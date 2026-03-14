@@ -138,7 +138,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             {/* Logo BSL */}
             <div className="flex justify-center mb-6">
               <img
-                src="/logoBlanco.png"
+                src="/bodytechLogo.png"
                 alt="BSL Logo"
                 className="h-20 w-auto"
               />
@@ -226,7 +226,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
 
         {/* Logo + Encryption badge */}
         <div className="flex-1 flex items-center justify-center gap-2">
-          <img src="/logoBlanco.png" alt="BSL" className="h-8 w-auto" />
+          <img src="/bodytechLogo.png" alt="BSL" className="h-8 w-auto" />
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -262,7 +262,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b141a]">
             <div className="text-center">
-              <img src="/logoBlanco.png" alt="BSL" className="h-16 w-auto mx-auto mb-4 opacity-50" />
+              <img src="/bodytechLogo.png" alt="BSL" className="h-16 w-auto mx-auto mb-4 opacity-50" />
               <p className="text-gray-500">Esperando participantes...</p>
             </div>
           </div>

@@ -61,11 +61,12 @@ class WhatsAppService {
 
   /**
    * Envía un mensaje usando el template aprobado de Twilio con variables
-   * Template: "Hola {{1}}. Te escribimos de BSL. Tienes una consulta médica programada con el Dr. {{2}}..."
+   * Template Bodytech: "Hola {{1}}, Te saludamos del Bodytech. Tienes una consulta médica a las {{2}}..."
+   * Button URL: https://bodytech.app/panel-medico/patient/{{3}}
    * @param phone Número de teléfono (ejemplo: 573001234567 o +573001234567)
    * @param roomNameWithParams Path completo: "consulta-abc123?nombre=Juan&apellido=Perez&documento=123&doctor=JUAN"
    * @param patientName Primer nombre del paciente
-   * @param doctorCode Código del doctor
+   * @param appointmentTime Hora de la cita (ejemplo: "3:00 PM")
    * @param attempt Número de intento actual (uso interno)
    * @returns Resultado del envío
    */
@@ -73,7 +74,7 @@ class WhatsAppService {
     phone: string,
     roomNameWithParams: string,
     patientName: string,
-    doctorCode: string,
+    appointmentTime: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
     if (!this.client.messages) {
@@ -88,16 +89,16 @@ class WhatsAppService {
 
     try {
       console.log(`📱 Enviando WhatsApp con template a: ${toNumber} (intento ${attempt}/${this.maxRetries})`);
-      console.log(`   Variables: roomPath=${roomNameWithParams}, name=${patientName}, doctor=${doctorCode}`);
+      console.log(`   Variables: name=${patientName}, time=${appointmentTime}, roomPath=${roomNameWithParams}`);
 
       const twilioMessage = await this.client.messages.create({
         from: this.fromNumber,
         to: toNumber,
         contentSid: this.templateSid,
         contentVariables: JSON.stringify({
-          '1': roomNameWithParams,
-          '2': patientName,
-          '3': doctorCode
+          '1': patientName,
+          '2': appointmentTime,
+          '3': roomNameWithParams
         }),
         statusCallback: this.statusCallbackUrl
       });
@@ -124,7 +125,7 @@ class WhatsAppService {
         );
 
         await this.sleep(backoffMs);
-        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, doctorCode, attempt + 1);
+        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, attempt + 1);
       }
 
       // Error final después de todos los reintentos

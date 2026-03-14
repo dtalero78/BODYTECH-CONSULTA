@@ -254,19 +254,19 @@ class VideoController {
   /**
    * Enviar mensaje de WhatsApp usando template aprobado
    * POST /api/video/whatsapp/send
-   * Body: { phone: string, roomNameWithParams: string, patientName: string, doctorCode: string }
+   * Body: { phone: string, roomNameWithParams: string, patientName: string, appointmentTime: string }
    *
    * Usa el template aprobado de Twilio con variables:
-   * Template: "Hola {{2}}. Te escribimos de BSL. Tienes una consulta médica programada con el Dr. {{3}}..."
-   * Button URL: https://medico-bsl.com/patient/{{1}}
+   * Template Bodytech: "Hola {{1}}, Te saludamos del Bodytech. Tienes una consulta médica a las {{2}}..."
+   * Button URL: https://bodytech.app/panel-medico/patient/{{3}}
    */
   async sendWhatsApp(req: Request, res: Response): Promise<void> {
     try {
-      const { phone, roomNameWithParams, patientName, doctorCode } = req.body;
+      const { phone, roomNameWithParams, patientName, appointmentTime } = req.body;
 
-      if (!phone || !roomNameWithParams || !patientName || !doctorCode) {
+      if (!phone || !roomNameWithParams || !patientName || !appointmentTime) {
         res.status(400).json({
-          error: 'phone, roomNameWithParams, patientName, and doctorCode are required',
+          error: 'phone, roomNameWithParams, patientName, and appointmentTime are required',
         });
         return;
       }
@@ -276,14 +276,14 @@ class VideoController {
         phone,
         roomNameWithParams,
         patientName,
-        doctorCode
+        appointmentTime
       );
 
       if (result.success) {
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
         try {
-          const videoCallUrl = `https://medico-bsl.com/patient/${roomNameWithParams}`;
-          const messageBody = `Hola ${patientName}. Te escribimos de BSL. Tienes una consulta médica programada con el Dr. ${doctorCode}.\n\nLink de videollamada: ${videoCallUrl}`;
+          const videoCallUrl = `https://bodytech.app/panel-medico/patient/${roomNameWithParams}`;
+          const messageBody = `Hola ${patientName}, Te saludamos del Bodytech. Tienes una consulta médica a las ${appointmentTime}.\n\nLink de videollamada: ${videoCallUrl}`;
 
           // Formatear número de teléfono con prefijo +
           const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;

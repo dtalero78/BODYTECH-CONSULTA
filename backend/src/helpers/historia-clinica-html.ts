@@ -204,7 +204,7 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
   .badge-aplazado { background: #8e44ad; color: #fff; }
   .badge-pendiente { background: #7f8c8d; color: #fff; }
   .concepto-detail { flex: 1; font-size: 9pt; }
-  .concepto-detail p { margin-bottom: 3px; }
+  .concepto-detail p { margin-bottom: 3px; white-space: pre-wrap; word-break: break-word; }
 
   .dx-row { display: flex; gap: 12px; padding: 4px 0; font-size: 9pt; }
   .dx-code { background: #e8f0f8; color: #1a5c8a; padding: 1px 6px; border-radius: 3px; font-weight: bold; font-size: 8.5pt; flex: 0 0 auto; }

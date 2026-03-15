@@ -1006,90 +1006,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           </div>
         </div>
 
-        {/* Diagnóstico Nutricional */}
-        <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Diagnóstico Nutricional</h3>
-          <div className="space-y-2">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Código CIE-10</label>
-              <input
-                type="text"
-                value={datosNutricionales.diagnosticoCIE10 || ''}
-                onChange={(e) => updateNutri('diagnosticoCIE10', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                placeholder="Ej: E66.0"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Diagnóstico Nutricional</label>
-              <textarea
-                value={datosNutricionales.diagnosticoNutricional || ''}
-                onChange={(e) => updateNutri('diagnosticoNutricional', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                rows={3}
-                placeholder="Diagnóstico nutricional detallado..."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Plan Nutricional */}
-        <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan Nutricional</h3>
-          <div className="space-y-2">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Requerimiento Calórico (kcal/día)</label>
-              <input
-                type="text"
-                value={datosNutricionales.requerimientoCalorico || ''}
-                onChange={(e) => updateNutri('requerimientoCalorico', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                placeholder="Ej: 1800"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Distribución de Macronutrientes</label>
-              <textarea
-                value={datosNutricionales.distribucionMacronutrientes || ''}
-                onChange={(e) => updateNutri('distribucionMacronutrientes', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                rows={3}
-                placeholder="CHO: 50%, Proteína: 20%, Grasa: 30%..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Plan Alimentario</label>
-              <textarea
-                value={datosNutricionales.planAlimentario || ''}
-                onChange={(e) => updateNutri('planAlimentario', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                rows={4}
-                placeholder="Detalle del plan alimentario por tiempos de comida..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Actividad Física Recomendada</label>
-              <textarea
-                value={datosNutricionales.actividadFisicaPlan || ''}
-                onChange={(e) => updateNutri('actividadFisicaPlan', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                rows={3}
-                placeholder="Tipo, frecuencia e intensidad de actividad física..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Nutricionales</label>
-              <textarea
-                value={datosNutricionales.recomendacionesNutricionales || ''}
-                onChange={(e) => updateNutri('recomendacionesNutricionales', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-                rows={3}
-                placeholder="Recomendaciones nutricionales generales..."
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Campos Médicos Editables */}
         <div className="bg-[#2a3942] rounded-lg p-3">
           <h3 className="text-sm font-semibold mb-3 text-[#00a884]">Evaluación Médica</h3>
@@ -1299,6 +1215,90 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </select>
             </div>
 
+          </div>
+        </div>
+
+        {/* Diagnóstico Nutricional */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Diagnóstico Nutricional</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Código CIE-10</label>
+              <input
+                type="text"
+                value={datosNutricionales.diagnosticoCIE10 || ''}
+                onChange={(e) => updateNutri('diagnosticoCIE10', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: E66.0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Diagnóstico Nutricional</label>
+              <textarea
+                value={datosNutricionales.diagnosticoNutricional || ''}
+                onChange={(e) => updateNutri('diagnosticoNutricional', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Diagnóstico nutricional detallado..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Plan Nutricional */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan Nutricional</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Requerimiento Calórico (kcal/día)</label>
+              <input
+                type="text"
+                value={datosNutricionales.requerimientoCalorico || ''}
+                onChange={(e) => updateNutri('requerimientoCalorico', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 1800"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Distribución de Macronutrientes</label>
+              <textarea
+                value={datosNutricionales.distribucionMacronutrientes || ''}
+                onChange={(e) => updateNutri('distribucionMacronutrientes', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="CHO: 50%, Proteína: 20%, Grasa: 30%..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Plan Alimentario</label>
+              <textarea
+                value={datosNutricionales.planAlimentario || ''}
+                onChange={(e) => updateNutri('planAlimentario', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={4}
+                placeholder="Detalle del plan alimentario por tiempos de comida..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Actividad Física Recomendada</label>
+              <textarea
+                value={datosNutricionales.actividadFisicaPlan || ''}
+                onChange={(e) => updateNutri('actividadFisicaPlan', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Tipo, frecuencia e intensidad de actividad física..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Nutricionales</label>
+              <textarea
+                value={datosNutricionales.recomendacionesNutricionales || ''}
+                onChange={(e) => updateNutri('recomendacionesNutricionales', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Recomendaciones nutricionales generales..."
+              />
+            </div>
           </div>
         </div>
 

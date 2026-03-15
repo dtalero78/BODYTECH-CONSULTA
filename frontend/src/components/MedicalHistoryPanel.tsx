@@ -1251,23 +1251,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione una opción</option>
-                {data?.codEmpresa === 'SIIGO' ? (
-                  <>
-                    <option value="APTO">APTO</option>
-                    <option value="NO APTO">NO APTO</option>
-                    <option value="APLAZADO">APLAZADO</option>
-                    <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="APTO">APTO</option>
-                    <option value="APTO CON RECOMENDACIONES">APTO CON RECOMENDACIONES</option>
-                    <option value="APLAZADO">APLAZADO</option>
-                    <option value="NO APTO">NO APTO</option>
-                    <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
-                    <option value="Puede realizar actividades escolares y grupales">Puede realizar actividades escolares y grupales</option>
-                  </>
-                )}
+                <option value="ESTADO NUTRICIONAL NORMAL">ESTADO NUTRICIONAL NORMAL</option>
+                <option value="SOBREPESO">SOBREPESO</option>
+                <option value="OBESIDAD GRADO I">OBESIDAD GRADO I</option>
+                <option value="OBESIDAD GRADO II">OBESIDAD GRADO II</option>
+                <option value="OBESIDAD GRADO III">OBESIDAD GRADO III</option>
+                <option value="BAJO PESO">BAJO PESO</option>
+                <option value="DESNUTRICION">DESNUTRICION</option>
+                <option value="RIESGO NUTRICIONAL">RIESGO NUTRICIONAL</option>
+                <option value="REQUIERE SEGUIMIENTO">REQUIERE SEGUIMIENTO</option>
               </select>
             </div>
 

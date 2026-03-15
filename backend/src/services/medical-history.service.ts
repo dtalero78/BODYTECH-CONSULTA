@@ -2,6 +2,7 @@ import axios from 'axios';
 import historiaClinicaPostgresService from './historia-clinica-postgres.service';
 import postgresService from './postgres.service';
 import whatsappService from './whatsapp.service';
+import { generarHTMLHistoriaClinica } from '../helpers/historia-clinica-html';
 
 interface AntecedentesPersonales {
   cirugiaOcular?: boolean;
@@ -442,6 +443,38 @@ class MedicalHistoryService {
     } catch (error: any) {
       console.error('❌ Error listando atendidos:', error.message);
       throw new Error('Error al listar historias clínicas de atendidos');
+    }
+  }
+
+  /**
+   * Genera el HTML completo de la historia clínica para preview/impresión
+   */
+  async getPreviewHTML(historiaId: string): Promise<string | null> {
+    try {
+      console.log(`📄 Generando preview HTML para historia: ${historiaId}`);
+
+      // 1. Historia Clínica
+      const hcResult = await postgresService.query(
+        'SELECT * FROM "HistoriaClinica" WHERE "_id" = $1',
+        [historiaId]
+      );
+      if (!hcResult || hcResult.length === 0) return null;
+      const historia = hcResult[0];
+
+      // 2. Formulario (datos demográficos + antecedentes + firma)
+      let formulario = null;
+      const fResult = await postgresService.query(
+        `SELECT * FROM formularios
+         WHERE wix_id = $1 OR numero_id = $2
+         ORDER BY fecha_registro DESC LIMIT 1`,
+        [historiaId, historia.numeroId]
+      );
+      if (fResult && fResult.length > 0) formulario = fResult[0];
+
+      return generarHTMLHistoriaClinica({ historia, formulario });
+    } catch (error: any) {
+      console.error('❌ Error generando preview HTML:', error.message);
+      throw new Error('Error al generar preview de historia clínica');
     }
   }
 

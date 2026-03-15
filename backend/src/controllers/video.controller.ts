@@ -347,6 +347,29 @@ class VideoController {
   }
 
   /**
+   * Generar preview HTML de la historia clínica completa para impresión
+   * GET /api/video/medical-history/:historiaId/preview
+   */
+  async getPreviewHTML(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+
+      const html = await medicalHistoryService.getPreviewHTML(historiaId);
+
+      if (!html) {
+        res.status(404).send('<h1>Historia clínica no encontrada</h1>');
+        return;
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch (error) {
+      console.error('Error generating preview HTML:', error);
+      res.status(500).send('<h1>Error generando historia clínica</h1>');
+    }
+  }
+
+  /**
    * Obtener historia clínica de un paciente por _id
    * GET /api/video/medical-history/:historiaId
    */

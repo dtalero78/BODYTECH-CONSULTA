@@ -30,6 +30,7 @@ router.post('/whatsapp/send', videoController.sendWhatsApp);
 // IMPORTANTE: Las rutas específicas deben ir ANTES de '/:historiaId' para evitar conflictos
 router.get('/medical-history/atendidos', videoController.getAtendidos);
 router.get('/medical-history/patient/:numeroId', videoController.getPatientHistory);
+router.get('/medical-history/:historiaId/preview', videoController.getPreviewHTML);
 router.get('/medical-history/:historiaId', videoController.getMedicalHistory);
 router.post('/medical-history', videoController.updateMedicalHistory);
 

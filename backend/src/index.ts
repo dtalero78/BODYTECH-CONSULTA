@@ -107,6 +107,10 @@ app.use((err: Error, _req: Request, res: Response) => {
   });
 });
 
+// Run database migrations
+import postgresService from './services/postgres.service';
+postgresService.runMigrations();
+
 // Start server
 const PORT = appConfig.port;
 

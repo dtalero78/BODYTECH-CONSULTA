@@ -33,6 +33,7 @@ interface HistoriaClinicaData {
   ciudad?: string;
   examenes?: string;
   horaAtencion?: string;
+  datosNutricionales?: any;
 }
 
 /**
@@ -53,13 +54,13 @@ class HistoriaClinicaPostgresService {
           "mdRecomendacionesMedicasAdicionales", "mdConceptoFinal", "mdDx1", "mdDx2",
           "talla", "peso", "motivoConsulta", "diagnostico", "tratamiento",
           "fechaAtencion", "fechaConsulta", "atendido", "pvEstado", "medico",
-          "ciudad", "examenes", "horaAtencion"
+          "ciudad", "examenes", "horaAtencion", "datosNutricionales"
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
           $13, $14, $15, $16, $17, $18, $19,
           $20, $21, $22, $23, $24,
           $25, $26, $27, $28, $29,
-          $30, $31, $32
+          $30, $31, $32, $33
         )
         ON CONFLICT ("_id") DO UPDATE SET
           "numeroId" = EXCLUDED."numeroId",
@@ -93,6 +94,7 @@ class HistoriaClinicaPostgresService {
           "ciudad" = EXCLUDED."ciudad",
           "examenes" = EXCLUDED."examenes",
           "horaAtencion" = EXCLUDED."horaAtencion",
+          "datosNutricionales" = EXCLUDED."datosNutricionales",
           "_updatedDate" = NOW()
         RETURNING "_id";
       `;
@@ -130,6 +132,7 @@ class HistoriaClinicaPostgresService {
         data.ciudad || null,
         data.examenes || null,
         data.horaAtencion || null,
+        data.datosNutricionales != null ? JSON.stringify(data.datosNutricionales) : null,
       ];
 
       const result = await postgresService.query(query, params);

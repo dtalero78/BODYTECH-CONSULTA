@@ -150,6 +150,25 @@ class ApiService {
   }
 
   /**
+   * Listar historias clínicas de personas atendidas con paginación y búsqueda
+   */
+  async getAtendidos(options?: { page?: number; limit?: number; buscar?: string }): Promise<{
+    data: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPaginas: number;
+  }> {
+    const params = new URLSearchParams();
+    if (options?.page) params.set('page', options.page.toString());
+    if (options?.limit) params.set('limit', options.limit.toString());
+    if (options?.buscar) params.set('buscar', options.buscar);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const response = await this.client.get(`/api/video/medical-history/atendidos${query}`);
+    return response.data;
+  }
+
+  /**
    * Obtener historia clínica de un paciente
    */
   async getMedicalHistory(historiaId: string): Promise<any> {
@@ -182,6 +201,7 @@ class ApiService {
     talla?: string;
     peso?: string;
     cargo?: string;
+    datosNutricionales?: any;
   }): Promise<void> {
     await this.client.post('/api/video/medical-history', payload);
   }

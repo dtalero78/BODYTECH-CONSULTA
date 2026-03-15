@@ -75,6 +75,10 @@ interface MedicalHistoryData {
   mdDx2?: string;
   talla?: string;
   peso?: string;
+  motivoConsulta?: string;
+  ciudad?: string;
+  eps?: string;
+  datosNutricionales?: any;
 }
 
 interface MedicalHistoryPanelProps {
@@ -82,13 +86,26 @@ interface MedicalHistoryPanelProps {
   onAppendToObservaciones?: (text: string) => void;
 }
 
+const LABS = [
+  { key: 'glucosa', label: 'Glucosa' },
+  { key: 'hba1c', label: 'HbA1c' },
+  { key: 'colesterolTotal', label: 'Colesterol Total' },
+  { key: 'ldl', label: 'LDL' },
+  { key: 'hdl', label: 'HDL' },
+  { key: 'trigliceridos', label: 'Triglicéridos' },
+  { key: 'hemoglobina', label: 'Hemoglobina' },
+  { key: 'ferritina', label: 'Ferritina' },
+  { key: 'vitaminaD', label: 'Vitamina D' },
+  { key: 'vitaminaB12', label: 'Vitamina B12' },
+];
+
 export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: MedicalHistoryPanelProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<MedicalHistoryData | null>(null);
 
-  // Campos editables
+  // Campos editables existentes
   const [mdAntecedentes, setMdAntecedentes] = useState('');
   const [mdObsParaMiDocYa, setMdObsParaMiDocYa] = useState('');
   const [mdObservacionesCertificado, setMdObservacionesCertificado] = useState('');
@@ -103,6 +120,13 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
+  // Estado para datos nutricionales (JSONB)
+  const [datosNutricionales, setDatosNutricionales] = useState<any>({});
+
+  const updateNutri = (field: string, value: string) => {
+    setDatosNutricionales((prev: any) => ({ ...prev, [field]: value }));
+  };
+
   useEffect(() => {
     loadMedicalHistory();
   }, [historiaId]);
@@ -110,7 +134,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
   // Exponer función para agregar texto a observaciones desde componentes externos
   useEffect(() => {
     if (onAppendToObservaciones) {
-      // Crear función que agrega texto al campo actual
       const appendText = (text: string) => {
         setMdObservacionesCertificado(prev => {
           if (prev) {
@@ -119,9 +142,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           return text;
         });
       };
-
-      // "Registrar" la función llamándola inmediatamente
-      // Esto permite que el padre llame a esta función cuando sea necesario
       onAppendToObservaciones(appendText as any);
     }
   }, [onAppendToObservaciones]);
@@ -131,9 +151,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     if (talla && peso) {
       const tallaNum = parseFloat(talla);
       const pesoNum = parseFloat(peso);
-
       if (!isNaN(tallaNum) && !isNaN(pesoNum) && tallaNum > 0) {
-        // IMC = peso(kg) / (talla(m))^2
         const tallaMetros = tallaNum / 100;
         const imcCalculado = pesoNum / (tallaMetros * tallaMetros);
         setImc(imcCalculado.toFixed(2));
@@ -145,15 +163,31 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     }
   }, [talla, peso]);
 
-  // Función para determinar el color del IMC
+  // Calcular relación cintura/cadera automáticamente
+  const relacionCinturaCadera = (() => {
+    const cintura = parseFloat(datosNutricionales.circunferenciaCintura || '');
+    const cadera = parseFloat(datosNutricionales.circunferenciaCadera || '');
+    if (!isNaN(cintura) && !isNaN(cadera) && cadera > 0) {
+      return (cintura / cadera).toFixed(2);
+    }
+    return '';
+  })();
+
+  const getRccColor = () => {
+    const rcc = parseFloat(relacionCinturaCadera);
+    if (isNaN(rcc)) return 'text-gray-400';
+    // Riesgo alto: >0.85 mujeres, >0.90 hombres (usamos 0.90 como umbral general)
+    if (rcc >= 0.90) return 'text-red-500';
+    return 'text-green-400';
+  };
+
   const getImcColor = () => {
     const imcNum = parseFloat(imc);
     if (isNaN(imcNum)) return 'text-gray-400';
-    if (imcNum >= 25) return 'text-red-500'; // Sobrepeso u obesidad
-    return 'text-green-400'; // Normal o bajo peso
+    if (imcNum >= 25) return 'text-red-500';
+    return 'text-green-400';
   };
 
-  // Función para obtener el texto de interpretación del IMC
   const getImcInterpretation = () => {
     const imcNum = parseFloat(imc);
     if (isNaN(imcNum)) return '';
@@ -163,10 +197,8 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     return 'Obesidad';
   };
 
-  // Función para convertir camelCase a texto legible
   const formatFieldName = (fieldName: string): string => {
     const translations: { [key: string]: string } = {
-      // Antecedentes personales
       cirugiaOcular: 'Cirugía Ocular',
       cirugiaProgramada: 'Cirugía Programada',
       condicionMedica: 'Condición Médica',
@@ -194,7 +226,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       enfermedadOsteomuscular: 'Enfermedad Osteomuscular',
       enfermedadAutoinmune: 'Enfermedad Autoinmune',
       ruidoJaqueca: 'Ruido/Jaqueca',
-      // Antecedentes familiares
       hereditarias: 'Enfermedades Hereditarias',
       geneticas: 'Enfermedades Genéticas',
       diabetes: 'Diabetes',
@@ -207,13 +238,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     return translations[fieldName] || fieldName;
   };
 
-  // Función para obtener antecedentes positivos como array de strings
   const getPositiveConditions = (): string[] => {
     if (!data) return [];
-
     const conditions: string[] = [];
-
-    // Agregar antecedentes personales positivos
     if (data.antecedentesPersonales) {
       Object.entries(data.antecedentesPersonales).forEach(([key, value]) => {
         if (value === true) {
@@ -221,8 +248,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         }
       });
     }
-
-    // Agregar antecedentes familiares positivos (con prefijo)
     if (data.antecedentesFamiliaresDetalle) {
       Object.entries(data.antecedentesFamiliaresDetalle).forEach(([key, value]) => {
         if (value === true) {
@@ -230,7 +255,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         }
       });
     }
-
     return conditions;
   };
 
@@ -240,8 +264,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       setError(null);
       const history = await apiService.getMedicalHistory(historiaId);
       setData(history);
-
-      // Pre-llenar campos editables
       setMdAntecedentes(history.mdAntecedentes || '');
       setMdObsParaMiDocYa(history.mdObsParaMiDocYa || '');
       setMdObservacionesCertificado(history.mdObservacionesCertificado || '');
@@ -251,6 +273,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       setMdDx2(history.mdDx2 || '');
       setTalla(history.talla || '');
       setPeso(history.peso || '');
+      setDatosNutricionales(history.datosNutricionales || {});
     } catch (err: any) {
       setError(err.message || 'Error al cargar historia clínica');
       console.error('Error loading medical history:', err);
@@ -261,11 +284,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
   const handleGenerateAISuggestions = async () => {
     if (!data) return;
-
     try {
       setIsGeneratingAI(true);
       setError(null);
-
       const patientData = {
         edad: data.edad,
         genero: data.genero,
@@ -279,7 +300,6 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         encuestaSalud: data.encuestaSalud,
         empresa1: data.empresa1,
       };
-
       const suggestions = await apiService.generateAISuggestions(patientData);
       setAiSuggestions(suggestions);
     } catch (err: any) {
@@ -303,12 +323,10 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       setIsSaving(true);
       setError(null);
 
-      // Concatenar sugerencias de IA con recomendaciones manuales
       const combinedRecommendations = aiSuggestions
         ? `${aiSuggestions}\n\n${mdRecomendacionesMedicasAdicionales}`.trim()
         : mdRecomendacionesMedicasAdicionales;
 
-      // Concatenar IMC con antecedentes
       let combinedAntecedentes = mdAntecedentes;
       if (imc) {
         const imcText = `IMC: ${imc} (${getImcInterpretation()})`;
@@ -329,6 +347,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         talla,
         peso,
         cargo: data.cargo,
+        datosNutricionales,
       });
 
       alert('Historia clínica guardada exitosamente');
@@ -368,7 +387,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
           {isWixNotConfigured && (
             <div className="mt-4 border-l-4 border-yellow-500 pl-4">
-              <p className="text-yellow-400 font-semibold mb-2">⚠️ Configuración Pendiente</p>
+              <p className="text-yellow-400 font-semibold mb-2">Configuración Pendiente</p>
               <p className="text-sm text-gray-300 mb-2">
                 Las funciones HTTP de Wix no están configuradas. Para activar esta funcionalidad:
               </p>
@@ -411,379 +430,817 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       {/* Contenido scrollable */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-      {/* Información del Paciente (Solo lectura) */}
-      <div className="bg-[#2a3942] rounded-lg p-3">
-        <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Datos del Paciente</h3>
-        <div className="grid grid-cols-1 gap-2 text-xs">
-          <div>
-            <span className="text-gray-400">Nombre:</span>
-            <span className="text-white ml-2">
-              {data.primerNombre} {data.segundoNombre} {data.primerApellido} {data.segundoApellido}
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-400">Documento:</span>
-            <span className="text-white ml-2">{data.numeroId}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Edad:</span>
-            <span className="text-white ml-2">{data.edad || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Género:</span>
-            <span className="text-white ml-2">{data.genero || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Celular:</span>
-            <span className="text-white ml-2">{data.celular}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Email:</span>
-            <span className="text-white ml-2">{data.email || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Estado Civil:</span>
-            <span className="text-white ml-2">{data.estadoCivil || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Hijos:</span>
-            <span className="text-white ml-2">{data.hijos || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Ejercicio:</span>
-            <span className="text-white ml-2">{data.ejercicio || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Empresa:</span>
-            <span className="text-white ml-2">{data.codEmpresa || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Cargo:</span>
-            <span className="text-white ml-2">{data.cargo || 'N/A'}</span>
-          </div>
-          <div>
-            <span className="text-gray-400">Tipo Examen:</span>
-            <span className="text-white ml-2">{data.tipoExamen || 'N/A'}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Condiciones Especiales (antecedentes positivos del formulario) */}
-      {getPositiveConditions().length > 0 && (
+        {/* Datos del Paciente (Solo lectura) */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Condiciones Especiales</h3>
-          <div className="flex flex-wrap gap-2">
-            {getPositiveConditions().map((condition, index) => (
-              <span
-                key={index}
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  condition.startsWith('Fam:')
-                    ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30'
-                    : 'bg-amber-900/30 text-amber-300 border border-amber-500/30'
-                }`}
-              >
-                {condition}
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Datos del Paciente</h3>
+          <div className="grid grid-cols-1 gap-2 text-xs">
+            <div>
+              <span className="text-gray-400">Nombre:</span>
+              <span className="text-white ml-2">
+                {data.primerNombre} {data.segundoNombre} {data.primerApellido} {data.segundoApellido}
               </span>
-            ))}
+            </div>
+            <div>
+              <span className="text-gray-400">Documento:</span>
+              <span className="text-white ml-2">{data.numeroId}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Edad:</span>
+              <span className="text-white ml-2">{data.edad || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Género:</span>
+              <span className="text-white ml-2">{data.genero || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Celular:</span>
+              <span className="text-white ml-2">{data.celular}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Email:</span>
+              <span className="text-white ml-2">{data.email || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Estado Civil:</span>
+              <span className="text-white ml-2">{data.estadoCivil || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Hijos:</span>
+              <span className="text-white ml-2">{data.hijos || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Ejercicio:</span>
+              <span className="text-white ml-2">{data.ejercicio || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Empresa:</span>
+              <span className="text-white ml-2">{data.codEmpresa || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Cargo:</span>
+              <span className="text-white ml-2">{data.cargo || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Tipo Examen:</span>
+              <span className="text-white ml-2">{data.tipoExamen || 'N/A'}</span>
+            </div>
+            {data.ciudad && (
+              <div>
+                <span className="text-gray-400">Ciudad:</span>
+                <span className="text-white ml-2">{data.ciudad}</span>
+              </div>
+            )}
+            {data.eps && (
+              <div>
+                <span className="text-gray-400">EPS:</span>
+                <span className="text-white ml-2">{data.eps}</span>
+              </div>
+            )}
+            {data.motivoConsulta && (
+              <div>
+                <span className="text-gray-400">Motivo de Consulta:</span>
+                <p className="text-white mt-1 whitespace-pre-wrap">{data.motivoConsulta}</p>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Antecedentes (Solo lectura) */}
-      {(data.antecedentesFamiliares || data.encuestaSalud || data.empresa1) && (
+        {/* Datos de Atención */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Antecedentes</h3>
-          <div className="space-y-2 text-xs">
-            {data.antecedentesFamiliares && (
-              <div>
-                <span className="text-gray-400">Antecedentes Familiares:</span>
-                <p className="text-white mt-1 whitespace-pre-wrap">{data.antecedentesFamiliares}</p>
-              </div>
-            )}
-            {data.encuestaSalud && (
-              <div>
-                <span className="text-gray-400">Encuesta de Salud:</span>
-                <p className="text-white mt-1 whitespace-pre-wrap">{data.encuestaSalud}</p>
-              </div>
-            )}
-            {data.empresa1 && (
-              <div>
-                <span className="text-gray-400">Cargo Anterior:</span>
-                <p className="text-white mt-1">{data.empresa1}</p>
-              </div>
-            )}
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Datos de Atención</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Tipo de Consulta</label>
+              <select
+                value={datosNutricionales.tipoConsulta || ''}
+                onChange={(e) => updateNutri('tipoConsulta', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              >
+                <option value="">Seleccione</option>
+                <option value="Primera vez">Primera vez</option>
+                <option value="Control">Control</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Modalidad</label>
+              <select
+                value={datosNutricionales.modalidad || ''}
+                onChange={(e) => updateNutri('modalidad', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              >
+                <option value="">Seleccione</option>
+                <option value="Presencial">Presencial</option>
+                <option value="Teleconsulta">Teleconsulta</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Registro Profesional</label>
+              <input
+                type="text"
+                value={datosNutricionales.registroProfesional || ''}
+                onChange={(e) => updateNutri('registroProfesional', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Número de registro"
+              />
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Medidas Físicas */}
-      <div className="bg-[#2a3942] rounded-lg p-3">
-        <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Medidas Físicas</h3>
-        <div className="grid grid-cols-3 gap-2">
+        {/* Enfermedad Actual */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Enfermedad Actual</h3>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Talla (cm)</label>
-            <input
-              type="text"
-              value={talla}
-              onChange={(e) => setTalla(e.target.value)}
+            <label className="block text-xs text-gray-400 mb-1">Descripción</label>
+            <textarea
+              value={datosNutricionales.descripcionEnfermedad || ''}
+              onChange={(e) => updateNutri('descripcionEnfermedad', e.target.value)}
               className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-              placeholder="170"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Peso (kg)</label>
-            <input
-              type="text"
-              value={peso}
-              onChange={(e) => setPeso(e.target.value)}
-              className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-              placeholder="70"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">IMC</label>
-            <input
-              type="text"
-              value={imc ? `${imc} (${getImcInterpretation()})` : ''}
-              readOnly
-              className={`w-full bg-[#2a3942] ${getImcColor()} text-sm px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
-              placeholder="Auto"
+              rows={3}
+              placeholder="Descripción de la enfermedad actual..."
             />
           </div>
         </div>
-      </div>
 
-      {/* Campos Médicos Editables */}
-      <div className="bg-[#2a3942] rounded-lg p-3">
-        <h3 className="text-sm font-semibold mb-3 text-[#00a884]">Evaluación Médica</h3>
-        <div className="space-y-3">
-
-        {/* 1. ANTECEDENTES */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Antecedentes</label>
-          <textarea
-            value={mdAntecedentes}
-            onChange={(e) => setMdAntecedentes(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            rows={3}
-            placeholder="Antecedentes médicos relevantes..."
-          />
-        </div>
-
-        {/* 2. OBS. CERTIFICADO */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Obs. Certificado</label>
-          <textarea
-            value={mdObservacionesCertificado}
-            onChange={(e) => setMdObservacionesCertificado(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            rows={3}
-            placeholder="Observaciones para el certificado..."
-          />
-        </div>
-
-        {/* 3. RECOMENDACIONES MÉDICAS ADICIONALES */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Recomendaciones Médicas Adicionales</label>
-          <textarea
-            value={mdRecomendacionesMedicasAdicionales}
-            onChange={(e) => setMdRecomendacionesMedicasAdicionales(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            rows={3}
-            placeholder="Recomendaciones médicas adicionales..."
-          />
-        </div>
-
-        {/* 4. OBSERVACIONES PRIVADAS PARA LA EMPRESA */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Observaciones privadas para la empresa</label>
-          <textarea
-            value={mdObsParaMiDocYa}
-            onChange={(e) => setMdObsParaMiDocYa(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            rows={3}
-            placeholder="Observaciones privadas para la empresa..."
-          />
-        </div>
-
-        {/* 5. DIAGNÓSTICOS */}
-        <div className="grid grid-cols-1 gap-2">
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Diagnóstico 1 (Principal)</label>
-            <select
-              value={mdDx1}
-              onChange={(e) => setMdDx1(e.target.value)}
-              className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            >
-              <option value="">Seleccione diagnóstico</option>
-              <option value="Asma ocupacional">Asma ocupacional</option>
-              <option value="Bronquitis crónica por polvos inorgánicos">Bronquitis crónica por polvos inorgánicos</option>
-              <option value="Bursitis de codo">Bursitis de codo</option>
-              <option value="Bursitis de hombro">Bursitis de hombro</option>
-              <option value="Bursitis de rodilla">Bursitis de rodilla</option>
-              <option value="Cervicalgia">Cervicalgia</option>
-              <option value="Dermatitis alérgica de contacto">Dermatitis alérgica de contacto</option>
-              <option value="Dermatitis irritativa de contacto">Dermatitis irritativa de contacto</option>
-              <option value="Dorsalgia">Dorsalgia</option>
-              <option value="Epicondilitis lateral (codo de tenista)">Epicondilitis lateral (codo de tenista)</option>
-              <option value="Epicondilitis medial">Epicondilitis medial</option>
-              <option value="Escoliosis">Escoliosis</option>
-              <option value="Espondiloartrosis cervical">Espondiloartrosis cervical</option>
-              <option value="Espondiloartrosis lumbar">Espondiloartrosis lumbar</option>
-              <option value="Espondilosis cervical">Espondilosis cervical</option>
-              <option value="Espondilosis lumbar">Espondilosis lumbar</option>
-              <option value="Estrés postraumático">Estrés postraumático</option>
-              <option value="Gonalgia (dolor de rodilla)">Gonalgia (dolor de rodilla)</option>
-              <option value="Hernia discal cervical">Hernia discal cervical</option>
-              <option value="Hernia discal lumbar">Hernia discal lumbar</option>
-              <option value="Hipoacusia neurosensorial bilateral">Hipoacusia neurosensorial bilateral</option>
-              <option value="Lumbalgia">Lumbalgia</option>
-              <option value="Mialgia">Mialgia</option>
-              <option value="Obesidad">Obesidad</option>
-              <option value="Onicomicosis">Onicomicosis</option>
-              <option value="Pérdida auditiva inducida por ruido">Pérdida auditiva inducida por ruido</option>
-              <option value="Presbiacusia">Presbiacusia</option>
-              <option value="Síndrome de Burnout">Síndrome de Burnout</option>
-              <option value="Síndrome de túnel carpiano">Síndrome de túnel carpiano</option>
-              <option value="Síndrome del manguito rotador">Síndrome del manguito rotador</option>
-              <option value="Sinovitis de muñeca">Sinovitis de muñeca</option>
-              <option value="Sobrepeso">Sobrepeso</option>
-              <option value="Tenosinovitis de De Quervain">Tenosinovitis de De Quervain</option>
-              <option value="Tendinitis de hombro">Tendinitis de hombro</option>
-              <option value="Tendinitis del manguito rotador">Tendinitis del manguito rotador</option>
-              <option value="Trastorno adaptativo con ansiedad">Trastorno adaptativo con ansiedad</option>
-              <option value="Trastorno de ansiedad generalizada">Trastorno de ansiedad generalizada</option>
-              <option value="Trastorno depresivo">Trastorno depresivo</option>
-              <option value="Trastornos del sueño">Trastornos del sueño</option>
-              <option value="Trauma acústico agudo">Trauma acústico agudo</option>
-              <option value="Vértigo posicional">Vértigo posicional</option>
-              <option value="Vitiligo">Vitiligo</option>
-            </select>
+        {/* Condiciones Especiales (antecedentes positivos del formulario) */}
+        {getPositiveConditions().length > 0 && (
+          <div className="bg-[#2a3942] rounded-lg p-3">
+            <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Condiciones Especiales</h3>
+            <div className="flex flex-wrap gap-2">
+              {getPositiveConditions().map((condition, index) => (
+                <span
+                  key={index}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    condition.startsWith('Fam:')
+                      ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30'
+                      : 'bg-amber-900/30 text-amber-300 border border-amber-500/30'
+                  }`}
+                >
+                  {condition}
+                </span>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Diagnóstico 2 (Secundario)</label>
-            <select
-              value={mdDx2}
-              onChange={(e) => setMdDx2(e.target.value)}
-              className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-            >
-              <option value="">Seleccione diagnóstico</option>
-              <option value="Asma ocupacional">Asma ocupacional</option>
-              <option value="Bronquitis crónica por polvos inorgánicos">Bronquitis crónica por polvos inorgánicos</option>
-              <option value="Bursitis de codo">Bursitis de codo</option>
-              <option value="Bursitis de hombro">Bursitis de hombro</option>
-              <option value="Bursitis de rodilla">Bursitis de rodilla</option>
-              <option value="Cervicalgia">Cervicalgia</option>
-              <option value="Dermatitis alérgica de contacto">Dermatitis alérgica de contacto</option>
-              <option value="Dermatitis irritativa de contacto">Dermatitis irritativa de contacto</option>
-              <option value="Dorsalgia">Dorsalgia</option>
-              <option value="Epicondilitis lateral (codo de tenista)">Epicondilitis lateral (codo de tenista)</option>
-              <option value="Epicondilitis medial">Epicondilitis medial</option>
-              <option value="Escoliosis">Escoliosis</option>
-              <option value="Espondiloartrosis cervical">Espondiloartrosis cervical</option>
-              <option value="Espondiloartrosis lumbar">Espondiloartrosis lumbar</option>
-              <option value="Espondilosis cervical">Espondilosis cervical</option>
-              <option value="Espondilosis lumbar">Espondilosis lumbar</option>
-              <option value="Estrés postraumático">Estrés postraumático</option>
-              <option value="Gonalgia (dolor de rodilla)">Gonalgia (dolor de rodilla)</option>
-              <option value="Hernia discal cervical">Hernia discal cervical</option>
-              <option value="Hernia discal lumbar">Hernia discal lumbar</option>
-              <option value="Hipoacusia neurosensorial bilateral">Hipoacusia neurosensorial bilateral</option>
-              <option value="Lumbalgia">Lumbalgia</option>
-              <option value="Mialgia">Mialgia</option>
-              <option value="Obesidad">Obesidad</option>
-              <option value="Onicomicosis">Onicomicosis</option>
-              <option value="Pérdida auditiva inducida por ruido">Pérdida auditiva inducida por ruido</option>
-              <option value="Presbiacusia">Presbiacusia</option>
-              <option value="Síndrome de Burnout">Síndrome de Burnout</option>
-              <option value="Síndrome de túnel carpiano">Síndrome de túnel carpiano</option>
-              <option value="Síndrome del manguito rotador">Síndrome del manguito rotador</option>
-              <option value="Sinovitis de muñeca">Sinovitis de muñeca</option>
-              <option value="Sobrepeso">Sobrepeso</option>
-              <option value="Tenosinovitis de De Quervain">Tenosinovitis de De Quervain</option>
-              <option value="Tendinitis de hombro">Tendinitis de hombro</option>
-              <option value="Tendinitis del manguito rotador">Tendinitis del manguito rotador</option>
-              <option value="Trastorno adaptativo con ansiedad">Trastorno adaptativo con ansiedad</option>
-              <option value="Trastorno de ansiedad generalizada">Trastorno de ansiedad generalizada</option>
-              <option value="Trastorno depresivo">Trastorno depresivo</option>
-              <option value="Trastornos del sueño">Trastornos del sueño</option>
-              <option value="Trauma acústico agudo">Trauma acústico agudo</option>
-              <option value="Vértigo posicional">Vértigo posicional</option>
-              <option value="Vitiligo">Vitiligo</option>
-            </select>
-          </div>
-        </div>
+        )}
 
-        {/* 6. SUGERENCIAS IA */}
-        <div className="border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs text-blue-400 font-semibold">Sugerencias IA</label>
-            <button
-              onClick={handleGenerateAISuggestions}
-              disabled={isGeneratingAI}
-              className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              {isGeneratingAI ? (
-                <>
-                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Generando...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Generar con IA
-                </>
+        {/* Antecedentes (Solo lectura) */}
+        {(data.antecedentesFamiliares || data.encuestaSalud || data.empresa1) && (
+          <div className="bg-[#2a3942] rounded-lg p-3">
+            <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Antecedentes</h3>
+            <div className="space-y-2 text-xs">
+              {data.antecedentesFamiliares && (
+                <div>
+                  <span className="text-gray-400">Antecedentes Familiares:</span>
+                  <p className="text-white mt-1 whitespace-pre-wrap">{data.antecedentesFamiliares}</p>
+                </div>
               )}
-            </button>
+              {data.encuestaSalud && (
+                <div>
+                  <span className="text-gray-400">Encuesta de Salud:</span>
+                  <p className="text-white mt-1 whitespace-pre-wrap">{data.encuestaSalud}</p>
+                </div>
+              )}
+              {data.empresa1 && (
+                <div>
+                  <span className="text-gray-400">Cargo Anterior:</span>
+                  <p className="text-white mt-1">{data.empresa1}</p>
+                </div>
+              )}
+            </div>
           </div>
-          <textarea
-            value={aiSuggestions}
-            onChange={(e) => setAiSuggestions(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-blue-500/30 focus:border-blue-400 focus:outline-none"
-            rows={5}
-            placeholder="Haz clic en 'Generar con IA' para obtener recomendaciones médicas personalizadas basadas en los datos del paciente..."
-          />
-          <p className="text-xs text-blue-400/70 mt-1">
-            Estas sugerencias se concatenarán automáticamente con las recomendaciones médicas adicionales al guardar
-          </p>
+        )}
+
+        {/* Antecedentes Adicionales */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Antecedentes Adicionales</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Medicamentos Actuales</label>
+              <textarea
+                value={datosNutricionales.medicamentosActuales || ''}
+                onChange={(e) => updateNutri('medicamentosActuales', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Medicamentos que toma actualmente..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Alergias</label>
+              <textarea
+                value={datosNutricionales.alergias || ''}
+                onChange={(e) => updateNutri('alergias', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Alergias conocidas..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cirugías</label>
+              <textarea
+                value={datosNutricionales.cirugias || ''}
+                onChange={(e) => updateNutri('cirugias', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Cirugías previas..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Hospitalizaciones</label>
+              <textarea
+                value={datosNutricionales.hospitalizaciones || ''}
+                onChange={(e) => updateNutri('hospitalizaciones', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Hospitalizaciones previas..."
+              />
+            </div>
+          </div>
         </div>
 
-        {/* 7. CONCEPTO FINAL */}
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Concepto Final <span className="text-red-500">*</span></label>
-          <select
-            value={mdConceptoFinal}
-            onChange={(e) => setMdConceptoFinal(e.target.value)}
-            className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
-          >
-            <option value="">Seleccione una opción</option>
-            {data?.codEmpresa === 'SIIGO' ? (
-              <>
-                <option value="APTO">APTO</option>
-                <option value="NO APTO">NO APTO</option>
-                <option value="APLAZADO">APLAZADO</option>
-                <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
-              </>
-            ) : (
-              <>
-                <option value="APTO">APTO</option>
-                <option value="APTO CON RECOMENDACIONES">APTO CON RECOMENDACIONES</option>
-                <option value="APLAZADO">APLAZADO</option>
-                <option value="NO APTO">NO APTO</option>
-                <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
-                <option value="Puede realizar actividades escolares y grupales">Puede realizar actividades escolares y grupales</option>
-              </>
-            )}
-          </select>
+        {/* Medidas Físicas */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Medidas Físicas</h3>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Talla (cm)</label>
+              <input
+                type="text"
+                value={talla}
+                onChange={(e) => setTalla(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="170"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Peso (kg)</label>
+              <input
+                type="text"
+                value={peso}
+                onChange={(e) => setPeso(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="70"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">IMC</label>
+              <input
+                type="text"
+                value={imc ? `${imc} (${getImcInterpretation()})` : ''}
+                readOnly
+                className={`w-full bg-[#2a3942] ${getImcColor()} text-sm px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
+                placeholder="Auto"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Peso Habitual (kg)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pesoHabitual || ''}
+                onChange={(e) => updateNutri('pesoHabitual', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 75"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">% Grasa Corporal</label>
+              <input
+                type="text"
+                value={datosNutricionales.porcentajeGrasa || ''}
+                onChange={(e) => updateNutri('porcentajeGrasa', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 25"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Masa Muscular (kg)</label>
+              <input
+                type="text"
+                value={datosNutricionales.masaMuscular || ''}
+                onChange={(e) => updateNutri('masaMuscular', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 45"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cintura (cm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.circunferenciaCintura || ''}
+                onChange={(e) => updateNutri('circunferenciaCintura', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 80"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cadera (cm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.circunferenciaCadera || ''}
+                onChange={(e) => updateNutri('circunferenciaCadera', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 95"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Rel. Cin/Cad</label>
+              <input
+                type="text"
+                value={relacionCinturaCadera}
+                readOnly
+                className={`w-full bg-[#2a3942] ${getRccColor()} text-sm px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
+                placeholder="Auto"
+              />
+            </div>
+          </div>
         </div>
 
+        {/* Evaluación Dietética */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Evaluación Dietética</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recordatorio 24 horas</label>
+              <textarea
+                value={datosNutricionales.recordatorio24h || ''}
+                onChange={(e) => updateNutri('recordatorio24h', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Descripción de lo consumido en las últimas 24 horas..."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Número de comidas/día</label>
+                <input
+                  type="text"
+                  value={datosNutricionales.numComidasDia || ''}
+                  onChange={(e) => updateNutri('numComidasDia', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  placeholder="Ej: 3"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Consumo de agua (L/día)</label>
+                <input
+                  type="text"
+                  value={datosNutricionales.consumoAgua || ''}
+                  onChange={(e) => updateNutri('consumoAgua', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  placeholder="Ej: 2"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Preferencias Alimentarias</label>
+              <textarea
+                value={datosNutricionales.preferenciasAlimentarias || ''}
+                onChange={(e) => updateNutri('preferenciasAlimentarias', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Alimentos preferidos, restricciones culturales o religiosas..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Alergias Alimentarias</label>
+              <textarea
+                value={datosNutricionales.alergiasAlimentarias || ''}
+                onChange={(e) => updateNutri('alergiasAlimentarias', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Alergias o intolerancias alimentarias..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Suplementos</label>
+              <textarea
+                value={datosNutricionales.suplementos || ''}
+                onChange={(e) => updateNutri('suplementos', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Suplementos vitamínicos o minerales que consume..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cambios de Peso Recientes</label>
+              <textarea
+                value={datosNutricionales.cambiosPesoRecientes || ''}
+                onChange={(e) => updateNutri('cambiosPesoRecientes', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Cambios de peso en los últimos meses..."
+              />
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Evaluación Clínica Nutricional */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Evaluación Clínica Nutricional</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Signos Clínicos</label>
+              <textarea
+                value={datosNutricionales.signosClinicos || ''}
+                onChange={(e) => updateNutri('signosClinicos', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Signos clínicos observados..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Problemas Digestivos</label>
+              <textarea
+                value={datosNutricionales.problemasDigestivos || ''}
+                onChange={(e) => updateNutri('problemasDigestivos', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Síntomas digestivos: náuseas, estreñimiento, diarrea..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Masticación y Deglución</label>
+              <textarea
+                value={datosNutricionales.masticacionDeglucion || ''}
+                onChange={(e) => updateNutri('masticacionDeglucion', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Dificultades para masticar o tragar..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Observaciones Nutricionales</label>
+              <textarea
+                value={datosNutricionales.observacionesNutricionales || ''}
+                onChange={(e) => updateNutri('observacionesNutricionales', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Observaciones clínicas nutricionales adicionales..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Laboratorios */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Laboratorios</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-600">
+                  <th className="text-left pb-2 pr-2">Examen</th>
+                  <th className="text-left pb-2 pr-2">Resultado</th>
+                  <th className="text-left pb-2">Fecha</th>
+                </tr>
+              </thead>
+              <tbody className="space-y-1">
+                {LABS.map(({ key, label }) => (
+                  <tr key={key} className="border-b border-gray-700/50">
+                    <td className="py-1 pr-2 text-gray-300 whitespace-nowrap">{label}</td>
+                    <td className="py-1 pr-2">
+                      <input
+                        type="text"
+                        value={datosNutricionales[`${key}Resultado`] || ''}
+                        onChange={(e) => updateNutri(`${key}Resultado`, e.target.value)}
+                        className="w-full bg-[#1f2c34] text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                        placeholder="Resultado"
+                      />
+                    </td>
+                    <td className="py-1">
+                      <input
+                        type="text"
+                        value={datosNutricionales[`${key}Fecha`] || ''}
+                        onChange={(e) => updateNutri(`${key}Fecha`, e.target.value)}
+                        className="w-full bg-[#1f2c34] text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                        placeholder="dd/mm/aaaa"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Diagnóstico Nutricional */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Diagnóstico Nutricional</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Código CIE-10</label>
+              <input
+                type="text"
+                value={datosNutricionales.diagnosticoCIE10 || ''}
+                onChange={(e) => updateNutri('diagnosticoCIE10', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: E66.0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Diagnóstico Nutricional</label>
+              <textarea
+                value={datosNutricionales.diagnosticoNutricional || ''}
+                onChange={(e) => updateNutri('diagnosticoNutricional', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Diagnóstico nutricional detallado..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Plan Nutricional */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan Nutricional</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Requerimiento Calórico (kcal/día)</label>
+              <input
+                type="text"
+                value={datosNutricionales.requerimientoCalorico || ''}
+                onChange={(e) => updateNutri('requerimientoCalorico', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 1800"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Distribución de Macronutrientes</label>
+              <textarea
+                value={datosNutricionales.distribucionMacronutrientes || ''}
+                onChange={(e) => updateNutri('distribucionMacronutrientes', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="CHO: 50%, Proteína: 20%, Grasa: 30%..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Plan Alimentario</label>
+              <textarea
+                value={datosNutricionales.planAlimentario || ''}
+                onChange={(e) => updateNutri('planAlimentario', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={4}
+                placeholder="Detalle del plan alimentario por tiempos de comida..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Actividad Física Recomendada</label>
+              <textarea
+                value={datosNutricionales.actividadFisicaPlan || ''}
+                onChange={(e) => updateNutri('actividadFisicaPlan', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Tipo, frecuencia e intensidad de actividad física..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Nutricionales</label>
+              <textarea
+                value={datosNutricionales.recomendacionesNutricionales || ''}
+                onChange={(e) => updateNutri('recomendacionesNutricionales', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Recomendaciones nutricionales generales..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Campos Médicos Editables */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-3 text-[#00a884]">Evaluación Médica</h3>
+          <div className="space-y-3">
+
+            {/* 1. ANTECEDENTES */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Antecedentes</label>
+              <textarea
+                value={mdAntecedentes}
+                onChange={(e) => setMdAntecedentes(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Antecedentes médicos relevantes..."
+              />
+            </div>
+
+            {/* 2. OBS. CERTIFICADO */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Obs. Certificado</label>
+              <textarea
+                value={mdObservacionesCertificado}
+                onChange={(e) => setMdObservacionesCertificado(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Observaciones para el certificado..."
+              />
+            </div>
+
+            {/* 3. RECOMENDACIONES MÉDICAS ADICIONALES */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Médicas Adicionales</label>
+              <textarea
+                value={mdRecomendacionesMedicasAdicionales}
+                onChange={(e) => setMdRecomendacionesMedicasAdicionales(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Recomendaciones médicas adicionales..."
+              />
+            </div>
+
+            {/* 4. OBSERVACIONES PRIVADAS PARA LA EMPRESA */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Observaciones privadas para la empresa</label>
+              <textarea
+                value={mdObsParaMiDocYa}
+                onChange={(e) => setMdObsParaMiDocYa(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={3}
+                placeholder="Observaciones privadas para la empresa..."
+              />
+            </div>
+
+            {/* 5. DIAGNÓSTICOS */}
+            <div className="grid grid-cols-1 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Diagnóstico 1 (Principal)</label>
+                <select
+                  value={mdDx1}
+                  onChange={(e) => setMdDx1(e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione diagnóstico</option>
+                  <option value="Asma ocupacional">Asma ocupacional</option>
+                  <option value="Bronquitis crónica por polvos inorgánicos">Bronquitis crónica por polvos inorgánicos</option>
+                  <option value="Bursitis de codo">Bursitis de codo</option>
+                  <option value="Bursitis de hombro">Bursitis de hombro</option>
+                  <option value="Bursitis de rodilla">Bursitis de rodilla</option>
+                  <option value="Cervicalgia">Cervicalgia</option>
+                  <option value="Dermatitis alérgica de contacto">Dermatitis alérgica de contacto</option>
+                  <option value="Dermatitis irritativa de contacto">Dermatitis irritativa de contacto</option>
+                  <option value="Dorsalgia">Dorsalgia</option>
+                  <option value="Epicondilitis lateral (codo de tenista)">Epicondilitis lateral (codo de tenista)</option>
+                  <option value="Epicondilitis medial">Epicondilitis medial</option>
+                  <option value="Escoliosis">Escoliosis</option>
+                  <option value="Espondiloartrosis cervical">Espondiloartrosis cervical</option>
+                  <option value="Espondiloartrosis lumbar">Espondiloartrosis lumbar</option>
+                  <option value="Espondilosis cervical">Espondilosis cervical</option>
+                  <option value="Espondilosis lumbar">Espondilosis lumbar</option>
+                  <option value="Estrés postraumático">Estrés postraumático</option>
+                  <option value="Gonalgia (dolor de rodilla)">Gonalgia (dolor de rodilla)</option>
+                  <option value="Hernia discal cervical">Hernia discal cervical</option>
+                  <option value="Hernia discal lumbar">Hernia discal lumbar</option>
+                  <option value="Hipoacusia neurosensorial bilateral">Hipoacusia neurosensorial bilateral</option>
+                  <option value="Lumbalgia">Lumbalgia</option>
+                  <option value="Mialgia">Mialgia</option>
+                  <option value="Obesidad">Obesidad</option>
+                  <option value="Onicomicosis">Onicomicosis</option>
+                  <option value="Pérdida auditiva inducida por ruido">Pérdida auditiva inducida por ruido</option>
+                  <option value="Presbiacusia">Presbiacusia</option>
+                  <option value="Síndrome de Burnout">Síndrome de Burnout</option>
+                  <option value="Síndrome de túnel carpiano">Síndrome de túnel carpiano</option>
+                  <option value="Síndrome del manguito rotador">Síndrome del manguito rotador</option>
+                  <option value="Sinovitis de muñeca">Sinovitis de muñeca</option>
+                  <option value="Sobrepeso">Sobrepeso</option>
+                  <option value="Tenosinovitis de De Quervain">Tenosinovitis de De Quervain</option>
+                  <option value="Tendinitis de hombro">Tendinitis de hombro</option>
+                  <option value="Tendinitis del manguito rotador">Tendinitis del manguito rotador</option>
+                  <option value="Trastorno adaptativo con ansiedad">Trastorno adaptativo con ansiedad</option>
+                  <option value="Trastorno de ansiedad generalizada">Trastorno de ansiedad generalizada</option>
+                  <option value="Trastorno depresivo">Trastorno depresivo</option>
+                  <option value="Trastornos del sueño">Trastornos del sueño</option>
+                  <option value="Trauma acústico agudo">Trauma acústico agudo</option>
+                  <option value="Vértigo posicional">Vértigo posicional</option>
+                  <option value="Vitiligo">Vitiligo</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Diagnóstico 2 (Secundario)</label>
+                <select
+                  value={mdDx2}
+                  onChange={(e) => setMdDx2(e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione diagnóstico</option>
+                  <option value="Asma ocupacional">Asma ocupacional</option>
+                  <option value="Bronquitis crónica por polvos inorgánicos">Bronquitis crónica por polvos inorgánicos</option>
+                  <option value="Bursitis de codo">Bursitis de codo</option>
+                  <option value="Bursitis de hombro">Bursitis de hombro</option>
+                  <option value="Bursitis de rodilla">Bursitis de rodilla</option>
+                  <option value="Cervicalgia">Cervicalgia</option>
+                  <option value="Dermatitis alérgica de contacto">Dermatitis alérgica de contacto</option>
+                  <option value="Dermatitis irritativa de contacto">Dermatitis irritativa de contacto</option>
+                  <option value="Dorsalgia">Dorsalgia</option>
+                  <option value="Epicondilitis lateral (codo de tenista)">Epicondilitis lateral (codo de tenista)</option>
+                  <option value="Epicondilitis medial">Epicondilitis medial</option>
+                  <option value="Escoliosis">Escoliosis</option>
+                  <option value="Espondiloartrosis cervical">Espondiloartrosis cervical</option>
+                  <option value="Espondiloartrosis lumbar">Espondiloartrosis lumbar</option>
+                  <option value="Espondilosis cervical">Espondilosis cervical</option>
+                  <option value="Espondilosis lumbar">Espondilosis lumbar</option>
+                  <option value="Estrés postraumático">Estrés postraumático</option>
+                  <option value="Gonalgia (dolor de rodilla)">Gonalgia (dolor de rodilla)</option>
+                  <option value="Hernia discal cervical">Hernia discal cervical</option>
+                  <option value="Hernia discal lumbar">Hernia discal lumbar</option>
+                  <option value="Hipoacusia neurosensorial bilateral">Hipoacusia neurosensorial bilateral</option>
+                  <option value="Lumbalgia">Lumbalgia</option>
+                  <option value="Mialgia">Mialgia</option>
+                  <option value="Obesidad">Obesidad</option>
+                  <option value="Onicomicosis">Onicomicosis</option>
+                  <option value="Pérdida auditiva inducida por ruido">Pérdida auditiva inducida por ruido</option>
+                  <option value="Presbiacusia">Presbiacusia</option>
+                  <option value="Síndrome de Burnout">Síndrome de Burnout</option>
+                  <option value="Síndrome de túnel carpiano">Síndrome de túnel carpiano</option>
+                  <option value="Síndrome del manguito rotador">Síndrome del manguito rotador</option>
+                  <option value="Sinovitis de muñeca">Sinovitis de muñeca</option>
+                  <option value="Sobrepeso">Sobrepeso</option>
+                  <option value="Tenosinovitis de De Quervain">Tenosinovitis de De Quervain</option>
+                  <option value="Tendinitis de hombro">Tendinitis de hombro</option>
+                  <option value="Tendinitis del manguito rotador">Tendinitis del manguito rotador</option>
+                  <option value="Trastorno adaptativo con ansiedad">Trastorno adaptativo con ansiedad</option>
+                  <option value="Trastorno de ansiedad generalizada">Trastorno de ansiedad generalizada</option>
+                  <option value="Trastorno depresivo">Trastorno depresivo</option>
+                  <option value="Trastornos del sueño">Trastornos del sueño</option>
+                  <option value="Trauma acústico agudo">Trauma acústico agudo</option>
+                  <option value="Vértigo posicional">Vértigo posicional</option>
+                  <option value="Vitiligo">Vitiligo</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 6. SUGERENCIAS IA */}
+            <div className="border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs text-blue-400 font-semibold">Sugerencias IA</label>
+                <button
+                  onClick={handleGenerateAISuggestions}
+                  disabled={isGeneratingAI}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {isGeneratingAI ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Generar con IA
+                    </>
+                  )}
+                </button>
+              </div>
+              <textarea
+                value={aiSuggestions}
+                onChange={(e) => setAiSuggestions(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-blue-500/30 focus:border-blue-400 focus:outline-none"
+                rows={5}
+                placeholder="Haz clic en 'Generar con IA' para obtener recomendaciones médicas personalizadas basadas en los datos del paciente..."
+              />
+              <p className="text-xs text-blue-400/70 mt-1">
+                Estas sugerencias se concatenarán automáticamente con las recomendaciones médicas adicionales al guardar
+              </p>
+            </div>
+
+            {/* 7. CONCEPTO FINAL */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Concepto Final <span className="text-red-500">*</span></label>
+              <select
+                value={mdConceptoFinal}
+                onChange={(e) => setMdConceptoFinal(e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              >
+                <option value="">Seleccione una opción</option>
+                {data?.codEmpresa === 'SIIGO' ? (
+                  <>
+                    <option value="APTO">APTO</option>
+                    <option value="NO APTO">NO APTO</option>
+                    <option value="APLAZADO">APLAZADO</option>
+                    <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="APTO">APTO</option>
+                    <option value="APTO CON RECOMENDACIONES">APTO CON RECOMENDACIONES</option>
+                    <option value="APLAZADO">APLAZADO</option>
+                    <option value="NO APTO">NO APTO</option>
+                    <option value="NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL">NO PRESENTA DETERIORO FÍSICO POR ACTIVIDAD LABORAL</option>
+                    <option value="Puede realizar actividades escolares y grupales">Puede realizar actividades escolares y grupales</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+          </div>
+        </div>
 
       </div>
       {/* Cierre del contenido scrollable */}

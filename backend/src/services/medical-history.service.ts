@@ -88,6 +88,12 @@ interface MedicalHistoryData {
   talla?: string;
   peso?: string;
 
+  // Datos adicionales
+  motivoConsulta?: string;
+  ciudad?: string;
+  eps?: string;
+  datosNutricionales?: any;
+
   // Fechas y estado
   fechaAtencion?: Date;
   fechaConsulta?: Date;
@@ -107,6 +113,7 @@ interface UpdateMedicalHistoryPayload {
   talla?: string;
   peso?: string;
   cargo?: string;
+  datosNutricionales?: any;
 }
 
 interface PatientHistoryRecord {
@@ -274,6 +281,10 @@ class MedicalHistoryService {
           mdDx2: row.mdDx2,
           talla: row.talla,
           peso: row.peso,
+          motivoConsulta: row.motivoConsulta,
+          ciudad: row.ciudad,
+          eps: row.eps,
+          datosNutricionales: row.datosNutricionales || null,
           fechaAtencion: row.fechaAtencion,
           fechaConsulta: row.fechaConsulta,
           atendido: row.atendido,
@@ -301,8 +312,139 @@ class MedicalHistoryService {
   }
 
   /**
-   * Actualiza la historia clínica: PostgreSQL primero (principal), luego Wix (backup)
+   * Lista historias clínicas de personas atendidas con paginación y búsqueda
    */
+  async getAtendidos(options: { page?: number; limit?: number; buscar?: string }): Promise<{
+    data: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPaginas: number;
+  }> {
+    try {
+      const page = options.page || 1;
+      const limit = options.limit || 20;
+      const offset = (page - 1) * limit;
+      const buscar = options.buscar?.trim();
+
+      console.log(`📋 Listando atendidos (página ${page}, limit ${limit}${buscar ? `, búsqueda: "${buscar}"` : ''})...`);
+
+      let whereClause = 'WHERE h."atendido" = \'ATENDIDO\' AND h."fechaConsulta" IS NOT NULL';
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (buscar && buscar.length >= 2) {
+        whereClause += ` AND (
+          h."numeroId" ILIKE $${paramIndex}
+          OR h."primerNombre" ILIKE $${paramIndex}
+          OR h."primerApellido" ILIKE $${paramIndex}
+          OR CONCAT(h."primerNombre", ' ', h."primerApellido") ILIKE $${paramIndex}
+        )`;
+        params.push(`%${buscar}%`);
+        paramIndex++;
+      }
+
+      // Count total
+      const countResult = await postgresService.query(
+        `SELECT COUNT(*) as total FROM "HistoriaClinica" h ${whereClause}`,
+        params
+      );
+      const total = parseInt(countResult?.[0]?.total || '0', 10);
+      const totalPaginas = Math.ceil(total / limit);
+
+      // Get paginated data with formulario join for extra fields
+      const dataResult = await postgresService.query(
+        `SELECT
+          h."_id",
+          h."numeroId",
+          h."primerNombre",
+          h."segundoNombre",
+          h."primerApellido",
+          h."segundoApellido",
+          h."celular",
+          h."email",
+          h."codEmpresa",
+          h."empresa",
+          h."cargo",
+          h."tipoExamen",
+          h."mdConceptoFinal",
+          h."mdDx1",
+          h."mdDx2",
+          h."mdAntecedentes",
+          h."mdObsParaMiDocYa",
+          h."mdObservacionesCertificado",
+          h."mdRecomendacionesMedicasAdicionales",
+          h."talla",
+          h."peso",
+          h."motivoConsulta",
+          h."diagnostico",
+          h."tratamiento",
+          h."fechaAtencion",
+          h."fechaConsulta",
+          h."atendido",
+          h."medico",
+          h."ciudad",
+          h."examenes",
+          h."horaAtencion",
+          h."datosNutricionales",
+          f.edad as "f_edad",
+          f.genero as "f_genero",
+          f.foto_url as "f_foto"
+        FROM "HistoriaClinica" h
+        LEFT JOIN formularios f ON h."numeroId" = f.numero_id
+        ${whereClause}
+        ORDER BY h."fechaConsulta" DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...params, limit, offset]
+      );
+
+      const data = (dataResult || []).map((row: any) => ({
+        _id: row._id,
+        numeroId: row.numeroId,
+        primerNombre: row.primerNombre,
+        segundoNombre: row.segundoNombre,
+        primerApellido: row.primerApellido,
+        segundoApellido: row.segundoApellido,
+        celular: row.celular,
+        email: row.email,
+        codEmpresa: row.codEmpresa,
+        empresa: row.empresa,
+        cargo: row.cargo,
+        tipoExamen: row.tipoExamen,
+        mdConceptoFinal: row.mdConceptoFinal,
+        mdDx1: row.mdDx1,
+        mdDx2: row.mdDx2,
+        mdAntecedentes: row.mdAntecedentes,
+        mdObsParaMiDocYa: row.mdObsParaMiDocYa,
+        mdObservacionesCertificado: row.mdObservacionesCertificado,
+        mdRecomendacionesMedicasAdicionales: row.mdRecomendacionesMedicasAdicionales,
+        talla: row.talla,
+        peso: row.peso,
+        motivoConsulta: row.motivoConsulta,
+        diagnostico: row.diagnostico,
+        tratamiento: row.tratamiento,
+        fechaAtencion: row.fechaAtencion,
+        fechaConsulta: row.fechaConsulta,
+        atendido: row.atendido,
+        medico: row.medico,
+        ciudad: row.ciudad,
+        examenes: row.examenes,
+        horaAtencion: row.horaAtencion,
+        datosNutricionales: row.datosNutricionales,
+        edad: row.f_edad,
+        genero: row.f_genero,
+        foto: row.f_foto,
+      }));
+
+      console.log(`✅ Atendidos: ${data.length} registros (página ${page}/${totalPaginas}, total: ${total})`);
+
+      return { data, total, page, limit, totalPaginas };
+    } catch (error: any) {
+      console.error('❌ Error listando atendidos:', error.message);
+      throw new Error('Error al listar historias clínicas de atendidos');
+    }
+  }
+
   /**
    * Obtiene el historial de consultas anteriores de un paciente por su numeroId (documento de identidad)
    * Retorna todas las consultas completadas (atendido = 'ATENDIDO') ordenadas por fecha descendente
@@ -413,6 +555,7 @@ class MedicalHistoryService {
         talla: payload.talla,
         peso: payload.peso,
         cargo: payload.cargo,
+        datosNutricionales: payload.datosNutricionales,
 
         // Campos de estado
         fechaConsulta: new Date(),

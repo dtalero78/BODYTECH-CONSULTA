@@ -107,6 +107,70 @@ class PostgresService {
   }
 
   /**
+   * Ejecuta migraciones automáticas para crear tablas necesarias
+   */
+  async runMigrations(): Promise<void> {
+    try {
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS "HistoriaClinica" (
+          "_id" TEXT PRIMARY KEY,
+          "_createdDate" TIMESTAMPTZ DEFAULT NOW(),
+          "_updatedDate" TIMESTAMPTZ DEFAULT NOW(),
+          "numeroId" TEXT,
+          "primerNombre" TEXT,
+          "segundoNombre" TEXT,
+          "primerApellido" TEXT,
+          "segundoApellido" TEXT,
+          "celular" TEXT,
+          "email" TEXT,
+          "codEmpresa" TEXT,
+          "empresa" TEXT,
+          "cargo" TEXT,
+          "tipoExamen" TEXT,
+          "mdAntecedentes" TEXT,
+          "mdObsParaMiDocYa" TEXT,
+          "mdObservacionesCertificado" TEXT,
+          "mdRecomendacionesMedicasAdicionales" TEXT,
+          "mdConceptoFinal" TEXT,
+          "mdDx1" TEXT,
+          "mdDx2" TEXT,
+          "talla" TEXT,
+          "peso" TEXT,
+          "motivoConsulta" TEXT,
+          "diagnostico" TEXT,
+          "tratamiento" TEXT,
+          "fechaAtencion" TEXT,
+          "fechaConsulta" TIMESTAMPTZ,
+          "atendido" TEXT,
+          "pvEstado" TEXT,
+          "medico" TEXT,
+          "ciudad" TEXT,
+          "examenes" TEXT,
+          "horaAtencion" TEXT,
+          "eps" TEXT,
+          "datosNutricionales" JSONB DEFAULT NULL
+        )
+      `);
+      console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
+
+      // Agregar columna datosNutricionales si no existe (para DBs existentes)
+      await this.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'HistoriaClinica' AND column_name = 'datosNutricionales'
+          ) THEN
+            ALTER TABLE "HistoriaClinica" ADD COLUMN "datosNutricionales" JSONB DEFAULT NULL;
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);
+    }
+  }
+
+  /**
    * Busca una conversación por número de celular, o la crea si no existe
    * @param celular Número de teléfono con formato +573001234567
    * @param nombrePaciente Nombre del paciente (opcional)

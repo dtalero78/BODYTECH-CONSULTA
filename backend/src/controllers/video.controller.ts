@@ -322,6 +322,31 @@ class VideoController {
   }
 
   /**
+   * Listar historias clínicas de personas atendidas con paginación y búsqueda
+   * GET /api/video/medical-history/atendidos?page=1&limit=20&buscar=texto
+   */
+  async getAtendidos(req: Request, res: Response): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const buscar = req.query.buscar as string | undefined;
+
+      const result = await medicalHistoryService.getAtendidos({ page, limit, buscar });
+
+      res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      console.error('Error fetching atendidos:', error);
+      res.status(500).json({
+        error: 'Failed to fetch atendidos',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
    * Obtener historia clínica de un paciente por _id
    * GET /api/video/medical-history/:historiaId
    */

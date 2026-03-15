@@ -200,7 +200,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       {role === 'doctor' && historiaId && (
         <div
           className="fixed top-0 right-0 h-full bg-[#1f2c34] shadow-2xl z-50"
-          style={{ width: '450px', maxWidth: '90vw' }}
+          style={{ width: '540px', maxWidth: '90vw' }}
         >
           <MedicalHistoryPanel
             historiaId={historiaId}

@@ -284,13 +284,15 @@ export function MedicalPanelPage() {
       const roomNameWithParams = `${roomName}?${params.toString()}`;
 
       // 1. Enviar mensaje de WhatsApp con template aprobado
-      // Template: "Hola {{2}}. Te escribimos de BSL. Tienes una consulta médica programada con el Dr. {{3}}..."
-      // Button URL: https://medico-bsl.com/patient/{{1}}
+      // Template Bodytech: "Hola {{1}}, Te saludamos del Bodytech. Tienes una consulta médica a las {{2}}..."
+      // Button URL: https://bodytech.app/panel-medico/patient/{{3}}
+      const now = new Date();
+      const appointmentTime = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
       await apiService.sendWhatsApp(
         phoneWithoutPlus,
         roomNameWithParams,
         patient.primerNombre,
-        medicoCode
+        appointmentTime
       );
       console.log('WhatsApp con template enviado exitosamente');
 

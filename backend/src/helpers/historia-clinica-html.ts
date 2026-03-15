@@ -105,6 +105,10 @@ function buildFamiliaresHTML(f: any): string {
   }).join('');
 }
 
+function section(title: string, body: string): string {
+  return `<div class="section"><div class="section-title">${title}</div><div class="section-body">${body}</div></div>`;
+}
+
 function buildDatosNutricionalesHTML(datos: any): string {
   if (!datos || typeof datos !== 'object') return '';
 
@@ -116,6 +120,7 @@ function buildDatosNutricionalesHTML(datos: any): string {
   };
 
   let html = '';
+  let sectionNum = 8;
 
   // Datos de Atención
   const atencion = [
@@ -124,12 +129,16 @@ function buildDatosNutricionalesHTML(datos: any): string {
     { key: 'registroProfesional', label: 'Registro Profesional' },
   ].filter(f => datos[f.key]);
   if (atencion.length > 0) {
-    html += `<div class="sub-section"><h4>Datos de Atención</h4><div class="grid-3">${atencion.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+    html += section(`VIII. Datos de Atención`,
+      `<div class="grid-3">${atencion.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
   }
 
   // Enfermedad Actual
   if (datos.descripcionEnfermedad) {
-    html += `<div class="sub-section"><h4>Enfermedad Actual</h4><div class="grid-2">${celda('Descripción', datos.descripcionEnfermedad, true)}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Enfermedad Actual`,
+      `<div class="value" style="padding:6px 0">${v(datos.descripcionEnfermedad)}</div>`);
+    sectionNum++;
   }
 
   // Antecedentes Adicionales
@@ -140,7 +149,9 @@ function buildDatosNutricionalesHTML(datos: any): string {
     { key: 'hospitalizaciones', label: 'Hospitalizaciones' },
   ].filter(f => datos[f.key]);
   if (antAd.length > 0) {
-    html += `<div class="sub-section"><h4>Antecedentes Adicionales</h4><div class="grid-2">${antAd.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Antecedentes Adicionales`,
+      `<div class="grid-2">${antAd.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
   }
 
   // Antropometría Complementaria
@@ -153,32 +164,38 @@ function buildDatosNutricionalesHTML(datos: any): string {
     { key: 'relacionCinturaCadera', label: 'Rel. Cintura/Cadera' },
   ].filter(f => datos[f.key]);
   if (antro.length > 0) {
-    html += `<div class="sub-section"><h4>Antropometría Complementaria</h4><div class="grid-3">${antro.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Antropometría Complementaria`,
+      `<div class="grid-3">${antro.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
   }
 
   // Evaluación Dietética
   const dieta = [
     { key: 'recordatorio24h', label: 'Recordatorio 24 Horas', wide: true },
-    { key: 'numComidasDia', label: 'Comidas/Día' },
-    { key: 'consumoAgua', label: 'Consumo de Agua (L/día)' },
+    { key: 'numComidasDia', label: 'Comidas/Día', wide: false },
+    { key: 'consumoAgua', label: 'Consumo de Agua (L/día)', wide: false },
     { key: 'preferenciasAlimentarias', label: 'Preferencias Alimentarias', wide: true },
-    { key: 'alergiasAlimentarias', label: 'Alergias Alimentarias' },
-    { key: 'suplementos', label: 'Suplementos' },
+    { key: 'alergiasAlimentarias', label: 'Alergias Alimentarias', wide: false },
+    { key: 'suplementos', label: 'Suplementos', wide: false },
     { key: 'cambiosPesoRecientes', label: 'Cambios de Peso Recientes', wide: true },
   ].filter(f => datos[f.key]);
   if (dieta.length > 0) {
-    html += `<div class="sub-section"><h4>Evaluación Dietética</h4><div class="grid-2">${dieta.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Evaluación Dietética`,
+      `<div class="grid-2">${dieta.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div>`);
+    sectionNum++;
   }
 
   // Evaluación Clínica Nutricional
   const clinica = [
-    { key: 'signosClinicos', label: 'Signos Clínicos', wide: true },
-    { key: 'problemasDigestivos', label: 'Problemas Digestivos', wide: true },
+    { key: 'signosClinicos', label: 'Signos Clínicos' },
+    { key: 'problemasDigestivos', label: 'Problemas Digestivos' },
     { key: 'masticacionDeglucion', label: 'Masticación y Deglución' },
-    { key: 'observacionesNutricionales', label: 'Observaciones Nutricionales', wide: true },
+    { key: 'observacionesNutricionales', label: 'Observaciones Nutricionales' },
   ].filter(f => datos[f.key]);
   if (clinica.length > 0) {
-    html += `<div class="sub-section"><h4>Evaluación Clínica Nutricional</h4><div class="grid-2">${clinica.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Evaluación Clínica Nutricional`,
+      clinica.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
   }
 
   // Laboratorios
@@ -191,35 +208,44 @@ function buildDatosNutricionalesHTML(datos: any): string {
     }
   }
   if (labRows.length > 0) {
-    html += `<div class="sub-section"><h4>Laboratorios</h4>
-      <table class="data-table">
+    html += section(`${romanNum(sectionNum)}. Laboratorios`,
+      `<table class="data-table">
         <thead><tr><th>Examen</th><th>Resultado</th><th>Fecha</th></tr></thead>
         <tbody>${labRows.join('')}</tbody>
-      </table></div>`;
+      </table>`);
+    sectionNum++;
   }
 
   // Diagnóstico Nutricional
   const dx = [
     { key: 'diagnosticoCIE10', label: 'Código CIE-10' },
-    { key: 'diagnosticoNutricional', label: 'Diagnóstico Nutricional', wide: true },
+    { key: 'diagnosticoNutricional', label: 'Diagnóstico Nutricional' },
   ].filter(f => datos[f.key]);
   if (dx.length > 0) {
-    html += `<div class="sub-section"><h4>Diagnóstico Nutricional</h4><div class="grid-2">${dx.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Diagnóstico Nutricional`,
+      dx.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
   }
 
   // Plan Nutricional
   const plan = [
     { key: 'requerimientoCalorico', label: 'Requerimiento Calórico (kcal/día)' },
-    { key: 'distribucionMacronutrientes', label: 'Distribución de Macronutrientes', wide: true },
-    { key: 'planAlimentario', label: 'Plan Alimentario', wide: true },
-    { key: 'actividadFisicaPlan', label: 'Actividad Física Recomendada', wide: true },
-    { key: 'recomendacionesNutricionales', label: 'Recomendaciones Nutricionales', wide: true },
+    { key: 'distribucionMacronutrientes', label: 'Distribución de Macronutrientes' },
+    { key: 'planAlimentario', label: 'Plan Alimentario' },
+    { key: 'actividadFisicaPlan', label: 'Actividad Física Recomendada' },
+    { key: 'recomendacionesNutricionales', label: 'Recomendaciones Nutricionales' },
   ].filter(f => datos[f.key]);
   if (plan.length > 0) {
-    html += `<div class="sub-section"><h4>Plan Nutricional</h4><div class="grid-2">${plan.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+    html += section(`${romanNum(sectionNum)}. Plan Nutricional`,
+      plan.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
   }
 
   return html;
+}
+
+function romanNum(n: number): string {
+  const romans = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+  return romans[n] || String(n);
 }
 
 interface HistoriaClinicaHTMLParams {
@@ -470,14 +496,7 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
 
   ${datosNutri && Object.keys(datosNutri).length > 0 ? `
   <!-- VIII. DATOS NUTRICIONALES -->
-  <div class="section">
-    <div class="section-title">VIII. Datos Nutricionales</div>
-    <div class="section-body">
-      <div class="grid-4">
-        ${buildDatosNutricionalesHTML(datosNutri)}
-      </div>
-    </div>
-  </div>` : ''}
+  ${buildDatosNutricionalesHTML(datosNutri)}` : ''}
 
   <!-- CONCEPTO MÉDICO FINAL -->
   <div class="section">

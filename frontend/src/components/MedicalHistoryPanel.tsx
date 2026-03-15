@@ -287,7 +287,19 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     try {
       setIsGeneratingAI(true);
       setError(null);
+      // Recopilar condiciones positivas de antecedentes
+      const condicionesPositivas = getPositiveConditions();
+
+      // Recopilar laboratorios desde datosNutricionales
+      const laboratorios: Record<string, string> = {};
+      const labKeys = ['glucosa','hba1c','colesterolTotal','ldl','hdl','trigliceridos','hemoglobina','ferritina','vitaminaD','vitaminaB12'];
+      labKeys.forEach(key => {
+        if (datosNutricionales[`${key}Resultado`]) laboratorios[`${key}Resultado`] = datosNutricionales[`${key}Resultado`];
+        if (datosNutricionales[`${key}Fecha`]) laboratorios[`${key}Fecha`] = datosNutricionales[`${key}Fecha`];
+      });
+
       const patientData = {
+        // Datos demográficos
         edad: data.edad,
         genero: data.genero,
         estadoCivil: data.estadoCivil,
@@ -299,6 +311,37 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         antecedentesFamiliares: data.antecedentesFamiliares,
         encuestaSalud: data.encuestaSalud,
         empresa1: data.empresa1,
+        // Antecedentes personales
+        condicionesPositivas,
+        // Antropometría
+        talla,
+        peso,
+        imc,
+        pesoHabitual: datosNutricionales.pesoHabitual,
+        circunferenciaCintura: datosNutricionales.circunferenciaCintura,
+        circunferenciaCadera: datosNutricionales.circunferenciaCadera,
+        porcentajeGrasa: datosNutricionales.porcentajeGrasa,
+        masaMuscular: datosNutricionales.masaMuscular,
+        // Evaluación dietética
+        recordatorio24h: datosNutricionales.recordatorio24h,
+        numComidasDia: datosNutricionales.numComidasDia,
+        consumoAgua: datosNutricionales.consumoAgua,
+        preferenciasAlimentarias: datosNutricionales.preferenciasAlimentarias,
+        alergiasAlimentarias: datosNutricionales.alergiasAlimentarias,
+        suplementos: datosNutricionales.suplementos,
+        cambiosPesoRecientes: datosNutricionales.cambiosPesoRecientes,
+        // Evaluación clínica
+        signosClinicos: datosNutricionales.signosClinicos,
+        problemasDigestivos: datosNutricionales.problemasDigestivos,
+        masticacionDeglucion: datosNutricionales.masticacionDeglucion,
+        // Antecedentes adicionales
+        medicamentosActuales: datosNutricionales.medicamentosActuales,
+        alergias: datosNutricionales.alergias,
+        cirugias: datosNutricionales.cirugias,
+        hospitalizaciones: datosNutricionales.hospitalizaciones,
+        descripcionEnfermedad: datosNutricionales.descripcionEnfermedad,
+        // Laboratorios
+        laboratorios: Object.keys(laboratorios).length > 0 ? laboratorios : undefined,
       };
       const suggestions = await apiService.generateAISuggestions(patientData);
       setAiSuggestions(suggestions);

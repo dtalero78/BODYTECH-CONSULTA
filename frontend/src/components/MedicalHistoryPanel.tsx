@@ -119,6 +119,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
   const [aiSuggestions, setAiSuggestions] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
   // Estado para datos nutricionales (JSONB)
   const [datosNutricionales, setDatosNutricionales] = useState<any>({});
@@ -1214,44 +1215,32 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </div>
             </div>
 
-            {/* 6. SUGERENCIAS IA */}
-            <div className="border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs text-blue-400 font-semibold">Sugerencias IA</label>
-                <button
-                  onClick={handleGenerateAISuggestions}
-                  disabled={isGeneratingAI}
-                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  {isGeneratingAI ? (
-                    <>
-                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Generando...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Generar con IA
-                    </>
-                  )}
-                </button>
-              </div>
-              <textarea
-                value={aiSuggestions}
-                onChange={(e) => setAiSuggestions(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-blue-500/30 focus:border-blue-400 focus:outline-none"
-                rows={5}
-                placeholder="Haz clic en 'Generar con IA' para obtener recomendaciones médicas personalizadas basadas en los datos del paciente..."
-              />
-              <p className="text-xs text-blue-400/70 mt-1">
-                Estas sugerencias se concatenarán automáticamente con las recomendaciones médicas adicionales al guardar
-              </p>
-            </div>
+            {/* 6. SUGERENCIAS IA - Botón para abrir modal */}
+            <button
+              onClick={() => {
+                setIsAIModalOpen(true);
+                if (!aiSuggestions) handleGenerateAISuggestions();
+              }}
+              disabled={isGeneratingAI}
+              className="w-full border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10 hover:bg-blue-900/20 transition flex items-center justify-center gap-2 text-blue-400 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGeneratingAI ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Generando Análisis Nutricional...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {aiSuggestions ? 'Ver / Editar Análisis Nutricional IA' : 'Generar Análisis Nutricional con IA'}
+                </>
+              )}
+            </button>
 
             {/* 7. CONCEPTO FINAL */}
             <div>
@@ -1317,6 +1306,89 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           numeroId={data.numeroId}
           patientName={`${data.primerNombre} ${data.primerApellido}`}
         />
+      )}
+
+      {/* Modal de Sugerencias IA - Análisis Nutricional */}
+      {isAIModalOpen && (
+        <div className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#1f2c34] rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            {/* Header del modal */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <h3 className="text-lg font-bold text-blue-400">Análisis Nutricional IA</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerateAISuggestions}
+                  disabled={isGeneratingAI}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {isGeneratingAI ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Regenerar
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setIsAIModalOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido del modal */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {isGeneratingAI && !aiSuggestions ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <svg className="animate-spin h-10 w-10 text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p className="text-gray-400">Analizando perfil nutricional del paciente...</p>
+                  <p className="text-gray-500 text-xs mt-1">Esto puede tomar unos segundos</p>
+                </div>
+              ) : (
+                <textarea
+                  value={aiSuggestions}
+                  onChange={(e) => setAiSuggestions(e.target.value)}
+                  className="w-full h-full min-h-[60vh] bg-[#0b141a] text-white text-sm px-4 py-3 rounded-lg border border-gray-700 focus:border-blue-400 focus:outline-none resize-none leading-relaxed"
+                  placeholder="Las sugerencias de IA aparecerán aquí..."
+                />
+              )}
+            </div>
+
+            {/* Footer del modal */}
+            <div className="border-t border-gray-700 p-4 flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                Este análisis se incluirá en las recomendaciones al guardar la historia clínica
+              </p>
+              <button
+                onClick={() => setIsAIModalOpen(false)}
+                className="px-4 py-2 bg-[#00a884] text-white text-sm rounded-lg hover:bg-[#008f6f] transition font-semibold"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -381,9 +381,9 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
       <img src="/bodytechLogo.png" alt="Bodytech">
     </div>
     <div class="header-info">
-      <h1>Historia Clínica Ocupacional</h1>
+      <h1>Historia Clínica</h1>
       <p>Bodytech &nbsp;|&nbsp; Consulta Médica</p>
-      <p>Medicina del Trabajo - Salud Ocupacional</p>
+      <p>Medicina del Trabajo</p>
     </div>
     <div class="header-meta">
       <strong>${v(hc._id)}</strong>
@@ -527,8 +527,8 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
         <div class="firma-box">
           <div style="height:50px"></div>
           <div class="firma-line">
-            ${v(hc.medico, 'Médico Ocupacional')}<br>
-            Médico Salud Ocupacional
+            ${v(hc.medico, 'Médico')}<br>
+            Médico
           </div>
         </div>
       </div>

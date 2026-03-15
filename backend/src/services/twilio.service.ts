@@ -66,7 +66,7 @@ class TwilioService {
    */
   async createRoom(
     roomName: string,
-    type: 'group' | 'peer-to-peer' | 'group-small' = 'group'
+    type: 'group' | 'peer-to-peer' | 'group-small' | 'go' = 'go'
   ) {
     try {
       const room = await this.client.video.v1.rooms.create({

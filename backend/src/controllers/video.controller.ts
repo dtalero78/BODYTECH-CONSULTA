@@ -23,11 +23,10 @@ class VideoController {
         return;
       }
 
-      // Intentar crear la sala como peer-to-peer si no existe
-      // Esto optimiza costos (~62% más barato que 'group')
+      // Intentar crear la sala como 'go' (tipo actual de Twilio, reemplaza legacy peer-to-peer)
       try {
-        await twilioService.createRoom(roomName, 'peer-to-peer');
-        console.log(`Room created as peer-to-peer: ${roomName}`);
+        await twilioService.createRoom(roomName, 'go');
+        console.log(`Room created as go: ${roomName}`);
       } catch (error: any) {
         // Si la sala ya existe, continuar (error code 53113)
         if (error.code === 53113) {

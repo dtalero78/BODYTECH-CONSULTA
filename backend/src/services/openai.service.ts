@@ -103,9 +103,12 @@ FORMATO:
 IMPORTANTE: Al final de tu respuesta, agrega un bloque JSON delimitado así:
 ---JSON_CAMPOS---
 {
-  "diagnosticoNutricional": "Diagnóstico nutricional completo del paciente (ej: Paciente con estado nutricional normal / sobrepeso / obesidad grado I, etc.)",
+  "diagnosticoNutricional": "Diagnóstico nutricional completo del paciente (ej: Sobrepeso con patrón alimentario hipercalórico, dislipidemia mixta...)",
   "observacionesNutricionales": "Observaciones clínicas nutricionales relevantes encontradas en la evaluación",
-  "distribucionMacronutrientes": "Distribución recomendada en formato: CHO: X%, Proteína: Y%, Grasa: Z% (Xg, Yg, Zg)",
+  "requerimientoCalorico": "Valor calórico calculado con fórmula (ej: 2200 kcal/día (déficit de 500 kcal para pérdida gradual))",
+  "distribucionMacronutrientes": "Distribución recomendada en formato: CHO: X% (Xg), Proteína: Y% (Yg), Grasa: Z% (Zg). Fibra mínimo Xg/día.",
+  "planAlimentario": "Plan alimentario detallado por tiempos de comida: Desayuno, Media mañana, Almuerzo, Tarde, Cena. Separado por líneas.",
+  "actividadFisicaPlan": "Tipo, frecuencia e intensidad de actividad física recomendada",
   "recomendacionesNutricionales": "Recomendaciones nutricionales específicas para el paciente, separadas por líneas"
 }
 ---FIN_JSON---

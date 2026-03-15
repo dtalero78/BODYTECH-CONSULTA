@@ -354,13 +354,18 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         displayText = suggestions.replace(/---JSON_CAMPOS---[\s\S]*?---FIN_JSON---/, '').trim();
         try {
           const campos = JSON.parse(jsonMatch[1]);
-          setDatosNutricionales((prev: any) => ({
-            ...prev,
-            ...(campos.diagnosticoNutricional && !prev.diagnosticoNutricional ? { diagnosticoNutricional: campos.diagnosticoNutricional } : {}),
-            ...(campos.observacionesNutricionales && !prev.observacionesNutricionales ? { observacionesNutricionales: campos.observacionesNutricionales } : {}),
-            ...(campos.distribucionMacronutrientes && !prev.distribucionMacronutrientes ? { distribucionMacronutrientes: campos.distribucionMacronutrientes } : {}),
-            ...(campos.recomendacionesNutricionales && !prev.recomendacionesNutricionales ? { recomendacionesNutricionales: campos.recomendacionesNutricionales } : {}),
-          }));
+          const camposAPreLlenar = [
+            'diagnosticoNutricional', 'observacionesNutricionales',
+            'requerimientoCalorico', 'distribucionMacronutrientes',
+            'planAlimentario', 'actividadFisicaPlan', 'recomendacionesNutricionales',
+          ];
+          setDatosNutricionales((prev: any) => {
+            const updates: any = {};
+            for (const key of camposAPreLlenar) {
+              if (campos[key] && !prev[key]) updates[key] = campos[key];
+            }
+            return { ...prev, ...updates };
+          });
           console.log('✅ Campos nutricionales pre-llenados con IA:', Object.keys(campos));
         } catch (parseErr) {
           console.warn('⚠️ No se pudo parsear JSON de campos IA:', parseErr);

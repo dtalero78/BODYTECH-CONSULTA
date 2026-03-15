@@ -13,6 +13,7 @@ function App() {
         <Route path="/doctor" element={<DoctorPage />} />
         <Route path="/doctor/:roomName" element={<DoctorRoomPage />} />
         <Route path="/patient/:roomName" element={<PatientPage />} />
+        <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
         <Route path="/panel-medico" element={<MedicalPanelPage />} />
         <Route path="/historias" element={<HistoriasClinicasPage />} />
       </Routes>

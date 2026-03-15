@@ -107,9 +107,119 @@ function buildFamiliaresHTML(f: any): string {
 
 function buildDatosNutricionalesHTML(datos: any): string {
   if (!datos || typeof datos !== 'object') return '';
-  const entries = Object.entries(datos).filter(([, val]) => val !== null && val !== undefined && val !== '');
-  if (entries.length === 0) return '';
-  return entries.map(([key, val]) => celda(key, val)).join('');
+
+  const labNames: Record<string, string> = {
+    glucosa: 'Glucosa', hba1c: 'HbA1c', colesterolTotal: 'Colesterol Total',
+    ldl: 'LDL', hdl: 'HDL', trigliceridos: 'Triglicéridos',
+    hemoglobina: 'Hemoglobina', ferritina: 'Ferritina',
+    vitaminaD: 'Vitamina D', vitaminaB12: 'Vitamina B12',
+  };
+
+  let html = '';
+
+  // Datos de Atención
+  const atencion = [
+    { key: 'tipoConsulta', label: 'Tipo de Consulta' },
+    { key: 'modalidad', label: 'Modalidad' },
+    { key: 'registroProfesional', label: 'Registro Profesional' },
+  ].filter(f => datos[f.key]);
+  if (atencion.length > 0) {
+    html += `<div class="sub-section"><h4>Datos de Atención</h4><div class="grid-3">${atencion.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+  }
+
+  // Enfermedad Actual
+  if (datos.descripcionEnfermedad) {
+    html += `<div class="sub-section"><h4>Enfermedad Actual</h4><div class="grid-2">${celda('Descripción', datos.descripcionEnfermedad, true)}</div></div>`;
+  }
+
+  // Antecedentes Adicionales
+  const antAd = [
+    { key: 'medicamentosActuales', label: 'Medicamentos Actuales' },
+    { key: 'alergias', label: 'Alergias' },
+    { key: 'cirugias', label: 'Cirugías' },
+    { key: 'hospitalizaciones', label: 'Hospitalizaciones' },
+  ].filter(f => datos[f.key]);
+  if (antAd.length > 0) {
+    html += `<div class="sub-section"><h4>Antecedentes Adicionales</h4><div class="grid-2">${antAd.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+  }
+
+  // Antropometría Complementaria
+  const antro = [
+    { key: 'pesoHabitual', label: 'Peso Habitual (kg)' },
+    { key: 'porcentajeGrasa', label: '% Grasa Corporal' },
+    { key: 'masaMuscular', label: 'Masa Muscular (kg)' },
+    { key: 'circunferenciaCintura', label: 'Cintura (cm)' },
+    { key: 'circunferenciaCadera', label: 'Cadera (cm)' },
+    { key: 'relacionCinturaCadera', label: 'Rel. Cintura/Cadera' },
+  ].filter(f => datos[f.key]);
+  if (antro.length > 0) {
+    html += `<div class="sub-section"><h4>Antropometría Complementaria</h4><div class="grid-3">${antro.map(f => celda(f.label, datos[f.key])).join('')}</div></div>`;
+  }
+
+  // Evaluación Dietética
+  const dieta = [
+    { key: 'recordatorio24h', label: 'Recordatorio 24 Horas', wide: true },
+    { key: 'numComidasDia', label: 'Comidas/Día' },
+    { key: 'consumoAgua', label: 'Consumo de Agua (L/día)' },
+    { key: 'preferenciasAlimentarias', label: 'Preferencias Alimentarias', wide: true },
+    { key: 'alergiasAlimentarias', label: 'Alergias Alimentarias' },
+    { key: 'suplementos', label: 'Suplementos' },
+    { key: 'cambiosPesoRecientes', label: 'Cambios de Peso Recientes', wide: true },
+  ].filter(f => datos[f.key]);
+  if (dieta.length > 0) {
+    html += `<div class="sub-section"><h4>Evaluación Dietética</h4><div class="grid-2">${dieta.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+  }
+
+  // Evaluación Clínica Nutricional
+  const clinica = [
+    { key: 'signosClinicos', label: 'Signos Clínicos', wide: true },
+    { key: 'problemasDigestivos', label: 'Problemas Digestivos', wide: true },
+    { key: 'masticacionDeglucion', label: 'Masticación y Deglución' },
+    { key: 'observacionesNutricionales', label: 'Observaciones Nutricionales', wide: true },
+  ].filter(f => datos[f.key]);
+  if (clinica.length > 0) {
+    html += `<div class="sub-section"><h4>Evaluación Clínica Nutricional</h4><div class="grid-2">${clinica.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+  }
+
+  // Laboratorios
+  const labRows: string[] = [];
+  for (const [key, name] of Object.entries(labNames)) {
+    const resultado = datos[`${key}Resultado`];
+    if (resultado) {
+      const fecha = datos[`${key}Fecha`] || '';
+      labRows.push(`<tr><td>${name}</td><td>${v(resultado)}</td><td>${v(fecha)}</td></tr>`);
+    }
+  }
+  if (labRows.length > 0) {
+    html += `<div class="sub-section"><h4>Laboratorios</h4>
+      <table class="data-table">
+        <thead><tr><th>Examen</th><th>Resultado</th><th>Fecha</th></tr></thead>
+        <tbody>${labRows.join('')}</tbody>
+      </table></div>`;
+  }
+
+  // Diagnóstico Nutricional
+  const dx = [
+    { key: 'diagnosticoCIE10', label: 'Código CIE-10' },
+    { key: 'diagnosticoNutricional', label: 'Diagnóstico Nutricional', wide: true },
+  ].filter(f => datos[f.key]);
+  if (dx.length > 0) {
+    html += `<div class="sub-section"><h4>Diagnóstico Nutricional</h4><div class="grid-2">${dx.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+  }
+
+  // Plan Nutricional
+  const plan = [
+    { key: 'requerimientoCalorico', label: 'Requerimiento Calórico (kcal/día)' },
+    { key: 'distribucionMacronutrientes', label: 'Distribución de Macronutrientes', wide: true },
+    { key: 'planAlimentario', label: 'Plan Alimentario', wide: true },
+    { key: 'actividadFisicaPlan', label: 'Actividad Física Recomendada', wide: true },
+    { key: 'recomendacionesNutricionales', label: 'Recomendaciones Nutricionales', wide: true },
+  ].filter(f => datos[f.key]);
+  if (plan.length > 0) {
+    html += `<div class="sub-section"><h4>Plan Nutricional</h4><div class="grid-2">${plan.map(f => celda(f.label, datos[f.key], f.wide)).join('')}</div></div>`;
+  }
+
+  return html;
 }
 
 interface HistoriaClinicaHTMLParams {
@@ -182,6 +292,14 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
     padding: 4px 10px; text-transform: uppercase; letter-spacing: 0.5px;
   }
   .section-body { padding: 8px 10px; }
+
+  .sub-section { padding: 4px 0; }
+  .sub-section h4 { font-size: 8.5pt; color: #1a5c8a; margin-bottom: 4px; border-bottom: 1px dashed #aac; padding-bottom: 2px; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-top: 4px; }
+  .data-table th { background: #1a5c8a; color: #fff; padding: 3px 8px; text-align: left; }
+  .data-table td { border: 1px solid #ddd; padding: 3px 8px; }
+  .data-table tr:nth-child(even) td { background: #f5f9fd; }
 
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; padding: 6px 0; }
   .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 10px; padding: 6px 0; }

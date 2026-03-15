@@ -383,7 +383,6 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
     <div class="header-info">
       <h1>Historia Clínica</h1>
       <p>Bodytech &nbsp;|&nbsp; Consulta Médica</p>
-      <p>Medicina del Trabajo</p>
     </div>
     <div class="header-meta">
       <strong>${v(hc._id)}</strong>

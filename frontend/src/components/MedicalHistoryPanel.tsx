@@ -345,7 +345,29 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         laboratorios: Object.keys(laboratorios).length > 0 ? laboratorios : undefined,
       };
       const suggestions = await apiService.generateAISuggestions(patientData);
-      setAiSuggestions(suggestions);
+
+      // Extraer campos JSON si la IA los incluyó
+      const jsonMatch = suggestions.match(/---JSON_CAMPOS---\s*([\s\S]*?)\s*---FIN_JSON---/);
+      let displayText = suggestions;
+      if (jsonMatch) {
+        // Remover el bloque JSON del texto visible
+        displayText = suggestions.replace(/---JSON_CAMPOS---[\s\S]*?---FIN_JSON---/, '').trim();
+        try {
+          const campos = JSON.parse(jsonMatch[1]);
+          setDatosNutricionales((prev: any) => ({
+            ...prev,
+            ...(campos.diagnosticoNutricional && !prev.diagnosticoNutricional ? { diagnosticoNutricional: campos.diagnosticoNutricional } : {}),
+            ...(campos.observacionesNutricionales && !prev.observacionesNutricionales ? { observacionesNutricionales: campos.observacionesNutricionales } : {}),
+            ...(campos.distribucionMacronutrientes && !prev.distribucionMacronutrientes ? { distribucionMacronutrientes: campos.distribucionMacronutrientes } : {}),
+            ...(campos.recomendacionesNutricionales && !prev.recomendacionesNutricionales ? { recomendacionesNutricionales: campos.recomendacionesNutricionales } : {}),
+          }));
+          console.log('✅ Campos nutricionales pre-llenados con IA:', Object.keys(campos));
+        } catch (parseErr) {
+          console.warn('⚠️ No se pudo parsear JSON de campos IA:', parseErr);
+        }
+      }
+
+      setAiSuggestions(displayText);
     } catch (err: any) {
       setError(err.message || 'Error al generar sugerencias con IA');
       console.error('Error generating AI suggestions:', err);

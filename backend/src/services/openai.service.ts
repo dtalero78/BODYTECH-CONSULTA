@@ -99,6 +99,18 @@ FORMATO:
 - Usa numeración simple (1., 2., 3.)
 - Separa las secciones con una línea que diga: --- PLAN NUTRICIONAL SUGERIDO ---
 - Sé específico y práctico
+
+IMPORTANTE: Al final de tu respuesta, agrega un bloque JSON delimitado así:
+---JSON_CAMPOS---
+{
+  "diagnosticoNutricional": "Diagnóstico nutricional completo del paciente (ej: Paciente con estado nutricional normal / sobrepeso / obesidad grado I, etc.)",
+  "observacionesNutricionales": "Observaciones clínicas nutricionales relevantes encontradas en la evaluación",
+  "distribucionMacronutrientes": "Distribución recomendada en formato: CHO: X%, Proteína: Y%, Grasa: Z% (Xg, Yg, Zg)",
+  "recomendacionesNutricionales": "Recomendaciones nutricionales específicas para el paciente, separadas por líneas"
+}
+---FIN_JSON---
+
+Llena TODOS los campos JSON con información específica del paciente. No dejes campos vacíos.
     `.trim();
 
     const response = await openai.chat.completions.create({

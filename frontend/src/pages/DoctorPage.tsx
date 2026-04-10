@@ -54,12 +54,9 @@ export const DoctorPage = () => {
       <div className="bg-[#1f2c34] rounded-3xl shadow-2xl p-8 sm:p-10 max-w-md w-full">
         {/* Logo y Título */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-6">
-            <img
-              src="/bodytechLogo.png"
-              alt="BSL Logo"
-              className="h-20 w-auto"
-            />
+          <div className="flex items-center justify-between mb-6">
+            <img src="/vipLogo.png" alt="VIP Salud Ocupacional" className="h-16 w-auto" />
+            <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-12 w-auto" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
             Consulta Video

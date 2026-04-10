@@ -138,8 +138,8 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             {/* Logo BSL */}
             <div className="flex justify-center mb-6">
               <img
-                src="/bodytechLogo.png"
-                alt="BSL Logo"
+                src="/vipLogo.png"
+                alt="VIP Salud Ocupacional"
                 className="h-20 w-auto"
               />
             </div>
@@ -213,37 +213,30 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       <div className="flex-1 flex flex-col">
       {/* Header tipo WhatsApp */}
       <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">
-        {/* Back button */}
-        <button
-          onClick={handleLeave}
-          className="text-white p-2 hover:bg-white/10 rounded-full transition"
-          aria-label="Volver"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        {/* Logo + Encryption badge */}
-        <div className="flex-1 flex items-center justify-center gap-2">
-          <img src="/bodytechLogo.png" alt="BSL" className="h-8 w-auto" />
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        {/* Left: Back button + VIP Logo */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLeave}
+            className="text-white p-2 hover:bg-white/10 rounded-full transition"
+            aria-label="Volver"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span>End-to-end Encrypted</span>
-          </div>
+          </button>
+          <img src="/vipLogo.png" alt="VIP Salud Ocupacional" className="h-8 w-auto" />
         </div>
 
-        {/* Info button */}
-        <button
-          className="text-white p-2 hover:bg-white/10 rounded-full transition"
-          aria-label="Información"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        {/* Center: Encryption badge */}
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-        </button>
+          <span>End-to-end Encrypted</span>
+        </div>
+
+        {/* Right: Mediconecta Logo */}
+        <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-8 w-auto" />
       </div>
 
       {/* Video Grid - Full screen with better mobile layout */}
@@ -262,7 +255,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b141a]">
             <div className="text-center">
-              <img src="/bodytechLogo.png" alt="BSL" className="h-16 w-auto mx-auto mb-4 opacity-50" />
+              <img src="/vipLogo.png" alt="VIP Salud Ocupacional" className="h-16 w-auto mx-auto mb-4 opacity-50" />
               <p className="text-gray-500">Esperando participantes...</p>
             </div>
           </div>

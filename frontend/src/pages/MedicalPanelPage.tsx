@@ -427,12 +427,9 @@ export function MedicalPanelPage() {
       <div className="min-h-screen bg-[#0b141a] flex items-center justify-center p-4">
         <div className="bg-[#1f2c34] rounded-3xl shadow-2xl p-8 sm:p-10 max-w-md w-full">
           <div className="text-center mb-8">
-            <div className="flex justify-center mb-6">
-              <img
-                src="/bodytechLogo.png"
-                alt="BSL Logo"
-                className="h-20 w-auto"
-              />
+            <div className="flex items-center justify-between mb-6">
+              <img src="/vipLogo.png" alt="VIP Salud Ocupacional" className="h-16 w-auto" />
+              <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-12 w-auto" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
               Panel Médico
@@ -498,19 +495,22 @@ export function MedicalPanelPage() {
         <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
-              <img src="/bodytechLogo.png" alt="BSL Logo" className="h-12 w-auto" />
+              <img src="/vipLogo.png" alt="VIP Salud Ocupacional" className="h-12 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-white">Panel Médico</h1>
                 <p className="text-gray-400 text-sm">Código: {medicoCode}</p>
               </div>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
-            >
-              {isLoading ? '⟳' : '↻ Actualizar'}
-            </button>
+            <div className="flex items-center gap-4">
+              <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-10 w-auto" />
+              <button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
+              >
+                {isLoading ? '⟳' : '↻ Actualizar'}
+              </button>
+            </div>
           </div>
 
           {/* Estadísticas */}

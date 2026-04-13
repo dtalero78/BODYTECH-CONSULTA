@@ -198,6 +198,104 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     return 'Obesidad';
   };
 
+  // --- Cálculos ISAK (Perfil Restringido) ---
+  const calcularISAK = () => {
+    const edad = data?.edad;
+    const genero = data?.genero?.toLowerCase() || '';
+    const pesoNum = parseFloat(peso);
+
+    const triceps = parseFloat(datosNutricionales.pliegueTriceps || '');
+    const subescapular = parseFloat(datosNutricionales.pliegueSubescapular || '');
+    const biceps = parseFloat(datosNutricionales.pliegueBiceps || '');
+    const crestaIliaca = parseFloat(datosNutricionales.pliegueCrestaIliaca || '');
+    const supraespinal = parseFloat(datosNutricionales.pliegueSupraespinal || '');
+    const abdominal = parseFloat(datosNutricionales.pliegueAbdominal || '');
+    const musloAnterior = parseFloat(datosNutricionales.pliegueMusloAnterior || '');
+    const pantorrilla = parseFloat(datosNutricionales.plieguePantorrilla || '');
+
+    const pliegues = [triceps, subescapular, biceps, crestaIliaca, supraespinal, abdominal, musloAnterior, pantorrilla];
+    const pliegues6 = [triceps, subescapular, supraespinal, abdominal, musloAnterior, pantorrilla];
+
+    // Sumatoria 6 pliegues (sin biceps ni cresta iliaca)
+    const sum6 = pliegues6.every(v => !isNaN(v)) ? pliegues6.reduce((a, b) => a + b, 0) : NaN;
+    // Sumatoria 8 pliegues
+    const sum8 = pliegues.every(v => !isNaN(v)) ? pliegues.reduce((a, b) => a + b, 0) : NaN;
+
+    // Faulkner (1968): %G = (Σ4 × 0.153) + 5.783
+    // Σ4 = triceps + subescapular + supraespinal + abdominal
+    let faulkner = NaN;
+    if (!isNaN(triceps) && !isNaN(subescapular) && !isNaN(supraespinal) && !isNaN(abdominal)) {
+      const s4f = triceps + subescapular + supraespinal + abdominal;
+      faulkner = (s4f * 0.153) + 5.783;
+    }
+
+    // Durnin & Womersley (1974): usa log10(Σ4) con coeficientes por edad/sexo
+    // Σ4 = biceps + triceps + subescapular + cresta iliaca
+    let durninWomersley = NaN;
+    if (!isNaN(biceps) && !isNaN(triceps) && !isNaN(subescapular) && !isNaN(crestaIliaca) && edad) {
+      const s4dw = biceps + triceps + subescapular + crestaIliaca;
+      const logSum = Math.log10(s4dw);
+      const esMasculino = genero.includes('masculino') || genero === 'm' || genero === 'male' || genero === 'hombre';
+      let dc: number;
+
+      if (esMasculino) {
+        if (edad < 20) dc = 1.1620 - (0.0630 * logSum);
+        else if (edad < 30) dc = 1.1631 - (0.0632 * logSum);
+        else if (edad < 40) dc = 1.1422 - (0.0544 * logSum);
+        else if (edad < 50) dc = 1.1620 - (0.0700 * logSum);
+        else dc = 1.1715 - (0.0779 * logSum);
+      } else {
+        if (edad < 20) dc = 1.1549 - (0.0678 * logSum);
+        else if (edad < 30) dc = 1.1599 - (0.0717 * logSum);
+        else if (edad < 40) dc = 1.1423 - (0.0632 * logSum);
+        else if (edad < 50) dc = 1.1333 - (0.0612 * logSum);
+        else dc = 1.1339 - (0.0645 * logSum);
+      }
+      durninWomersley = (495 / dc) - 450;
+    }
+
+    // Masa grasa y masa libre de grasa
+    const grasaPct = !isNaN(faulkner) ? faulkner : !isNaN(durninWomersley) ? durninWomersley : NaN;
+    const masaGrasa = !isNaN(grasaPct) && !isNaN(pesoNum) ? (pesoNum * grasaPct / 100) : NaN;
+    const masaLibreGrasa = !isNaN(masaGrasa) && !isNaN(pesoNum) ? (pesoNum - masaGrasa) : NaN;
+
+    return {
+      sum6: !isNaN(sum6) ? sum6.toFixed(1) : '',
+      sum8: !isNaN(sum8) ? sum8.toFixed(1) : '',
+      faulkner: !isNaN(faulkner) ? faulkner.toFixed(1) : '',
+      durninWomersley: !isNaN(durninWomersley) ? durninWomersley.toFixed(1) : '',
+      masaGrasa: !isNaN(masaGrasa) ? masaGrasa.toFixed(1) : '',
+      masaLibreGrasa: !isNaN(masaLibreGrasa) ? masaLibreGrasa.toFixed(1) : '',
+    };
+  };
+
+  const isak = calcularISAK();
+
+  // Auto-llenar % grasa con Faulkner cuando hay pliegues y el campo está vacío
+  useEffect(() => {
+    if (isak.faulkner && !datosNutricionales.porcentajeGrasa) {
+      updateNutri('porcentajeGrasa', isak.faulkner);
+    }
+  }, [isak.faulkner]);
+
+  const getGrasaColor = (pct: string) => {
+    const val = parseFloat(pct);
+    if (isNaN(val)) return 'text-gray-400';
+    const genero = data?.genero?.toLowerCase() || '';
+    const esMasculino = genero.includes('masculino') || genero === 'm' || genero === 'male' || genero === 'hombre';
+    if (esMasculino) {
+      if (val < 6) return 'text-yellow-400';
+      if (val <= 17) return 'text-green-400';
+      if (val <= 25) return 'text-yellow-400';
+      return 'text-red-500';
+    } else {
+      if (val < 14) return 'text-yellow-400';
+      if (val <= 24) return 'text-green-400';
+      if (val <= 32) return 'text-yellow-400';
+      return 'text-red-500';
+    }
+  };
+
   const formatFieldName = (fieldName: string): string => {
     const translations: { [key: string]: string } = {
       cirugiaOcular: 'Cirugía Ocular',
@@ -323,6 +421,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         circunferenciaCadera: datosNutricionales.circunferenciaCadera,
         porcentajeGrasa: datosNutricionales.porcentajeGrasa,
         masaMuscular: datosNutricionales.masaMuscular,
+        // Pliegues ISAK
+        pliegueTriceps: datosNutricionales.pliegueTriceps,
+        pliegueSubescapular: datosNutricionales.pliegueSubescapular,
+        pliegueBiceps: datosNutricionales.pliegueBiceps,
+        pliegueCrestaIliaca: datosNutricionales.pliegueCrestaIliaca,
+        pliegueSupraespinal: datosNutricionales.pliegueSupraespinal,
+        pliegueAbdominal: datosNutricionales.pliegueAbdominal,
+        pliegueMusloAnterior: datosNutricionales.pliegueMusloAnterior,
+        plieguePantorrilla: datosNutricionales.plieguePantorrilla,
         // Evaluación dietética
         recordatorio24h: datosNutricionales.recordatorio24h,
         numComidasDia: datosNutricionales.numComidasDia,
@@ -842,6 +949,148 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               />
             </div>
           </div>
+        </div>
+
+        {/* Pliegues Cutáneos - ISAK */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Pliegues Cutaneos - ISAK</h3>
+          {!data?.edad || !data?.genero ? (
+            <p className="text-xs text-yellow-400 mb-2">Se requiere edad y genero del paciente para los calculos ISAK.</p>
+          ) : null}
+          <div className="grid grid-cols-4 gap-2 mb-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Triceps (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueTriceps || ''}
+                onChange={(e) => updateNutri('pliegueTriceps', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Subescapular (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueSubescapular || ''}
+                onChange={(e) => updateNutri('pliegueSubescapular', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Biceps (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueBiceps || ''}
+                onChange={(e) => updateNutri('pliegueBiceps', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cresta Iliaca (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueCrestaIliaca || ''}
+                onChange={(e) => updateNutri('pliegueCrestaIliaca', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Supraespinal (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueSupraespinal || ''}
+                onChange={(e) => updateNutri('pliegueSupraespinal', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Abdominal (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueAbdominal || ''}
+                onChange={(e) => updateNutri('pliegueAbdominal', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Muslo Anterior (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.pliegueMusloAnterior || ''}
+                onChange={(e) => updateNutri('pliegueMusloAnterior', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Pantorrilla (mm)</label>
+              <input
+                type="text"
+                value={datosNutricionales.plieguePantorrilla || ''}
+                onChange={(e) => updateNutri('plieguePantorrilla', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="mm"
+              />
+            </div>
+          </div>
+          {/* Resultados ISAK calculados */}
+          {(isak.sum6 || isak.sum8 || isak.faulkner || isak.durninWomersley) && (
+            <div className="bg-[#1a2530] rounded p-2 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-1 font-semibold">Resultados ISAK</p>
+              <div className="grid grid-cols-3 gap-2 mb-1">
+                {isak.sum6 && (
+                  <div className="text-center">
+                    <span className="block text-xs text-gray-400">Suma 6 pliegues</span>
+                    <span className="text-sm text-white font-semibold">{isak.sum6} mm</span>
+                  </div>
+                )}
+                {isak.sum8 && (
+                  <div className="text-center">
+                    <span className="block text-xs text-gray-400">Suma 8 pliegues</span>
+                    <span className="text-sm text-white font-semibold">{isak.sum8} mm</span>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-1">
+                {isak.faulkner && (
+                  <div className="text-center">
+                    <span className="block text-xs text-gray-400">% Grasa (Faulkner)</span>
+                    <span className={`text-sm font-semibold ${getGrasaColor(isak.faulkner)}`}>{isak.faulkner}%</span>
+                  </div>
+                )}
+                {isak.durninWomersley && (
+                  <div className="text-center">
+                    <span className="block text-xs text-gray-400">% Grasa (Durnin-Womersley)</span>
+                    <span className={`text-sm font-semibold ${getGrasaColor(isak.durninWomersley)}`}>{isak.durninWomersley}%</span>
+                  </div>
+                )}
+              </div>
+              {(isak.masaGrasa || isak.masaLibreGrasa) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {isak.masaGrasa && (
+                    <div className="text-center">
+                      <span className="block text-xs text-gray-400">Masa Grasa</span>
+                      <span className="text-sm text-white font-semibold">{isak.masaGrasa} kg</span>
+                    </div>
+                  )}
+                  {isak.masaLibreGrasa && (
+                    <div className="text-center">
+                      <span className="block text-xs text-gray-400">Masa Libre de Grasa</span>
+                      <span className="text-sm text-white font-semibold">{isak.masaLibreGrasa} kg</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Evaluación Dietética */}

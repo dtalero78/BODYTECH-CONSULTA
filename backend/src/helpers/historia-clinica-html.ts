@@ -169,6 +169,23 @@ function buildDatosNutricionalesHTML(datos: any): string {
     sectionNum++;
   }
 
+  // Pliegues Cutáneos ISAK
+  const plieguesISAK = [
+    { key: 'pliegueTriceps', label: 'Triceps (mm)' },
+    { key: 'pliegueSubescapular', label: 'Subescapular (mm)' },
+    { key: 'pliegueBiceps', label: 'Biceps (mm)' },
+    { key: 'pliegueCrestaIliaca', label: 'Cresta Iliaca (mm)' },
+    { key: 'pliegueSupraespinal', label: 'Supraespinal (mm)' },
+    { key: 'pliegueAbdominal', label: 'Abdominal (mm)' },
+    { key: 'pliegueMusloAnterior', label: 'Muslo Anterior (mm)' },
+    { key: 'plieguePantorrilla', label: 'Pantorrilla (mm)' },
+  ].filter(f => datos[f.key]);
+  if (plieguesISAK.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Pliegues Cutáneos - ISAK`,
+      `<div class="grid-4">${plieguesISAK.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
+  }
+
   // Evaluación Dietética
   const dieta = [
     { key: 'recordatorio24h', label: 'Recordatorio 24 Horas', wide: true },

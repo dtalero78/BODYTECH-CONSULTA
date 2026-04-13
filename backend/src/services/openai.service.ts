@@ -35,6 +35,16 @@ interface PatientData {
   porcentajeGrasa?: string;
   masaMuscular?: string;
 
+  // Pliegues ISAK
+  pliegueTriceps?: string;
+  pliegueSubescapular?: string;
+  pliegueBiceps?: string;
+  pliegueCrestaIliaca?: string;
+  pliegueSupraespinal?: string;
+  pliegueAbdominal?: string;
+  pliegueMusloAnterior?: string;
+  plieguePantorrilla?: string;
+
   // Evaluación dietética
   recordatorio24h?: string;
   numComidasDia?: string;
@@ -171,6 +181,21 @@ function buildPatientContext(data: PatientData): string {
   if (data.circunferenciaCadera) antropometria.push(`- Circunferencia cadera: ${data.circunferenciaCadera} cm`);
   if (data.porcentajeGrasa) antropometria.push(`- % Grasa corporal: ${data.porcentajeGrasa}%`);
   if (data.masaMuscular) antropometria.push(`- Masa muscular: ${data.masaMuscular} kg`);
+
+  // Pliegues ISAK
+  const plieguesISAK: string[] = [];
+  if (data.pliegueTriceps) plieguesISAK.push(`Triceps: ${data.pliegueTriceps}mm`);
+  if (data.pliegueSubescapular) plieguesISAK.push(`Subescapular: ${data.pliegueSubescapular}mm`);
+  if (data.pliegueBiceps) plieguesISAK.push(`Biceps: ${data.pliegueBiceps}mm`);
+  if (data.pliegueCrestaIliaca) plieguesISAK.push(`Cresta Iliaca: ${data.pliegueCrestaIliaca}mm`);
+  if (data.pliegueSupraespinal) plieguesISAK.push(`Supraespinal: ${data.pliegueSupraespinal}mm`);
+  if (data.pliegueAbdominal) plieguesISAK.push(`Abdominal: ${data.pliegueAbdominal}mm`);
+  if (data.pliegueMusloAnterior) plieguesISAK.push(`Muslo Anterior: ${data.pliegueMusloAnterior}mm`);
+  if (data.plieguePantorrilla) plieguesISAK.push(`Pantorrilla: ${data.plieguePantorrilla}mm`);
+  if (plieguesISAK.length > 0) {
+    antropometria.push(`- Pliegues ISAK: ${plieguesISAK.join(', ')}`);
+  }
+
   if (antropometria.length > 0) {
     sections.push(`ANTROPOMETRIA:\n${antropometria.join('\n')}`);
   }

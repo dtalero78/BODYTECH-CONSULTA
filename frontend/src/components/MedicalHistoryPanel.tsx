@@ -1520,21 +1520,21 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                         <rect width={svgW} height={svgH} fill="url(#grid)" />
 
                         {/* Ejes cartesianos */}
-                        <line x1={toSvgX(xMin)} y1={toSvgY(0)} x2={toSvgX(xMax)} y2={toSvgY(0)} stroke="#4a5b65" strokeWidth="1" />
-                        <line x1={toSvgX(0)} y1={toSvgY(yMin)} x2={toSvgX(0)} y2={toSvgY(yMax)} stroke="#4a5b65" strokeWidth="1" />
+                        <line x1={toSvgX(xMin)} y1={toSvgY(0)} x2={toSvgX(xMax)} y2={toSvgY(0)} stroke="#cbd5e1" strokeWidth="2" />
+                        <line x1={toSvgX(0)} y1={toSvgY(yMin)} x2={toSvgX(0)} y2={toSvgY(yMax)} stroke="#cbd5e1" strokeWidth="2" />
 
                         {/* Marcas eje X */}
                         {[-8, -4, 4, 8].map(v => (
                           <g key={`xt${v}`}>
-                            <line x1={toSvgX(v)} y1={toSvgY(0) - 3} x2={toSvgX(v)} y2={toSvgY(0) + 3} stroke="#4a5b65" />
-                            <text x={toSvgX(v)} y={toSvgY(0) + 14} fontSize="9" fill="#6b7b85" textAnchor="middle">{v}</text>
+                            <line x1={toSvgX(v)} y1={toSvgY(0) - 4} x2={toSvgX(v)} y2={toSvgY(0) + 4} stroke="#cbd5e1" strokeWidth="1.5" />
+                            <text x={toSvgX(v)} y={toSvgY(0) + 15} fontSize="10" fill="#cbd5e1" textAnchor="middle">{v}</text>
                           </g>
                         ))}
                         {/* Marcas eje Y */}
                         {[-8, -4, 4, 8, 12, 16].map(v => (
                           <g key={`yt${v}`}>
-                            <line x1={toSvgX(0) - 3} y1={toSvgY(v)} x2={toSvgX(0) + 3} y2={toSvgY(v)} stroke="#4a5b65" />
-                            <text x={toSvgX(0) - 6} y={toSvgY(v) + 3} fontSize="9" fill="#6b7b85" textAnchor="end">{v}</text>
+                            <line x1={toSvgX(0) - 4} y1={toSvgY(v)} x2={toSvgX(0) + 4} y2={toSvgY(v)} stroke="#cbd5e1" strokeWidth="1.5" />
+                            <text x={toSvgX(0) - 7} y={toSvgY(v) + 3} fontSize="10" fill="#cbd5e1" textAnchor="end">{v}</text>
                           </g>
                         ))}
 

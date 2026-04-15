@@ -21,6 +21,7 @@ interface VideoRoomProps {
 export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, onLeave }: VideoRoomProps) => {
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
   const [appendToObservacionesFunc, setAppendToObservacionesFunc] = useState<((text: string) => void) | null>(null);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
   const {
     localParticipant,
@@ -199,9 +200,22 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       {/* Panel lateral de Historia Clínica - Siempre visible para doctores */}
       {role === 'doctor' && historiaId && (
         <div
-          className="fixed top-0 right-0 h-full bg-[#1f2c34] shadow-2xl z-50"
-          style={{ width: '540px', maxWidth: '90vw' }}
+          className="fixed top-0 right-0 h-full bg-[#1f2c34] shadow-2xl z-50 transition-all duration-300"
+          style={{ width: isHistoryExpanded ? '95vw' : '820px', maxWidth: '95vw' }}
         >
+          <button
+            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+            className="absolute top-4 left-2 z-10 bg-[#00a884] hover:bg-[#008f6f] text-white rounded-full p-2 shadow-lg transition"
+            title={isHistoryExpanded ? 'Contraer panel' : 'Expandir panel'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {isHistoryExpanded ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              )}
+            </svg>
+          </button>
           <MedicalHistoryPanel
             historiaId={historiaId}
             onAppendToObservaciones={(func) => setAppendToObservacionesFunc(() => func)}

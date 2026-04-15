@@ -688,7 +688,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
   return (
     <div className="h-full flex flex-col bg-[#1f2c34] text-white">
       {/* Header fijo */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-[#1f2c34] sticky top-0 z-10">
+      <div className="flex items-center justify-between p-4 pl-14 border-b border-gray-700 bg-[#1f2c34] sticky top-0 z-10">
         <h2 className="text-lg font-bold text-[#00a884]">Historia Clínica</h2>
         <div className="flex items-center gap-2">
           {data?.numeroId && (

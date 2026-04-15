@@ -268,6 +268,73 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     const masaGrasa = !isNaN(grasaPct) && !isNaN(pesoNum) ? (pesoNum * grasaPct / 100) : NaN;
     const masaLibreGrasa = !isNaN(masaGrasa) && !isNaN(pesoNum) ? (pesoNum - masaGrasa) : NaN;
 
+    // --- Somatotipo Heath-Carter ---
+    const tallaNum = parseFloat(talla);
+    const diametroHumero = parseFloat(datosNutricionales.diametroHumero || '');
+    const diametroFemur = parseFloat(datosNutricionales.diametroFemur || '');
+    const perimetroBrazoContraido = parseFloat(datosNutricionales.perimetroBrazoContraido || '');
+    const perimetroPantorrillaMax = parseFloat(datosNutricionales.perimetroPantorrillaMaxima || '');
+
+    // Endomorfia: requiere triceps + subescapular + supraespinal + talla
+    let endomorfia = NaN;
+    if (!isNaN(triceps) && !isNaN(subescapular) && !isNaN(supraespinal) && !isNaN(tallaNum) && tallaNum > 0) {
+      const X = (triceps + subescapular + supraespinal) * (170.18 / tallaNum);
+      endomorfia = -0.7182 + (0.1451 * X) - (0.00068 * X * X) + (0.0000014 * X * X * X);
+    }
+
+    // Mesomorfia: requiere DH, DF, PBC (perímetro brazo contraído corregido = brazoContraído - triceps/10),
+    // PGC (perímetro pantorrilla corregido = pantorrilla - plieguePantorrilla/10), talla
+    let mesomorfia = NaN;
+    if (!isNaN(diametroHumero) && !isNaN(diametroFemur) &&
+        !isNaN(perimetroBrazoContraido) && !isNaN(triceps) &&
+        !isNaN(perimetroPantorrillaMax) && !isNaN(pantorrilla) &&
+        !isNaN(tallaNum) && tallaNum > 0) {
+      const PBC = perimetroBrazoContraido - (triceps / 10);
+      const PGC = perimetroPantorrillaMax - (pantorrilla / 10);
+      mesomorfia = (0.858 * diametroHumero) + (0.601 * diametroFemur)
+                 + (0.188 * PBC) + (0.161 * PGC)
+                 - (tallaNum * 0.131) + 4.5;
+    }
+
+    // Ectomorfia: requiere peso, talla (usa índice ponderal IP = talla / peso^(1/3))
+    let ectomorfia = NaN;
+    if (!isNaN(pesoNum) && !isNaN(tallaNum) && pesoNum > 0 && tallaNum > 0) {
+      const IP = tallaNum / Math.cbrt(pesoNum);
+      if (IP >= 40.75) ectomorfia = (0.732 * IP) - 28.58;
+      else if (IP > 38.25) ectomorfia = (0.463 * IP) - 17.63;
+      else ectomorfia = 0.1;
+    }
+
+    // Ejes somatocarta
+    let ejeX = NaN, ejeY = NaN;
+    if (!isNaN(endomorfia) && !isNaN(ectomorfia)) ejeX = ectomorfia - endomorfia;
+    if (!isNaN(endomorfia) && !isNaN(mesomorfia) && !isNaN(ectomorfia)) ejeY = (2 * mesomorfia) - endomorfia - ectomorfia;
+
+    // Clasificación del somatotipo dominante
+    let clasificacionSomato = '';
+    if (!isNaN(endomorfia) && !isNaN(mesomorfia) && !isNaN(ectomorfia)) {
+      const e = endomorfia, m = mesomorfia, ec = ectomorfia;
+      const diffEM = Math.abs(e - m);
+      const diffME = Math.abs(m - ec);
+      const diffEE = Math.abs(e - ec);
+      const umbral = 0.5;
+      if (e > m && e > ec) {
+        if (diffEM <= umbral) clasificacionSomato = 'Endo-mesomorfo';
+        else if (diffEE <= umbral) clasificacionSomato = 'Endo-ectomorfo';
+        else clasificacionSomato = 'Endomorfo';
+      } else if (m > e && m > ec) {
+        if (diffEM <= umbral) clasificacionSomato = 'Meso-endomorfo';
+        else if (diffME <= umbral) clasificacionSomato = 'Meso-ectomorfo';
+        else clasificacionSomato = 'Mesomorfo';
+      } else if (ec > e && ec > m) {
+        if (diffEE <= umbral) clasificacionSomato = 'Ecto-endomorfo';
+        else if (diffME <= umbral) clasificacionSomato = 'Ecto-mesomorfo';
+        else clasificacionSomato = 'Ectomorfo';
+      } else {
+        clasificacionSomato = 'Central';
+      }
+    }
+
     return {
       sum6: !isNaN(sum6) ? sum6.toFixed(1) : '',
       sum8: !isNaN(sum8) ? sum8.toFixed(1) : '',
@@ -276,6 +343,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       durninWomersley: !isNaN(durninWomersley) ? durninWomersley.toFixed(1) : '',
       masaGrasa: !isNaN(masaGrasa) ? masaGrasa.toFixed(1) : '',
       masaLibreGrasa: !isNaN(masaLibreGrasa) ? masaLibreGrasa.toFixed(1) : '',
+      endomorfia: !isNaN(endomorfia) ? endomorfia.toFixed(1) : '',
+      mesomorfia: !isNaN(mesomorfia) ? mesomorfia.toFixed(1) : '',
+      ectomorfia: !isNaN(ectomorfia) ? ectomorfia.toFixed(1) : '',
+      ejeX: !isNaN(ejeX) ? ejeX.toFixed(2) : '',
+      ejeY: !isNaN(ejeY) ? ejeY.toFixed(2) : '',
+      clasificacionSomato,
     };
   };
 
@@ -288,6 +361,21 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       updateNutri('porcentajeGrasa', valor);
     }
   }, [isak.yuhasz, isak.faulkner]);
+
+  // Persistir resultados de somatotipo en datosNutricionales
+  useEffect(() => {
+    if (isak.endomorfia || isak.mesomorfia || isak.ectomorfia) {
+      setDatosNutricionales((prev: any) => ({
+        ...prev,
+        endomorfia: isak.endomorfia,
+        mesomorfia: isak.mesomorfia,
+        ectomorfia: isak.ectomorfia,
+        ejeX: isak.ejeX,
+        ejeY: isak.ejeY,
+        clasificacionSomato: isak.clasificacionSomato,
+      }));
+    }
+  }, [isak.endomorfia, isak.mesomorfia, isak.ectomorfia]);
 
   const getGrasaColor = (pct: string) => {
     const val = parseFloat(pct);
@@ -1278,6 +1366,30 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               />
             </div>
           </div>
+          {/* Diámetros óseos (para somatotipo Heath-Carter) */}
+          <p className="text-xs text-gray-400 mb-1 font-semibold">Diámetros óseos (cm)</p>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Diámetro Húmero (biepicondíleo)</label>
+              <input
+                type="text"
+                value={datosNutricionales.diametroHumero || ''}
+                onChange={(e) => updateNutri('diametroHumero', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Diámetro Fémur (biepicondíleo)</label>
+              <input
+                type="text"
+                value={datosNutricionales.diametroFemur || ''}
+                onChange={(e) => updateNutri('diametroFemur', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+          </div>
           {/* Resultados ISAK calculados */}
           {(isak.sum6 || isak.sum8 || isak.yuhasz || isak.faulkner || isak.durninWomersley) && (
             <div className="bg-[#1a2530] rounded p-2 border border-gray-700">
@@ -1331,6 +1443,53 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+          {/* Somatotipo Heath-Carter */}
+          {(isak.endomorfia || isak.mesomorfia || isak.ectomorfia) && (
+            <div className="bg-[#1a2530] rounded p-2 border border-gray-700 mt-2">
+              <p className="text-xs text-gray-400 mb-1 font-semibold">Somatotipo (Heath-Carter)</p>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                <div className="text-center bg-[#2a3942] rounded p-1">
+                  <span className="block text-xs text-gray-400">Endomorfia</span>
+                  <span className="text-sm text-amber-400 font-semibold">{isak.endomorfia || '—'}</span>
+                </div>
+                <div className="text-center bg-[#2a3942] rounded p-1">
+                  <span className="block text-xs text-gray-400">Mesomorfia</span>
+                  <span className="text-sm text-green-400 font-semibold">{isak.mesomorfia || '—'}</span>
+                </div>
+                <div className="text-center bg-[#2a3942] rounded p-1">
+                  <span className="block text-xs text-gray-400">Ectomorfia</span>
+                  <span className="text-sm text-blue-400 font-semibold">{isak.ectomorfia || '—'}</span>
+                </div>
+              </div>
+              {(isak.ejeX || isak.ejeY || isak.clasificacionSomato) && (
+                <div className="grid grid-cols-3 gap-2">
+                  {isak.ejeX && (
+                    <div className="text-center">
+                      <span className="block text-xs text-gray-400">Eje X</span>
+                      <span className="text-sm text-white font-semibold">{isak.ejeX}</span>
+                    </div>
+                  )}
+                  {isak.ejeY && (
+                    <div className="text-center">
+                      <span className="block text-xs text-gray-400">Eje Y</span>
+                      <span className="text-sm text-white font-semibold">{isak.ejeY}</span>
+                    </div>
+                  )}
+                  {isak.clasificacionSomato && (
+                    <div className="text-center">
+                      <span className="block text-xs text-gray-400">Clasificación</span>
+                      <span className="text-sm text-[#00a884] font-semibold">{isak.clasificacionSomato}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {isak.endomorfia && isak.mesomorfia && isak.ectomorfia && (
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Somatocarta: {isak.endomorfia} - {isak.mesomorfia} - {isak.ectomorfia}
+                </p>
               )}
             </div>
           )}

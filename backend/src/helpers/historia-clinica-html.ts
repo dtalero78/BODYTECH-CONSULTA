@@ -200,6 +200,29 @@ function buildDatosNutricionalesHTML(datos: any): string {
     sectionNum++;
   }
 
+  // Diámetros óseos y Somatotipo Heath-Carter
+  const diametros = [
+    { key: 'diametroHumero', label: 'Diámetro Húmero (cm)' },
+    { key: 'diametroFemur', label: 'Diámetro Fémur (cm)' },
+  ].filter(f => datos[f.key]);
+  const somatotipo = [
+    { key: 'endomorfia', label: 'Endomorfia' },
+    { key: 'mesomorfia', label: 'Mesomorfia' },
+    { key: 'ectomorfia', label: 'Ectomorfia' },
+    { key: 'clasificacionSomato', label: 'Clasificación' },
+  ].filter(f => datos[f.key]);
+  if (diametros.length > 0 || somatotipo.length > 0) {
+    let content = '';
+    if (diametros.length > 0) {
+      content += `<div class="grid-2">${diametros.map(f => celda(f.label, datos[f.key])).join('')}</div>`;
+    }
+    if (somatotipo.length > 0) {
+      content += `<div class="grid-4" style="margin-top:6px">${somatotipo.map(f => celda(f.label, datos[f.key])).join('')}</div>`;
+    }
+    html += section(`${romanNum(sectionNum)}. Somatotipo (Heath-Carter)`, content);
+    sectionNum++;
+  }
+
   // Motivo de Consulta y Objetivo
   const motivo = [
     { key: 'tipoConsulta', label: 'Tipo de Consulta' },

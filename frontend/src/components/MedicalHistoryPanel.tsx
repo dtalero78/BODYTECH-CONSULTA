@@ -665,17 +665,17 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           {isWixNotConfigured && (
             <div className="mt-4 border-l-4 border-yellow-500 pl-4">
               <p className="text-yellow-400 font-semibold mb-2">Configuración Pendiente</p>
-              <p className="text-sm text-gray-300 mb-2">
+              <p className="text-base text-gray-300 mb-2">
                 Las funciones HTTP de Wix no están configuradas. Para activar esta funcionalidad:
               </p>
-              <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
+              <ol className="text-base text-gray-300 space-y-1 list-decimal list-inside">
                 <li>Abre tu sitio de Wix (www.bsl.com.co)</li>
                 <li>Activa el Developer Mode (Velo)</li>
                 <li>Ve a Backend → http-functions.js</li>
                 <li>Copia las funciones de: <code className="bg-gray-700 px-1 rounded">backend/wix-backend-medical-history.js</code></li>
                 <li>Publica el sitio</li>
               </ol>
-              <p className="text-sm text-gray-400 mt-3">
+              <p className="text-base text-gray-400 mt-3">
                 ID de Historia: <span className="text-white font-mono">{historiaId}</span>
               </p>
             </div>
@@ -694,7 +694,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           {data?.numeroId && (
             <button
               onClick={() => setIsHistoryModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition"
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-base rounded-lg hover:bg-blue-700 transition"
               title="Ver consultas anteriores de este paciente"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -707,7 +707,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
             href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/video/medical-history/${historiaId}/preview`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 bg-[#2a3942] text-[#00a884] text-sm rounded-lg hover:bg-[#344950] border border-[#00a884]/30 transition"
+            className="flex items-center gap-2 px-3 py-2 bg-[#2a3942] text-[#00a884] text-base rounded-lg hover:bg-[#344950] border border-[#00a884]/30 transition"
             title="Ver e imprimir historia clínica completa"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -723,8 +723,8 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Datos del Paciente (Solo lectura) */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Datos del Paciente</h3>
-          <div className="grid grid-cols-1 gap-2 text-xs">
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Datos del Paciente</h3>
+          <div className="grid grid-cols-1 gap-2 text-sm">
             <div>
               <span className="text-gray-400">Nombre:</span>
               <span className="text-white ml-2">
@@ -798,14 +798,14 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Datos de Atención */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Datos de Atención</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Datos de Atención</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Tipo de Consulta</label>
+              <label className="block text-sm text-gray-400 mb-1">Tipo de Consulta</label>
               <select
                 value={datosNutricionales.tipoConsulta || ''}
                 onChange={(e) => updateNutri('tipoConsulta', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione</option>
                 <option value="Primera vez">Primera vez</option>
@@ -813,11 +813,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Modalidad</label>
+              <label className="block text-sm text-gray-400 mb-1">Modalidad</label>
               <select
                 value={datosNutricionales.modalidad || ''}
                 onChange={(e) => updateNutri('modalidad', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione</option>
                 <option value="Presencial">Presencial</option>
@@ -825,12 +825,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Registro Profesional</label>
+              <label className="block text-sm text-gray-400 mb-1">Registro Profesional</label>
               <input
                 type="text"
                 value={datosNutricionales.registroProfesional || ''}
                 onChange={(e) => updateNutri('registroProfesional', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Número de registro"
               />
             </div>
@@ -839,15 +839,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Motivo de Consulta y Objetivo */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Motivo de Consulta y Objetivo</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Motivo de Consulta y Objetivo</h3>
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Tipo de consulta</label>
+                <label className="block text-sm text-gray-400 mb-1">Tipo de consulta</label>
                 <select
                   value={datosNutricionales.tipoConsulta || ''}
                   onChange={(e) => updateNutri('tipoConsulta', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Primera vez">Primera vez</option>
@@ -855,11 +855,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Objetivo principal</label>
+                <label className="block text-sm text-gray-400 mb-1">Objetivo principal</label>
                 <select
                   value={datosNutricionales.objetivoPrincipal || ''}
                   onChange={(e) => updateNutri('objetivoPrincipal', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Pérdida de grasa">Pérdida de grasa</option>
@@ -871,21 +871,21 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Motivo de consulta</label>
+              <label className="block text-sm text-gray-400 mb-1">Motivo de consulta</label>
               <textarea
                 value={datosNutricionales.motivoConsultaTexto || ''}
                 onChange={(e) => updateNutri('motivoConsultaTexto', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Motivo de la consulta..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Objetivos específicos</label>
+              <label className="block text-sm text-gray-400 mb-1">Objetivos específicos</label>
               <textarea
                 value={datosNutricionales.objetivosEspecificos || ''}
                 onChange={(e) => updateNutri('objetivosEspecificos', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Metas específicas del paciente..."
               />
@@ -895,15 +895,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Actividad Física y Contexto Deportivo */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Actividad Física y Contexto Deportivo</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Actividad Física y Contexto Deportivo</h3>
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">¿Realiza actividad física?</label>
+                <label className="block text-sm text-gray-400 mb-1">¿Realiza actividad física?</label>
                 <select
                   value={datosNutricionales.realizaActividadFisica || ''}
                   onChange={(e) => updateNutri('realizaActividadFisica', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Sí">Sí</option>
@@ -911,23 +911,23 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Frecuencia (veces/semana)</label>
+                <label className="block text-sm text-gray-400 mb-1">Frecuencia (veces/semana)</label>
                 <input
                   type="text"
                   value={datosNutricionales.frecuenciaEjercicio || ''}
                   onChange={(e) => updateNutri('frecuenciaEjercicio', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   placeholder="Ej: 3"
                 />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Tipo de entrenamiento</label>
+                <label className="block text-sm text-gray-400 mb-1">Tipo de entrenamiento</label>
                 <select
                   value={datosNutricionales.tipoEntrenamiento || ''}
                   onChange={(e) => updateNutri('tipoEntrenamiento', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Fuerza">Fuerza</option>
@@ -937,11 +937,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Intensidad percibida</label>
+                <label className="block text-sm text-gray-400 mb-1">Intensidad percibida</label>
                 <select
                   value={datosNutricionales.intensidadPercibida || ''}
                   onChange={(e) => updateNutri('intensidadPercibida', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Baja">Baja</option>
@@ -950,11 +950,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Horario habitual</label>
+                <label className="block text-sm text-gray-400 mb-1">Horario habitual</label>
                 <select
                   value={datosNutricionales.horarioEjercicio || ''}
                   onChange={(e) => updateNutri('horarioEjercicio', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="AM">AM</option>
@@ -968,24 +968,24 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Estilo de Vida */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Estilo de Vida</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Estilo de Vida</h3>
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Horas de sueño</label>
+              <label className="block text-sm text-gray-400 mb-1">Horas de sueño</label>
               <input
                 type="text"
                 value={datosNutricionales.horasSueno || ''}
                 onChange={(e) => updateNutri('horasSueno', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 7"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Calidad del sueño</label>
+              <label className="block text-sm text-gray-400 mb-1">Calidad del sueño</label>
               <select
                 value={datosNutricionales.calidadSueno || ''}
                 onChange={(e) => updateNutri('calidadSueno', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione</option>
                 <option value="Buena">Buena</option>
@@ -994,11 +994,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Nivel de estrés</label>
+              <label className="block text-sm text-gray-400 mb-1">Nivel de estrés</label>
               <select
                 value={datosNutricionales.nivelEstres || ''}
                 onChange={(e) => updateNutri('nivelEstres', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione</option>
                 <option value="Bajo">Bajo</option>
@@ -1011,13 +1011,13 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Enfermedad Actual */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Enfermedad Actual</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Enfermedad Actual</h3>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Descripción</label>
+            <label className="block text-sm text-gray-400 mb-1">Descripción</label>
             <textarea
               value={datosNutricionales.descripcionEnfermedad || ''}
               onChange={(e) => updateNutri('descripcionEnfermedad', e.target.value)}
-              className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               rows={3}
               placeholder="Descripción de la enfermedad actual..."
             />
@@ -1027,12 +1027,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         {/* Condiciones Especiales (antecedentes positivos del formulario) */}
         {getPositiveConditions().length > 0 && (
           <div className="bg-[#2a3942] rounded-lg p-3">
-            <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Condiciones Especiales</h3>
+            <h3 className="text-base font-semibold mb-2 text-[#00a884]">Condiciones Especiales</h3>
             <div className="flex flex-wrap gap-2">
               {getPositiveConditions().map((condition, index) => (
                 <span
                   key={index}
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
                     condition.startsWith('Fam:')
                       ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30'
                       : 'bg-amber-900/30 text-amber-300 border border-amber-500/30'
@@ -1048,8 +1048,8 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
         {/* Antecedentes (Solo lectura) */}
         {(data.antecedentesFamiliares || data.encuestaSalud || data.empresa1) && (
           <div className="bg-[#2a3942] rounded-lg p-3">
-            <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Antecedentes</h3>
-            <div className="space-y-2 text-xs">
+            <h3 className="text-base font-semibold mb-2 text-[#00a884]">Antecedentes</h3>
+            <div className="space-y-2 text-sm">
               {data.antecedentesFamiliares && (
                 <div>
                   <span className="text-gray-400">Antecedentes Familiares:</span>
@@ -1074,44 +1074,44 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Antecedentes Adicionales */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Antecedentes Adicionales</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Antecedentes Adicionales</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Medicamentos Actuales</label>
+              <label className="block text-sm text-gray-400 mb-1">Medicamentos Actuales</label>
               <textarea
                 value={datosNutricionales.medicamentosActuales || ''}
                 onChange={(e) => updateNutri('medicamentosActuales', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Medicamentos que toma actualmente..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Alergias</label>
+              <label className="block text-sm text-gray-400 mb-1">Alergias</label>
               <textarea
                 value={datosNutricionales.alergias || ''}
                 onChange={(e) => updateNutri('alergias', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Alergias conocidas..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cirugías</label>
+              <label className="block text-sm text-gray-400 mb-1">Cirugías</label>
               <textarea
                 value={datosNutricionales.cirugias || ''}
                 onChange={(e) => updateNutri('cirugias', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Cirugías previas..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Hospitalizaciones</label>
+              <label className="block text-sm text-gray-400 mb-1">Hospitalizaciones</label>
               <textarea
                 value={datosNutricionales.hospitalizaciones || ''}
                 onChange={(e) => updateNutri('hospitalizaciones', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Hospitalizaciones previas..."
               />
@@ -1121,101 +1121,101 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Medidas Físicas */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Medidas Físicas</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Medidas Físicas</h3>
           <div className="grid grid-cols-3 gap-2 mb-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Talla (cm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Talla (cm)</label>
               <input
                 type="text"
                 value={talla}
                 onChange={(e) => setTalla(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="170"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Peso (kg)</label>
+              <label className="block text-sm text-gray-400 mb-1">Peso (kg)</label>
               <input
                 type="text"
                 value={peso}
                 onChange={(e) => setPeso(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="70"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">IMC</label>
+              <label className="block text-sm text-gray-400 mb-1">IMC</label>
               <input
                 type="text"
                 value={imc ? `${imc} (${getImcInterpretation()})` : ''}
                 readOnly
-                className={`w-full bg-[#2a3942] ${getImcColor()} text-sm px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
+                className={`w-full bg-[#2a3942] ${getImcColor()} text-base px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
                 placeholder="Auto"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Peso Habitual (kg)</label>
+              <label className="block text-sm text-gray-400 mb-1">Peso Habitual (kg)</label>
               <input
                 type="text"
                 value={datosNutricionales.pesoHabitual || ''}
                 onChange={(e) => updateNutri('pesoHabitual', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 75"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">% Grasa Corporal</label>
+              <label className="block text-sm text-gray-400 mb-1">% Grasa Corporal</label>
               <input
                 type="text"
                 value={datosNutricionales.porcentajeGrasa || ''}
                 onChange={(e) => updateNutri('porcentajeGrasa', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 25"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Masa Muscular (kg)</label>
+              <label className="block text-sm text-gray-400 mb-1">Masa Muscular (kg)</label>
               <input
                 type="text"
                 value={datosNutricionales.masaMuscular || ''}
                 onChange={(e) => updateNutri('masaMuscular', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 45"
               />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cintura (cm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Cintura (cm)</label>
               <input
                 type="text"
                 value={datosNutricionales.circunferenciaCintura || ''}
                 onChange={(e) => updateNutri('circunferenciaCintura', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 80"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cadera (cm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Cadera (cm)</label>
               <input
                 type="text"
                 value={datosNutricionales.circunferenciaCadera || ''}
                 onChange={(e) => updateNutri('circunferenciaCadera', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 95"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Rel. Cin/Cad</label>
+              <label className="block text-sm text-gray-400 mb-1">Rel. Cin/Cad</label>
               <input
                 type="text"
                 value={relacionCinturaCadera}
                 readOnly
-                className={`w-full bg-[#2a3942] ${getRccColor()} text-sm px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
+                className={`w-full bg-[#2a3942] ${getRccColor()} text-base px-2 py-2 rounded border border-gray-600 cursor-not-allowed font-semibold`}
                 placeholder="Auto"
               />
             </div>
@@ -1224,168 +1224,168 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Pliegues Cutáneos - ISAK */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Pliegues Cutaneos - ISAK</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Pliegues Cutaneos - ISAK</h3>
           {!data?.edad || !data?.genero ? (
-            <p className="text-xs text-yellow-400 mb-2">Se requiere edad y genero del paciente para los calculos ISAK.</p>
+            <p className="text-sm text-yellow-400 mb-2">Se requiere edad y genero del paciente para los calculos ISAK.</p>
           ) : null}
           <div className="grid grid-cols-4 gap-2 mb-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Triceps (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Triceps (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueTriceps || ''}
                 onChange={(e) => updateNutri('pliegueTriceps', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Subescapular (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Subescapular (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueSubescapular || ''}
                 onChange={(e) => updateNutri('pliegueSubescapular', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Biceps (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Biceps (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueBiceps || ''}
                 onChange={(e) => updateNutri('pliegueBiceps', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cresta Iliaca (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Cresta Iliaca (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueCrestaIliaca || ''}
                 onChange={(e) => updateNutri('pliegueCrestaIliaca', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
           </div>
           <div className="grid grid-cols-4 gap-2 mb-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Supraespinal (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Supraespinal (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueSupraespinal || ''}
                 onChange={(e) => updateNutri('pliegueSupraespinal', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Abdominal (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Abdominal (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueAbdominal || ''}
                 onChange={(e) => updateNutri('pliegueAbdominal', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Muslo Anterior (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Muslo Anterior (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.pliegueMusloAnterior || ''}
                 onChange={(e) => updateNutri('pliegueMusloAnterior', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Pantorrilla (mm)</label>
+              <label className="block text-sm text-gray-400 mb-1">Pantorrilla (mm)</label>
               <input
                 type="text"
                 value={datosNutricionales.plieguePantorrilla || ''}
                 onChange={(e) => updateNutri('plieguePantorrilla', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="mm"
               />
             </div>
           </div>
           {/* Perímetros ISAK */}
-          <p className="text-xs text-gray-400 mb-1 font-semibold mt-2">Perímetros (cm)</p>
+          <p className="text-sm text-gray-400 mb-1 font-semibold mt-2">Perímetros (cm)</p>
           <div className="grid grid-cols-5 gap-2 mb-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Brazo Relajado</label>
+              <label className="block text-sm text-gray-400 mb-1">Brazo Relajado</label>
               <input
                 type="text"
                 value={datosNutricionales.perimetroBrazoRelajado || ''}
                 onChange={(e) => updateNutri('perimetroBrazoRelajado', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Brazo Contraído</label>
+              <label className="block text-sm text-gray-400 mb-1">Brazo Contraído</label>
               <input
                 type="text"
                 value={datosNutricionales.perimetroBrazoContraido || ''}
                 onChange={(e) => updateNutri('perimetroBrazoContraido', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cintura Mínima</label>
+              <label className="block text-sm text-gray-400 mb-1">Cintura Mínima</label>
               <input
                 type="text"
                 value={datosNutricionales.perimetroCinturaMinima || ''}
                 onChange={(e) => updateNutri('perimetroCinturaMinima', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cadera Máxima</label>
+              <label className="block text-sm text-gray-400 mb-1">Cadera Máxima</label>
               <input
                 type="text"
                 value={datosNutricionales.perimetroCaderaMaxima || ''}
                 onChange={(e) => updateNutri('perimetroCaderaMaxima', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Pantorrilla Máx.</label>
+              <label className="block text-sm text-gray-400 mb-1">Pantorrilla Máx.</label>
               <input
                 type="text"
                 value={datosNutricionales.perimetroPantorrillaMaxima || ''}
                 onChange={(e) => updateNutri('perimetroPantorrillaMaxima', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
           </div>
           {/* Diámetros óseos (para somatotipo Heath-Carter) */}
-          <p className="text-xs text-gray-400 mb-1 font-semibold">Diámetros óseos (cm)</p>
+          <p className="text-sm text-gray-400 mb-1 font-semibold">Diámetros óseos (cm)</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Diámetro Húmero (biepicondíleo)</label>
+              <label className="block text-sm text-gray-400 mb-1">Diámetro Húmero (biepicondíleo)</label>
               <input
                 type="text"
                 value={datosNutricionales.diametroHumero || ''}
                 onChange={(e) => updateNutri('diametroHumero', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Diámetro Fémur (biepicondíleo)</label>
+              <label className="block text-sm text-gray-400 mb-1">Diámetro Fémur (biepicondíleo)</label>
               <input
                 type="text"
                 value={datosNutricionales.diametroFemur || ''}
                 onChange={(e) => updateNutri('diametroFemur', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="cm"
               />
             </div>
@@ -1393,38 +1393,38 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           {/* Resultados ISAK calculados */}
           {(isak.sum6 || isak.sum8 || isak.yuhasz || isak.faulkner || isak.durninWomersley) && (
             <div className="bg-[#1a2530] rounded p-2 border border-gray-700">
-              <p className="text-xs text-gray-400 mb-1 font-semibold">Resultados ISAK</p>
+              <p className="text-sm text-gray-400 mb-1 font-semibold">Resultados ISAK</p>
               <div className="grid grid-cols-3 gap-2 mb-1">
                 {isak.sum6 && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">Suma 6 pliegues</span>
-                    <span className="text-sm text-white font-semibold">{isak.sum6} mm</span>
+                    <span className="block text-sm text-gray-400">Suma 6 pliegues</span>
+                    <span className="text-base text-white font-semibold">{isak.sum6} mm</span>
                   </div>
                 )}
                 {isak.sum8 && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">Suma 8 pliegues</span>
-                    <span className="text-sm text-white font-semibold">{isak.sum8} mm</span>
+                    <span className="block text-sm text-gray-400">Suma 8 pliegues</span>
+                    <span className="text-base text-white font-semibold">{isak.sum8} mm</span>
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-3 gap-2 mb-1">
                 {isak.yuhasz && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">% Grasa (Yuhasz)</span>
-                    <span className={`text-sm font-semibold ${getGrasaColor(isak.yuhasz)}`}>{isak.yuhasz}%</span>
+                    <span className="block text-sm text-gray-400">% Grasa (Yuhasz)</span>
+                    <span className={`text-base font-semibold ${getGrasaColor(isak.yuhasz)}`}>{isak.yuhasz}%</span>
                   </div>
                 )}
                 {isak.faulkner && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">% Grasa (Faulkner)</span>
-                    <span className={`text-sm font-semibold ${getGrasaColor(isak.faulkner)}`}>{isak.faulkner}%</span>
+                    <span className="block text-sm text-gray-400">% Grasa (Faulkner)</span>
+                    <span className={`text-base font-semibold ${getGrasaColor(isak.faulkner)}`}>{isak.faulkner}%</span>
                   </div>
                 )}
                 {isak.durninWomersley && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">% Grasa (D-W)</span>
-                    <span className={`text-sm font-semibold ${getGrasaColor(isak.durninWomersley)}`}>{isak.durninWomersley}%</span>
+                    <span className="block text-sm text-gray-400">% Grasa (D-W)</span>
+                    <span className={`text-base font-semibold ${getGrasaColor(isak.durninWomersley)}`}>{isak.durninWomersley}%</span>
                   </div>
                 )}
               </div>
@@ -1432,14 +1432,14 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 <div className="grid grid-cols-2 gap-2">
                   {isak.masaGrasa && (
                     <div className="text-center">
-                      <span className="block text-xs text-gray-400">Masa Grasa</span>
-                      <span className="text-sm text-white font-semibold">{isak.masaGrasa} kg</span>
+                      <span className="block text-sm text-gray-400">Masa Grasa</span>
+                      <span className="text-base text-white font-semibold">{isak.masaGrasa} kg</span>
                     </div>
                   )}
                   {isak.masaLibreGrasa && (
                     <div className="text-center">
-                      <span className="block text-xs text-gray-400">Masa Libre de Grasa</span>
-                      <span className="text-sm text-white font-semibold">{isak.masaLibreGrasa} kg</span>
+                      <span className="block text-sm text-gray-400">Masa Libre de Grasa</span>
+                      <span className="text-base text-white font-semibold">{isak.masaLibreGrasa} kg</span>
                     </div>
                   )}
                 </div>
@@ -1449,45 +1449,45 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           {/* Somatotipo Heath-Carter */}
           {(isak.endomorfia || isak.mesomorfia || isak.ectomorfia) && (
             <div className="bg-[#1a2530] rounded p-2 border border-gray-700 mt-2">
-              <p className="text-xs text-gray-400 mb-1 font-semibold">Somatotipo (Heath-Carter)</p>
+              <p className="text-sm text-gray-400 mb-1 font-semibold">Somatotipo (Heath-Carter)</p>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 <div className="text-center bg-[#2a3942] rounded p-1">
-                  <span className="block text-xs text-gray-400">Endomorfia</span>
-                  <span className="text-sm text-amber-400 font-semibold">{isak.endomorfia || '—'}</span>
+                  <span className="block text-sm text-gray-400">Endomorfia</span>
+                  <span className="text-base text-amber-400 font-semibold">{isak.endomorfia || '—'}</span>
                 </div>
                 <div className="text-center bg-[#2a3942] rounded p-1">
-                  <span className="block text-xs text-gray-400">Mesomorfia</span>
-                  <span className="text-sm text-green-400 font-semibold">{isak.mesomorfia || '—'}</span>
+                  <span className="block text-sm text-gray-400">Mesomorfia</span>
+                  <span className="text-base text-green-400 font-semibold">{isak.mesomorfia || '—'}</span>
                 </div>
                 <div className="text-center bg-[#2a3942] rounded p-1">
-                  <span className="block text-xs text-gray-400">Ectomorfia</span>
-                  <span className="text-sm text-blue-400 font-semibold">{isak.ectomorfia || '—'}</span>
+                  <span className="block text-sm text-gray-400">Ectomorfia</span>
+                  <span className="text-base text-blue-400 font-semibold">{isak.ectomorfia || '—'}</span>
                 </div>
               </div>
               {(isak.ejeX || isak.ejeY || isak.clasificacionSomato) && (
                 <div className="grid grid-cols-3 gap-2">
                   {isak.ejeX && (
                     <div className="text-center">
-                      <span className="block text-xs text-gray-400">Eje X</span>
-                      <span className="text-sm text-white font-semibold">{isak.ejeX}</span>
+                      <span className="block text-sm text-gray-400">Eje X</span>
+                      <span className="text-base text-white font-semibold">{isak.ejeX}</span>
                     </div>
                   )}
                   {isak.ejeY && (
                     <div className="text-center">
-                      <span className="block text-xs text-gray-400">Eje Y</span>
-                      <span className="text-sm text-white font-semibold">{isak.ejeY}</span>
+                      <span className="block text-sm text-gray-400">Eje Y</span>
+                      <span className="text-base text-white font-semibold">{isak.ejeY}</span>
                     </div>
                   )}
                   {isak.clasificacionSomato && (
                     <div className="text-center">
-                      <span className="block text-xs text-gray-400">Clasificación</span>
-                      <span className="text-sm text-[#00a884] font-semibold">{isak.clasificacionSomato}</span>
+                      <span className="block text-sm text-gray-400">Clasificación</span>
+                      <span className="text-base text-[#00a884] font-semibold">{isak.clasificacionSomato}</span>
                     </div>
                   )}
                 </div>
               )}
               {isak.endomorfia && isak.mesomorfia && isak.ectomorfia && (
-                <p className="text-xs text-gray-500 mt-2 text-center">
+                <p className="text-sm text-gray-500 mt-2 text-center">
                   Somatocarta: {isak.endomorfia} - {isak.mesomorfia} - {isak.ectomorfia}
                 </p>
               )}
@@ -1497,97 +1497,97 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Evaluación Dietética */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Evaluación Dietética</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Evaluación Dietética</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recordatorio 24 horas</label>
+              <label className="block text-sm text-gray-400 mb-1">Recordatorio 24 horas</label>
               <textarea
                 value={datosNutricionales.recordatorio24h || ''}
                 onChange={(e) => updateNutri('recordatorio24h', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Descripción de lo consumido en las últimas 24 horas..."
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Número de comidas/día</label>
+                <label className="block text-sm text-gray-400 mb-1">Número de comidas/día</label>
                 <input
                   type="text"
                   value={datosNutricionales.numComidasDia || ''}
                   onChange={(e) => updateNutri('numComidasDia', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   placeholder="Ej: 3"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Consumo de agua (L/día)</label>
+                <label className="block text-sm text-gray-400 mb-1">Consumo de agua (L/día)</label>
                 <input
                   type="text"
                   value={datosNutricionales.consumoAgua || ''}
                   onChange={(e) => updateNutri('consumoAgua', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   placeholder="Ej: 2"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Preferencias Alimentarias</label>
+              <label className="block text-sm text-gray-400 mb-1">Preferencias Alimentarias</label>
               <textarea
                 value={datosNutricionales.preferenciasAlimentarias || ''}
                 onChange={(e) => updateNutri('preferenciasAlimentarias', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Alimentos preferidos, restricciones culturales o religiosas..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Alergias Alimentarias</label>
+              <label className="block text-sm text-gray-400 mb-1">Alergias Alimentarias</label>
               <textarea
                 value={datosNutricionales.alergiasAlimentarias || ''}
                 onChange={(e) => updateNutri('alergiasAlimentarias', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Alergias o intolerancias alimentarias..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Suplementos</label>
+              <label className="block text-sm text-gray-400 mb-1">Suplementos</label>
               <textarea
                 value={datosNutricionales.suplementos || ''}
                 onChange={(e) => updateNutri('suplementos', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Suplementos vitamínicos o minerales que consume..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cambios de Peso Recientes</label>
+              <label className="block text-sm text-gray-400 mb-1">Cambios de Peso Recientes</label>
               <textarea
                 value={datosNutricionales.cambiosPesoRecientes || ''}
                 onChange={(e) => updateNutri('cambiosPesoRecientes', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Cambios de peso en los últimos meses..."
               />
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Horarios de comida</label>
+                <label className="block text-sm text-gray-400 mb-1">Horarios de comida</label>
                 <input
                   type="text"
                   value={datosNutricionales.horariosComida || ''}
                   onChange={(e) => updateNutri('horariosComida', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   placeholder="Ej: 7-12-19"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Consumo de alcohol</label>
+                <label className="block text-sm text-gray-400 mb-1">Consumo de alcohol</label>
                 <select
                   value={datosNutricionales.consumoAlcohol || ''}
                   onChange={(e) => updateNutri('consumoAlcohol', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione</option>
                   <option value="Sí">Sí</option>
@@ -1595,12 +1595,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Frecuencia alcohol</label>
+                <label className="block text-sm text-gray-400 mb-1">Frecuencia alcohol</label>
                 <input
                   type="text"
                   value={datosNutricionales.frecuenciaAlcohol || ''}
                   onChange={(e) => updateNutri('frecuenciaAlcohol', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   placeholder="Ej: fines de semana"
                 />
               </div>
@@ -1610,97 +1610,97 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Anamnesis Alimentaria */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Anamnesis Alimentaria</h3>
-          <p className="text-xs text-gray-400 mb-2 font-semibold">Entre semana</p>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Anamnesis Alimentaria</h3>
+          <p className="text-sm text-gray-400 mb-2 font-semibold">Entre semana</p>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Desayuno</label>
+              <label className="block text-sm text-gray-400 mb-1">Desayuno</label>
               <textarea
                 value={datosNutricionales.anamnesisDesayuno || ''}
                 onChange={(e) => updateNutri('anamnesisDesayuno', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Descripción del desayuno típico..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Media mañana</label>
+              <label className="block text-sm text-gray-400 mb-1">Media mañana</label>
               <textarea
                 value={datosNutricionales.anamnesisMediaManana || ''}
                 onChange={(e) => updateNutri('anamnesisMediaManana', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Snack de media mañana..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Almuerzo</label>
+              <label className="block text-sm text-gray-400 mb-1">Almuerzo</label>
               <textarea
                 value={datosNutricionales.anamnesisAlmuerzo || ''}
                 onChange={(e) => updateNutri('anamnesisAlmuerzo', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Descripción del almuerzo típico..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Media tarde</label>
+              <label className="block text-sm text-gray-400 mb-1">Media tarde</label>
               <textarea
                 value={datosNutricionales.anamnesisMediaTarde || ''}
                 onChange={(e) => updateNutri('anamnesisMediaTarde', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Snack de media tarde..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Cena</label>
+              <label className="block text-sm text-gray-400 mb-1">Cena</label>
               <textarea
                 value={datosNutricionales.anamnesisCena || ''}
                 onChange={(e) => updateNutri('anamnesisCena', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Descripción de la cena típica..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Fin de semana</label>
+              <label className="block text-sm text-gray-400 mb-1">Fin de semana</label>
               <textarea
                 value={datosNutricionales.anamnesisFinSemana || ''}
                 onChange={(e) => updateNutri('anamnesisFinSemana', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Descripción general de alimentación fin de semana..."
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Alimentos preferidos</label>
+                <label className="block text-sm text-gray-400 mb-1">Alimentos preferidos</label>
                 <textarea
                   value={datosNutricionales.alimentosPreferidos || ''}
                   onChange={(e) => updateNutri('alimentosPreferidos', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   rows={2}
                   placeholder="Alimentos que le gustan..."
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Alimentos rechazados</label>
+                <label className="block text-sm text-gray-400 mb-1">Alimentos rechazados</label>
                 <textarea
                   value={datosNutricionales.alimentosRechazados || ''}
                   onChange={(e) => updateNutri('alimentosRechazados', e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                   rows={2}
                   placeholder="Alimentos que rechaza..."
                 />
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Intolerancias</label>
+              <label className="block text-sm text-gray-400 mb-1">Intolerancias</label>
               <textarea
                 value={datosNutricionales.intoleranciasAlimentarias || ''}
                 onChange={(e) => updateNutri('intoleranciasAlimentarias', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Intolerancias alimentarias (lactosa, gluten, etc.)..."
               />
@@ -1710,64 +1710,64 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Evaluación Clínica Nutricional */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Evaluación Clínica Nutricional</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Evaluación Clínica Nutricional</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Signos Clínicos</label>
+              <label className="block text-sm text-gray-400 mb-1">Signos Clínicos</label>
               <textarea
                 value={datosNutricionales.signosClinicos || ''}
                 onChange={(e) => updateNutri('signosClinicos', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Signos clínicos observados..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Problemas Digestivos</label>
+              <label className="block text-sm text-gray-400 mb-1">Problemas Digestivos</label>
               <textarea
                 value={datosNutricionales.problemasDigestivos || ''}
                 onChange={(e) => updateNutri('problemasDigestivos', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Síntomas digestivos: náuseas, estreñimiento, diarrea..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Masticación y Deglución</label>
+              <label className="block text-sm text-gray-400 mb-1">Masticación y Deglución</label>
               <textarea
                 value={datosNutricionales.masticacionDeglucion || ''}
                 onChange={(e) => updateNutri('masticacionDeglucion', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Dificultades para masticar o tragar..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Observaciones Nutricionales</label>
+              <label className="block text-sm text-gray-400 mb-1">Observaciones Nutricionales</label>
               <textarea
                 value={datosNutricionales.observacionesNutricionales || ''}
                 onChange={(e) => updateNutri('observacionesNutricionales', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Observaciones clínicas nutricionales adicionales..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Análisis de composición corporal</label>
+              <label className="block text-sm text-gray-400 mb-1">Análisis de composición corporal</label>
               <textarea
                 value={datosNutricionales.analisisComposicionCorporal || ''}
                 onChange={(e) => updateNutri('analisisComposicionCorporal', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Análisis de masa grasa, masa muscular, distribución..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Identificación de riesgos</label>
+              <label className="block text-sm text-gray-400 mb-1">Identificación de riesgos</label>
               <textarea
                 value={datosNutricionales.identificacionRiesgos || ''}
                 onChange={(e) => updateNutri('identificacionRiesgos', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Riesgos cardiovascular, metabólico, nutricional..."
               />
@@ -1777,64 +1777,64 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Plan de Intervención */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan de Intervención</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Plan de Intervención</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Objetivo nutricional definido</label>
+              <label className="block text-sm text-gray-400 mb-1">Objetivo nutricional definido</label>
               <textarea
                 value={datosNutricionales.objetivoNutricional || ''}
                 onChange={(e) => updateNutri('objetivoNutricional', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Objetivo nutricional específico y medible..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Estrategia alimentaria</label>
+              <label className="block text-sm text-gray-400 mb-1">Estrategia alimentaria</label>
               <textarea
                 value={datosNutricionales.estrategiaAlimentaria || ''}
                 onChange={(e) => updateNutri('estrategiaAlimentaria', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Estrategia alimentaria propuesta..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones generales</label>
+              <label className="block text-sm text-gray-400 mb-1">Recomendaciones generales</label>
               <textarea
                 value={datosNutricionales.recomendacionesGenerales || ''}
                 onChange={(e) => updateNutri('recomendacionesGenerales', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Recomendaciones nutricionales generales..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Suplementación sugerida</label>
+              <label className="block text-sm text-gray-400 mb-1">Suplementación sugerida</label>
               <textarea
                 value={datosNutricionales.suplementacionSugerida || ''}
                 onChange={(e) => updateNutri('suplementacionSugerida', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Suplementos recomendados con dosis..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones de hidratación</label>
+              <label className="block text-sm text-gray-400 mb-1">Recomendaciones de hidratación</label>
               <textarea
                 value={datosNutricionales.recomendacionesHidratacion || ''}
                 onChange={(e) => updateNutri('recomendacionesHidratacion', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Cantidad y tipo de líquidos recomendados..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones de estilo de vida</label>
+              <label className="block text-sm text-gray-400 mb-1">Recomendaciones de estilo de vida</label>
               <textarea
                 value={datosNutricionales.recomendacionesEstiloVida || ''}
                 onChange={(e) => updateNutri('recomendacionesEstiloVida', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Sueño, actividad física, manejo del estrés..."
               />
@@ -1844,24 +1844,24 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Seguimiento */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Seguimiento</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Seguimiento</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Fecha próxima cita</label>
+              <label className="block text-sm text-gray-400 mb-1">Fecha próxima cita</label>
               <input
                 type="date"
                 value={datosNutricionales.fechaProximaCita || ''}
                 onChange={(e) => updateNutri('fechaProximaCita', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Indicadores a monitorear</label>
+              <label className="block text-sm text-gray-400 mb-1">Indicadores a monitorear</label>
               <div className="grid grid-cols-5 gap-1">
                 {['Peso', '% grasa', 'Medidas', 'Adherencia', 'Rendimiento'].map(ind => {
                   const key = `indicador_${ind.replace(/[^a-zA-Z]/g, '')}`;
                   return (
-                    <label key={ind} className="flex items-center gap-1 text-xs text-white cursor-pointer bg-[#1f2c34] px-2 py-1 rounded border border-gray-600">
+                    <label key={ind} className="flex items-center gap-1 text-sm text-white cursor-pointer bg-[#1f2c34] px-2 py-1 rounded border border-gray-600">
                       <input
                         type="checkbox"
                         checked={datosNutricionales[key] || false}
@@ -1875,11 +1875,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Observaciones de seguimiento</label>
+              <label className="block text-sm text-gray-400 mb-1">Observaciones de seguimiento</label>
               <textarea
                 value={datosNutricionales.observacionesSeguimiento || ''}
                 onChange={(e) => updateNutri('observacionesSeguimiento', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={2}
                 placeholder="Observaciones para próxima consulta..."
               />
@@ -1889,9 +1889,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Laboratorios */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Laboratorios</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Laboratorios</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-600">
                   <th className="text-left pb-2 pr-2">Examen</th>
@@ -1908,7 +1908,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                         type="text"
                         value={datosNutricionales[`${key}Resultado`] || ''}
                         onChange={(e) => updateNutri(`${key}Resultado`, e.target.value)}
-                        className="w-full bg-[#1f2c34] text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                        className="w-full bg-[#1f2c34] text-white text-sm px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                         placeholder="Resultado"
                       />
                     </td>
@@ -1917,7 +1917,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                         type="text"
                         value={datosNutricionales[`${key}Fecha`] || ''}
                         onChange={(e) => updateNutri(`${key}Fecha`, e.target.value)}
-                        className="w-full bg-[#1f2c34] text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                        className="w-full bg-[#1f2c34] text-white text-sm px-2 py-1 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                         placeholder="dd/mm/aaaa"
                       />
                     </td>
@@ -1930,16 +1930,16 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Campos Médicos Editables */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-3 text-[#00a884]">Evaluación Médica</h3>
+          <h3 className="text-base font-semibold mb-3 text-[#00a884]">Evaluación Médica</h3>
           <div className="space-y-3">
 
             {/* 1. ANTECEDENTES */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Antecedentes</label>
+              <label className="block text-sm text-gray-400 mb-1">Antecedentes</label>
               <textarea
                 value={mdAntecedentes}
                 onChange={(e) => setMdAntecedentes(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Antecedentes médicos relevantes..."
               />
@@ -1947,11 +1947,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
             {/* 2. OBS. CERTIFICADO */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Obs. Certificado</label>
+              <label className="block text-sm text-gray-400 mb-1">Obs. Certificado</label>
               <textarea
                 value={mdObservacionesCertificado}
                 onChange={(e) => setMdObservacionesCertificado(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Observaciones para el certificado..."
               />
@@ -1959,11 +1959,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
             {/* 3. RECOMENDACIONES MÉDICAS ADICIONALES */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Médicas Adicionales</label>
+              <label className="block text-sm text-gray-400 mb-1">Recomendaciones Médicas Adicionales</label>
               <textarea
                 value={mdRecomendacionesMedicasAdicionales}
                 onChange={(e) => setMdRecomendacionesMedicasAdicionales(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Recomendaciones médicas adicionales..."
               />
@@ -1971,11 +1971,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
             {/* 4. OBSERVACIONES PRIVADAS PARA LA EMPRESA */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Observaciones privadas para la empresa</label>
+              <label className="block text-sm text-gray-400 mb-1">Observaciones privadas para la empresa</label>
               <textarea
                 value={mdObsParaMiDocYa}
                 onChange={(e) => setMdObsParaMiDocYa(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Observaciones privadas para la empresa..."
               />
@@ -1984,11 +1984,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
             {/* 5. DIAGNÓSTICOS */}
             <div className="grid grid-cols-1 gap-2">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Diagnóstico 1 (Principal)</label>
+                <label className="block text-sm text-gray-400 mb-1">Diagnóstico 1 (Principal)</label>
                 <select
                   value={mdDx1}
                   onChange={(e) => setMdDx1(e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione diagnóstico</option>
                   <option value="Asma ocupacional">Asma ocupacional</option>
@@ -2036,11 +2036,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Diagnóstico 2 (Secundario)</label>
+                <label className="block text-sm text-gray-400 mb-1">Diagnóstico 2 (Secundario)</label>
                 <select
                   value={mdDx2}
                   onChange={(e) => setMdDx2(e.target.value)}
-                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 >
                   <option value="">Seleccione diagnóstico</option>
                   <option value="Asma ocupacional">Asma ocupacional</option>
@@ -2096,7 +2096,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 if (!aiSuggestions) handleGenerateAISuggestions();
               }}
               disabled={isGeneratingAI}
-              className="w-full border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10 hover:bg-blue-900/20 transition flex items-center justify-center gap-2 text-blue-400 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10 hover:bg-blue-900/20 transition flex items-center justify-center gap-2 text-blue-400 font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGeneratingAI ? (
                 <>
@@ -2118,11 +2118,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
             {/* 7. CONCEPTO FINAL */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Concepto Final <span className="text-red-500">*</span></label>
+              <label className="block text-sm text-gray-400 mb-1">Concepto Final <span className="text-red-500">*</span></label>
               <select
                 value={mdConceptoFinal}
                 onChange={(e) => setMdConceptoFinal(e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
               >
                 <option value="">Seleccione una opción</option>
                 <option value="ESTADO NUTRICIONAL NORMAL">ESTADO NUTRICIONAL NORMAL</option>
@@ -2142,24 +2142,24 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Diagnóstico Nutricional */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Diagnóstico Nutricional</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Diagnóstico Nutricional</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Código CIE-10</label>
+              <label className="block text-sm text-gray-400 mb-1">Código CIE-10</label>
               <input
                 type="text"
                 value={datosNutricionales.diagnosticoCIE10 || ''}
                 onChange={(e) => updateNutri('diagnosticoCIE10', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: E66.0"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Diagnóstico Nutricional</label>
+              <label className="block text-sm text-gray-400 mb-1">Diagnóstico Nutricional</label>
               <textarea
                 value={datosNutricionales.diagnosticoNutricional || ''}
                 onChange={(e) => updateNutri('diagnosticoNutricional', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Diagnóstico nutricional detallado..."
               />
@@ -2169,54 +2169,54 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
         {/* Plan Nutricional */}
         <div className="bg-[#2a3942] rounded-lg p-3">
-          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan Nutricional</h3>
+          <h3 className="text-base font-semibold mb-2 text-[#00a884]">Plan Nutricional</h3>
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Requerimiento Calórico (kcal/día)</label>
+              <label className="block text-sm text-gray-400 mb-1">Requerimiento Calórico (kcal/día)</label>
               <input
                 type="text"
                 value={datosNutricionales.requerimientoCalorico || ''}
                 onChange={(e) => updateNutri('requerimientoCalorico', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 placeholder="Ej: 1800"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Distribución de Macronutrientes</label>
+              <label className="block text-sm text-gray-400 mb-1">Distribución de Macronutrientes</label>
               <textarea
                 value={datosNutricionales.distribucionMacronutrientes || ''}
                 onChange={(e) => updateNutri('distribucionMacronutrientes', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="CHO: 50%, Proteína: 20%, Grasa: 30%..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Plan Alimentario</label>
+              <label className="block text-sm text-gray-400 mb-1">Plan Alimentario</label>
               <textarea
                 value={datosNutricionales.planAlimentario || ''}
                 onChange={(e) => updateNutri('planAlimentario', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={4}
                 placeholder="Detalle del plan alimentario por tiempos de comida..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Actividad Física Recomendada</label>
+              <label className="block text-sm text-gray-400 mb-1">Actividad Física Recomendada</label>
               <textarea
                 value={datosNutricionales.actividadFisicaPlan || ''}
                 onChange={(e) => updateNutri('actividadFisicaPlan', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Tipo, frecuencia e intensidad de actividad física..."
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Recomendaciones Nutricionales</label>
+              <label className="block text-sm text-gray-400 mb-1">Recomendaciones Nutricionales</label>
               <textarea
                 value={datosNutricionales.recomendacionesNutricionales || ''}
                 onChange={(e) => updateNutri('recomendacionesNutricionales', e.target.value)}
-                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Recomendaciones nutricionales generales..."
               />
@@ -2274,7 +2274,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 <button
                   onClick={handleGenerateAISuggestions}
                   disabled={isGeneratingAI}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   {isGeneratingAI ? (
                     <>
@@ -2313,13 +2313,13 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   <p className="text-gray-400">Analizando perfil nutricional del paciente...</p>
-                  <p className="text-gray-500 text-xs mt-1">Esto puede tomar unos segundos</p>
+                  <p className="text-gray-500 text-sm mt-1">Esto puede tomar unos segundos</p>
                 </div>
               ) : (
                 <textarea
                   value={aiSuggestions}
                   onChange={(e) => setAiSuggestions(e.target.value)}
-                  className="w-full h-full min-h-[60vh] bg-[#0b141a] text-white text-sm px-4 py-3 rounded-lg border border-gray-700 focus:border-blue-400 focus:outline-none resize-none leading-relaxed"
+                  className="w-full h-full min-h-[60vh] bg-[#0b141a] text-white text-base px-4 py-3 rounded-lg border border-gray-700 focus:border-blue-400 focus:outline-none resize-none leading-relaxed"
                   placeholder="Las sugerencias de IA aparecerán aquí..."
                 />
               )}
@@ -2327,12 +2327,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
             {/* Footer del modal */}
             <div className="border-t border-gray-700 p-4 flex items-center justify-between">
-              <p className="text-xs text-gray-500">
+              <p className="text-sm text-gray-500">
                 Este análisis se incluirá en las recomendaciones al guardar la historia clínica
               </p>
               <button
                 onClick={() => setIsAIModalOpen(false)}
-                className="px-4 py-2 bg-[#00a884] text-white text-sm rounded-lg hover:bg-[#008f6f] transition font-semibold"
+                className="px-4 py-2 bg-[#00a884] text-white text-base rounded-lg hover:bg-[#008f6f] transition font-semibold"
               >
                 Aceptar
               </button>

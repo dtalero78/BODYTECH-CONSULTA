@@ -254,14 +254,24 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       durninWomersley = (495 / dc) - 450;
     }
 
-    // Masa grasa y masa libre de grasa
-    const grasaPct = !isNaN(faulkner) ? faulkner : !isNaN(durninWomersley) ? durninWomersley : NaN;
+    // Yuhasz (formula del protocolo Bodytech - usa suma 6 pliegues)
+    let yuhasz = NaN;
+    if (!isNaN(sum6)) {
+      const esMasculino = genero.includes('masculino') || genero === 'm' || genero === 'male' || genero === 'hombre';
+      yuhasz = esMasculino
+        ? 2.585 + (sum6 * 0.1051)
+        : 3.5803 + (sum6 * 0.1548);
+    }
+
+    // Masa grasa y masa libre de grasa (prioridad: Yuhasz > Faulkner > Durnin-Womersley)
+    const grasaPct = !isNaN(yuhasz) ? yuhasz : !isNaN(faulkner) ? faulkner : !isNaN(durninWomersley) ? durninWomersley : NaN;
     const masaGrasa = !isNaN(grasaPct) && !isNaN(pesoNum) ? (pesoNum * grasaPct / 100) : NaN;
     const masaLibreGrasa = !isNaN(masaGrasa) && !isNaN(pesoNum) ? (pesoNum - masaGrasa) : NaN;
 
     return {
       sum6: !isNaN(sum6) ? sum6.toFixed(1) : '',
       sum8: !isNaN(sum8) ? sum8.toFixed(1) : '',
+      yuhasz: !isNaN(yuhasz) ? yuhasz.toFixed(1) : '',
       faulkner: !isNaN(faulkner) ? faulkner.toFixed(1) : '',
       durninWomersley: !isNaN(durninWomersley) ? durninWomersley.toFixed(1) : '',
       masaGrasa: !isNaN(masaGrasa) ? masaGrasa.toFixed(1) : '',
@@ -271,12 +281,13 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
 
   const isak = calcularISAK();
 
-  // Auto-llenar % grasa con Faulkner cuando hay pliegues y el campo está vacío
+  // Auto-llenar % grasa con Yuhasz (protocolo Bodytech) o Faulkner como fallback
   useEffect(() => {
-    if (isak.faulkner && !datosNutricionales.porcentajeGrasa) {
-      updateNutri('porcentajeGrasa', isak.faulkner);
+    const valor = isak.yuhasz || isak.faulkner;
+    if (valor && !datosNutricionales.porcentajeGrasa) {
+      updateNutri('porcentajeGrasa', valor);
     }
-  }, [isak.faulkner]);
+  }, [isak.yuhasz, isak.faulkner]);
 
   const getGrasaColor = (pct: string) => {
     const val = parseFloat(pct);
@@ -738,6 +749,178 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           </div>
         </div>
 
+        {/* Motivo de Consulta y Objetivo */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Motivo de Consulta y Objetivo</h3>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Tipo de consulta</label>
+                <select
+                  value={datosNutricionales.tipoConsulta || ''}
+                  onChange={(e) => updateNutri('tipoConsulta', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Primera vez">Primera vez</option>
+                  <option value="Control">Control</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Objetivo principal</label>
+                <select
+                  value={datosNutricionales.objetivoPrincipal || ''}
+                  onChange={(e) => updateNutri('objetivoPrincipal', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Pérdida de grasa">Pérdida de grasa</option>
+                  <option value="Ganancia de masa muscular">Ganancia de masa muscular</option>
+                  <option value="Rendimiento deportivo">Rendimiento deportivo</option>
+                  <option value="Salud general">Salud general</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Motivo de consulta</label>
+              <textarea
+                value={datosNutricionales.motivoConsultaTexto || ''}
+                onChange={(e) => updateNutri('motivoConsultaTexto', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Motivo de la consulta..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Objetivos específicos</label>
+              <textarea
+                value={datosNutricionales.objetivosEspecificos || ''}
+                onChange={(e) => updateNutri('objetivosEspecificos', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Metas específicas del paciente..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Actividad Física y Contexto Deportivo */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Actividad Física y Contexto Deportivo</h3>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">¿Realiza actividad física?</label>
+                <select
+                  value={datosNutricionales.realizaActividadFisica || ''}
+                  onChange={(e) => updateNutri('realizaActividadFisica', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Sí">Sí</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Frecuencia (veces/semana)</label>
+                <input
+                  type="text"
+                  value={datosNutricionales.frecuenciaEjercicio || ''}
+                  onChange={(e) => updateNutri('frecuenciaEjercicio', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  placeholder="Ej: 3"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Tipo de entrenamiento</label>
+                <select
+                  value={datosNutricionales.tipoEntrenamiento || ''}
+                  onChange={(e) => updateNutri('tipoEntrenamiento', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Fuerza">Fuerza</option>
+                  <option value="Cardio">Cardio</option>
+                  <option value="Mixto">Mixto</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Intensidad percibida</label>
+                <select
+                  value={datosNutricionales.intensidadPercibida || ''}
+                  onChange={(e) => updateNutri('intensidadPercibida', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Baja">Baja</option>
+                  <option value="Media">Media</option>
+                  <option value="Alta">Alta</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Horario habitual</label>
+                <select
+                  value={datosNutricionales.horarioEjercicio || ''}
+                  onChange={(e) => updateNutri('horarioEjercicio', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                  <option value="Mixto">Mixto</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Estilo de Vida */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Estilo de Vida</h3>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Horas de sueño</label>
+              <input
+                type="text"
+                value={datosNutricionales.horasSueno || ''}
+                onChange={(e) => updateNutri('horasSueno', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="Ej: 7"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Calidad del sueño</label>
+              <select
+                value={datosNutricionales.calidadSueno || ''}
+                onChange={(e) => updateNutri('calidadSueno', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              >
+                <option value="">Seleccione</option>
+                <option value="Buena">Buena</option>
+                <option value="Regular">Regular</option>
+                <option value="Mala">Mala</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Nivel de estrés</label>
+              <select
+                value={datosNutricionales.nivelEstres || ''}
+                onChange={(e) => updateNutri('nivelEstres', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              >
+                <option value="">Seleccione</option>
+                <option value="Bajo">Bajo</option>
+                <option value="Medio">Medio</option>
+                <option value="Alto">Alto</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* Enfermedad Actual */}
         <div className="bg-[#2a3942] rounded-lg p-3">
           <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Enfermedad Actual</h3>
@@ -1041,8 +1224,62 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               />
             </div>
           </div>
+          {/* Perímetros ISAK */}
+          <p className="text-xs text-gray-400 mb-1 font-semibold mt-2">Perímetros (cm)</p>
+          <div className="grid grid-cols-5 gap-2 mb-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Brazo Relajado</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroBrazoRelajado || ''}
+                onChange={(e) => updateNutri('perimetroBrazoRelajado', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Brazo Contraído</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroBrazoContraido || ''}
+                onChange={(e) => updateNutri('perimetroBrazoContraido', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cintura Mínima</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroCinturaMinima || ''}
+                onChange={(e) => updateNutri('perimetroCinturaMinima', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cadera Máxima</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroCaderaMaxima || ''}
+                onChange={(e) => updateNutri('perimetroCaderaMaxima', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Pantorrilla Máx.</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroPantorrillaMaxima || ''}
+                onChange={(e) => updateNutri('perimetroPantorrillaMaxima', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+          </div>
           {/* Resultados ISAK calculados */}
-          {(isak.sum6 || isak.sum8 || isak.faulkner || isak.durninWomersley) && (
+          {(isak.sum6 || isak.sum8 || isak.yuhasz || isak.faulkner || isak.durninWomersley) && (
             <div className="bg-[#1a2530] rounded p-2 border border-gray-700">
               <p className="text-xs text-gray-400 mb-1 font-semibold">Resultados ISAK</p>
               <div className="grid grid-cols-3 gap-2 mb-1">
@@ -1059,7 +1296,13 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-1">
+              <div className="grid grid-cols-3 gap-2 mb-1">
+                {isak.yuhasz && (
+                  <div className="text-center">
+                    <span className="block text-xs text-gray-400">% Grasa (Yuhasz)</span>
+                    <span className={`text-sm font-semibold ${getGrasaColor(isak.yuhasz)}`}>{isak.yuhasz}%</span>
+                  </div>
+                )}
                 {isak.faulkner && (
                   <div className="text-center">
                     <span className="block text-xs text-gray-400">% Grasa (Faulkner)</span>
@@ -1068,7 +1311,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 )}
                 {isak.durninWomersley && (
                   <div className="text-center">
-                    <span className="block text-xs text-gray-400">% Grasa (Durnin-Womersley)</span>
+                    <span className="block text-xs text-gray-400">% Grasa (D-W)</span>
                     <span className={`text-sm font-semibold ${getGrasaColor(isak.durninWomersley)}`}>{isak.durninWomersley}%</span>
                   </div>
                 )}
@@ -1169,6 +1412,140 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 placeholder="Cambios de peso en los últimos meses..."
               />
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Horarios de comida</label>
+                <input
+                  type="text"
+                  value={datosNutricionales.horariosComida || ''}
+                  onChange={(e) => updateNutri('horariosComida', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  placeholder="Ej: 7-12-19"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Consumo de alcohol</label>
+                <select
+                  value={datosNutricionales.consumoAlcohol || ''}
+                  onChange={(e) => updateNutri('consumoAlcohol', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Sí">Sí</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Frecuencia alcohol</label>
+                <input
+                  type="text"
+                  value={datosNutricionales.frecuenciaAlcohol || ''}
+                  onChange={(e) => updateNutri('frecuenciaAlcohol', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  placeholder="Ej: fines de semana"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Anamnesis Alimentaria */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Anamnesis Alimentaria</h3>
+          <p className="text-xs text-gray-400 mb-2 font-semibold">Entre semana</p>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Desayuno</label>
+              <textarea
+                value={datosNutricionales.anamnesisDesayuno || ''}
+                onChange={(e) => updateNutri('anamnesisDesayuno', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Descripción del desayuno típico..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Media mañana</label>
+              <textarea
+                value={datosNutricionales.anamnesisMediaManana || ''}
+                onChange={(e) => updateNutri('anamnesisMediaManana', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Snack de media mañana..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Almuerzo</label>
+              <textarea
+                value={datosNutricionales.anamnesisAlmuerzo || ''}
+                onChange={(e) => updateNutri('anamnesisAlmuerzo', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Descripción del almuerzo típico..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Media tarde</label>
+              <textarea
+                value={datosNutricionales.anamnesisMediaTarde || ''}
+                onChange={(e) => updateNutri('anamnesisMediaTarde', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Snack de media tarde..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Cena</label>
+              <textarea
+                value={datosNutricionales.anamnesisCena || ''}
+                onChange={(e) => updateNutri('anamnesisCena', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Descripción de la cena típica..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Fin de semana</label>
+              <textarea
+                value={datosNutricionales.anamnesisFinSemana || ''}
+                onChange={(e) => updateNutri('anamnesisFinSemana', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Descripción general de alimentación fin de semana..."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Alimentos preferidos</label>
+                <textarea
+                  value={datosNutricionales.alimentosPreferidos || ''}
+                  onChange={(e) => updateNutri('alimentosPreferidos', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  rows={2}
+                  placeholder="Alimentos que le gustan..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Alimentos rechazados</label>
+                <textarea
+                  value={datosNutricionales.alimentosRechazados || ''}
+                  onChange={(e) => updateNutri('alimentosRechazados', e.target.value)}
+                  className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                  rows={2}
+                  placeholder="Alimentos que rechaza..."
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Intolerancias</label>
+              <textarea
+                value={datosNutricionales.intoleranciasAlimentarias || ''}
+                onChange={(e) => updateNutri('intoleranciasAlimentarias', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Intolerancias alimentarias (lactosa, gluten, etc.)..."
+              />
+            </div>
           </div>
         </div>
 
@@ -1214,6 +1591,138 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                 className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
                 rows={3}
                 placeholder="Observaciones clínicas nutricionales adicionales..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Análisis de composición corporal</label>
+              <textarea
+                value={datosNutricionales.analisisComposicionCorporal || ''}
+                onChange={(e) => updateNutri('analisisComposicionCorporal', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Análisis de masa grasa, masa muscular, distribución..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Identificación de riesgos</label>
+              <textarea
+                value={datosNutricionales.identificacionRiesgos || ''}
+                onChange={(e) => updateNutri('identificacionRiesgos', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Riesgos cardiovascular, metabólico, nutricional..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Plan de Intervención */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Plan de Intervención</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Objetivo nutricional definido</label>
+              <textarea
+                value={datosNutricionales.objetivoNutricional || ''}
+                onChange={(e) => updateNutri('objetivoNutricional', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Objetivo nutricional específico y medible..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Estrategia alimentaria</label>
+              <textarea
+                value={datosNutricionales.estrategiaAlimentaria || ''}
+                onChange={(e) => updateNutri('estrategiaAlimentaria', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Estrategia alimentaria propuesta..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones generales</label>
+              <textarea
+                value={datosNutricionales.recomendacionesGenerales || ''}
+                onChange={(e) => updateNutri('recomendacionesGenerales', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Recomendaciones nutricionales generales..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Suplementación sugerida</label>
+              <textarea
+                value={datosNutricionales.suplementacionSugerida || ''}
+                onChange={(e) => updateNutri('suplementacionSugerida', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Suplementos recomendados con dosis..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones de hidratación</label>
+              <textarea
+                value={datosNutricionales.recomendacionesHidratacion || ''}
+                onChange={(e) => updateNutri('recomendacionesHidratacion', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Cantidad y tipo de líquidos recomendados..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Recomendaciones de estilo de vida</label>
+              <textarea
+                value={datosNutricionales.recomendacionesEstiloVida || ''}
+                onChange={(e) => updateNutri('recomendacionesEstiloVida', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Sueño, actividad física, manejo del estrés..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Seguimiento */}
+        <div className="bg-[#2a3942] rounded-lg p-3">
+          <h3 className="text-sm font-semibold mb-2 text-[#00a884]">Seguimiento</h3>
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Fecha próxima cita</label>
+              <input
+                type="date"
+                value={datosNutricionales.fechaProximaCita || ''}
+                onChange={(e) => updateNutri('fechaProximaCita', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Indicadores a monitorear</label>
+              <div className="grid grid-cols-5 gap-1">
+                {['Peso', '% grasa', 'Medidas', 'Adherencia', 'Rendimiento'].map(ind => {
+                  const key = `indicador_${ind.replace(/[^a-zA-Z]/g, '')}`;
+                  return (
+                    <label key={ind} className="flex items-center gap-1 text-xs text-white cursor-pointer bg-[#1f2c34] px-2 py-1 rounded border border-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={datosNutricionales[key] || false}
+                        onChange={(e) => setDatosNutricionales((prev: any) => ({ ...prev, [key]: e.target.checked }))}
+                        className="accent-[#00a884]"
+                      />
+                      {ind}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Observaciones de seguimiento</label>
+              <textarea
+                value={datosNutricionales.observacionesSeguimiento || ''}
+                onChange={(e) => updateNutri('observacionesSeguimiento', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-sm px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                rows={2}
+                placeholder="Observaciones para próxima consulta..."
               />
             </div>
           </div>

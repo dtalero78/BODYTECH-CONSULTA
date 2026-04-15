@@ -186,11 +186,67 @@ function buildDatosNutricionalesHTML(datos: any): string {
     sectionNum++;
   }
 
+  // Perímetros ISAK
+  const perimetrosISAK = [
+    { key: 'perimetroBrazoRelajado', label: 'Brazo Relajado (cm)' },
+    { key: 'perimetroBrazoContraido', label: 'Brazo Contraído (cm)' },
+    { key: 'perimetroCinturaMinima', label: 'Cintura Mínima (cm)' },
+    { key: 'perimetroCaderaMaxima', label: 'Cadera Máxima (cm)' },
+    { key: 'perimetroPantorrillaMaxima', label: 'Pantorrilla Máxima (cm)' },
+  ].filter(f => datos[f.key]);
+  if (perimetrosISAK.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Perímetros ISAK`,
+      `<div class="grid-3">${perimetrosISAK.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
+  }
+
+  // Motivo de Consulta y Objetivo
+  const motivo = [
+    { key: 'tipoConsulta', label: 'Tipo de Consulta' },
+    { key: 'objetivoPrincipal', label: 'Objetivo Principal' },
+    { key: 'motivoConsultaTexto', label: 'Motivo de Consulta', wide: true },
+    { key: 'objetivosEspecificos', label: 'Objetivos Específicos', wide: true },
+  ].filter(f => datos[f.key]);
+  if (motivo.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Motivo de Consulta y Objetivo`,
+      motivo.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
+  }
+
+  // Actividad Física
+  const actividad = [
+    { key: 'realizaActividadFisica', label: '¿Realiza actividad física?' },
+    { key: 'frecuenciaEjercicio', label: 'Frecuencia (veces/sem)' },
+    { key: 'tipoEntrenamiento', label: 'Tipo de entrenamiento' },
+    { key: 'intensidadPercibida', label: 'Intensidad percibida' },
+    { key: 'horarioEjercicio', label: 'Horario habitual' },
+  ].filter(f => datos[f.key]);
+  if (actividad.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Actividad Física y Contexto Deportivo`,
+      `<div class="grid-3">${actividad.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
+  }
+
+  // Estilo de Vida
+  const estilo = [
+    { key: 'horasSueno', label: 'Horas de sueño' },
+    { key: 'calidadSueno', label: 'Calidad del sueño' },
+    { key: 'nivelEstres', label: 'Nivel de estrés' },
+  ].filter(f => datos[f.key]);
+  if (estilo.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Estilo de Vida`,
+      `<div class="grid-3">${estilo.map(f => celda(f.label, datos[f.key])).join('')}</div>`);
+    sectionNum++;
+  }
+
   // Evaluación Dietética
   const dieta = [
     { key: 'recordatorio24h', label: 'Recordatorio 24 Horas', wide: true },
     { key: 'numComidasDia', label: 'Comidas/Día', wide: false },
     { key: 'consumoAgua', label: 'Consumo de Agua (L/día)', wide: false },
+    { key: 'horariosComida', label: 'Horarios de comida', wide: false },
+    { key: 'consumoAlcohol', label: 'Consumo de alcohol', wide: false },
+    { key: 'frecuenciaAlcohol', label: 'Frecuencia alcohol', wide: false },
     { key: 'preferenciasAlimentarias', label: 'Preferencias Alimentarias', wide: true },
     { key: 'alergiasAlimentarias', label: 'Alergias Alimentarias', wide: false },
     { key: 'suplementos', label: 'Suplementos', wide: false },
@@ -202,16 +258,68 @@ function buildDatosNutricionalesHTML(datos: any): string {
     sectionNum++;
   }
 
+  // Anamnesis Alimentaria
+  const anamnesis = [
+    { key: 'anamnesisDesayuno', label: 'Desayuno' },
+    { key: 'anamnesisMediaManana', label: 'Media mañana' },
+    { key: 'anamnesisAlmuerzo', label: 'Almuerzo' },
+    { key: 'anamnesisMediaTarde', label: 'Media tarde' },
+    { key: 'anamnesisCena', label: 'Cena' },
+    { key: 'anamnesisFinSemana', label: 'Fin de semana' },
+    { key: 'alimentosPreferidos', label: 'Alimentos preferidos' },
+    { key: 'alimentosRechazados', label: 'Alimentos rechazados' },
+    { key: 'intoleranciasAlimentarias', label: 'Intolerancias' },
+  ].filter(f => datos[f.key]);
+  if (anamnesis.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Anamnesis Alimentaria`,
+      anamnesis.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
+  }
+
   // Evaluación Clínica Nutricional
   const clinica = [
     { key: 'signosClinicos', label: 'Signos Clínicos' },
     { key: 'problemasDigestivos', label: 'Problemas Digestivos' },
     { key: 'masticacionDeglucion', label: 'Masticación y Deglución' },
     { key: 'observacionesNutricionales', label: 'Observaciones Nutricionales' },
+    { key: 'analisisComposicionCorporal', label: 'Análisis de Composición Corporal' },
+    { key: 'identificacionRiesgos', label: 'Identificación de Riesgos' },
   ].filter(f => datos[f.key]);
   if (clinica.length > 0) {
     html += section(`${romanNum(sectionNum)}. Evaluación Clínica Nutricional`,
       clinica.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
+  }
+
+  // Plan de Intervención
+  const planIntervencion = [
+    { key: 'objetivoNutricional', label: 'Objetivo Nutricional' },
+    { key: 'estrategiaAlimentaria', label: 'Estrategia Alimentaria' },
+    { key: 'recomendacionesGenerales', label: 'Recomendaciones Generales' },
+    { key: 'suplementacionSugerida', label: 'Suplementación Sugerida' },
+    { key: 'recomendacionesHidratacion', label: 'Recomendaciones de Hidratación' },
+    { key: 'recomendacionesEstiloVida', label: 'Recomendaciones de Estilo de Vida' },
+  ].filter(f => datos[f.key]);
+  if (planIntervencion.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Plan de Intervención`,
+      planIntervencion.map(f => `<div style="margin-bottom:6px">${celda(f.label, datos[f.key], true)}</div>`).join(''));
+    sectionNum++;
+  }
+
+  // Seguimiento
+  const indicadores: string[] = [];
+  ['Peso', 'grasa', 'Medidas', 'Adherencia', 'Rendimiento'].forEach(ind => {
+    const key = `indicador_${ind.replace(/[^a-zA-Z]/g, '')}`;
+    if (datos[key]) indicadores.push(ind === 'grasa' ? '% grasa' : ind);
+  });
+  const seguimiento = [
+    { key: 'fechaProximaCita', label: 'Fecha próxima cita', valor: datos.fechaProximaCita },
+    { key: 'indicadoresMonitorear', label: 'Indicadores a monitorear', valor: indicadores.join(', ') },
+    { key: 'observacionesSeguimiento', label: 'Observaciones de seguimiento', valor: datos.observacionesSeguimiento },
+  ].filter(f => f.valor);
+  if (seguimiento.length > 0) {
+    html += section(`${romanNum(sectionNum)}. Seguimiento`,
+      seguimiento.map(f => `<div style="margin-bottom:6px">${celda(f.label, f.valor, true)}</div>`).join(''));
     sectionNum++;
   }
 

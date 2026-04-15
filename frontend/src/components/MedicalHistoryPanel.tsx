@@ -1491,6 +1491,94 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
                   Somatocarta: {isak.endomorfia} - {isak.mesomorfia} - {isak.ectomorfia}
                 </p>
               )}
+              {/* Somatocarta (plano cartesiano) */}
+              {isak.ejeX && isak.ejeY && (() => {
+                const x = parseFloat(isak.ejeX);
+                const y = parseFloat(isak.ejeY);
+                // Viewbox: X de -10 a 10, Y de -10 a 18. Escalamos a SVG 400x320.
+                const svgW = 400, svgH = 320;
+                const xMin = -10, xMax = 10, yMin = -10, yMax = 18;
+                const toSvgX = (vx: number) => ((vx - xMin) / (xMax - xMin)) * svgW;
+                const toSvgY = (vy: number) => svgH - ((vy - yMin) / (yMax - yMin)) * svgH;
+                // Polos del triángulo
+                const endoPt = { x: toSvgX(-8), y: toSvgY(-8) };
+                const mesoPt = { x: toSvgX(0), y: toSvgY(16) };
+                const ectoPt = { x: toSvgX(8), y: toSvgY(-8) };
+                const puntoX = toSvgX(x);
+                const puntoY = toSvgY(y);
+                return (
+                  <div className="mt-3 bg-[#0b141a] rounded p-2 border border-gray-700">
+                    <p className="text-sm text-gray-400 mb-1 font-semibold text-center">Somatocarta</p>
+                    <div className="flex justify-center">
+                      <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full max-w-md" style={{ background: '#0b141a' }}>
+                        {/* Grilla */}
+                        <defs>
+                          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#2a3942" strokeWidth="0.5"/>
+                          </pattern>
+                        </defs>
+                        <rect width={svgW} height={svgH} fill="url(#grid)" />
+
+                        {/* Ejes cartesianos */}
+                        <line x1={toSvgX(xMin)} y1={toSvgY(0)} x2={toSvgX(xMax)} y2={toSvgY(0)} stroke="#4a5b65" strokeWidth="1" />
+                        <line x1={toSvgX(0)} y1={toSvgY(yMin)} x2={toSvgX(0)} y2={toSvgY(yMax)} stroke="#4a5b65" strokeWidth="1" />
+
+                        {/* Marcas eje X */}
+                        {[-8, -4, 4, 8].map(v => (
+                          <g key={`xt${v}`}>
+                            <line x1={toSvgX(v)} y1={toSvgY(0) - 3} x2={toSvgX(v)} y2={toSvgY(0) + 3} stroke="#4a5b65" />
+                            <text x={toSvgX(v)} y={toSvgY(0) + 14} fontSize="9" fill="#6b7b85" textAnchor="middle">{v}</text>
+                          </g>
+                        ))}
+                        {/* Marcas eje Y */}
+                        {[-8, -4, 4, 8, 12, 16].map(v => (
+                          <g key={`yt${v}`}>
+                            <line x1={toSvgX(0) - 3} y1={toSvgY(v)} x2={toSvgX(0) + 3} y2={toSvgY(v)} stroke="#4a5b65" />
+                            <text x={toSvgX(0) - 6} y={toSvgY(v) + 3} fontSize="9" fill="#6b7b85" textAnchor="end">{v}</text>
+                          </g>
+                        ))}
+
+                        {/* Triángulo somatotipo */}
+                        <polygon
+                          points={`${endoPt.x},${endoPt.y} ${mesoPt.x},${mesoPt.y} ${ectoPt.x},${ectoPt.y}`}
+                          fill="rgba(0, 168, 132, 0.08)"
+                          stroke="#00a884"
+                          strokeWidth="1.5"
+                        />
+
+                        {/* Lineas al centro desde cada polo (para zonas) */}
+                        <line x1={endoPt.x} y1={endoPt.y} x2={toSvgX(0)} y2={toSvgY(0)} stroke="#00a884" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.4" />
+                        <line x1={mesoPt.x} y1={mesoPt.y} x2={toSvgX(0)} y2={toSvgY(0)} stroke="#00a884" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.4" />
+                        <line x1={ectoPt.x} y1={ectoPt.y} x2={toSvgX(0)} y2={toSvgY(0)} stroke="#00a884" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.4" />
+
+                        {/* Etiquetas polos */}
+                        <text x={endoPt.x} y={endoPt.y + 16} fontSize="11" fill="#fbbf24" textAnchor="middle" fontWeight="bold">ENDOMORFIA</text>
+                        <text x={endoPt.x} y={endoPt.y + 28} fontSize="9" fill="#9ca3af" textAnchor="middle">(7-1-1)</text>
+
+                        <text x={mesoPt.x} y={mesoPt.y - 10} fontSize="11" fill="#34d399" textAnchor="middle" fontWeight="bold">MESOMORFIA</text>
+                        <text x={mesoPt.x} y={mesoPt.y - 22} fontSize="9" fill="#9ca3af" textAnchor="middle">(1-7-1)</text>
+
+                        <text x={ectoPt.x} y={ectoPt.y + 16} fontSize="11" fill="#60a5fa" textAnchor="middle" fontWeight="bold">ECTOMORFIA</text>
+                        <text x={ectoPt.x} y={ectoPt.y + 28} fontSize="9" fill="#9ca3af" textAnchor="middle">(1-1-7)</text>
+
+                        {/* Etiquetas ejes */}
+                        <text x={svgW - 4} y={toSvgY(0) - 4} fontSize="9" fill="#9ca3af" textAnchor="end">X = Ecto − Endo</text>
+                        <text x={toSvgX(0) + 6} y={12} fontSize="9" fill="#9ca3af" textAnchor="start">Y = 2·Meso − Endo − Ecto</text>
+
+                        {/* Punto del paciente */}
+                        <circle cx={puntoX} cy={puntoY} r="8" fill="rgba(239, 68, 68, 0.3)" stroke="#ef4444" strokeWidth="2" />
+                        <circle cx={puntoX} cy={puntoY} r="3" fill="#ef4444" />
+                        <text x={puntoX + 10} y={puntoY - 6} fontSize="10" fill="#fca5a5" fontWeight="bold">
+                          ({isak.ejeX}, {isak.ejeY})
+                        </text>
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-500 text-center mt-1">
+                      Clasificación: <span className="text-[#00a884] font-semibold">{isak.clasificacionSomato}</span>
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

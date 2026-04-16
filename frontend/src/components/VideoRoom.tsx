@@ -224,7 +224,14 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       )}
 
       {/* Contenedor principal de la videollamada */}
-      <div className="flex-1 flex flex-col">
+      <div
+        className="flex-1 flex flex-col transition-all duration-300"
+        style={
+          role === 'doctor' && historiaId
+            ? { paddingRight: isHistoryExpanded ? '95vw' : '820px', maxWidth: '100vw' }
+            : undefined
+        }
+      >
       {/* Header tipo WhatsApp */}
       <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">
         {/* Back button */}

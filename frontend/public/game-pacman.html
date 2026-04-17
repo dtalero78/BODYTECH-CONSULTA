@@ -13,8 +13,41 @@ body{background:#0b141a;color:#e2e8f0;font-family:'Segoe UI',system-ui,-apple-sy
 #app{display:flex;height:100vh;width:100vw}
 #board-area{flex:1;display:flex;flex-direction:column;min-width:0}
 #header{padding:16px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #1e293b;background:#0f172a;z-index:10}
-#header h1{font-size:1.3rem;font-weight:700;white-space:nowrap}
+#header h1{font-size:1.3rem;font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:12px}
 #header h1 span{color:#00a884}
+#header h1 img{height:28px;width:auto;border-radius:4px}
+#header-spacer{flex:1}
+.stack-btn{padding:8px 18px;background:#00a884;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s,transform .15s;display:flex;align-items:center;gap:6px}
+.stack-btn:hover{background:#008f6f;transform:scale(1.04)}
+
+/* ── Stack Modal ── */
+#stack-modal{position:fixed;inset:0;background:rgba(11,20,26,.85);display:none;align-items:center;justify-content:center;z-index:200;padding:20px;backdrop-filter:blur(4px)}
+#stack-modal.show{display:flex}
+.stack-modal-content{background:#1f2c34;border:1px solid #334155;border-radius:16px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.stack-modal-header{padding:20px 28px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#1f2c34;z-index:1;border-radius:16px 16px 0 0}
+.stack-modal-header h2{font-size:1.3rem;color:#fff;font-weight:700}
+.stack-modal-header h2 span{color:#00a884}
+.stack-close{background:transparent;border:none;color:#94a3b8;font-size:1.8rem;cursor:pointer;padding:0 8px;line-height:1}
+.stack-close:hover{color:#fff}
+.stack-modal-body{padding:24px 28px}
+.stack-section{margin-bottom:28px}
+.stack-section:last-child{margin-bottom:0}
+.stack-section h3{color:#00a884;font-size:1rem;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.04em}
+.stack-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.stack-card{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px 16px}
+.stack-card h4{color:#fff;font-size:.85rem;font-weight:600;margin-bottom:8px}
+.stack-card ul{list-style:none;padding:0;margin:0}
+.stack-card li{color:#cbd5e1;font-size:.78rem;padding:3px 0;display:flex;align-items:flex-start;gap:6px;line-height:1.5}
+.stack-card li::before{content:'▸';color:#00a884;flex-shrink:0}
+.stack-card li strong{color:#fff;font-weight:600}
+.stack-note{background:#0f2e27;border:1px solid #00a884;border-radius:10px;padding:12px 16px;color:#6ee7b7;font-size:.82rem;line-height:1.5;margin-top:12px}
+.stack-note::before{content:'💡 ';}
+.stack-warn{background:#2e1f0f;border:1px solid #F59E0B;border-radius:10px;padding:12px 16px;color:#fcd34d;font-size:.82rem;line-height:1.5;margin-top:12px}
+.stack-warn::before{content:'⚠️ ';}
+.stack-scale-row{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:12px 16px;margin-bottom:8px}
+.stack-scale-row .trigger{color:#fbbf24;font-weight:600;font-size:.82rem;margin-bottom:4px}
+.stack-scale-row .action{color:#cbd5e1;font-size:.78rem;line-height:1.5}
+.stack-scale-row .action strong{color:#00a884}
 #svg-wrap{flex:1;position:relative;overflow:hidden}
 #svg-wrap svg{width:100%;height:100%}
 
@@ -123,7 +156,9 @@ body{background:#0b141a;color:#e2e8f0;font-family:'Segoe UI',system-ui,-apple-sy
   <!-- Board -->
   <div id="board-area">
     <div id="header">
-      <h1>BSL Consulta Video — <span>Pac-Man</span></h1>
+      <h1><img src="/bodyLogo.jpg" alt="Bodytech"> Consulta Video — <span>Pac-Man</span></h1>
+      <div id="header-spacer"></div>
+      <button class="stack-btn" onclick="openStackModal()">⚙ Stack</button>
     </div>
     <div id="svg-wrap">
       <svg id="board" viewBox="0 0 1050 750" preserveAspectRatio="xMidYMid meet">
@@ -180,6 +215,250 @@ body{background:#0b141a;color:#e2e8f0;font-family:'Segoe UI',system-ui,-apple-sy
 
 <!-- Tooltip -->
 <div class="node-tooltip" id="tooltip"></div>
+
+<!-- Stack Modal -->
+<div id="stack-modal" onclick="if(event.target===this)closeStackModal()">
+  <div class="stack-modal-content">
+    <div class="stack-modal-header">
+      <h2>Arquitectura <span>Bodytech Consulta Video</span></h2>
+      <button class="stack-close" onclick="closeStackModal()">×</button>
+    </div>
+    <div class="stack-modal-body">
+
+      <!-- Stack Técnico -->
+      <div class="stack-section">
+        <h3>🛠 Stack Técnico</h3>
+        <div class="stack-grid">
+          <div class="stack-card">
+            <h4>Frontend</h4>
+            <ul>
+              <li><strong>React 18</strong> + TypeScript 5.2 (strict)</li>
+              <li><strong>Vite 5</strong> (build tool, dev server)</li>
+              <li><strong>TailwindCSS 3</strong> + PostCSS</li>
+              <li><strong>React Router 6</strong> (SPA routing)</li>
+              <li><strong>Zustand</strong> (estado global)</li>
+              <li><strong>Axios</strong> (cliente HTTP)</li>
+              <li><strong>jsPDF</strong> (historias clínicas PDF)</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Video &amp; Real-time</h4>
+            <ul>
+              <li><strong>twilio-video 2.28</strong> (WebRTC)</li>
+              <li><strong>@twilio/video-processors</strong> (blur/fondos)</li>
+              <li><strong>socket.io-client 4.8</strong> (tiempo real)</li>
+              <li><strong>MediaPipe</strong> (análisis postural)</li>
+              <li>Assets locales (TFLite models) — <strong>5.1 MB</strong></li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Backend</h4>
+            <ul>
+              <li><strong>Node.js</strong> + Express 4.18</li>
+              <li><strong>TypeScript 5.3</strong> (strict)</li>
+              <li><strong>pg 8.16</strong> (PostgreSQL client con pool)</li>
+              <li><strong>twilio 4.20</strong> (video + WhatsApp)</li>
+              <li><strong>socket.io 4.8</strong> (server)</li>
+              <li><strong>openai 6.7</strong> (sugerencias IA)</li>
+              <li><strong>helmet, cors, jsonwebtoken, bcryptjs</strong></li>
+              <li><strong>winston + morgan</strong> (logging)</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Base de Datos</h4>
+            <ul>
+              <li><strong>PostgreSQL managed</strong> en Digital Ocean</li>
+              <li>Conexión SSL obligatoria</li>
+              <li>Pool de <strong>20 conexiones</strong>, idle 30s</li>
+              <li>Tablas: <strong>HistoriaClinica</strong>, conversaciones_whatsapp, mensajes_whatsapp</li>
+              <li>Campos <strong>JSONB</strong> (somatocarta, nutricional)</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Infraestructura</h4>
+            <ul>
+              <li><strong>Digital Ocean App Platform</strong></li>
+              <li>Dockerfile <strong>multi-stage</strong> (backend + frontend)</li>
+              <li>Un solo servicio: Basic XXS <strong>$5/mes</strong></li>
+              <li>CI/CD auto desde GitHub (<strong>main</strong>)</li>
+              <li>SSL/TLS por defecto en DO</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Servicios Externos</h4>
+            <ul>
+              <li><strong>Twilio Video</strong> (salas WebRTC tipo "go")</li>
+              <li><strong>Twilio WhatsApp</strong> (templates aprobados)</li>
+              <li><strong>OpenAI API</strong> (gpt-4, sugerencias médicas)</li>
+              <li>Todos pagados <strong>por uso</strong></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arquitectura -->
+      <div class="stack-section">
+        <h3>🏛 Tipo de Arquitectura</h3>
+        <div class="stack-grid">
+          <div class="stack-card">
+            <h4>Modelo general</h4>
+            <ul>
+              <li><strong>Monolito modular</strong> en capas (Controller → Service → PostgresService)</li>
+              <li><strong>SPA + API unificados</strong>: Express sirve tanto /api/* como los archivos estáticos del frontend</li>
+              <li><strong>Stateless</strong> (salvo tracker de sesiones en memoria)</li>
+              <li><strong>Single-component deployment</strong> en DO: un solo contenedor para todo</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Separación de capas</h4>
+            <ul>
+              <li><strong>Pantallas</strong> — solo UI + hooks</li>
+              <li><strong>Hooks</strong> — solo HTTP, nunca lógica de negocio</li>
+              <li><strong>Rutas</strong> — validan y delegan</li>
+              <li><strong>Services</strong> — reglas de negocio y orquestación</li>
+              <li><strong>PostgresService</strong> — único con acceso SQL</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Patrones clave</h4>
+            <ul>
+              <li><strong>Token-based auth</strong>: JWT Twilio efímero (1h TTL)</li>
+              <li><strong>Fire-and-forget</strong> para tracking y logging</li>
+              <li><strong>Two-useEffect pattern</strong> para adjuntar tracks de video</li>
+              <li><strong>Event tracking in-memory</strong> (singleton SessionTracker)</li>
+              <li><strong>UPDATEs parciales</strong> sin sobreescribir con null</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Comunicación real-time</h4>
+            <ul>
+              <li><strong>WebRTC</strong> (Twilio) para video/audio P2P</li>
+              <li><strong>Socket.io</strong> para pose data del análisis postural</li>
+              <li><strong>Rooms de Socket.io</strong> para aislar por consulta</li>
+            </ul>
+          </div>
+        </div>
+        <div class="stack-note">
+          <strong>Decisión consciente:</strong> se eligió simplicidad sobre microservicios. Para el volumen actual (consultas médicas agendadas) un monolito es óptimo. Escalar a microservicios solo si la organización crece o un módulo tiene requisitos muy distintos (ej: análisis postural con GPU).
+        </div>
+      </div>
+
+      <!-- Seguridad -->
+      <div class="stack-section">
+        <h3>🔒 Esquema de Seguridad</h3>
+        <div class="stack-grid">
+          <div class="stack-card">
+            <h4>Autenticación Twilio</h4>
+            <ul>
+              <li><strong>Credenciales NUNCA en frontend</strong>: API Key Secret solo en el backend</li>
+              <li>Tokens <strong>JWT efímeros</strong> firmados server-side (TTL 1h)</li>
+              <li><strong>Identity único por sesión</strong> (médico o paciente)</li>
+              <li><strong>VideoGrant acotado</strong> a una sala específica</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Transport Security</h4>
+            <ul>
+              <li><strong>HTTPS</strong> obligatorio en DO App Platform</li>
+              <li><strong>WebRTC DTLS-SRTP</strong> — video end-to-end encrypted</li>
+              <li><strong>SSL</strong> obligatorio con PostgreSQL</li>
+              <li><strong>TLS</strong> con Twilio y OpenAI</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>HTTP Hardening</h4>
+            <ul>
+              <li><strong>Helmet</strong>: headers de seguridad automáticos</li>
+              <li><strong>CORS</strong> con allowlist configurable por entorno</li>
+              <li><strong>express-validator</strong> para validar inputs</li>
+              <li><strong>Fail-fast</strong>: validación antes de llamar servicios externos</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Datos sensibles</h4>
+            <ul>
+              <li><strong>Secrets</strong> en variables de entorno de DO (nunca en repo)</li>
+              <li><strong>OpenAI</strong> recibe solo datos clínicos <strong>sin PII identificable</strong></li>
+              <li>Passwords (si aplica) con <strong>bcryptjs</strong></li>
+              <li><strong>Logs sanitizados</strong> con Winston (no imprime tokens)</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>SQL Injection</h4>
+            <ul>
+              <li><strong>100% consultas parametrizadas</strong> ($1, $2...)</li>
+              <li>Ninguna concatenación de strings en SQL</li>
+              <li>JSONB serializado con <strong>::jsonb</strong> explícito</li>
+              <li>Constraint único <strong>idx_mensajes_sid_twilio_unique</strong> previene duplicados</li>
+            </ul>
+          </div>
+          <div class="stack-card">
+            <h4>Aislamiento</h4>
+            <ul>
+              <li>Cada consulta tiene <strong>roomName único</strong> (consulta-timestamp-random)</li>
+              <li>Socket.io <strong>Rooms</strong> aíslan la comunicación por consulta</li>
+              <li>Tracking in-memory <strong>scoped por roomName</strong></li>
+            </ul>
+          </div>
+        </div>
+        <div class="stack-warn">
+          <strong>Deuda técnica reconocida:</strong> no hay rate limiting en /api/video/token ni autenticación a nivel de sesión del médico (solo medicoCode). Ambos son prioridad alta si el producto escala.
+        </div>
+      </div>
+
+      <!-- Plan de Escalamiento -->
+      <div class="stack-section">
+        <h3>📈 Plan para Escalar</h3>
+        <p style="color:#94a3b8;font-size:.82rem;margin-bottom:12px;line-height:1.5">El escalamiento se activa por disparadores concretos, no por números redondos. Estos son los gatillos reales ordenados por probabilidad de aparecer:</p>
+
+        <div class="stack-scale-row">
+          <div class="trigger">① Gatillo: Requisito de negocio (SLA / uptime)</div>
+          <div class="action"><strong>Acción:</strong> pasar de un solo contenedor a <strong>2+ instancias</strong> con rolling deploy en DO. Migrar <strong>SessionTracker a Redis</strong> para que las sesiones sobrevivan entre instancias. Costo: ~$25/mes en lugar de $5.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">② Gatillo: RAM &gt; 70% sostenido en Basic XXS (512 MB)</div>
+          <div class="action"><strong>Acción:</strong> subir a <strong>Basic S</strong> (1 GB, ~$12/mes) o Basic M. Antes de subir, auditar el <strong>singleton de SessionTracker</strong> y el pool pg (20 conexiones) por memory leaks.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">③ Gatillo: &gt;20-30 sesiones concurrentes sostenidas</div>
+          <div class="action"><strong>Acción:</strong> el video lo maneja Twilio (no es cuello de botella). El cuello es <strong>firmado de tokens + tracking</strong>. Subir instancia o añadir réplica. Considerar <strong>rate limiting</strong> en /api/video/token con express-rate-limit.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">④ Gatillo: Reportes de sesión no pueden perderse</div>
+          <div class="action"><strong>Acción:</strong> persistir sesiones en <strong>PostgreSQL</strong> (nueva tabla <em>sessions</em>) en lugar de memoria. Agregar <strong>job queue</strong> (BullMQ + Redis) para el envío de reportes por WhatsApp con retry automático.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">⑤ Gatillo: Costos de OpenAI disparados</div>
+          <div class="action"><strong>Acción:</strong> añadir <strong>cache de sugerencias</strong> por hash del paciente (si los datos no cambian, no vuelve a llamar). Bajar a <strong>gpt-4o-mini</strong> para casos simples. Implementar <strong>quota por médico</strong>.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">⑥ Gatillo: Equipo crece (&gt;4 devs)</div>
+          <div class="action"><strong>Acción:</strong> separar <strong>backend y frontend en apps independientes</strong> en DO (sigue siendo monolito modular, pero 2 servicios). Pipelines de CI/CD separados. Tests automatizados (Jest ya configurado, solo falta escribirlos).</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">⑦ Gatillo: Análisis postural se vuelve feature central</div>
+          <div class="action"><strong>Acción:</strong> extraer <strong>worker dedicado con GPU</strong> para procesamiento MediaPipe server-side. Cola de procesamiento con Redis + BullMQ. Este SÍ justificaría un microservicio aparte por el perfil de recursos distinto.</div>
+        </div>
+
+        <div class="stack-scale-row">
+          <div class="trigger">⑧ Gatillo: Múltiples médicos simultáneos &gt; 100</div>
+          <div class="action"><strong>Acción:</strong> agregar <strong>CDN</strong> (Cloudflare) frente al frontend estático. Habilitar <strong>connection pooling</strong> con PgBouncer entre backend y Postgres. Considerar <strong>sharding por medicoCode</strong> si alguna tabla crece a millones de filas.</div>
+        </div>
+
+        <div class="stack-note">
+          <strong>Filosofía:</strong> escalar cuando una métrica concreta lo exija, no antes. Complejidad prematura = costo sin retorno. Hoy la app soporta el volumen actual con margen; los gatillos de arriba son el "cuándo", no el "si".
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <script>
 /* ════════════════════════════════════════════
@@ -1319,6 +1598,11 @@ function hideBubble() {
    KEYBOARD
    ════════════════════════════════════════════ */
 document.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') {
+    const modal = document.getElementById('stack-modal');
+    if (modal.classList.contains('show')) { closeStackModal(); return; }
+  }
+  if (document.getElementById('stack-modal').classList.contains('show')) return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   else if (e.code === 'KeyR') { resetScenario(); }
   else if (e.code === 'Digit1') setSpeed(1, document.querySelector('[data-speed="1"]'));
@@ -1341,6 +1625,14 @@ document.addEventListener('keydown', (e) => {
 function startApp() {
   document.getElementById('intro').classList.add('hidden');
   setTimeout(() => document.getElementById('intro').style.display = 'none', 500);
+}
+
+function openStackModal() {
+  document.getElementById('stack-modal').classList.add('show');
+}
+
+function closeStackModal() {
+  document.getElementById('stack-modal').classList.remove('show');
 }
 
 function init() {

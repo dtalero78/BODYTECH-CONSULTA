@@ -53,7 +53,7 @@ export const PatientPage = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
             <img
-              src="/bodytechLogo.png"
+              src="/bodyLogo.jpg"
               alt="BSL Logo"
               className="h-20 w-auto"
             />

@@ -526,7 +526,7 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
   <!-- HEADER -->
   <div class="header">
     <div class="header-logo">
-      <img src="/bodytechLogo.png" alt="Bodytech">
+      <img src="/bodyLogo.jpg" alt="Bodytech">
     </div>
     <div class="header-info">
       <h1>Historia Clínica</h1>

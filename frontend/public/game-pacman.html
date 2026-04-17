@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BSL Consulta Video — Data Flow Pac-Man</title>
+<style>
+/* ── Reset & Base ── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0b141a;color:#e2e8f0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;overflow:hidden;height:100vh}
+
+/* ── Layout ── */
+#app{display:flex;height:100vh;width:100vw}
+#board-area{flex:1;display:flex;flex-direction:column;min-width:0}
+#header{padding:16px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #1e293b;background:#0f172a;z-index:10}
+#header h1{font-size:1.3rem;font-weight:700;white-space:nowrap}
+#header h1 span{color:#00a884}
+#svg-wrap{flex:1;position:relative;overflow:hidden}
+#svg-wrap svg{width:100%;height:100%}
+
+/* ── Sidebar ── */
+#sidebar{width:340px;min-width:340px;background:#1f2c34;border-left:1px solid #334155;display:flex;flex-direction:column;overflow:hidden}
+#sidebar h2{padding:16px 20px 8px;font-size:.75rem;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+
+/* Scenario list */
+.scenario-list{list-style:none;padding:0 12px;overflow-y:auto;flex-shrink:0}
+.scenario-item{padding:10px 12px;margin:4px 0;border-radius:8px;cursor:pointer;transition:all .2s;border:1px solid transparent;display:flex;align-items:center;gap:10px}
+.scenario-item:hover{background:#2a3942}
+.scenario-item.active{background:#0f2e27;border-color:#00a884}
+.scenario-item.completed{opacity:.6}
+.scenario-item.completed::after{content:'✓';margin-left:auto;color:#00a884;font-weight:bold}
+.sc-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.sc-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sc-name{font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-desc{font-size:.68rem;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Controls */
+.controls{padding:16px 20px;border-top:1px solid #334155;display:flex;flex-direction:column;gap:12px}
+.ctrl-row{display:flex;gap:8px;align-items:center}
+.ctrl-btn{padding:8px 14px;border:1px solid #475569;border-radius:6px;background:#2a3942;color:#e2e8f0;cursor:pointer;font-size:.8rem;transition:all .15s;display:flex;align-items:center;gap:6px}
+.ctrl-btn:hover{background:#374045;border-color:#00a884}
+.ctrl-btn.primary{background:#00a884;border-color:#00a884;color:#fff}
+.ctrl-btn.primary:hover{background:#008f6f}
+.ctrl-btn.active{background:#475569;border-color:#00a884}
+.ctrl-btn:disabled{opacity:.4;cursor:not-allowed}
+.speed-btns{display:flex;gap:0}
+.speed-btns .ctrl-btn{border-radius:0;margin:0 -1px}
+.speed-btns .ctrl-btn:first-child{border-radius:6px 0 0 6px}
+.speed-btns .ctrl-btn:last-child{border-radius:0 6px 6px 0}
+
+/* Narration */
+.narration{flex:1;padding:16px 20px;border-top:1px solid #334155;overflow-y:auto;min-height:0}
+.narr-step{font-size:.82rem;color:#cbd5e1;line-height:1.5}
+.narr-step .narr-label{color:#00a884;font-weight:600;display:block;margin-bottom:4px;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em}
+.narr-step .narr-text{display:block}
+.narr-rule{margin-top:12px;padding:10px 14px;background:#0f2e27;border:1px solid #00a884;border-radius:8px;font-size:.78rem;color:#6ee7b7;line-height:1.4}
+.narr-rule::before{content:'💡 ';font-size:.9rem}
+.narr-example{margin-top:8px;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;font-size:.76rem;color:#e2e8f0;line-height:1.6}
+.narr-example::before{content:'📌 Ejemplo:';display:block;font-size:.65rem;color:#00a884;font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.narr-example em{color:#7dd3fc;font-style:normal;font-weight:600}
+
+/* Legend */
+#legend{padding:12px 20px;border-top:1px solid #334155;display:flex;flex-wrap:wrap;gap:10px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.7rem;color:#94a3b8}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* ── SVG Styles ── */
+.maze-path{stroke:#1e3a5f;stroke-width:24;stroke-linecap:round;fill:none}
+.maze-path-inner{stroke:#0b141a;stroke-width:18;stroke-linecap:round;fill:none}
+.flow-path{stroke:none;stroke-width:3;stroke-linecap:round;fill:none;opacity:0}
+.flow-path.visible{opacity:1;stroke-dasharray:8 4;animation:dashFlow 1s linear infinite}
+@keyframes dashFlow{to{stroke-dashoffset:-12}}
+
+.node-box{rx:8;ry:8;stroke-width:2;cursor:pointer;transition:filter .3s}
+.node-box:hover{filter:brightness(1.3)}
+.node-box.glow{filter:drop-shadow(0 0 12px var(--glow-color)) brightness(1.3)}
+.node-label{font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:600}
+.node-sublabel{font-family:'Segoe UI',system-ui,sans-serif;font-size:8px;fill:rgba(255,255,255,.6);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+
+.layer-label{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;fill:#94a3b8;text-anchor:start;dominant-baseline:auto;text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+
+/* Character */
+.character{transition:opacity .3s}
+.char-body{transition:r .1s}
+
+/* Particles */
+.particle{pointer-events:none}
+
+/* ── Intro overlay ── */
+#intro{position:fixed;inset:0;background:rgba(11,20,26,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity .5s}
+#intro.hidden{opacity:0;pointer-events:none}
+#intro img{height:72px;margin-bottom:20px}
+#intro h1{font-size:2rem;margin-bottom:8px;text-align:center}
+#intro h1 span{color:#00a884}
+#intro p{color:#94a3b8;margin-bottom:24px;text-align:center;max-width:520px;line-height:1.5}
+#intro .start-btn{padding:14px 36px;background:#00a884;color:#fff;border:none;border-radius:10px;font-size:1.1rem;cursor:pointer;font-weight:600;transition:transform .15s,background .15s}
+#intro .start-btn:hover{background:#008f6f;transform:scale(1.05)}
+
+/* ── Tooltip ── */
+.node-tooltip{position:fixed;background:#1f2c34;border:1px solid #475569;border-radius:8px;padding:10px 14px;font-size:.78rem;color:#cbd5e1;pointer-events:none;z-index:50;max-width:240px;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;transition:opacity .15s}
+.node-tooltip.show{opacity:1}
+.node-tooltip strong{color:#fff;display:block;margin-bottom:4px}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  #app{flex-direction:column}
+  #sidebar{width:100%;min-width:0;max-height:45vh;border-left:none;border-top:1px solid #334155}
+  .scenario-list{max-height:120px}
+}
+</style>
+</head>
+<body>
+
+<!-- Intro -->
+<div id="intro">
+  <img src="/bodyLogo.jpg" alt="BSL">
+  <h1>BSL Consulta Video — <span>Data Flow Pac-Man</span></h1>
+  <p>Observa cómo viajan los requests a través de la arquitectura: Pantallas → Hooks → API Routes → Services → PostgreSQL / Twilio / OpenAI. Todos los datos persistentes viven en PostgreSQL.</p>
+  <button class="start-btn" onclick="startApp()">▶ Iniciar</button>
+</div>
+
+<div id="app">
+  <!-- Board -->
+  <div id="board-area">
+    <div id="header">
+      <h1>BSL Consulta Video — <span>Pac-Man</span></h1>
+    </div>
+    <div id="svg-wrap">
+      <svg id="board" viewBox="0 0 1050 750" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="glowStrong"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <g id="paths-layer"></g>
+        <g id="nodes-layer"></g>
+        <g id="particles-layer"></g>
+        <g id="character-layer"></g>
+        <g id="bubble-layer"></g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <h2>Escenarios</h2>
+    <ul class="scenario-list" id="scenario-list"></ul>
+    <div class="controls">
+      <div class="ctrl-row">
+        <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()">▶ Play</button>
+        <button class="ctrl-btn" id="btn-autoplay" onclick="toggleAutoPlay()">⟳ Auto Play</button>
+        <button class="ctrl-btn" onclick="resetScenario()">↺ Reset</button>
+      </div>
+      <div class="ctrl-row">
+        <span style="font-size:.72rem;color:#64748b;width:60px">Velocidad:</span>
+        <div class="speed-btns">
+          <button class="ctrl-btn active" data-speed="1" onclick="setSpeed(1,this)">1x</button>
+          <button class="ctrl-btn" data-speed="2" onclick="setSpeed(2,this)">2x</button>
+          <button class="ctrl-btn" data-speed="3" onclick="setSpeed(3,this)">3x</button>
+        </div>
+      </div>
+    </div>
+    <h2>Narración</h2>
+    <div class="narration" id="narration">
+      <div class="narr-step">
+        <span class="narr-label">Selecciona un escenario</span>
+        <span class="narr-text">Haz click en un escenario de la lista o presiona "Auto Play" para ver todos los flujos de la consulta video.</span>
+      </div>
+    </div>
+    <div id="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#F97316"></div>Pantalla</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div>Hook</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div>API Route</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#10B981"></div>Service</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#06B6D4"></div>Externo</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div>PostgreSQL</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div>Error</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="node-tooltip" id="tooltip"></div>
+
+<script>
+/* ════════════════════════════════════════════
+   CONFIG
+   ════════════════════════════════════════════ */
+const COLORS = {
+  component: '#F97316',
+  hook: '#ec4899',
+  route: '#3B82F6',
+  service: '#10B981',
+  external: '#06B6D4',
+  db: '#8B5CF6',
+  request: '#94a3b8',
+  error: '#EF4444'
+};
+
+/* ── Nodos (viewBox 1050×750) ── */
+const NODES = {
+  // Request entry
+  request:       { x: 470, y: 30,  w: 100, h: 30, label: 'REQUEST',           type: 'request',   tip: 'Punto de entrada: médico o paciente abre la app en su navegador' },
+
+  // Components (y=110) — pantallas React
+  cPanel:        { x: 100, y: 110, w: 108, h: 26, label: 'MedicalPanel',       type: 'component', tip: 'Pantalla: panel del médico con stats del día, lista de pacientes pendientes y búsqueda' },
+  cDoctor:       { x: 245, y: 110, w: 108, h: 26, label: 'DoctorRoom',         type: 'component', tip: 'Pantalla: doctor entra a la sala de video desde el panel con código de médico' },
+  cPatient:      { x: 390, y: 110, w: 108, h: 26, label: 'PatientPage',        type: 'component', tip: 'Pantalla: paciente entra desde el link de WhatsApp con sus datos pre-cargados' },
+  cVideo:        { x: 540, y: 110, w: 100, h: 26, label: 'VideoRoom',          type: 'component', tip: 'Pantalla: la videollamada en curso con controles (mic, cámara, fondos, colgar)' },
+  cHistory:      { x: 680, y: 110, w: 120, h: 26, label: 'MedicalHistory',     type: 'component', tip: 'Pantalla: panel lateral con historia clínica editable del paciente' },
+  cPostural:     { x: 840, y: 110, w: 124, h: 26, label: 'PosturalAnalysis',   type: 'component', tip: 'Pantalla: modal de análisis postural con MediaPipe sobre el video del paciente' },
+
+  // Hooks (y=200) — custom hooks
+  hPanel:        { x: 100, y: 200, w: 100, h: 26, label: 'usePanel',           type: 'hook',      tip: 'Mensajero: pide stats del día, pacientes pendientes y detalles del paciente' },
+  hVideo:        { x: 240, y: 200, w: 108, h: 26, label: 'useVideoRoom',       type: 'hook',      tip: 'Mensajero: pide token Twilio, conecta a la sala y trackea conexión/desconexión' },
+  hHistory:      { x: 390, y: 200, w: 120, h: 26, label: 'useMedicalHistory',  type: 'hook',      tip: 'Mensajero: carga y actualiza la historia clínica del paciente durante la consulta' },
+  hAI:           { x: 550, y: 200, w: 98,  h: 26, label: 'useAI',              type: 'hook',      tip: 'Mensajero: pide a OpenAI sugerencias de diagnóstico basadas en los datos del paciente' },
+  hWhatsApp:     { x: 690, y: 200, w: 112, h: 26, label: 'useWhatsApp',        type: 'hook',      tip: 'Mensajero: envía el link de videollamada al paciente vía WhatsApp template' },
+  hPostural:     { x: 840, y: 200, w: 124, h: 26, label: 'usePosturalAnalysis', type: 'hook',     tip: 'Mensajero: conecta Socket.io entre doctor y paciente para enviar pose data en tiempo real' },
+
+  // API Routes (y=300) — rutas Express
+  rStats:        { x: 75,  y: 300, w: 110, h: 26, label: '/panel/stats',       type: 'route',     tip: 'GET /api/medical-panel/stats/:medicoCode — programadosHoy, atendidosHoy, restantes' },
+  rPatients:     { x: 200, y: 300, w: 112, h: 26, label: '/panel/patients',    type: 'route',     tip: 'GET /api/medical-panel/patients/pending/:medicoCode — lista paginada de pacientes' },
+  rToken:        { x: 335, y: 300, w: 96,  h: 26, label: '/video/token',       type: 'route',     tip: 'POST /api/video/token — genera JWT de acceso Twilio con VideoGrant' },
+  rEvents:       { x: 450, y: 300, w: 104, h: 26, label: '/video/events',      type: 'route',     tip: 'POST /api/video/events/participant-(dis)connected — tracking de sesiones in-memory' },
+  rHistory:      { x: 575, y: 300, w: 124, h: 26, label: '/medical-history',   type: 'route',     tip: 'GET/POST /api/video/medical-history — obtener y actualizar historia clínica' },
+  rAI:           { x: 720, y: 300, w: 104, h: 26, label: '/ai-suggestions',    type: 'route',     tip: 'POST /api/video/ai-suggestions — genera recomendaciones con OpenAI' },
+  rWhatsApp:     { x: 845, y: 300, w: 120, h: 26, label: '/whatsapp/send',     type: 'route',     tip: 'POST /api/video/whatsapp/send — envía template aprobado y registra mensaje en Postgres' },
+
+  // Services (y=420) — servicios backend
+  sPanel:        { x: 90,  y: 420, w: 112, h: 28, label: 'PanelService',       type: 'service',   tip: 'Cerebro: agrega conteos del día y filtra pacientes por médico, fecha, estado' },
+  sTwilio:       { x: 225, y: 420, w: 108, h: 28, label: 'TwilioService',      type: 'service',   tip: 'Cerebro: firma tokens JWT (1h), crea salas tipo "go", gestiona participantes' },
+  sSession:      { x: 355, y: 420, w: 130, h: 28, label: 'SessionTracker',     type: 'service',   tip: 'Cerebro: singleton in-memory que rastrea quién está conectado y genera reportes al finalizar' },
+  sHistory:      { x: 510, y: 420, w: 140, h: 28, label: 'MedicalHistorySvc',  type: 'service',   tip: 'Cerebro: lee y actualiza la tabla HistoriaClinica, incluye campos JSONB (nutricional)' },
+  sOpenAI:       { x: 670, y: 420, w: 104, h: 28, label: 'OpenAIService',      type: 'service',   tip: 'Cerebro: construye prompt médico y llama a la API de OpenAI (gpt-4)' },
+  sWhatsApp:     { x: 800, y: 420, w: 120, h: 28, label: 'WhatsAppService',    type: 'service',   tip: 'Cerebro: envía templates aprobados de Twilio WhatsApp con variables dinámicas' },
+  sPostgres:     { x: 940, y: 420, w: 100, h: 28, label: 'PostgresService',    type: 'service',   tip: 'Cerebro compartido: pool pg con SSL; el ÚNICO que ejecuta SQL contra la DB' },
+
+  // External (y=540) — servicios externos (Twilio, OpenAI)
+  extTwilio:     { x: 260, y: 540, w: 120, h: 28, label: 'Twilio Cloud',       type: 'external',  tip: 'Servicio externo: plataforma WebRTC + WhatsApp. Crea las salas reales de video y envía templates' },
+  extOpenAI:     { x: 670, y: 540, w: 110, h: 28, label: 'OpenAI API',         type: 'external',  tip: 'Servicio externo: genera recomendaciones médicas en lenguaje natural' },
+
+  // Database (y=660)
+  database:      { x: 520, y: 660, w: 150, h: 38, label: 'PostgreSQL',         type: 'db',        tip: 'Almacén: Digital Ocean managed PostgreSQL con SSL. Aquí viven HistoriaClinica, conversaciones_whatsapp y mensajes_whatsapp' },
+
+  // Error node (hidden por defecto)
+  errorNode:     { x: 300, y: 360, w: 100, h: 26, label: '400 Invalid',        type: 'error',     tip: 'Error: identity o roomName vacíos — el controller rechaza la petición antes de firmar el token', hidden: true }
+};
+
+/* ── Edges ── */
+const EDGES = [
+  // Request → Components
+  ['request','cPanel'],['request','cDoctor'],['request','cPatient'],
+  ['request','cVideo'],['request','cHistory'],['request','cPostural'],
+  // Components → Hooks
+  ['cPanel','hPanel'],['cDoctor','hVideo'],['cPatient','hVideo'],
+  ['cVideo','hVideo'],['cHistory','hHistory'],['cHistory','hAI'],
+  ['cPanel','hWhatsApp'],['cPostural','hPostural'],
+  // Hooks → Routes
+  ['hPanel','rStats'],['hPanel','rPatients'],
+  ['hVideo','rToken'],['hVideo','rEvents'],
+  ['hHistory','rHistory'],
+  ['hAI','rAI'],
+  ['hWhatsApp','rWhatsApp'],
+  // Routes → Services
+  ['rStats','sPanel'],['rPatients','sPanel'],
+  ['rToken','sTwilio'],
+  ['rEvents','sSession'],
+  ['rHistory','sHistory'],
+  ['rAI','sOpenAI'],
+  ['rWhatsApp','sWhatsApp'],
+  // Services → External
+  ['sTwilio','extTwilio'],
+  ['sOpenAI','extOpenAI'],
+  ['sWhatsApp','extTwilio'],
+  // Services con persistencia → PostgresService → DB
+  ['sPanel','sPostgres'],['sHistory','sPostgres'],['sWhatsApp','sPostgres'],
+  ['sPostgres','database']
+];
+
+/* ── 7 Escenarios ── */
+const SCENARIOS = [
+  {
+    id: 'stats',
+    name: 'GET /panel/stats',
+    subtitle: 'Stats del día',
+    icon: '📊',
+    color: '#8B5CF6',
+    steps: [
+      { from: 'request', to: 'cPanel',
+        narr: 'El médico abre su panel al iniciar el día.',
+        code: 'La Dra. <em>García</em> hace login con su código médico. Se monta <em>MedicalPanelPage</em> y necesita las estadísticas del día.' },
+      { from: 'cPanel', to: 'hPanel',
+        narr: 'La pantalla le pide al hook las estadísticas.',
+        code: 'MedicalPanelPage le dice al mensajero: <em>"Tráeme cuántos pacientes tengo programados, atendidos y pendientes hoy"</em>.' },
+      { from: 'hPanel', to: 'rStats',
+        narr: 'El hook hace fetch a /api/medical-panel/stats/:medicoCode.',
+        code: 'El hook llama: <em>GET /api/medical-panel/stats/MED123</em>. Axios envía el request al backend Express.' },
+      { from: 'rStats', to: 'sPanel',
+        narr: 'La ruta delega a PanelService para agregar los conteos.',
+        code: 'El controller recibe el medicoCode y llama a <em>medicalPanelService.getDailyStats(medicoCode)</em>.' },
+      { from: 'sPanel', to: 'sPostgres',
+        narr: 'PanelService usa PostgresService para ejecutar SQL.',
+        code: 'El servicio arma 3 queries COUNT con filtros por médico y fecha. PostgresService obtiene un cliente del pool.' },
+      { from: 'sPostgres', to: 'database',
+        narr: 'PostgresService ejecuta SQL parametrizado en PostgreSQL.',
+        code: 'Ejecuta: <em>SELECT COUNT(*) FROM "HistoriaClinica" WHERE medico=$1 AND fechaAtencion=CURRENT_DATE</em>. La DB cuenta los registros.' },
+    ],
+    returnSteps: [
+      { from: 'database', to: 'sPostgres',
+        narr: 'PostgreSQL devuelve los conteos.',
+        code: 'La DB retorna: <em>programadosHoy=12, atendidosHoy=5, restantes=7</em>.' },
+      { from: 'sPostgres', to: 'sPanel',
+        narr: 'Los rows vuelven al servicio.',
+        code: 'PanelService combina los 3 resultados en un objeto DailyStats.' },
+      { from: 'sPanel', to: 'rStats',
+        narr: 'El servicio retorna al controller.',
+        code: 'Retorna: <em>{ programadosHoy: 12, atendidosHoy: 5, restantes: 7 }</em>.' },
+      { from: 'rStats', to: 'hPanel',
+        narr: 'La ruta responde con JSON.',
+        code: 'Express envía <em>res.json(stats)</em>. Axios recibe la respuesta en el frontend.' },
+      { from: 'hPanel', to: 'cPanel',
+        narr: 'El hook entrega los datos a la pantalla.',
+        code: 'El estado se actualiza y React re-renderiza las tarjetas de stats.' },
+      { from: 'cPanel', to: 'request',
+        narr: 'La pantalla muestra los KPIs del día.',
+        code: 'La Dra. García ve: <em>"12 programados | 5 atendidos | 7 pendientes"</em>.' },
+    ],
+    rule: 'Los Services NUNCA ejecutan SQL directamente. Delegan siempre en PostgresService (el único con pool pg).'
+  },
+  {
+    id: 'token',
+    name: 'POST /video/token',
+    subtitle: 'Generar token Twilio',
+    icon: '🎫',
+    color: '#3B82F6',
+    steps: [
+      { from: 'request', to: 'cDoctor',
+        narr: 'La doctora hace click en un paciente para iniciar la consulta.',
+        code: 'La Dra. García selecciona a <em>"Juan Pérez"</em> desde la lista. Se navega a <em>/doctor/consulta-abc123</em>.' },
+      { from: 'cDoctor', to: 'hVideo',
+        narr: 'DoctorRoomPage monta VideoRoom que usa useVideoRoom.',
+        code: 'El hook necesita un token JWT firmado por el backend para conectarse a la sala Twilio.' },
+      { from: 'hVideo', to: 'rToken',
+        narr: 'El hook envía POST /api/video/token con identity y roomName.',
+        code: 'POST body: <em>{ identity: "Dra. García", roomName: "consulta-abc123" }</em>.' },
+      { from: 'rToken', to: 'sTwilio',
+        narr: 'El controller valida inputs y delega a TwilioService.',
+        code: 'Si identity o roomName faltan, responde <em>400</em>. Si todo OK, llama a <em>twilioService.createRoom()</em> + <em>generateVideoToken()</em>.' },
+      { from: 'sTwilio', to: 'extTwilio',
+        narr: 'TwilioService crea la sala tipo "go" en Twilio Cloud.',
+        code: 'Llama a <em>client.video.rooms.create({ uniqueName, type: "go" })</em>. Si ya existe (error 53113), continúa sin bloquear.' },
+    ],
+    returnSteps: [
+      { from: 'extTwilio', to: 'sTwilio',
+        narr: 'Twilio confirma la creación (o avisa que ya existe).',
+        code: 'Twilio retorna el SID de la sala. El servicio procede a firmar el JWT.' },
+      { from: 'sTwilio', to: 'rToken',
+        narr: 'TwilioService firma el JWT con API Key + VideoGrant.',
+        code: 'Genera: <em>AccessToken(ACCOUNT_SID, API_KEY_SID, API_KEY_SECRET)</em> + <em>VideoGrant({ room })</em>. TTL = 1 hora.' },
+      { from: 'rToken', to: 'hVideo',
+        narr: 'La ruta responde con el token firmado.',
+        code: 'Retorna: <em>{ success: true, data: { token: "eyJ...", identity, roomName } }</em>.' },
+      { from: 'hVideo', to: 'cVideo',
+        narr: 'El hook usa el token para conectarse a Twilio vía WebRTC.',
+        code: 'Llama a <em>Video.connect(token, { name: roomName, audio: true, video: true })</em>. Negocia tracks via WebRTC.' },
+      { from: 'cVideo', to: 'request',
+        narr: 'VideoRoom se renderiza con el stream local y remoto.',
+        code: 'La Dra. García ve su propio video + el del paciente cuando entre. La consulta está lista.' },
+    ],
+    rule: 'Las credenciales Twilio NUNCA llegan al frontend. El backend es el único que firma JWTs con API Key Secret.'
+  },
+  {
+    id: 'tracking',
+    name: 'POST /video/events',
+    subtitle: 'Tracking sin DB',
+    icon: '📡',
+    color: '#10B981',
+    steps: [
+      { from: 'request', to: 'cVideo',
+        narr: 'Al conectarse a la sala, VideoRoom dispara un evento de tracking.',
+        code: 'useVideoRoom detecta <em>room.on("participantConnected")</em> y al estar ya conectado dispara el tracking.' },
+      { from: 'cVideo', to: 'hVideo',
+        narr: 'El hook envía el evento participant-connected.',
+        code: 'POST body: <em>{ roomName, identity, role: "doctor", medicoCode: "MED123" }</em>.' },
+      { from: 'hVideo', to: 'rEvents',
+        narr: 'La ruta POST /api/video/events/participant-connected recibe el evento.',
+        code: 'El controller valida role ∈ {doctor, patient} y llama a <em>sessionTracker.trackParticipantConnected()</em>.' },
+      { from: 'rEvents', to: 'sSession',
+        narr: 'SessionTrackerService guarda el estado en memoria (NO en DB).',
+        code: 'Un <em>singleton in-memory</em> acumula: <em>sessions[roomName] = { doctor: {...}, patient: {...}, joinedAt }</em>.' },
+    ],
+    returnSteps: [
+      { from: 'sSession', to: 'rEvents',
+        narr: 'Al desconectar el último participante, el tracker genera reporte.',
+        code: 'Cuando sale el último: calcula duración, arma texto con nombres y tiempos, envía por WhatsApp a soporte (573008021701).' },
+      { from: 'rEvents', to: 'hVideo',
+        narr: 'La ruta responde 200 al frontend.',
+        code: 'El frontend ignora la respuesta: el tracking es <em>fire-and-forget</em>. Si falla, el video sigue funcionando.' },
+      { from: 'hVideo', to: 'cVideo',
+        narr: 'La pantalla no muestra nada del tracking — es invisible al usuario.',
+        code: 'Los eventos de tracking están en <em>try/catch</em>: si algo falla, nunca rompe la videollamada.' },
+      { from: 'cVideo', to: 'request',
+        narr: 'El usuario sigue su consulta normalmente.',
+        code: 'El tracking vive en memoria del backend. Si el servidor reinicia, se pierde — pero Twilio mantiene la sala activa.' },
+    ],
+    rule: 'Decisión consciente: sesiones in-memory. No necesitan persistencia (son efímeras). Escalar a Redis solo si hay múltiples instancias.'
+  },
+  {
+    id: 'history',
+    name: 'POST /medical-history',
+    subtitle: 'Actualizar historia',
+    icon: '📋',
+    color: '#F97316',
+    steps: [
+      { from: 'request', to: 'cHistory',
+        narr: 'Durante la consulta, la doctora escribe el diagnóstico.',
+        code: 'En el panel lateral, la Dra. García escribe motivo, diagnóstico y tratamiento. Hace click en <em>"Guardar"</em>.' },
+      { from: 'cHistory', to: 'hHistory',
+        narr: 'MedicalHistoryPanel le pasa el payload al hook useMedicalHistory.',
+        code: 'Payload: <em>{ historiaId, motivoConsulta, diagnostico, tratamiento, mdDx1, mdConceptoFinal, datosNutricionales }</em>.' },
+      { from: 'hHistory', to: 'rHistory',
+        narr: 'El hook envía POST /api/video/medical-history.',
+        code: 'Axios envía el JSON al backend. El controller verifica que <em>historiaId</em> esté presente.' },
+      { from: 'rHistory', to: 'sHistory',
+        narr: 'La ruta delega en MedicalHistoryService.',
+        code: 'El service construye UPDATE dinámico: solo toca los campos presentes en el payload (no pisa con null).' },
+      { from: 'sHistory', to: 'sPostgres',
+        narr: 'El service pide a PostgresService que ejecute el UPDATE.',
+        code: 'PostgresService obtiene cliente del pool y ejecuta SQL parametrizado con <em>$1, $2, ...</em>.' },
+      { from: 'sPostgres', to: 'database',
+        narr: 'PostgreSQL actualiza el registro incluyendo JSONB (nutricional).',
+        code: 'UPDATE "HistoriaClinica" SET "diagnostico"=$1, "datosNutricionales"=$2::jsonb WHERE "_id"=$3.' },
+    ],
+    returnSteps: [
+      { from: 'database', to: 'sPostgres',
+        narr: 'PostgreSQL confirma el UPDATE.',
+        code: 'La DB retorna <em>rowCount=1</em>. Todo el JSONB de somatocarta y datos antropométricos queda persistido.' },
+      { from: 'sPostgres', to: 'sHistory',
+        narr: 'El pool release y retorna success al service.',
+        code: 'El service verifica rowCount > 0 para confirmar que el registro existía y se actualizó.' },
+      { from: 'sHistory', to: 'rHistory',
+        narr: 'Service retorna { success: true } al controller.',
+        code: 'Si algo falló, retornaría <em>{ success: false, error }</em> sin lanzar excepción.' },
+      { from: 'rHistory', to: 'hHistory',
+        narr: 'El backend responde 200 al frontend.',
+        code: 'El hook actualiza su estado local para reflejar que la historia está guardada.' },
+      { from: 'hHistory', to: 'cHistory',
+        narr: 'El panel muestra el badge "Guardado".',
+        code: 'El botón cambia a <em>"✓ Guardado"</em> y los cambios se marcan como no-dirty.' },
+      { from: 'cHistory', to: 'request',
+        narr: 'La doctora sigue con la consulta sin perder datos.',
+        code: 'La historia clínica queda lista para consultarse después desde <em>/medical-history/:id/preview</em> (HTML para impresión).' },
+    ],
+    rule: 'UPDATEs parciales siempre parametrizados ($1, $2). Los campos JSONB (somatocarta, nutricional) se serializan con ::jsonb.'
+  },
+  {
+    id: 'ai',
+    name: 'POST /ai-suggestions',
+    subtitle: 'Sugerencias con OpenAI',
+    icon: '🧠',
+    color: '#06B6D4',
+    steps: [
+      { from: 'request', to: 'cHistory',
+        narr: 'La doctora hace click en "Sugerir diagnóstico" para que la IA la asista.',
+        code: 'En MedicalHistoryPanel, el botón <em>"🧠 Sugerir"</em> toma los datos actuales del paciente y llama al hook useAI.' },
+      { from: 'cHistory', to: 'hAI',
+        narr: 'El hook useAI envía los datos del paciente al backend.',
+        code: 'Payload: <em>{ patientData: { edad, antecedentes, talla, peso, motivo, signosVitales } }</em>.' },
+      { from: 'hAI', to: 'rAI',
+        narr: 'POST /api/video/ai-suggestions con los datos clínicos.',
+        code: 'El controller verifica que <em>patientData</em> no esté vacío. Si falta, responde 400.' },
+      { from: 'rAI', to: 'sOpenAI',
+        narr: 'OpenAIService construye el prompt médico.',
+        code: 'El service arma un prompt system "Eres un asistente médico..." + user con los datos estructurados.' },
+      { from: 'sOpenAI', to: 'extOpenAI',
+        narr: 'Llamada a la API de OpenAI (gpt-4) con temperatura baja.',
+        code: 'POST a <em>api.openai.com/v1/chat/completions</em> con <em>temperature: 0.3</em> para respuestas deterministas.' },
+    ],
+    returnSteps: [
+      { from: 'extOpenAI', to: 'sOpenAI',
+        narr: 'OpenAI devuelve sugerencias en lenguaje natural.',
+        code: 'Respuesta: <em>"Basado en IMC elevado y dolor lumbar: considerar HTA, evaluar columna lumbar..."</em>.' },
+      { from: 'sOpenAI', to: 'rAI',
+        narr: 'El service extrae el texto y lo retorna al controller.',
+        code: 'Toma <em>response.choices[0].message.content</em> y limpia markdown si aplica.' },
+      { from: 'rAI', to: 'hAI',
+        narr: 'El controller responde JSON al frontend.',
+        code: 'Retorna: <em>{ success: true, data: { suggestions: "..." } }</em>.' },
+      { from: 'hAI', to: 'cHistory',
+        narr: 'El hook expone las sugerencias al componente.',
+        code: 'MedicalHistoryPanel renderiza un bloque con las sugerencias como texto editable.' },
+      { from: 'cHistory', to: 'request',
+        narr: 'La doctora revisa, ajusta y copia lo relevante al diagnóstico.',
+        code: 'Importante: las sugerencias son <em>asistencia</em>, no reemplazan el criterio clínico. La decisión final es del médico.' },
+    ],
+    rule: 'OpenAI NUNCA recibe datos identificables del paciente (nombre, cédula). Solo datos clínicos anonimizados.'
+  },
+  {
+    id: 'whatsapp',
+    name: 'POST /whatsapp/send',
+    subtitle: 'Envío de template',
+    icon: '💬',
+    color: '#ec4899',
+    steps: [
+      { from: 'request', to: 'cPanel',
+        narr: 'La doctora presiona "Enviar link al paciente" desde el panel.',
+        code: 'En la tarjeta del paciente <em>Juan Pérez</em>, hace click en el botón de WhatsApp para enviarle el link de videollamada.' },
+      { from: 'cPanel', to: 'hWhatsApp',
+        narr: 'El componente llama al hook useWhatsApp con los datos del paciente.',
+        code: 'Payload: <em>{ phone: "573001234567", roomNameWithParams, patientName: "Juan", appointmentTime: "3:00 PM" }</em>.' },
+      { from: 'hWhatsApp', to: 'rWhatsApp',
+        narr: 'POST /api/video/whatsapp/send con el template aprobado.',
+        code: 'El controller valida que los 4 campos estén presentes antes de delegar.' },
+      { from: 'rWhatsApp', to: 'sWhatsApp',
+        narr: 'WhatsAppService arma el template de Twilio con variables {{1}} {{2}} {{3}}.',
+        code: 'Template aprobado: <em>HXc8473cfd... — "Hola {{1}}, te saludamos del Bodytech. Tienes consulta a las {{2}}..."</em>.' },
+      { from: 'sWhatsApp', to: 'extTwilio',
+        narr: 'Twilio envía el mensaje WhatsApp al paciente.',
+        code: 'Llama a <em>client.messages.create({ contentSid, contentVariables, from: "whatsapp:+...", to: "whatsapp:+..." })</em>.' },
+      { from: 'sWhatsApp', to: 'sPostgres',
+        narr: 'En paralelo, se registra el mensaje en PostgreSQL para el historial.',
+        code: 'Llama a <em>postgresService.registrarMensajeSaliente()</em> — busca/crea conversación e inserta el mensaje.' },
+      { from: 'sPostgres', to: 'database',
+        narr: 'PostgreSQL inserta en conversaciones_whatsapp y mensajes_whatsapp.',
+        code: 'INSERT atómico: <em>conversacionId</em> (o crea) + <em>mensaje saliente</em> con SID de Twilio para evitar duplicados.' },
+    ],
+    returnSteps: [
+      { from: 'database', to: 'sPostgres',
+        narr: 'PostgreSQL confirma la inserción.',
+        code: 'Constraint único por <em>sid_twilio</em> previene mensajes duplicados (error 23505 se ignora silenciosamente).' },
+      { from: 'sPostgres', to: 'sWhatsApp',
+        narr: 'PostgresService retorna true al service.',
+        code: 'Si el registro falla, NO bloquea: el WhatsApp ya se envió, solo se pierde el historial local.' },
+      { from: 'sWhatsApp', to: 'rWhatsApp',
+        narr: 'El service retorna success + messageSid al controller.',
+        code: 'Retorna: <em>{ success: true, messageSid: "SMxxx" }</em>.' },
+      { from: 'rWhatsApp', to: 'hWhatsApp',
+        narr: 'El backend responde 200 al frontend.',
+        code: 'El hook expone un estado <em>enviado: true</em> para actualizar la UI.' },
+      { from: 'hWhatsApp', to: 'cPanel',
+        narr: 'El panel muestra el check "Link enviado".',
+        code: 'Badge verde: <em>"✓ Link enviado a Juan Pérez"</em>. El paciente recibe el WhatsApp casi instantáneamente.' },
+      { from: 'cPanel', to: 'request',
+        narr: 'Juan recibe el WhatsApp con el link de la videollamada.',
+        code: 'Juan hace click en el botón del mensaje y abre <em>bodytech.app/patient/consulta-abc123</em>. La consulta arranca.' },
+    ],
+    rule: 'WhatsApp + Postgres corren en paralelo: si el registro DB falla, el mensaje ya se envió. El UX del paciente no depende del logging.'
+  },
+  {
+    id: 'error',
+    name: 'Token inválido',
+    subtitle: 'El rechazo',
+    icon: '🛑',
+    color: '#EF4444',
+    steps: [
+      { from: 'request', to: 'cDoctor',
+        narr: 'Un request llega sin identity (por ejemplo, estado corrupto del cliente).',
+        code: 'El frontend intenta llamar a <em>useVideoRoom</em> antes de que <em>identity</em> esté definido.' },
+      { from: 'cDoctor', to: 'hVideo',
+        narr: 'El hook intenta obtener token igualmente.',
+        code: 'POST /api/video/token con body <em>{ identity: "", roomName: "consulta-xxx" }</em>.' },
+      { from: 'hVideo', to: 'rToken',
+        narr: 'La ruta recibe el request pero identity está vacío.',
+        code: 'El controller valida inputs ANTES de llamar a Twilio (fail fast).' },
+      { from: 'rToken', to: 'errorNode',
+        narr: '❌ Rechazado. Responde 400 sin tocar Twilio.',
+        code: 'Retorna: <em>res.status(400).json({ error: "Identity and roomName are required" })</em>. Ahorra una llamada externa costosa.' },
+    ],
+    returnSteps: [
+      { from: 'errorNode', to: 'hVideo',
+        narr: 'El frontend recibe 400 y captura el error.',
+        code: 'Axios lanza excepción con status 400. El hook entra en catch y guarda <em>error: "..."</em>.' },
+      { from: 'hVideo', to: 'cDoctor',
+        narr: 'VideoRoom muestra pantalla de error con botón "Reintentar".',
+        code: 'La UI muestra: <em>"Error de conexión — [mensaje]"</em>. El usuario puede reintentar o volver al panel.' },
+      { from: 'cDoctor', to: 'request',
+        narr: 'La consulta no inicia hasta que los datos estén correctos.',
+        code: 'Validación defensiva: mejor fallar rápido y visible que pasar un token mal formado a Twilio y obtener un error opaco más adelante.' },
+    ],
+    rule: 'Fail fast en el controller: validar inputs ANTES de llamar servicios externos (Twilio, OpenAI). Evita costos y errores tardíos.',
+    isError: true
+  }
+];
+
+/* ════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════ */
+let state = {
+  currentScenario: null,
+  currentStepIndex: -1,
+  isPlaying: false,
+  isPaused: false,
+  speed: 1,
+  autoPlay: false,
+  phase: 'forward',
+  animFrame: null,
+  charPos: { x: 0, y: 0 },
+  charTarget: { x: 0, y: 0 },
+  charProgress: 0,
+  particles: [],
+  completedScenarios: new Set(),
+  glowingNodes: new Set(),
+  stepTimer: null,
+  isWaiting: false
+};
+
+/* ════════════════════════════════════════════
+   RENDERING
+   ════════════════════════════════════════════ */
+const svgNS = 'http://www.w3.org/2000/svg';
+
+function getNodeColor(type) {
+  return COLORS[type] || COLORS.request;
+}
+
+function renderBoard() {
+  const pathsLayer = document.getElementById('paths-layer');
+  const nodesLayer = document.getElementById('nodes-layer');
+  pathsLayer.innerHTML = '';
+  nodesLayer.innerHTML = '';
+
+  const layers = [
+    { y: 12,  label: 'ENTRY',        tip: 'El punto de partida: el médico o paciente abre la app en su navegador.' },
+    { y: 82,  label: 'PANTALLAS',     tip: 'Las "pantallas" que el usuario ve. Viven en frontend/src/pages y frontend/src/components.' },
+    { y: 172, label: 'HOOKS',         tip: 'Los "mensajeros". Cuando la pantalla necesita datos o acciones, el hook se encarga de llamar al backend.' },
+    { y: 272, label: 'API ROUTES',    tip: 'Las "puertas" del backend Express. Reciben la petición, validan, delegan y responden.' },
+    { y: 392, label: 'SERVICES',      tip: 'Los "cerebros". Aquí vive la lógica de negocio: qué validar, cómo combinar, a qué servicios externos llamar.' },
+    { y: 512, label: 'EXTERNOS',      tip: 'Servicios de terceros: Twilio (video + WhatsApp) y OpenAI (sugerencias). Se pagan por uso.' },
+    { y: 632, label: 'DATABASE',      tip: 'PostgreSQL managed en Digital Ocean con SSL. Aquí viven las historias clínicas, conversaciones y mensajes.' }
+  ];
+  layers.forEach(l => {
+    const g = document.createElementNS(svgNS, 'g');
+    g.style.cursor = 'pointer';
+
+    const lx = l.x || 12;
+    const bg = document.createElementNS(svgNS, 'rect');
+    bg.setAttribute('x', String(lx - 6));
+    bg.setAttribute('y', String(l.y - 10));
+    bg.setAttribute('width', '120');
+    bg.setAttribute('height', '16');
+    bg.setAttribute('fill', 'transparent');
+    g.appendChild(bg);
+
+    const txt = document.createElementNS(svgNS, 'text');
+    txt.setAttribute('x', String(lx));
+    txt.setAttribute('y', String(l.y));
+    txt.classList.add('layer-label');
+    txt.textContent = l.label;
+    g.appendChild(txt);
+
+    g.addEventListener('mouseenter', (e) => showTooltip(e, { label: l.label, tip: l.tip }));
+    g.addEventListener('mousemove', (e) => moveTooltip(e));
+    g.addEventListener('mouseleave', hideTooltip);
+
+    nodesLayer.appendChild(g);
+  });
+
+  // Draw edges
+  EDGES.forEach(([fromId, toId]) => {
+    const from = NODES[fromId];
+    const to = NODES[toId];
+    if (!from || !to) return;
+    if (from.hidden || to.hidden) return;
+
+    const outer = document.createElementNS(svgNS, 'line');
+    outer.setAttribute('x1', from.x); outer.setAttribute('y1', from.y);
+    outer.setAttribute('x2', to.x); outer.setAttribute('y2', to.y);
+    outer.classList.add('maze-path');
+    pathsLayer.appendChild(outer);
+
+    const inner = document.createElementNS(svgNS, 'line');
+    inner.setAttribute('x1', from.x); inner.setAttribute('y1', from.y);
+    inner.setAttribute('x2', to.x); inner.setAttribute('y2', to.y);
+    inner.classList.add('maze-path-inner');
+    pathsLayer.appendChild(inner);
+  });
+
+  // Draw nodes
+  Object.entries(NODES).forEach(([id, node]) => {
+    if (node.hidden) return;
+
+    const g = document.createElementNS(svgNS, 'g');
+    g.setAttribute('data-node-id', id);
+
+    const rect = document.createElementNS(svgNS, 'rect');
+    const color = getNodeColor(node.type);
+    rect.setAttribute('x', node.x - node.w / 2);
+    rect.setAttribute('y', node.y - node.h / 2);
+    rect.setAttribute('width', node.w);
+    rect.setAttribute('height', node.h);
+    rect.setAttribute('fill', color);
+    rect.setAttribute('stroke', color);
+    rect.setAttribute('stroke-opacity', '0.5');
+    rect.setAttribute('rx', '8');
+    rect.setAttribute('ry', '8');
+    rect.classList.add('node-box');
+    rect.style.setProperty('--glow-color', color);
+    g.appendChild(rect);
+
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('x', node.x);
+    label.setAttribute('y', node.y);
+    label.classList.add('node-label');
+    label.textContent = node.label;
+    if (node.w < 90) label.setAttribute('font-size', '9');
+    g.appendChild(label);
+
+    g.addEventListener('mouseenter', (e) => showTooltip(e, node));
+    g.addEventListener('mousemove', (e) => moveTooltip(e));
+    g.addEventListener('mouseleave', hideTooltip);
+
+    nodesLayer.appendChild(g);
+  });
+}
+
+/* ── Tooltip ── */
+const tooltipEl = document.getElementById('tooltip');
+function showTooltip(e, node) {
+  tooltipEl.innerHTML = `<strong>${node.label}</strong>${node.tip}`;
+  tooltipEl.classList.add('show');
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  tooltipEl.style.left = (e.clientX + 14) + 'px';
+  tooltipEl.style.top = (e.clientY - 10) + 'px';
+}
+function hideTooltip() {
+  tooltipEl.classList.remove('show');
+}
+
+/* ════════════════════════════════════════════
+   SCENARIO LIST
+   ════════════════════════════════════════════ */
+function renderScenarioList() {
+  const list = document.getElementById('scenario-list');
+  list.innerHTML = '';
+  SCENARIOS.forEach((sc, i) => {
+    const li = document.createElement('li');
+    li.className = 'scenario-item' + (state.currentScenario === sc ? ' active' : '') + (state.completedScenarios.has(sc.id) ? ' completed' : '');
+    li.innerHTML = `
+      <div class="sc-icon" style="background:${sc.color}20;color:${sc.color};border:2px solid ${sc.color}">${sc.icon}</div>
+      <div class="sc-info">
+        <span class="sc-name">${sc.name}</span>
+        <span class="sc-desc">${sc.subtitle}</span>
+      </div>`;
+    li.addEventListener('click', () => selectScenario(i));
+    list.appendChild(li);
+  });
+}
+
+/* ════════════════════════════════════════════
+   CHARACTER & ANIMATION
+   ════════════════════════════════════════════ */
+function createCharacter(color, icon) {
+  const charLayer = document.getElementById('character-layer');
+  charLayer.innerHTML = '';
+
+  const g = document.createElementNS(svgNS, 'g');
+  g.classList.add('character');
+  g.setAttribute('id', 'char');
+
+  const body = document.createElementNS(svgNS, 'circle');
+  body.setAttribute('r', '14');
+  body.setAttribute('fill', color);
+  body.setAttribute('filter', 'url(#glowStrong)');
+  body.classList.add('char-body');
+  g.appendChild(body);
+
+  const mouth = document.createElementNS(svgNS, 'path');
+  mouth.setAttribute('fill', '#0b141a');
+  mouth.setAttribute('id', 'char-mouth');
+  g.appendChild(mouth);
+
+  const txt = document.createElementNS(svgNS, 'text');
+  txt.setAttribute('x', '0');
+  txt.setAttribute('y', '1');
+  txt.setAttribute('text-anchor', 'middle');
+  txt.setAttribute('dominant-baseline', 'central');
+  txt.setAttribute('font-size', '12');
+  txt.setAttribute('fill', '#fff');
+  txt.setAttribute('pointer-events', 'none');
+  txt.textContent = icon;
+  g.appendChild(txt);
+
+  g.style.cursor = 'pointer';
+  g.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (state.isPlaying || state.isPaused) togglePlay();
+  });
+
+  charLayer.appendChild(g);
+  return g;
+}
+
+function updateCharacterPos(x, y) {
+  const char = document.getElementById('char');
+  if (!char) return;
+  char.setAttribute('transform', `translate(${x},${y})`);
+  positionBubble(x, y);
+
+  const mouth = document.getElementById('char-mouth');
+  if (mouth) {
+    const t = Date.now() / 150;
+    const mouthAngle = 15 + Math.abs(Math.sin(t)) * 30;
+    const rad = mouthAngle * Math.PI / 180;
+    const r = 14;
+    const dx = state.charTarget.x - state.charPos.x;
+    const dy = state.charTarget.y - state.charPos.y;
+    let angle = Math.atan2(dy, dx);
+    const x1 = Math.cos(angle - rad) * r;
+    const y1 = Math.sin(angle - rad) * r;
+    const x2 = Math.cos(angle + rad) * r;
+    const y2 = Math.sin(angle + rad) * r;
+    mouth.setAttribute('d', `M0,0 L${x1},${y1} A${r},${r} 0 0,0 ${x2},${y2} Z`);
+  }
+}
+
+function spawnParticle(x, y, color) {
+  const particlesLayer = document.getElementById('particles-layer');
+  const c = document.createElementNS(svgNS, 'circle');
+  c.setAttribute('cx', x);
+  c.setAttribute('cy', y);
+  c.setAttribute('r', '3');
+  c.setAttribute('fill', color);
+  c.setAttribute('opacity', '0.7');
+  c.classList.add('particle');
+  particlesLayer.appendChild(c);
+  state.particles.push({ el: c, life: 1, decay: 0.03 + Math.random() * 0.02 });
+}
+
+function updateParticles() {
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.life -= p.decay;
+    if (p.life <= 0) {
+      p.el.remove();
+      state.particles.splice(i, 1);
+    } else {
+      p.el.setAttribute('opacity', String(p.life * 0.6));
+      p.el.setAttribute('r', String(3 * p.life));
+    }
+  }
+}
+
+function clearParticles() {
+  state.particles.forEach(p => p.el.remove());
+  state.particles = [];
+}
+
+function setNodeGlow(nodeId, on) {
+  const g = document.querySelector(`[data-node-id="${nodeId}"]`);
+  if (!g) return;
+  const rect = g.querySelector('.node-box');
+  if (on) {
+    rect.classList.add('glow');
+    rect.setAttribute('filter', 'url(#glowStrong)');
+    state.glowingNodes.add(nodeId);
+  } else {
+    rect.classList.remove('glow');
+    rect.removeAttribute('filter');
+    state.glowingNodes.delete(nodeId);
+  }
+}
+
+function clearAllGlow() {
+  state.glowingNodes.forEach(id => setNodeGlow(id, false));
+}
+
+function showErrorNode(show) {
+  if (show) {
+    const nodesLayer = document.getElementById('nodes-layer');
+    const node = NODES.errorNode;
+    const existing = document.querySelector('[data-node-id="errorNode"]');
+    if (existing) existing.remove();
+
+    const g = document.createElementNS(svgNS, 'g');
+    g.setAttribute('data-node-id', 'errorNode');
+
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x', node.x - node.w / 2);
+    rect.setAttribute('y', node.y - node.h / 2);
+    rect.setAttribute('width', node.w);
+    rect.setAttribute('height', node.h);
+    rect.setAttribute('fill', COLORS.error);
+    rect.setAttribute('stroke', COLORS.error);
+    rect.setAttribute('stroke-opacity', '0.5');
+    rect.setAttribute('rx', '8');
+    rect.setAttribute('ry', '8');
+    rect.classList.add('node-box');
+    rect.style.setProperty('--glow-color', COLORS.error);
+    g.appendChild(rect);
+
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('x', node.x);
+    label.setAttribute('y', node.y);
+    label.classList.add('node-label');
+    label.textContent = node.label;
+    g.appendChild(label);
+
+    const pathsLayer = document.getElementById('paths-layer');
+    const from = NODES.rToken;
+
+    const outer = document.createElementNS(svgNS, 'line');
+    outer.setAttribute('x1', from.x); outer.setAttribute('y1', from.y);
+    outer.setAttribute('x2', node.x); outer.setAttribute('y2', node.y);
+    outer.classList.add('maze-path');
+    outer.setAttribute('data-error-path', 'true');
+    outer.style.stroke = '#4a1525';
+    pathsLayer.appendChild(outer);
+
+    const inner = document.createElementNS(svgNS, 'line');
+    inner.setAttribute('x1', from.x); inner.setAttribute('y1', from.y);
+    inner.setAttribute('x2', node.x); inner.setAttribute('y2', node.y);
+    inner.classList.add('maze-path-inner');
+    inner.setAttribute('data-error-path', 'true');
+    pathsLayer.appendChild(inner);
+
+    nodesLayer.appendChild(g);
+  } else {
+    const el = document.querySelector('[data-node-id="errorNode"]');
+    if (el) el.remove();
+    document.querySelectorAll('[data-error-path]').forEach(p => p.remove());
+  }
+}
+
+/* ════════════════════════════════════════════
+   ANIMATION LOOP
+   ════════════════════════════════════════════ */
+const MOVE_SPEED = 0.008;
+
+function animationLoop() {
+  if (!state.isPlaying || state.isPaused) {
+    state.animFrame = requestAnimationFrame(animationLoop);
+    updateParticles();
+    const char = document.getElementById('char');
+    if (char) {
+      const cx = parseFloat(char.getAttribute('transform')?.match(/translate\(([^,]+)/)?.[1] || 0);
+      const cy = parseFloat(char.getAttribute('transform')?.match(/,([^)]+)/)?.[1] || 0);
+      updateCharacterPos(cx, cy);
+    }
+    return;
+  }
+
+  state.charProgress += MOVE_SPEED * state.speed;
+
+  if (state.charProgress >= 1) {
+    state.charProgress = 0;
+    const cx = state.charTarget.x;
+    const cy = state.charTarget.y;
+    updateCharacterPos(cx, cy);
+    state.charPos = { ...state.charTarget };
+
+    const scenario = state.currentScenario;
+    const steps = state.phase === 'forward' ? scenario.steps : scenario.returnSteps;
+    const step = steps[state.currentStepIndex];
+    if (step) setNodeGlow(step.to, true);
+
+    state.isPlaying = false;
+    state.isWaiting = true;
+    const delay = state.phase === 'return' ? 1200 / state.speed : 2200 / state.speed;
+    state.stepTimer = setTimeout(() => {
+      state.isWaiting = false;
+      state.stepTimer = null;
+      advanceStep();
+    }, delay);
+  } else {
+    const x = state.charPos.x + (state.charTarget.x - state.charPos.x) * state.charProgress;
+    const y = state.charPos.y + (state.charTarget.y - state.charPos.y) * state.charProgress;
+    updateCharacterPos(x, y);
+
+    if (Math.random() < 0.4) {
+      const sc = state.currentScenario;
+      spawnParticle(
+        x + (Math.random() - 0.5) * 6,
+        y + (Math.random() - 0.5) * 6,
+        sc ? sc.color : '#fff'
+      );
+    }
+  }
+
+  updateParticles();
+  state.animFrame = requestAnimationFrame(animationLoop);
+}
+
+/* ════════════════════════════════════════════
+   SCENARIO CONTROL
+   ════════════════════════════════════════════ */
+function selectScenario(index) {
+  stopAnimation();
+  clearAllGlow();
+  clearParticles();
+  showErrorNode(false);
+
+  const sc = SCENARIOS[index];
+  state.currentScenario = sc;
+  state.currentStepIndex = -1;
+  state.phase = 'forward';
+  state.isPlaying = false;
+  state.isPaused = false;
+
+  state.charPos = { x: NODES.request.x, y: NODES.request.y };
+  state.charTarget = { ...state.charPos };
+  createCharacter(sc.color, sc.icon);
+  updateCharacterPos(state.charPos.x, state.charPos.y);
+  setNodeGlow('request', true);
+
+  if (sc.isError) showErrorNode(true);
+
+  renderScenarioList();
+  updateNarration(`▶ ${sc.name} — ${sc.subtitle}`, 'Presiona Play para iniciar la animación.', null);
+  updatePlayButton();
+}
+
+function togglePlay() {
+  if (!state.currentScenario) {
+    selectScenario(0);
+  }
+
+  if (state.isPaused) {
+    state.isPaused = false;
+    if (state.isWaiting) {
+      const delay = state.phase === 'return' ? 1200 / state.speed : 2200 / state.speed;
+      state.stepTimer = setTimeout(() => {
+        state.isWaiting = false;
+        state.stepTimer = null;
+        advanceStep();
+      }, delay);
+    } else {
+      state.isPlaying = true;
+    }
+    updatePlayButton();
+    return;
+  }
+
+  if (state.isPlaying || state.isWaiting) {
+    if (state.stepTimer) {
+      clearTimeout(state.stepTimer);
+      state.stepTimer = null;
+    }
+    state.isPaused = true;
+    state.isPlaying = false;
+    updatePlayButton();
+    return;
+  }
+
+  if (state.currentStepIndex === -1) {
+    advanceStep();
+  } else {
+    state.isPlaying = true;
+  }
+  updatePlayButton();
+}
+
+function advanceStep() {
+  const sc = state.currentScenario;
+  if (!sc) return;
+
+  const steps = state.phase === 'forward' ? sc.steps : sc.returnSteps;
+  state.currentStepIndex++;
+
+  if (state.currentStepIndex >= steps.length) {
+    if (state.phase === 'forward' && sc.returnSteps && sc.returnSteps.length > 0) {
+      state.phase = 'return';
+      state.currentStepIndex = 0;
+      const step = sc.returnSteps[0];
+      startMove(step);
+      updateNarration('↩ Respuesta', step.narr, null, step.code);
+    } else {
+      finishScenario();
+    }
+    return;
+  }
+
+  const step = steps[state.currentStepIndex];
+  startMove(step);
+
+  const phaseLabel = state.phase === 'forward' ? `Paso ${state.currentStepIndex + 1}/${steps.length}` : '↩ Respuesta';
+  updateNarration(phaseLabel, step.narr, null, step.code);
+}
+
+function startMove(step) {
+  const fromNode = NODES[step.from];
+  const toNode = NODES[step.to];
+  if (!fromNode || !toNode) return;
+
+  state.charPos = { x: fromNode.x, y: fromNode.y };
+  state.charTarget = { x: toNode.x, y: toNode.y };
+  state.charProgress = 0;
+  state.isPlaying = true;
+  state.isPaused = false;
+
+  highlightPath(step.from, step.to);
+}
+
+function highlightPath(fromId, toId) {
+  document.querySelectorAll('.flow-path').forEach(p => p.remove());
+
+  const from = NODES[fromId];
+  const to = NODES[toId];
+  if (!from || !to) return;
+
+  const sc = state.currentScenario;
+  const pathsLayer = document.getElementById('paths-layer');
+
+  const line = document.createElementNS(svgNS, 'line');
+  line.setAttribute('x1', from.x); line.setAttribute('y1', from.y);
+  line.setAttribute('x2', to.x); line.setAttribute('y2', to.y);
+  line.classList.add('flow-path', 'visible');
+  line.style.stroke = sc ? sc.color : '#fff';
+  pathsLayer.appendChild(line);
+}
+
+function finishScenario() {
+  state.isPlaying = false;
+  state.isPaused = false;
+  const sc = state.currentScenario;
+  if (!sc) return;
+
+  state.completedScenarios.add(sc.id);
+  renderScenarioList();
+  updateNarration('✓ Completado', `${sc.name} — ${sc.subtitle}`, sc.rule);
+  updatePlayButton();
+
+  if (state.autoPlay) {
+    const idx = SCENARIOS.indexOf(sc);
+    const nextIdx = idx + 1;
+    if (nextIdx < SCENARIOS.length) {
+      setTimeout(() => {
+        selectScenario(nextIdx);
+        setTimeout(() => togglePlay(), 1500);
+      }, 4000 / state.speed);
+    } else {
+      state.autoPlay = false;
+      updateAutoPlayButton();
+      updateNarration(
+        '🎉 ¡Todos los flujos completados!',
+        'Has visto los 7 escenarios de la arquitectura de BSL Consulta Video.',
+        'Las 5 reglas de oro: 1) Las pantallas solo hablan con hooks, nunca con el backend directamente. 2) Los hooks solo hacen HTTP, nunca lógica de negocio. 3) Las rutas validan y delegan, nunca tienen SQL. 4) Los services orquestan y aplican reglas, delegando SQL a PostgresService. 5) Solo PostgresService toca PostgreSQL; las credenciales de Twilio/OpenAI viven solo en el backend.'
+      );
+    }
+  }
+}
+
+function resetScenario() {
+  if (state.currentScenario) {
+    const idx = SCENARIOS.indexOf(state.currentScenario);
+    selectScenario(idx);
+  }
+}
+
+function stopAnimation() {
+  state.isPlaying = false;
+  state.isPaused = false;
+  state.isWaiting = false;
+  if (state.stepTimer) { clearTimeout(state.stepTimer); state.stepTimer = null; }
+  document.querySelectorAll('.flow-path').forEach(p => p.remove());
+  hideBubble();
+  const charLayer = document.getElementById('character-layer');
+  if (charLayer) charLayer.innerHTML = '';
+}
+
+function setSpeed(s, btn) {
+  state.speed = s;
+  document.querySelectorAll('.speed-btns .ctrl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function toggleAutoPlay() {
+  if (state.autoPlay) {
+    state.autoPlay = false;
+    updateAutoPlayButton();
+    return;
+  }
+  state.autoPlay = true;
+  updateAutoPlayButton();
+  let startIdx = 0;
+  for (let i = 0; i < SCENARIOS.length; i++) {
+    if (!state.completedScenarios.has(SCENARIOS[i].id)) {
+      startIdx = i;
+      break;
+    }
+  }
+  selectScenario(startIdx);
+  setTimeout(() => togglePlay(), 300);
+}
+
+function updatePlayButton() {
+  const btn = document.getElementById('btn-play');
+  if (state.isPaused) {
+    btn.textContent = '▶ Resume';
+  } else if (state.isPlaying || state.isWaiting) {
+    btn.textContent = '⏸ Pause';
+  } else {
+    btn.textContent = '▶ Play';
+  }
+}
+
+function updateAutoPlayButton() {
+  const btn = document.getElementById('btn-autoplay');
+  if (state.autoPlay) {
+    btn.classList.add('active');
+    btn.textContent = '⏹ Stop Auto';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '⟳ Auto Play';
+  }
+}
+
+function updateNarration(label, text, rule, code) {
+  const narr = document.getElementById('narration');
+  let html = `<div class="narr-step"><span class="narr-label">${label}</span><span class="narr-text">${text}</span></div>`;
+  if (code) html += `<div class="narr-example">${code}</div>`;
+  if (rule) html += `<div class="narr-rule">${rule}</div>`;
+  narr.innerHTML = html;
+  updateBubble(label, text);
+}
+
+function updateBubble(label, text) {
+  const layer = document.getElementById('bubble-layer');
+  if (!layer) return;
+  layer.innerHTML = '';
+
+  const cleanText = text.replace(/<[^>]+>/g, '');
+  const maxLen = 90;
+  const displayText = cleanText.length > maxLen ? cleanText.substring(0, maxLen) + '…' : cleanText;
+
+  const g = document.createElementNS(svgNS, 'g');
+  g.setAttribute('id', 'speech-bubble');
+
+  const words = displayText.split(' ');
+  const lines = [];
+  let currentLine = '';
+  for (const word of words) {
+    if ((currentLine + ' ' + word).trim().length > 45) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine = (currentLine + ' ' + word).trim();
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  const lineHeight = 14;
+  const padX = 12, padY = 8;
+  const labelHeight = 14;
+  const bubbleH = padY + labelHeight + lines.length * lineHeight + padY;
+  const bubbleW = 280;
+  const tailH = 8;
+
+  const rect = document.createElementNS(svgNS, 'rect');
+  rect.setAttribute('x', String(-bubbleW / 2));
+  rect.setAttribute('y', String(-bubbleH - tailH));
+  rect.setAttribute('width', String(bubbleW));
+  rect.setAttribute('height', String(bubbleH));
+  rect.setAttribute('rx', '10');
+  rect.setAttribute('ry', '10');
+  rect.setAttribute('fill', '#1f2c34');
+  rect.setAttribute('fill-opacity', '0.95');
+  rect.setAttribute('stroke', '#475569');
+  rect.setAttribute('stroke-width', '1');
+  g.appendChild(rect);
+
+  const tail = document.createElementNS(svgNS, 'polygon');
+  tail.setAttribute('points', `-8,-${tailH} 8,-${tailH} 0,2`);
+  tail.setAttribute('fill', '#1f2c34');
+  tail.setAttribute('fill-opacity', '0.95');
+  g.appendChild(tail);
+
+  const lblEl = document.createElementNS(svgNS, 'text');
+  lblEl.setAttribute('x', String(-bubbleW / 2 + padX));
+  lblEl.setAttribute('y', String(-bubbleH - tailH + padY + 10));
+  lblEl.setAttribute('font-family', "'Segoe UI',system-ui,sans-serif");
+  lblEl.setAttribute('font-size', '10');
+  lblEl.setAttribute('fill', '#00a884');
+  lblEl.setAttribute('font-weight', '700');
+  lblEl.setAttribute('text-transform', 'uppercase');
+  lblEl.setAttribute('letter-spacing', '0.04em');
+  lblEl.textContent = label.replace(/[<>]/g, '');
+  g.appendChild(lblEl);
+
+  lines.forEach((line, i) => {
+    const tEl = document.createElementNS(svgNS, 'text');
+    tEl.setAttribute('x', String(-bubbleW / 2 + padX));
+    tEl.setAttribute('y', String(-bubbleH - tailH + padY + labelHeight + 4 + (i + 1) * lineHeight));
+    tEl.setAttribute('font-family', "'Segoe UI',system-ui,sans-serif");
+    tEl.setAttribute('font-size', '11');
+    tEl.setAttribute('fill', '#cbd5e1');
+    tEl.textContent = line;
+    g.appendChild(tEl);
+  });
+
+  layer.appendChild(g);
+
+  const char = document.getElementById('char');
+  if (char) {
+    const match = char.getAttribute('transform')?.match(/translate\(([^,]+),([^)]+)\)/);
+    if (match) positionBubble(parseFloat(match[1]), parseFloat(match[2]));
+  }
+}
+
+function positionBubble(charX, charY) {
+  const bubble = document.getElementById('speech-bubble');
+  if (!bubble) return;
+
+  const halfW = 140;
+  let bx = charX;
+  if (bx - halfW < 10) bx = halfW + 10;
+  if (bx + halfW > 940) bx = 940 - halfW;
+
+  bubble.setAttribute('transform', `translate(${bx},${charY - 22})`);
+}
+
+function hideBubble() {
+  const layer = document.getElementById('bubble-layer');
+  if (layer) layer.innerHTML = '';
+}
+
+/* ════════════════════════════════════════════
+   KEYBOARD
+   ════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'KeyR') { resetScenario(); }
+  else if (e.code === 'Digit1') setSpeed(1, document.querySelector('[data-speed="1"]'));
+  else if (e.code === 'Digit2') setSpeed(2, document.querySelector('[data-speed="2"]'));
+  else if (e.code === 'Digit3') setSpeed(3, document.querySelector('[data-speed="3"]'));
+  else if (e.code === 'ArrowDown' || e.code === 'ArrowRight') {
+    e.preventDefault();
+    const idx = state.currentScenario ? SCENARIOS.indexOf(state.currentScenario) : -1;
+    if (idx < SCENARIOS.length - 1) selectScenario(idx + 1);
+  } else if (e.code === 'ArrowUp' || e.code === 'ArrowLeft') {
+    e.preventDefault();
+    const idx = state.currentScenario ? SCENARIOS.indexOf(state.currentScenario) : 1;
+    if (idx > 0) selectScenario(idx - 1);
+  }
+});
+
+/* ════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════ */
+function startApp() {
+  document.getElementById('intro').classList.add('hidden');
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 500);
+}
+
+function init() {
+  renderBoard();
+  renderScenarioList();
+  state.animFrame = requestAnimationFrame(animationLoop);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

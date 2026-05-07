@@ -27,3 +27,9 @@ build/
 
 # Playwright MCP cache
 .playwright-mcp/
+
+# Personal artifacts del autor (PDFs, scripts, drafts)
+*.pdf
+build_*.py
+guion-*.md
+my-video/

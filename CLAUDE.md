@@ -4,300 +4,249 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BSL Consulta Video is a Twilio-based video calling application integrated with Wix for medical consultations. It features a React frontend, Node.js/Express backend, and WhatsApp messaging via Twilio WhatsApp API.
+BSL Consulta Video is a medical telemedicine platform built around Twilio Video. It started as a video-call shim for a Wix front office and has grown into a full app with:
+
+- Twilio Video calls (doctor + patient)
+- A medical panel (`/panel-medico`) that replaced the Wix patient list and queries PostgreSQL directly
+- Real-time postural analysis (Socket.io + MediaPipe on the patient, canvas rendering on the doctor)
+- Historia clínica (medical record) viewer/editor with OpenAI-assisted suggestions
+- Twilio WhatsApp messaging for session reports and patient links
+- Twilio Voice (outbound calls)
+
+Two halves of the app share one Express server in production: API + WebSocket on `/api/*` and `/socket.io/*`, static React build on everything else.
 
 ## Development Commands
 
-### Backend
+### Backend (`backend/`)
 ```bash
-cd backend
-npm install              # Install dependencies
-npm run dev             # Start development server (nodemon + ts-node)
-npm run build           # Compile TypeScript to dist/
-npm start               # Run production build
-npm test                # Run Jest tests
-npm run lint            # ESLint check
-npm run lint:fix        # ESLint auto-fix
+npm install
+npm run dev             # nodemon + ts-node, port 3000
+npm run build           # tsc → dist/
+npm start               # node dist/index.js
+npm test                # jest (no tests written yet)
+npm run lint
+npm run lint:fix
 ```
 
-### Frontend
+### Frontend (`frontend/`)
 ```bash
-cd frontend
-npm install              # Install dependencies
-npm run dev             # Start Vite dev server (http://localhost:5173)
-npm run build           # Build for production (outputs to dist/)
-npm run preview         # Preview production build
-npm run lint            # ESLint check
-npm run lint:fix        # ESLint auto-fix
+npm install
+npm run dev             # vite, port 5173
+npm run build           # tsc + vite build → dist/
+npm run preview
+npm run lint
+npm run lint:fix
 ```
 
-### Full Stack Build (for deployment)
-```bash
-# From backend/
-npm run build
-# From frontend/
-npm run build
-# Backend serves frontend from dist/ → backend/frontend-dist/
-```
+### Full stack locally
+Start backend (`:3000`) and frontend (`:5173`) in separate terminals. Frontend hits `VITE_API_BASE_URL` (set to `http://localhost:3000` in dev) for both REST and Socket.io.
 
-## Architecture
+### Docker / production build
+`Dockerfile` is a 3-stage build that compiles backend, builds the frontend, and copies `frontend/dist/` into `backend/frontend-dist/` so a single Express process serves both.
 
-### Single-Component Deployment Model
+## High-Level Architecture
 
-**Critical Design Pattern**: The application uses a cost-optimized single-component architecture for Digital Ocean deployment.
+### Single-component deployment
 
-- **One server serves everything**: The Express backend (port 3000) serves both API routes AND static frontend files
-- **Build process**: Frontend builds to `frontend/dist/`, which gets copied to `backend/frontend-dist/` in Docker
-- **Routing logic** (in `backend/src/index.ts`):
-  1. `/health` → Health check endpoint
-  2. `/api/video/*` → API routes (Twilio video operations)
-  3. `/*` → Serves static frontend files (React SPA)
-  4. All non-API routes → Fall back to `index.html` (for client-side routing)
+**One Express server serves everything.** This is a hard constraint driven by the Digital Ocean App Platform cost target ($5/mo, single Basic XXS).
 
-**Why this matters**: In development, frontend runs on :5173 and backend on :3000 (requires CORS). In production, both are served from :3000 (no CORS needed). The `VITE_API_BASE_URL` env var controls this:
-- Development: `VITE_API_BASE_URL=http://localhost:3000`
-- Production: `VITE_API_BASE_URL=""` (empty = relative URLs)
+Routing in [backend/src/index.ts](backend/src/index.ts):
+1. `/health` → health check
+2. `/api/video/*` → Twilio video, tracking events, medical history, AI suggestions, WhatsApp
+3. `/api/telemedicine/*` → postural analysis session metadata
+4. `/api/medical-panel/*` → doctor panel (stats, patient list, search)
+5. `/api/twilio/*` → outbound voice calls
+6. `/socket.io/*` → Socket.io (telemedicine + session-tracker broadcasts)
+7. Everything else → static frontend (`backend/frontend-dist/`) with SPA fallback to `index.html`
 
-### Wix Integration Pattern
+Implication: in dev you have CORS (set `ALLOWED_ORIGINS=http://localhost:5173`); in prod you don't, because frontend and API share an origin. `VITE_API_BASE_URL=""` in production makes the frontend use relative URLs.
 
-**Critical Constraint**: Wix Velo has a limitation where you **cannot dynamically change button `.link` properties inside `onClick` handlers**. The browser processes the link before the onClick executes.
+### Data layer: PostgreSQL is the source of truth (Wix is legacy)
 
-**Solution Pattern** (in `backend/panel-consultamedica-wix.json`):
-1. Generate room name INSIDE the `onClick` handler (not in `$w.onReady`)
-2. Configure both doctor and patient links ATOMICALLY in the same onClick
-3. Send patient link via backend `sendTextMessage()` API (not WhatsApp Web links)
-4. Configure doctor button link IMMEDIATELY after room generation to ensure same room
+The medical panel originally proxied through Wix Velo functions. It now queries Digital Ocean PostgreSQL directly via [backend/src/services/postgres.service.ts](backend/src/services/postgres.service.ts) (a single `pg.Pool`, SSL with `rejectUnauthorized: false`, migrations run on boot from `index.ts`).
 
-**Example**:
-```javascript
-$w('#whpTwilio').onClick(async () => {
-    const roomName = generarNombreSala();  // Generate ONCE
-    const patientLink = construirLinkVideollamada(...);
-    const doctorLink = construirLinkDoctor(roomName, ...);
+Two main tables:
+- `HistoriaClinica` — visit/consultation row keyed by `_id`, with `numeroId` (patient document), `medico` (doctor code), `fechaAtencion` (scheduled), `fechaConsulta` (attended), and dozens of clinical fields.
+- `formularios` — patient intake form keyed by `numero_id`, with 27 personal antecedent flags and 8 family antecedent flags. Joined via `LEFT JOIN` in [backend/src/services/medical-history.service.ts](backend/src/services/medical-history.service.ts).
 
-    // Configure doctor button ATOMICALLY
-    $w('#iniciarConsultaTwilio').link = doctorLink;
-    $w('#iniciarConsultaTwilio').target = "_blank";
+**Timezone gotcha — Colombia is UTC-5.** "Today" queries must convert via `Date.UTC(y, m, d, 5, 0, 0)` for start-of-day and `Date.UTC(y, m, d+1, 4, 59, 59, 999)` for end-of-day. See `getDailyStats` and `getPendingPatients` in `medical-panel.service.ts`. Don't use `new Date()` directly — local server TZ in production is UTC.
 
-    // Send to patient via backend API
-    await sendTextMessage(phone, patientLink);
-});
-```
+**Boolean coercion gotcha.** Antecedent columns store positives as `true`, `'true'`, `'Sí'`, or `'SI'` (different ingestion paths). Always check all four when reading. See [backend/src/services/medical-history.service.ts](backend/src/services/medical-history.service.ts) lines ~208-245.
 
-**Wrong Pattern** (causes different rooms):
-```javascript
-// BAD: Generating room in onReady or using wixLocation.to()
-$w.onReady(() => {
-    const roomName = generarNombreSala();  // This runs on page load, not click
-    // ... causes doctor and patient to be in different rooms
-});
-```
+### Real-time layer: Socket.io for telemedicine and session reports
 
-### Session Tracking and Reporting
+A single `socket.io` server is attached to the same `http.Server` as Express (see [backend/src/index.ts](backend/src/index.ts)). It is consumed by two services:
 
-**Architecture**: Backend-based event tracking (NOT Wix-based) to generate WhatsApp reports.
+1. **`telemedicineSocketService`** ([backend/src/services/telemedicine-socket.service.ts](backend/src/services/telemedicine-socket.service.ts)) — postural analysis. Doctor and patient join a room keyed by `roomName`. Patient runs MediaPipe locally, emits `pose-data-update` with 33 landmarks @ ~15 FPS, server relays to the doctor. The doctor never receives video frames over Socket.io — only landmark data.
+2. **`sessionTracker`** ([backend/src/services/session-tracker.service.ts](backend/src/services/session-tracker.service.ts)) — in-memory map of who is in which Twilio room. Frontend reports connect/disconnect via REST (`/api/video/events/participant-*`); when both doctor and patient have left, a formatted report is sent via WHAPI to `573008021701`. Wrapped in try/catch so tracking never breaks calls.
 
-**Flow**:
-1. Frontend calls `POST /api/video/events/participant-connected` when joining room (with role: 'doctor'|'patient')
-2. Frontend calls `POST /api/video/events/participant-disconnected` when leaving room
-3. `SessionTrackerService` (singleton) maintains in-memory session state
-4. When ALL participants disconnect, service generates formatted report and sends via WHAPI to 573008021701
-5. Session is cleaned up from memory
+The frontend uses `socket.io-client` from [frontend/src/hooks/usePosturalAnalysis.ts](frontend/src/hooks/usePosturalAnalysis.ts). The video logic in [frontend/src/hooks/useVideoRoom.ts](frontend/src/hooks/useVideoRoom.ts) does NOT touch Socket.io — keep these concerns separate.
 
-**Key files**:
-- `backend/src/services/session-tracker.service.ts` - Core tracking logic
-- `frontend/src/hooks/useVideoRoom.ts` - Calls tracking endpoints (lines 71-78, 118-135)
-- `frontend/src/components/VideoRoom.tsx` - Passes `role` prop
-- Page components (`DoctorRoomPage.tsx`, `PatientPage.tsx`) - Provide role information
+### Postural analysis (MediaPipe)
 
-**Important**: Tracking calls are wrapped in try/catch to never break video functionality if tracking fails.
+Patient side ([frontend/src/components/PosturalAnalysisPatient.tsx](frontend/src/components/PosturalAnalysisPatient.tsx)) uses MediaPipe Pose Landmarker, loaded lazily through [frontend/src/utils/mediapipe-loader.ts](frontend/src/utils/mediapipe-loader.ts). It emits `{ landmarks, metrics, timestamp }` over Socket.io.
 
-### Twilio Video Integration
+Doctor side ([frontend/src/components/PosturalAnalysisCanvas.tsx](frontend/src/components/PosturalAnalysisCanvas.tsx)) receives the data and draws the skeleton on a canvas. The first frame triggers `hasReceivedFirstFrame` which transitions the modal out of the "Cargando Análisis..." state — see [DIAGNOSTICO_ANALISIS_POSTURAL.md](DIAGNOSTICO_ANALISIS_POSTURAL.md) for the diagnostic logging convention (`[Doctor] 📊`, `[Canvas] 🎨`, `[Patient] ...`).
 
-**Token-based authentication**: Backend generates short-lived JWT tokens (1 hour TTL) using Twilio API Key.
+The doctor can capture multiple snapshots ([frontend/src/components/PosturalAnalysisModal.tsx](frontend/src/components/PosturalAnalysisModal.tsx)). Each captures `canvas.toDataURL('image/png')` plus the current metrics, lets the doctor name the exercise, and assembles a multi-page PDF via `jspdf`. All client-side — no server storage.
 
-**Room connection flow**:
-1. User enters name and clicks "Join"
-2. Frontend calls `POST /api/video/token` with identity and roomName
-3. Backend generates Twilio access token with VideoGrant
-4. Frontend uses token to connect via `twilio-video` SDK
-5. Twilio automatically creates room if it doesn't exist
+### Twilio Video integration
 
-**Track attachment pattern** (critical for video rendering):
-Twilio tracks must be attached to DOM elements in specific useEffect patterns. See `frontend/src/components/Participant.tsx` for the two-useEffect pattern used for reliable track rendering.
+Token-based, 1-hour TTL JWTs generated by [backend/src/services/twilio.service.ts](backend/src/services/twilio.service.ts) using the API Key (not the Auth Token). Twilio auto-creates the room on first connect, so `POST /api/video/rooms` is rarely needed.
 
-### Virtual Background and Blur Effects
+**Track attachment is the trickiest part of the frontend.** Twilio tracks must be attached to a DOM element after both the track and the element exist. [frontend/src/components/Participant.tsx](frontend/src/components/Participant.tsx) uses a two-`useEffect` pattern (one to subscribe to the participant, one to attach existing tracks plus listen for `trackSubscribed`) — replicate this pattern for any new track-rendering component.
 
-**Architecture**: Uses `@twilio/video-processors` with locally hosted assets to avoid CDN permission issues.
+### Virtual backgrounds / blur
 
-**Implementation**:
-- **Hook**: `frontend/src/hooks/useBackgroundEffects.ts` - Manages blur and virtual background processors
-- **Component**: `frontend/src/components/BackgroundControls.tsx` - UI dropdown menu in bottom control bar
-- **Assets**: `frontend/public/twilio-processors/` - TensorFlow Lite models and WASM files (5.1 MB)
+Uses `@twilio/video-processors`. The TFLite models and WASM (~5.1 MB) live in [frontend/public/twilio-processors/](frontend/public/twilio-processors/) — **do not delete** and **do not point at the Twilio CDN**, which returns 403 in production. `assetsPath` must be `/twilio-processors`. UI in [frontend/src/components/BackgroundControls.tsx](frontend/src/components/BackgroundControls.tsx), logic in [frontend/src/hooks/useBackgroundEffects.ts](frontend/src/hooks/useBackgroundEffects.ts). Only shown to `role === 'doctor'`.
 
-**Critical**: Assets MUST be hosted locally (not from Twilio CDN) due to 403 Forbidden errors. The `assetsPath` must point to `/twilio-processors`.
+### Medical history + OpenAI
 
-**Features**:
-- Gaussian blur background (15px radius)
-- Virtual background replacement (office, nature, abstract presets)
-- Only visible for doctors (`role === 'doctor'`)
-- Located in bottom control bar (first button, left side)
+`MedicalHistoryPanel` ([frontend/src/components/MedicalHistoryPanel.tsx](frontend/src/components/MedicalHistoryPanel.tsx)) opens during a doctor's call and edits the `HistoriaClinica` row. The "AI suggestions" button hits `POST /api/video/ai-suggestions` which calls OpenAI ([backend/src/services/openai.service.ts](backend/src/services/openai.service.ts)) with the patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side as HTML in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts).
 
-**How it works**:
-1. User clicks background button in control bar
-2. Dropdown menu shows options (blur, virtual backgrounds, remove)
-3. Processor loads TFLite model for person segmentation (~2-3 MB, cached after first load)
-4. Effect applied to `LocalVideoTrack` via `track.addProcessor()`
-5. Real-time processing without disconnecting from call
+### Wix integration (legacy but still live)
 
-### Phone Number Formatting (International Support)
+The Wix front office still hosts the booking funnel. Two Wix files are kept in `backend/` as the source of truth that gets pasted into Velo:
+- `backend/wix.json` — patient repeater + day stats
+- `backend/panel-consultamedica-wix.json` — consultation lightbox with the WhatsApp + videollamada buttons
 
-**Function**: `formatTelefono()` in `backend/panel-consultamedica-wix.json`
+**Critical Wix constraint.** You cannot mutate a button's `.link` from inside its own `onClick` — the browser navigates before the handler resolves. Pattern that works: in `whpTwilio.onClick`, generate the room name once, set `iniciarConsultaTwilio.link` *atomically* in the same handler before sending the patient link via the backend's `sendTextMessage()` (NOT a `wa.me/` URL). See [WIX_INTEGRATION.md](WIX_INTEGRATION.md) for the full pattern.
 
-**Supported formats**:
-- International with parentheses: `(+52) 2441564651` → `+522441564651`
-- With plus prefix: `+13053392098` → `+13053392098`
-- Without plus: `13053455190` → `+13053455190`
-- Colombian local: `3001234567` → `+573001234567`
+**Phone formatting.** `formatTelefono()` in `backend/panel-consultamedica-wix.json` (and [backend/src/helpers/phone.helper.ts](backend/src/helpers/phone.helper.ts) on the server) accepts `(+52) 244...`, `+13053...`, bare `13053...`, and Colombian local `300...`. Recognized country codes: 1, 33, 34, 44, 49, 52, 54, 55, 57. Twilio WhatsApp accepts both with and without `+` — the service normalizes.
 
-**Country codes recognized**: 1 (USA/Canada), 52 (Mexico), 57 (Colombia), 54 (Argentina), 55 (Brazil), 34 (Spain), 44 (UK), 49 (Germany), 33 (France)
+## Frontend Routes
 
-**Usage**:
-- For WhatsApp Web links: Use full number with `+`
-- For `sendTextMessage()`: Remove `+` prefix (use `.substring(1)`)
+Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to `/panel-medico`, not a landing page.
 
-## Key Files and Their Roles
+| Path | Purpose |
+|---|---|
+| `/panel-medico` | Doctor login + patient list (default) |
+| `/historias` | Historia clínica browser |
+| `/doctor` | Manual room creation page |
+| `/doctor/:roomName?doctor=CODE` | Doctor joins specific room (entry from Wix) |
+| `/patient/:roomName?nombre=...&apellido=...&doctor=...` | Patient joins from WhatsApp link |
+| `/panel-medico/patient/:roomName` | Same as `/patient` but routed under panel (also from WhatsApp) |
 
-### Backend
-- `src/index.ts` - Express app setup, serves both API and static frontend
-- `src/services/twilio.service.ts` - Token generation, room management
-- `src/services/session-tracker.service.ts` - Session lifecycle tracking, WhatsApp reporting
-- `src/controllers/video.controller.ts` - Video API endpoints
-- `src/routes/video.routes.ts` - API route definitions
+## Key Files
 
-### Frontend
-- `src/hooks/useVideoRoom.ts` - Core Twilio Video integration logic (connect, disconnect, tracks)
-- `src/hooks/useBackgroundEffects.ts` - Manages blur and virtual background processors
-- `src/components/VideoRoom.tsx` - Main video UI (grid layout, controls)
-- `src/components/VideoControls.tsx` - Bottom control bar (mic, camera, backgrounds, hang up)
-- `src/components/BackgroundControls.tsx` - Dropdown menu for background effects
-- `src/components/Participant.tsx` - Individual participant video/audio rendering
-- `src/pages/DoctorRoomPage.tsx` - Doctor joins pre-generated room from Wix
-- `src/pages/PatientPage.tsx` - Patient joins from WhatsApp link with pre-filled info
-- `src/services/api.service.ts` - Axios client for backend API calls
-- `public/twilio-processors/` - TFLite models and WASM for background effects (DO NOT DELETE)
+### Backend (`backend/src/`)
+- `index.ts` — Express + Socket.io bootstrap, route mounting, static fallback, `postgresService.runMigrations()` on boot
+- `services/twilio.service.ts` — token + room API
+- `services/twilio-voice.service.ts` — outbound voice calls
+- `services/whatsapp.service.ts` — Twilio WhatsApp send (used by session reports + medical panel)
+- `services/postgres.service.ts` — `pg.Pool`, `query()`, migrations
+- `services/medical-panel.service.ts` — daily stats, paginated pending list, search, "no contesta"
+- `services/medical-history.service.ts` — historia clínica read/write with the 27+8 antecedent boolean coercion
+- `services/historia-clinica-postgres.service.ts` — historia clínica DB layer (separate concern from `medical-history.service`)
+- `services/session-tracker.service.ts` — in-memory tracker, sends WhatsApp report on full disconnect
+- `services/telemedicine-socket.service.ts` — Socket.io rooms for postural analysis
+- `services/openai.service.ts` — AI suggestion prompts for clinical fields
+- `controllers/*.controller.ts` — thin HTTP wrappers around the services
+- `helpers/historia-clinica-html.ts` — server-rendered preview HTML for the historia clínica
+- `helpers/phone.helper.ts` — server-side `formatTelefono`
 
-### Wix Integration
-- `backend/wix.json` - Main repeater page (patient list with stats)
-- `backend/panel-consultamedica-wix.json` - Consultation panel lightbox with videollamada button and status indicator
+### Frontend (`frontend/src/`)
+- `App.tsx` — react-router routes
+- `pages/MedicalPanelPage.tsx` — doctor login + patient list (default landing)
+- `pages/HistoriasClinicasPage.tsx` — historia browser
+- `pages/DoctorPage.tsx` / `DoctorRoomPage.tsx` — manual + Wix-routed doctor entry
+- `pages/PatientPage.tsx` — patient entry from WhatsApp link
+- `components/VideoRoom.tsx` — main call layout, hosts `MedicalHistoryPanel` + `PosturalAnalysisModal`
+- `components/Participant.tsx` — track attachment (two-useEffect pattern)
+- `components/MedicalHistoryPanel.tsx` — historia clínica editor; renders "Condiciones Especiales" tags
+- `components/PosturalAnalysisCanvas.tsx` / `PosturalAnalysisModal.tsx` / `PosturalAnalysisPatient.tsx` — postural flow
+- `hooks/useVideoRoom.ts` — Twilio Video lifecycle + tracking event calls
+- `hooks/usePosturalAnalysis.ts` — Socket.io client, `pose-data-update` listener, `hasReceivedFirstFrame`
+- `hooks/useBackgroundEffects.ts` — blur + virtual background processor
+- `services/api.service.ts` — axios client (uses `VITE_API_BASE_URL`)
+- `services/medical-panel.service.ts` — panel-specific axios calls
+- `utils/mediapipe-loader.ts` — lazy MediaPipe load
+- `utils/posturalMetricsFormatter.ts` — formats metrics for the modal/PDF
+- `public/twilio-processors/` — TFLite + WASM, must stay co-located
 
 ## Environment Variables
 
-### Backend (.env)
+### Backend (`.env`)
 ```bash
-# Twilio credentials (required for video calls and WhatsApp)
-TWILIO_ACCOUNT_SID=ACxxxxxx
-TWILIO_AUTH_TOKEN=xxxxxx
-TWILIO_API_KEY_SID=SKxxxxxx
-TWILIO_API_KEY_SECRET=xxxxxx
-
-# Twilio WhatsApp Configuration - Required for session reports and Wix integration
+# Twilio Video + WhatsApp + Voice
+TWILIO_ACCOUNT_SID=ACxxxx
+TWILIO_AUTH_TOKEN=xxxx
+TWILIO_API_KEY_SID=SKxxxx
+TWILIO_API_KEY_SECRET=xxxx
 TWILIO_WHATSAPP_FROM=whatsapp:+3153369631
 TWILIO_WHATSAPP_TEMPLATE_SID=HXc8473cfd60cd378314355e17e736d24d
 
-# Server config
+# PostgreSQL (Digital Ocean managed)
+POSTGRES_HOST=...db.ondigitalocean.com
+POSTGRES_PORT=25060
+POSTGRES_USER=doadmin
+POSTGRES_PASSWORD=...
+POSTGRES_DATABASE=defaultdb
+
+# OpenAI (AI suggestions in historia clínica)
+OPENAI_API_KEY=sk-...
+
+# Server
 PORT=3000
 NODE_ENV=development|production
-ALLOWED_ORIGINS=http://localhost:5173  # Only needed in development
+ALLOWED_ORIGINS=http://localhost:5173   # dev only; in prod everything is same-origin
 ```
 
-### Frontend (.env)
+### Frontend (`.env`)
 ```bash
-# Empty for production (uses relative URLs), localhost:3000 for dev
-VITE_API_BASE_URL=http://localhost:3000  # Development only
+VITE_API_BASE_URL=http://localhost:3000   # dev only; empty/unset in prod
 ```
-
-## URL Patterns
-
-- `/` - Home page (patient or doctor flow selection)
-- `/patient/:roomName?nombre=X&apellido=Y&doctor=Z` - Patient joins room (pre-filled from Wix)
-- `/doctor/:roomName?doctor=CODE` - Doctor joins specific room from Wix panel
-- `/doctor` - Manual doctor room creation page
-
-## Digital Ocean Deployment
-
-Deployment is fully automated via `.do/app.yaml` configuration.
-
-**Build process**:
-1. Digital Ocean runs `Dockerfile` multi-stage build
-2. Stage 1: Builds backend TypeScript
-3. Stage 2: Builds frontend React app
-4. Stage 3: Combines both into single image
-5. Backend serves API on `/api/*` and frontend on `/*`
-
-**Health check**: `GET /health` returns `{"status":"OK",...}`
-
-**Cost**: $5/month (single Basic XXS service)
 
 ## Common Patterns
 
-### Adding a new API endpoint
-1. Add method to appropriate service (`backend/src/services/`)
-2. Add controller method (`backend/src/controllers/`)
-3. Register route (`backend/src/routes/`)
-4. Add API client method (`frontend/src/services/api.service.ts`)
+### Adding a new REST endpoint
+1. Add a method to the relevant service in `backend/src/services/`
+2. Wrap it in `backend/src/controllers/<area>.controller.ts`
+3. Register in `backend/src/routes/<area>.routes.ts`
+4. Mount in `index.ts` if it's a new route group
+5. Expose to the frontend via `frontend/src/services/api.service.ts` or a domain-specific service
 
-### Room name generation
-Always use the pattern: `consulta-${timestamp36}-${random5}` (see `generarNombreSala()` in Wix files)
+### Adding a new Socket.io event
+Extend `telemedicineSocketService` (or a new service) and `initialize(io)` it from `index.ts`. Keep tracker / video / postural concerns separated — don't fan out from a single mega-handler.
 
-### WhatsApp message sending
-Use `sendTextMessage(phoneWithoutPlus, message)` from Wix backend module, NOT WhatsApp Web links.
+### Generating a room name
+`consulta-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`. Keep this consistent across Wix Velo and React (utility in [frontend/src/utils/linkGenerator.ts](frontend/src/utils/linkGenerator.ts)).
 
-### Wix Status Indicators
-When performing async operations in Wix, show user feedback:
+### Querying "today" in PostgreSQL
+Convert to Colombia (UTC-5) before extracting `y/m/d`, then build start/end of day in UTC. Don't trust the server's local TZ.
+
+### Showing async status in Wix
 ```javascript
-// Before operation
 $w('#estadoWhp').text = "📤 ENVIANDO LINK...";
 $w('#estadoWhp').show();
-
-// On success
-$w('#estadoWhp').text = "✅ MENSAJE ENVIADO";
-
-// On error
-$w('#estadoWhp').text = "❌ ERROR AL ENVIAR";
+// ... await sendTextMessage(...)
+$w('#estadoWhp').text = "✅ MENSAJE ENVIADO"; // or "❌ ERROR AL ENVIAR"
 ```
-
-### Wix Data Queries
-Main repeater in `wix.json` displays:
-- **programadosHoy**: Count of patients scheduled today (by `fechaAtencion`)
-- **atendidosHoy**: Count of patients attended today (by `fechaConsulta`)
-- **restantesHoy**: Count scheduled today with empty `fechaConsulta`
-- Patient list filtered by: `medico`, `fechaAtencion` (today), `isEmpty("fechaConsulta")`, sorted ascending
-
-### Critical Wix Events
-- `numeroId_click_1`: Opens consultation panel lightbox
-- `whpTwilio.onClick`: Generates room, sends WhatsApp link, configures doctor button
-- `iniciarConsultaTwilio`: Opens doctor video room (link set dynamically in whpTwilio.onClick)
-
-## Testing Notes
-
-- Backend has Jest configured but tests not yet implemented
-- Frontend has test infrastructure but no test files yet
-- Manual testing workflow: Start backend, start frontend, test video call flow with two browser windows/devices
 
 ## Known Issues and Solutions
 
-### Virtual Backgrounds
-- **Issue**: ERR_NAME_NOT_RESOLVED when using Twilio CDN
-- **Solution**: Assets MUST be hosted locally in `frontend/public/twilio-processors/`
-- **Don't**: Delete or move the `twilio-processors` folder (5.1 MB of TFLite models)
+- **Doctor sees skeleton-loading forever** — patient hasn't emitted the first `pose-data-update`. Check patient browser console for MediaPipe / camera errors. The doctor's "Iniciar Análisis" button is disabled until `isPosturalAnalysisConnected` is true; if it isn't, Socket.io hasn't connected yet (give it 2-3s after entering the room).
+- **Doctor and patient end up in different rooms** — room name was generated in `$w.onReady` (Wix) instead of inside `whpTwilio.onClick`, OR `iniciarConsultaTwilio.link` was set after sending the patient link. Generate once, set the doctor link atomically before any await.
+- **Background blur returns 403** — assets are being fetched from the Twilio CDN. Confirm `assetsPath: '/twilio-processors'` and that the public folder still has the TFLite/WASM bundle.
+- **"Condiciones Especiales" tags missing for a patient** — the `formularios` row uses `'SI'` / `'Sí'` / `'true'`. The boolean coercion in `medical-history.service.ts` must check all four; missing one will silently hide that condition.
+- **`new Date()` shows the wrong day** — production runs in UTC. Always convert to UTC-5 before computing day boundaries.
 
-### WhatsApp Integration
-- **Issue**: Different room names for doctor and patient
-- **Solution**: Generate room name ONCE in onClick, configure both links atomically
-- **Don't**: Generate room in `$w.onReady` or use separate onClick handlers
+## Testing Notes
 
-### Phone Number Format
-- **Issue**: International numbers not recognized
-- **Solution**: Use `formatTelefono()` which supports multiple country codes
-- **Note**: Twilio WhatsApp API accepts numbers with or without `+` prefix (service handles both formats automatically)
+- Jest is configured in backend; no tests written yet.
+- No frontend test runner.
+- Manual testing flow: backend on `:3000`, frontend on `:5173`, two browser windows (one for `/doctor/<room>`, one for `/patient/<room>`), open DevTools on both. Watch for `[Postural Analysis]`, `[Doctor] 📊`, `[Canvas] 🎨` log markers when exercising the postural feature.
+
+## Reference Documents in this Repo
+
+These docs go deeper than this file — read them when working on a specific area:
+
+- [arquitectura-video.md](arquitectura-video.md) — overall architecture write-up
+- [WIX_INTEGRATION.md](WIX_INTEGRATION.md) — full Wix integration patterns
+- [PANEL-MEDICO.md](PANEL-MEDICO.md) — medical panel design
+- [MIGRACION-WIX-POSTGRES.md](MIGRACION-WIX-POSTGRES.md) — schema, queries, TZ handling
+- [DIAGNOSTICO_ANALISIS_POSTURAL.md](DIAGNOSTICO_ANALISIS_POSTURAL.md) — postural analysis log conventions and failure modes
+- [FUNCIONALIDAD_SNAPSHOTS_MULTIPLES.md](FUNCIONALIDAD_SNAPSHOTS_MULTIPLES.md) — snapshot/PDF export internals
+- [CONDICIONES_ESPECIALES.md](CONDICIONES_ESPECIALES.md) — antecedent flag coercion details
+- [README-TELEMEDICINA.md](README-TELEMEDICINA.md) — telemedicine flow user-facing
+- [.do/app.yaml](.do/app.yaml) + Dockerfile — deployment configuration

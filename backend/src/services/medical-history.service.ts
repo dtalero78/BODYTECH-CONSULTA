@@ -186,7 +186,9 @@ const EDITABLE_FIELD_TYPE_MAP: Readonly<Record<string, EditableFieldType>> = EDI
   {} as Record<string, EditableFieldType>
 );
 
-const SNAKE_KEYS = new Set<string>(EDITABLE_FIELD_DEFS.filter((d) => d.field.includes('_')).map((d) => d.field));
+// Fix bug #1: incluir TODOS los campos editables, no solo los snake_case con underscore.
+// Antes el filtro excluía `municipio`, `ocupacion`, `eps` etc. del spread y el GET devolvía null.
+const SNAKE_KEYS = new Set<string>(EDITABLE_FIELD_DEFS.map((d) => d.field));
 
 function snakeToCamel(s: string): string {
   return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
@@ -478,7 +480,9 @@ class MedicalHistoryService {
           email: row.f_email || row.email,
           edad: row.f_edad,
           genero: row.f_genero,
-          estadoCivil: row.f_estado_civil,
+          // Fix bug #2: priorizar nueva columna HistoriaClinica.estado_civil sobre legacy formularios.f_estado_civil.
+          // El spread `extra` ya pone estadoCivil desde row.estado_civil; este explicit mapping lo respeta y solo cae al legacy si la nueva está null.
+          estadoCivil: row.estado_civil ?? row.f_estado_civil,
           hijos: row.f_hijos?.toString(),
           ejercicio: row.f_ejercicio,
           foto: row.f_foto,

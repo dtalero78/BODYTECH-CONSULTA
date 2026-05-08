@@ -110,17 +110,20 @@ function CalcAutosave({
   historiaId,
   field,
   value,
+  serverValue,
   onPatchLocal,
 }: {
   historiaId: string | undefined;
   field: string;
   value: string | null;
+  serverValue?: unknown;
   onPatchLocal: (field: string, value: unknown) => void;
 }) {
   useFieldAutoSave({
     historiaId,
     field,
     value,
+    serverValue,
     onSaved: onPatchLocal,
   });
   return null;
@@ -403,6 +406,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
               historiaId={historiaId}
               field="downton_riesgo"
               value={downtonCat}
+              serverValue={data?.downtonRiesgo ?? null}
               onPatchLocal={onPatchLocal}
             />
           </div>
@@ -473,6 +477,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
             historiaId={historiaId}
             field="acsm_riesgo"
             value={acsmCat}
+            serverValue={data?.acsmRiesgo ?? null}
             onPatchLocal={onPatchLocal}
           />
         </div>
@@ -544,6 +549,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
             historiaId={historiaId}
             field="riesgo_final"
             value={riesgoFinal}
+            serverValue={data?.riesgoFinal ?? null}
             onPatchLocal={onPatchLocal}
           />
         </div>

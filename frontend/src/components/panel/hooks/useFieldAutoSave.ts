@@ -8,13 +8,14 @@ interface UseFieldAutoSaveOptions {
   value: unknown;
   delay?: number;
   onSaved?: (field: string, value: unknown) => void;
+  serverValue?: unknown;
 }
 
 /**
  * Wrapper de useAutoSave que reporta su estado al SaveContext del orchestrator.
  */
-export function useFieldAutoSave({ historiaId, field, value, delay, onSaved }: UseFieldAutoSaveOptions) {
-  const status = useAutoSave({ historiaId, field, value, delay, onSaved });
+export function useFieldAutoSave({ historiaId, field, value, delay, onSaved, serverValue }: UseFieldAutoSaveOptions) {
+  const status = useAutoSave({ historiaId, field, value, delay, onSaved, serverValue });
   const { report, registerRetry } = useSaveCtx();
 
   useEffect(() => {

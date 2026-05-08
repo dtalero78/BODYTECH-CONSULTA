@@ -16,6 +16,13 @@ interface UseAutoSaveOptions {
   onSaved?: (field: string, value: unknown) => void;
   /** Si está deshabilitado, no dispara save (útil para skip al primer mount). */
   enabled?: boolean;
+  /**
+   * Para campos calculados: valor actual en DB. Cuando se provee, las refs de
+   * "valor inicial" se anclan a este valor en vez del valor computado, de modo
+   * que si el valor calculado difiere del DB en el primer render se dispara
+   * PATCH inmediatamente (con debounce normal).
+   */
+  serverValue?: unknown;
 }
 
 /**
@@ -32,6 +39,7 @@ export function useAutoSave({
   delay = 800,
   onSaved,
   enabled = true,
+  serverValue,
 }: UseAutoSaveOptions): SaveStatus & { retry: () => void } {
   const [status, setStatus] = useState<SaveStatus>({
     saving: false,
@@ -39,9 +47,13 @@ export function useAutoSave({
     error: null,
   });
 
+  // Para campos calculados que ya tienen un valor en el primer render: anclar
+  // las refs al valor del servidor (serverValue) para que, si el calculado
+  // difiere del DB, se dispare PATCH en el primer render (no se omita).
+  const anchor = serverValue !== undefined ? serverValue : value;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialValueRef = useRef<unknown>(value);
-  const lastSentValueRef = useRef<unknown>(value);
+  const initialValueRef = useRef<unknown>(anchor);
+  const lastSentValueRef = useRef<unknown>(anchor);
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
 

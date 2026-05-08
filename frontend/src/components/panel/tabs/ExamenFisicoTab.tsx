@@ -163,17 +163,20 @@ function CalcAutosave({
   historiaId,
   field,
   value,
+  serverValue,
   onPatchLocal,
 }: {
   historiaId: string | undefined;
   field: string;
   value: number | string | null;
+  serverValue?: unknown;
   onPatchLocal: (field: string, value: unknown) => void;
 }) {
   useFieldAutoSave({
     historiaId,
     field,
     value,
+    serverValue,
     onSaved: onPatchLocal,
   });
   return null;
@@ -401,6 +404,7 @@ export function ExamenFisicoTab({
             historiaId={historiaId}
             field="cc_imc_nuevo"
             value={imcNuevoCalc}
+            serverValue={data?.ccImcNuevo ?? null}
             onPatchLocal={onPatchLocal}
           />
 
@@ -606,6 +610,7 @@ export function ExamenFisicoTab({
                 historiaId={historiaId}
                 field="fcr"
                 value={fcrCalc}
+                serverValue={data?.fcr ?? null}
                 onPatchLocal={onPatchLocal}
               />
             )}

@@ -6,7 +6,7 @@ import { Participant } from './Participant';
 import { VideoControls } from './VideoControls';
 import { PosturalAnalysisModal } from './PosturalAnalysisModal';
 import { PosturalAnalysisPatient } from './PosturalAnalysisPatient';
-import { MedicalHistoryPanel } from './MedicalHistoryPanel';
+import { MedicalConsultationPanel } from './panel/MedicalConsultationPanel';
 
 interface VideoRoomProps {
   identity: string;
@@ -20,8 +20,7 @@ interface VideoRoomProps {
 
 export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, onLeave }: VideoRoomProps) => {
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
-  const [appendToObservacionesFunc, setAppendToObservacionesFunc] = useState<((text: string) => void) | null>(null);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [isPanelMaxed, setIsPanelMaxed] = useState(false);
 
   const {
     localParticipant,
@@ -195,113 +194,75 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
 
   const remoteParticipantArray = Array.from(remoteParticipants.values());
 
-  return (
-    <div className="min-h-screen bg-[#0b141a] flex">
-      {/* Panel lateral de Historia Clínica - Siempre visible para doctores */}
-      {role === 'doctor' && historiaId && (
-        <div
-          className="fixed top-0 right-0 h-full bg-[#1f2c34] shadow-2xl z-50 transition-all duration-300"
-          style={{ width: isHistoryExpanded ? '95vw' : '820px', maxWidth: '95vw' }}
-        >
+  // Doctor con historiaId → layout 25/75 con panel de consulta médica.
+  const showPanel = role === 'doctor' && !!historiaId;
+
+  // Bloque de columna de video (reusable entre estados normal y maxed).
+  const videoColumn = (
+    <div className="relative w-full h-full bg-[#0b141a] flex flex-col overflow-hidden">
+      {/* Header tipo WhatsApp — solo para vista paciente o cuando no hay panel */}
+      {!showPanel && (
+        <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">
           <button
-            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-            className="absolute top-4 left-2 z-10 bg-[#00a884] hover:bg-[#008f6f] text-white rounded-full p-2 shadow-lg transition"
-            title={isHistoryExpanded ? 'Contraer panel' : 'Expandir panel'}
+            onClick={handleLeave}
+            className="text-white p-2 hover:bg-white/10 rounded-full transition"
+            aria-label="Volver"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isHistoryExpanded ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-              )}
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <MedicalHistoryPanel
-            historiaId={historiaId}
-            onAppendToObservaciones={(func) => setAppendToObservacionesFunc(() => func)}
-          />
+          <div className="flex-1 flex items-center justify-center gap-2">
+            <img src="/bodyLogo.jpg" alt="BSL" className="h-8 w-auto" />
+            <div className="flex items-center gap-1 text-xs text-gray-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span>End-to-end Encrypted</span>
+            </div>
+          </div>
+          <button className="text-white p-2 hover:bg-white/10 rounded-full transition" aria-label="Información">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
         </div>
       )}
 
-      {/* Contenedor principal de la videollamada */}
-      <div
-        className="flex-1 flex flex-col transition-all duration-300"
-        style={
-          role === 'doctor' && historiaId
-            ? { paddingRight: isHistoryExpanded ? '95vw' : '820px', maxWidth: '100vw' }
-            : undefined
-        }
-      >
-      {/* Header tipo WhatsApp */}
-      <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">
-        {/* Back button */}
-        <button
-          onClick={handleLeave}
-          className="text-white p-2 hover:bg-white/10 rounded-full transition"
-          aria-label="Volver"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        {/* Logo + Encryption badge */}
-        <div className="flex-1 flex items-center justify-center gap-2">
-          <img src="/bodyLogo.jpg" alt="BSL" className="h-8 w-auto" />
-          <div className="flex items-center gap-1 text-xs text-gray-400">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span>End-to-end Encrypted</span>
-          </div>
-        </div>
-
-        {/* Info button */}
-        <button
-          className="text-white p-2 hover:bg-white/10 rounded-full transition"
-          aria-label="Información"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Video Grid - Full screen with better mobile layout */}
       <div className="flex-1 relative overflow-hidden bg-[#0b141a]">
-        {/* Remote participant (large) - ocupa TODO el espacio disponible */}
-        {/* Cuando el modal de análisis postural está abierto, el video se muestra flotante */}
         {remoteParticipantArray.length > 0 ? (
-          <div className={`
-            ${isPosturalAnalysisOpen
-              ? 'fixed bottom-20 right-6 w-80 h-60 z-[55] rounded-xl overflow-hidden shadow-2xl border-2 border-green-500'
-              : 'absolute inset-0 w-full h-full'
+          <div
+            className={
+              isPosturalAnalysisOpen
+                ? 'fixed bottom-20 right-6 w-80 h-60 z-[55] rounded-xl overflow-hidden shadow-2xl border-2 border-green-500'
+                : 'absolute inset-0 w-full h-full'
             }
-          `}>
+          >
             <Participant participant={remoteParticipantArray[0]} />
           </div>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b141a]">
             <div className="text-center">
               <img src="/bodyLogo.jpg" alt="BSL" className="h-16 w-auto mx-auto mb-4 opacity-50" />
-              <p className="text-gray-500">Esperando participantes...</p>
+              <p className="text-gray-500">Esperando paciente...</p>
             </div>
           </div>
         )}
-
-        {/* Local participant (floating) - MÁS GRANDE en móvil */}
         {localParticipant && (
-          <div className={`absolute top-3 ${role === 'doctor' ? 'left-3' : 'right-3'} w-36 h-48 sm:w-40 sm:h-56 md:w-32 md:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/30 z-10`}>
+          <div
+            className={`absolute top-3 ${role === 'doctor' ? 'left-3' : 'right-3'} w-28 h-36 sm:w-32 sm:h-44 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/30 z-10`}
+          >
             <Participant participant={localParticipant} isLocal={true} />
           </div>
         )}
-
-        {/* Additional remote participants (if more than 1) */}
         {remoteParticipantArray.length > 1 && (
           <div className="absolute bottom-24 left-0 right-0 px-4 z-10">
             <div className="flex gap-2 justify-center overflow-x-auto pb-2">
               {remoteParticipantArray.slice(1).map((participant) => (
-                <div key={participant.sid} className="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 border-2 border-gray-700">
+                <div
+                  key={participant.sid}
+                  className="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 border-2 border-gray-700"
+                >
                   <Participant participant={participant} />
                 </div>
               ))}
@@ -310,7 +271,6 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         )}
       </div>
 
-      {/* Controls tipo WhatsApp */}
       <VideoControls
         isAudioEnabled={isAudioEnabled}
         isVideoEnabled={isVideoEnabled}
@@ -326,33 +286,88 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         showPosturalAnalysis={role === 'doctor'}
         onOpenPosturalAnalysis={handleOpenPosturalAnalysis}
       />
-
-      {/* Postural Analysis Modal - Only for doctors */}
-      {role === 'doctor' && (
-        <PosturalAnalysisModal
-          isOpen={isPosturalAnalysisOpen}
-          onClose={handleClosePosturalAnalysis}
-          roomName={roomName}
-          sessionActive={sessionActive}
-          patientConnected={patientConnected}
-          latestPoseData={latestPoseData}
-          hasReceivedFirstFrame={hasReceivedFirstFrame}
-          onStartSession={startSession}
-          onEndSession={endSession}
-          onAppendToObservaciones={appendToObservacionesFunc}
-        />
-      )}
-
-      {/* Postural Analysis Patient - Auto-activates when doctor starts session */}
-      {role === 'patient' && sessionActive && (
-        <PosturalAnalysisPatient
-          onPoseData={sendPoseData}
-          isActive={sessionActive}
-        />
-      )}
-      </div>
-      {/* Cierre del contenedor principal de videollamada */}
     </div>
-    // Cierre del contenedor flex principal
+  );
+
+  // Vista paciente o doctor sin historiaId → layout legacy (no panel)
+  if (!showPanel) {
+    return (
+      <div className="min-h-screen bg-[#0b141a] flex">
+        <div className="flex-1 flex flex-col">{videoColumn}</div>
+        {role === 'doctor' && (
+          <PosturalAnalysisModal
+            isOpen={isPosturalAnalysisOpen}
+            onClose={handleClosePosturalAnalysis}
+            roomName={roomName}
+            sessionActive={sessionActive}
+            patientConnected={patientConnected}
+            latestPoseData={latestPoseData}
+            hasReceivedFirstFrame={hasReceivedFirstFrame}
+            onStartSession={startSession}
+            onEndSession={endSession}
+            onAppendToObservaciones={null}
+          />
+        )}
+        {role === 'patient' && sessionActive && (
+          <PosturalAnalysisPatient onPoseData={sendPoseData} isActive={sessionActive} />
+        )}
+      </div>
+    );
+  }
+
+  // Doctor con panel — layout 25/75 con toggle Maximize2
+  return (
+    <div className={`h-screen w-screen bg-[#0b141a] flex overflow-hidden ${isPanelMaxed ? 'panel-maxed' : ''}`}>
+      {/* Columna de video (25% por default, 0 cuando maxed) */}
+      <aside
+        className="relative bg-[#070f12] border-r border-[#324049] transition-[flex-basis,width,opacity] duration-300 ease-out"
+        style={{
+          flex: isPanelMaxed ? '0 0 0' : '0 0 max(320px, 25vw)',
+          width: isPanelMaxed ? '0' : undefined,
+          visibility: isPanelMaxed ? 'hidden' : 'visible',
+          pointerEvents: isPanelMaxed ? 'none' : 'auto',
+        }}
+      >
+        {videoColumn}
+      </aside>
+
+      {/* Panel principal */}
+      <main className="flex-1 min-w-0 relative">
+        <MedicalConsultationPanel
+          historiaId={historiaId!}
+          isMaxed={isPanelMaxed}
+          onToggleMaxed={() => setIsPanelMaxed((p) => !p)}
+        />
+      </main>
+
+      {/* Float thumbnail del video remoto cuando el panel está maximizado */}
+      {isPanelMaxed && (
+        <div
+          className="fixed bottom-6 right-6 w-72 h-44 z-[55] rounded-2xl overflow-hidden border-2 border-[#00a884] shadow-2xl bg-[#070f12]"
+        >
+          {remoteParticipantArray.length > 0 ? (
+            <Participant participant={remoteParticipantArray[0]} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
+              Esperando paciente...
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Postural Analysis Modal */}
+      <PosturalAnalysisModal
+        isOpen={isPosturalAnalysisOpen}
+        onClose={handleClosePosturalAnalysis}
+        roomName={roomName}
+        sessionActive={sessionActive}
+        patientConnected={patientConnected}
+        latestPoseData={latestPoseData}
+        hasReceivedFirstFrame={hasReceivedFirstFrame}
+        onStartSession={startSession}
+        onEndSession={endSession}
+        onAppendToObservaciones={null}
+      />
+    </div>
   );
 };

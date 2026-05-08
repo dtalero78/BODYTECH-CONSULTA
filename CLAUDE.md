@@ -250,3 +250,14 @@ These docs go deeper than this file — read them when working on a specific are
 - [CONDICIONES_ESPECIALES.md](CONDICIONES_ESPECIALES.md) — antecedent flag coercion details
 - [README-TELEMEDICINA.md](README-TELEMEDICINA.md) — telemedicine flow user-facing
 - [.do/app.yaml](.do/app.yaml) + Dockerfile — deployment configuration
+
+## Phase 1 — refactor structure (panel de consulta médica)
+
+- Panel descompuesto en `frontend/src/components/panel/` (orchestrator + 12 componentes + tabs/ + hooks/ + types.ts).
+- Layout 75/25 en `VideoRoom.tsx` con toggle Maximize2/Minimize2 (atajos `M` / `N`).
+- Auto-save: hook `useAutoSave` con debounce 800ms → `PATCH /api/video/medical-history/:id/field`. Aggregator de estado vía `SaveContext`.
+- Schema: ~150 columnas snake_case nuevas en `HistoriaClinica` (idempotente con `ADD COLUMN IF NOT EXISTS`, en `postgres.service.ts → runMigrations()`).
+- Whitelist de campos editables en `medical-history.service.ts` (constante exportada `EDITABLE_FIELDS` + tipos por campo). Coerción de booleanos consistente con el resto del proyecto (`true | 'true' | 'Sí' | 'SI'`).
+- POC tab Datos Básicos completo (3 cards: Identidad, Residencia, Información Básica). El resto de tabs son placeholders.
+- `MedicalHistoryPanel.tsx` viejo queda huérfano en disco para referencia Phase 2; ya no se importa desde `VideoRoom.tsx`.
+- Phase 2 (anamnesis, examen físico, riesgo) y Phase 3 (intervención, conducta, observaciones, polish) son runs separados.

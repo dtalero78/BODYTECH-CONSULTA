@@ -13,3 +13,48 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.font-figtree {
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* ============================================
+   Animaciones del panel de consulta médica (Phase 1)
+============================================ */
+@keyframes panelScaleY {
+  from {
+    transform: translateY(8px) scaleY(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes panelFabIn {
+  from {
+    transform: scale(0.85) translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Scrollbars del panel — coherente con el design system WhatsApp-like */
+.font-figtree *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.font-figtree *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.font-figtree *::-webkit-scrollbar-thumb {
+  background: #2c3942;
+  border-radius: 4px;
+}
+.font-figtree *::-webkit-scrollbar-thumb:hover {
+  background: #3b4a54;
+}

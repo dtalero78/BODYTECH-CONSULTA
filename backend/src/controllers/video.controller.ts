@@ -470,6 +470,50 @@ class VideoController {
   }
 
   /**
+   * Actualizar UN solo campo de la historia clínica (auto-save por field).
+   * PATCH /api/video/medical-history/:historiaId/field
+   * Body: { field: string, value: string | number | boolean | null }
+   *
+   * - 200 + { success: true, field, value, updatedAt } si se guardó
+   * - 400 INVALID_FIELD si `field` no está en la whitelist
+   * - 404 NOT_FOUND si el _id no existe
+   * - 500 DB_ERROR para errores internos
+   */
+  async updateMedicalHistoryField(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+      const { field, value } = req.body ?? {};
+
+      if (!historiaId) {
+        res.status(400).json({ success: false, error: 'MISSING_ID', code: 'MISSING_ID' });
+        return;
+      }
+
+      const result = await medicalHistoryService.updateField(historiaId, field, value);
+
+      if (result.success) {
+        res.status(200).json(result);
+        return;
+      }
+
+      const httpCode = result.code ?? 400;
+      res.status(httpCode).json({
+        success: false,
+        error: result.error || 'UPDATE_FAILED',
+        code: result.error || 'UPDATE_FAILED',
+      });
+    } catch (error) {
+      console.error('Error in updateMedicalHistoryField:', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        code: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
    * Generar sugerencias médicas con IA
    * POST /api/video/ai-suggestions
    * Body: { patientData: PatientData }

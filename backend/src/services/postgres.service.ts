@@ -151,8 +151,6 @@ class PostgresService {
           "datosNutricionales" JSONB DEFAULT NULL
         )
       `);
-      console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
-
       // Agregar columna datosNutricionales si no existe (para DBs existentes)
       await this.query(`
         DO $$
@@ -165,6 +163,167 @@ class PostgresService {
           END IF;
         END $$;
       `);
+
+      // ===== Phase 1 — Foundation: ampliación del esquema HistoriaClinica =====
+      // Convención: columnas nuevas en snake_case con DOUBLE QUOTES.
+      // Postgres >= 9.6 soporta ADD COLUMN IF NOT EXISTS (idempotente).
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          -- Datos Básicos
+          ADD COLUMN IF NOT EXISTS "genero_biologico" VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS "identidad_genero" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "grupo_sanguineo" VARCHAR(5),
+          ADD COLUMN IF NOT EXISTS "fecha_nacimiento" DATE,
+          ADD COLUMN IF NOT EXISTS "comunidad_etnica" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "pertenencia_etnica" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "estado_civil" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "pais_residencia" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "municipio" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "zona_territorial" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "telefono_residencia" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "contacto_emergencia_nombre" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "contacto_emergencia_telefono" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "contacto_emergencia_parentesco" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "ocupacion" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "tipo_vinculacion" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "entidad_territorial" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "categoria_discapacidad" VARCHAR(30),
+
+          -- Anamnesis
+          ADD COLUMN IF NOT EXISTS "objetivo_bodytech" TEXT,
+          ADD COLUMN IF NOT EXISTS "modalidad" VARCHAR(40) DEFAULT 'Intramural',
+          ADD COLUMN IF NOT EXISTS "servicio_atencion" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "lugar_atencion" VARCHAR(40) DEFAULT 'Institucional',
+          ADD COLUMN IF NOT EXISTS "puerta_entrada" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "causa" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "tipo_consulta" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "motivo_consulta_texto" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_patologico_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_patologico_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_patologico_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_quirurgico_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_quirurgico_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_quirurgico_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_farmacologico_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_farmacologico_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_farmacologico_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_alergicos_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_alergicos_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_alergicos_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "ant_familiares_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "ant_familiares_tipo" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "ant_familiares_obs" TEXT,
+          ADD COLUMN IF NOT EXISTS "embarazo_actual" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "partos" INTEGER,
+          ADD COLUMN IF NOT EXISTS "cesareas" INTEGER,
+          ADD COLUMN IF NOT EXISTS "abortos" INTEGER,
+          ADD COLUMN IF NOT EXISTS "fum" DATE,
+          ADD COLUMN IF NOT EXISTS "planificacion" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "actividad_frecuencia" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "actividad_duracion_min" INTEGER,
+          ADD COLUMN IF NOT EXISTS "actividad_fuerza_semanal" INTEGER,
+
+          -- Clasificación de Riesgo (Downton)
+          ADD COLUMN IF NOT EXISTS "downton_caidas" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_medicamentos" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_deficits_sensoriales" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_estado_mental" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_deambulacion" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_neurologico" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_cardiovascular" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_visual" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_auditivo" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_marcha" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_riesgo" VARCHAR(20),
+
+          -- Clasificación de Riesgo (ACSM)
+          ADD COLUMN IF NOT EXISTS "acsm_edad_hombre" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_edad_mujer" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_familiar_cardiaco" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_tabaquismo" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_sedentarismo" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_obesidad" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_hipertension" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_dislipidemia" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_prediabetes" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_diabetes" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_signos_sintomas" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_enfermedad_conocida" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_riesgo" VARCHAR(20),
+
+          -- Clasificación de Riesgo (Bodytech)
+          ADD COLUMN IF NOT EXISTS "bt_factor_1" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "bt_factor_2" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "bt_factor_3" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "riesgo_final" VARCHAR(20),
+
+          -- Examen físico — composición corporal
+          ADD COLUMN IF NOT EXISTS "cc_peso_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_peso_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_estatura_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_estatura_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_masa_muscular_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_masa_muscular_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_imc_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_imc_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_imm_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_imm_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_grasa_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_grasa_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_perimetro_abdominal_anterior" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_perimetro_abdominal_nuevo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "cc_observacion" TEXT,
+
+          -- Examen físico — postura y hallazgos
+          ADD COLUMN IF NOT EXISTS "postura_espalda" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "postura_cad_sup" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "postura_cad_inf" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "hallazgos_descripcion" TEXT,
+          ADD COLUMN IF NOT EXISTS "hallazgos_stretching" TEXT,
+          ADD COLUMN IF NOT EXISTS "hallazgos_observaciones" TEXT,
+          ADD COLUMN IF NOT EXISTS "hallazgos_dolor" TEXT,
+          ADD COLUMN IF NOT EXISTS "mov_tren_superior" VARCHAR(60),
+
+          -- Examen físico — fuerza
+          ADD COLUMN IF NOT EXISTS "fuerza_superior" INTEGER,
+          ADD COLUMN IF NOT EXISTS "fuerza_abdominal" INTEGER,
+          ADD COLUMN IF NOT EXISTS "fuerza_inferior" INTEGER,
+          ADD COLUMN IF NOT EXISTS "tecnica_sentadilla" TEXT,
+          ADD COLUMN IF NOT EXISTS "estabilidad_plancha" INTEGER,
+
+          -- Examen físico — signos vitales
+          ADD COLUMN IF NOT EXISTS "fcr" INTEGER,
+          ADD COLUMN IF NOT EXISTS "fcm" INTEGER,
+          ADD COLUMN IF NOT EXISTS "tas" INTEGER,
+          ADD COLUMN IF NOT EXISTS "tad" INTEGER,
+
+          -- Examen físico — equilibrio / marcha
+          ADD COLUMN IF NOT EXISTS "equilibrio_unipodal" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "riesgo_marcha" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "marcha_estacionaria" TEXT,
+          ADD COLUMN IF NOT EXISTS "riesgo_om" VARCHAR(20),
+
+          -- Intervención y procedimiento
+          ADD COLUMN IF NOT EXISTS "intervencion_analisis" TEXT,
+          ADD COLUMN IF NOT EXISTS "intervencion_tipo_tecnologia" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "intervencion_educacion_si" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "intervencion_educacion_tipo" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "intervencion_tipo_meta" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "intervencion_meta_texto" TEXT,
+          ADD COLUMN IF NOT EXISTS "dx_tecnologia_salud" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "dx_procedimiento" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "dx_tipo" VARCHAR(60),
+
+          -- Conducta
+          ADD COLUMN IF NOT EXISTS "aptitud" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "control_fecha" DATE,
+          ADD COLUMN IF NOT EXISTS "exoneracion_programa" BOOLEAN DEFAULT FALSE
+      `);
+
+      console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);
     }

@@ -4,6 +4,250 @@ import postgresService from './postgres.service';
 import whatsappService from './whatsapp.service';
 import { generarHTMLHistoriaClinica } from '../helpers/historia-clinica-html';
 
+// ============================================
+// Phase 1 — Foundation: whitelist de campos editables vía PATCH
+// La whitelist garantiza que el nombre de columna que se concatena en el
+// SQL del UPDATE provenga siempre de una constante hardcodeada.
+// ============================================
+
+export type EditableFieldType = 'string' | 'number' | 'boolean' | 'date';
+
+interface EditableFieldDef {
+  field: string;
+  type: EditableFieldType;
+}
+
+const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
+  // ---- Campos médicos legacy (camelCase, ya existían) ----
+  { field: 'mdAntecedentes', type: 'string' },
+  { field: 'mdObsParaMiDocYa', type: 'string' },
+  { field: 'mdObservacionesCertificado', type: 'string' },
+  { field: 'mdRecomendacionesMedicasAdicionales', type: 'string' },
+  { field: 'mdConceptoFinal', type: 'string' },
+  { field: 'mdDx1', type: 'string' },
+  { field: 'mdDx2', type: 'string' },
+  { field: 'talla', type: 'string' },
+  { field: 'peso', type: 'string' },
+  { field: 'cargo', type: 'string' },
+  { field: 'motivoConsulta', type: 'string' },
+  { field: 'diagnostico', type: 'string' },
+  { field: 'tratamiento', type: 'string' },
+  { field: 'eps', type: 'string' },
+
+  // ---- Datos Básicos (snake_case, nuevos) ----
+  { field: 'genero_biologico', type: 'string' },
+  { field: 'identidad_genero', type: 'string' },
+  { field: 'grupo_sanguineo', type: 'string' },
+  { field: 'fecha_nacimiento', type: 'date' },
+  { field: 'comunidad_etnica', type: 'string' },
+  { field: 'pertenencia_etnica', type: 'string' },
+  { field: 'estado_civil', type: 'string' },
+  { field: 'pais_residencia', type: 'string' },
+  { field: 'municipio', type: 'string' },
+  { field: 'zona_territorial', type: 'string' },
+  { field: 'telefono_residencia', type: 'string' },
+  { field: 'contacto_emergencia_nombre', type: 'string' },
+  { field: 'contacto_emergencia_telefono', type: 'string' },
+  { field: 'contacto_emergencia_parentesco', type: 'string' },
+  { field: 'ocupacion', type: 'string' },
+  { field: 'tipo_vinculacion', type: 'string' },
+  { field: 'entidad_territorial', type: 'string' },
+  { field: 'categoria_discapacidad', type: 'string' },
+
+  // ---- Anamnesis ----
+  { field: 'objetivo_bodytech', type: 'string' },
+  { field: 'modalidad', type: 'string' },
+  { field: 'servicio_atencion', type: 'string' },
+  { field: 'lugar_atencion', type: 'string' },
+  { field: 'puerta_entrada', type: 'string' },
+  { field: 'causa', type: 'string' },
+  { field: 'tipo_consulta', type: 'string' },
+  { field: 'motivo_consulta_texto', type: 'string' },
+  { field: 'ant_patologico_flag', type: 'boolean' },
+  { field: 'ant_patologico_tipo', type: 'string' },
+  { field: 'ant_patologico_obs', type: 'string' },
+  { field: 'ant_quirurgico_flag', type: 'boolean' },
+  { field: 'ant_quirurgico_tipo', type: 'string' },
+  { field: 'ant_quirurgico_obs', type: 'string' },
+  { field: 'ant_osteomuscular_flag', type: 'boolean' },
+  { field: 'ant_osteomuscular_tipo', type: 'string' },
+  { field: 'ant_osteomuscular_obs', type: 'string' },
+  { field: 'ant_farmacologico_flag', type: 'boolean' },
+  { field: 'ant_farmacologico_tipo', type: 'string' },
+  { field: 'ant_farmacologico_obs', type: 'string' },
+  { field: 'ant_alergicos_flag', type: 'boolean' },
+  { field: 'ant_alergicos_tipo', type: 'string' },
+  { field: 'ant_alergicos_obs', type: 'string' },
+  { field: 'ant_familiares_flag', type: 'boolean' },
+  { field: 'ant_familiares_tipo', type: 'string' },
+  { field: 'ant_familiares_obs', type: 'string' },
+  { field: 'embarazo_actual', type: 'boolean' },
+  { field: 'partos', type: 'number' },
+  { field: 'cesareas', type: 'number' },
+  { field: 'abortos', type: 'number' },
+  { field: 'fum', type: 'date' },
+  { field: 'planificacion', type: 'string' },
+  { field: 'actividad_frecuencia', type: 'string' },
+  { field: 'actividad_duracion_min', type: 'number' },
+  { field: 'actividad_fuerza_semanal', type: 'number' },
+
+  // ---- Clasificación de Riesgo ----
+  { field: 'downton_caidas', type: 'boolean' },
+  { field: 'downton_medicamentos', type: 'boolean' },
+  { field: 'downton_deficits_sensoriales', type: 'boolean' },
+  { field: 'downton_estado_mental', type: 'boolean' },
+  { field: 'downton_deambulacion', type: 'boolean' },
+  { field: 'downton_neurologico', type: 'boolean' },
+  { field: 'downton_cardiovascular', type: 'boolean' },
+  { field: 'downton_visual', type: 'boolean' },
+  { field: 'downton_auditivo', type: 'boolean' },
+  { field: 'downton_marcha', type: 'boolean' },
+  { field: 'downton_riesgo', type: 'string' },
+  { field: 'acsm_edad_hombre', type: 'boolean' },
+  { field: 'acsm_edad_mujer', type: 'boolean' },
+  { field: 'acsm_familiar_cardiaco', type: 'boolean' },
+  { field: 'acsm_tabaquismo', type: 'boolean' },
+  { field: 'acsm_sedentarismo', type: 'boolean' },
+  { field: 'acsm_obesidad', type: 'boolean' },
+  { field: 'acsm_hipertension', type: 'boolean' },
+  { field: 'acsm_dislipidemia', type: 'boolean' },
+  { field: 'acsm_prediabetes', type: 'boolean' },
+  { field: 'acsm_diabetes', type: 'boolean' },
+  { field: 'acsm_signos_sintomas', type: 'boolean' },
+  { field: 'acsm_enfermedad_conocida', type: 'boolean' },
+  { field: 'acsm_riesgo', type: 'string' },
+  { field: 'bt_factor_1', type: 'boolean' },
+  { field: 'bt_factor_2', type: 'boolean' },
+  { field: 'bt_factor_3', type: 'boolean' },
+  { field: 'riesgo_final', type: 'string' },
+
+  // ---- Examen físico ----
+  { field: 'cc_peso_anterior', type: 'number' },
+  { field: 'cc_peso_nuevo', type: 'number' },
+  { field: 'cc_estatura_anterior', type: 'number' },
+  { field: 'cc_estatura_nuevo', type: 'number' },
+  { field: 'cc_masa_muscular_anterior', type: 'number' },
+  { field: 'cc_masa_muscular_nuevo', type: 'number' },
+  { field: 'cc_imc_anterior', type: 'number' },
+  { field: 'cc_imc_nuevo', type: 'number' },
+  { field: 'cc_imm_anterior', type: 'number' },
+  { field: 'cc_imm_nuevo', type: 'number' },
+  { field: 'cc_grasa_anterior', type: 'number' },
+  { field: 'cc_grasa_nuevo', type: 'number' },
+  { field: 'cc_perimetro_abdominal_anterior', type: 'number' },
+  { field: 'cc_perimetro_abdominal_nuevo', type: 'number' },
+  { field: 'cc_observacion', type: 'string' },
+  { field: 'postura_espalda', type: 'string' },
+  { field: 'postura_cad_sup', type: 'string' },
+  { field: 'postura_cad_inf', type: 'string' },
+  { field: 'hallazgos_descripcion', type: 'string' },
+  { field: 'hallazgos_stretching', type: 'string' },
+  { field: 'hallazgos_observaciones', type: 'string' },
+  { field: 'hallazgos_dolor', type: 'string' },
+  { field: 'mov_tren_superior', type: 'string' },
+  { field: 'fuerza_superior', type: 'number' },
+  { field: 'fuerza_abdominal', type: 'number' },
+  { field: 'fuerza_inferior', type: 'number' },
+  { field: 'tecnica_sentadilla', type: 'string' },
+  { field: 'estabilidad_plancha', type: 'number' },
+  { field: 'fcr', type: 'number' },
+  { field: 'fcm', type: 'number' },
+  { field: 'tas', type: 'number' },
+  { field: 'tad', type: 'number' },
+  { field: 'equilibrio_unipodal', type: 'string' },
+  { field: 'riesgo_marcha', type: 'string' },
+  { field: 'marcha_estacionaria', type: 'string' },
+  { field: 'riesgo_om', type: 'string' },
+
+  // ---- Intervención y procedimiento ----
+  { field: 'intervencion_analisis', type: 'string' },
+  { field: 'intervencion_tipo_tecnologia', type: 'string' },
+  { field: 'intervencion_educacion_si', type: 'boolean' },
+  { field: 'intervencion_educacion_tipo', type: 'string' },
+  { field: 'intervencion_tipo_meta', type: 'string' },
+  { field: 'intervencion_meta_texto', type: 'string' },
+  { field: 'dx_tecnologia_salud', type: 'string' },
+  { field: 'dx_procedimiento', type: 'string' },
+  { field: 'dx_tipo', type: 'string' },
+
+  // ---- Conducta ----
+  { field: 'aptitud', type: 'string' },
+  { field: 'control_fecha', type: 'date' },
+  { field: 'exoneracion_programa', type: 'boolean' },
+];
+
+export const EDITABLE_FIELDS: ReadonlyArray<string> = EDITABLE_FIELD_DEFS.map((d) => d.field);
+
+const EDITABLE_FIELD_TYPE_MAP: Readonly<Record<string, EditableFieldType>> = EDITABLE_FIELD_DEFS.reduce(
+  (acc, def) => {
+    acc[def.field] = def.type;
+    return acc;
+  },
+  {} as Record<string, EditableFieldType>
+);
+
+const SNAKE_KEYS = new Set<string>(EDITABLE_FIELD_DEFS.filter((d) => d.field.includes('_')).map((d) => d.field));
+
+function snakeToCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+type FieldValue = string | number | boolean | null;
+
+interface UpdateFieldResult {
+  success: boolean;
+  field?: string;
+  value?: FieldValue;
+  updatedAt?: string;
+  error?: string;
+  code?: number;
+}
+
+function coerceValue(field: string, raw: unknown): { ok: true; value: FieldValue } | { ok: false; error: string } {
+  const type = EDITABLE_FIELD_TYPE_MAP[field];
+  if (!type) return { ok: false, error: 'INVALID_FIELD' };
+
+  // null o '' => NULL
+  if (raw === null || raw === undefined) return { ok: true, value: null };
+  if (typeof raw === 'string' && raw.trim() === '' && type !== 'string') return { ok: true, value: null };
+
+  switch (type) {
+    case 'string': {
+      if (typeof raw === 'string') return { ok: true, value: raw };
+      if (typeof raw === 'number' || typeof raw === 'boolean') return { ok: true, value: String(raw) };
+      return { ok: false, error: 'INVALID_VALUE' };
+    }
+    case 'number': {
+      if (typeof raw === 'number' && !isNaN(raw)) return { ok: true, value: raw };
+      if (typeof raw === 'string') {
+        const n = Number(raw);
+        if (!isNaN(n)) return { ok: true, value: n };
+      }
+      return { ok: false, error: 'INVALID_VALUE' };
+    }
+    case 'boolean': {
+      if (typeof raw === 'boolean') return { ok: true, value: raw };
+      if (typeof raw === 'string') {
+        const v = raw.trim();
+        if (v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si') return { ok: true, value: true };
+        if (v === 'false' || v === 'No' || v === 'NO' || v === 'no') return { ok: true, value: false };
+      }
+      if (typeof raw === 'number') return { ok: true, value: raw !== 0 };
+      return { ok: false, error: 'INVALID_VALUE' };
+    }
+    case 'date': {
+      if (typeof raw === 'string') {
+        // Aceptar 'YYYY-MM-DD' o ISO; '' ya se convirtió a null arriba
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) return { ok: true, value: raw };
+      }
+      return { ok: false, error: 'INVALID_VALUE' };
+    }
+    default:
+      return { ok: false, error: 'INVALID_VALUE' };
+  }
+}
+
 interface AntecedentesPersonales {
   cirugiaOcular?: boolean;
   cirugiaProgramada?: boolean;
@@ -210,7 +454,18 @@ class MedicalHistoryService {
       if (pgResult && pgResult.length > 0) {
         const row = pgResult[0];
         console.log(`✅ [PostgreSQL] Historia clínica encontrada para ${historiaId}`);
+
+        // Mapeo automático snake_case -> camelCase de TODAS las columnas nuevas Phase 1.
+        // Prefiero hacerlo aquí (sin SELECT *) porque ya tenemos el row completo del JOIN.
+        const extra: Record<string, unknown> = {};
+        for (const snakeKey of SNAKE_KEYS) {
+          if (Object.prototype.hasOwnProperty.call(row, snakeKey)) {
+            extra[snakeToCamel(snakeKey)] = row[snakeKey];
+          }
+        }
+
         return {
+          ...extra,
           _id: row._id,
           historiaId: row._id, // Alias para compatibilidad con frontend
           numeroId: row.numeroId,
@@ -541,6 +796,52 @@ class MedicalHistoryService {
     } catch (error: any) {
       console.error('❌ Error obteniendo historial del paciente:', error.message);
       throw new Error('Error al obtener historial de consultas del paciente');
+    }
+  }
+
+  /**
+   * Actualiza un solo campo de la historia clínica (auto-save por field).
+   * Phase 1 — Foundation.
+   *
+   * - Valida `field` contra la whitelist EDITABLE_FIELDS (sin esto NO se construye el SQL).
+   * - Coerciona el valor según el tipo declarado.
+   * - El nombre de columna se concatena luego de la whitelist; no hay riesgo de inyección.
+   */
+  async updateField(historiaId: string, field: string, rawValue: unknown): Promise<UpdateFieldResult> {
+    if (!historiaId) {
+      return { success: false, error: 'MISSING_ID', code: 400 };
+    }
+    if (typeof field !== 'string' || !EDITABLE_FIELDS.includes(field)) {
+      return { success: false, error: 'INVALID_FIELD', code: 400 };
+    }
+
+    const coerced = coerceValue(field, rawValue);
+    if (!coerced.ok) {
+      return { success: false, error: coerced.error, code: 400 };
+    }
+
+    const value = coerced.value;
+    const sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 RETURNING "_updatedDate"`;
+
+    try {
+      const rows = await postgresService.query(sql, [value, historiaId]);
+      if (rows === null) {
+        return { success: false, error: 'DB_ERROR', code: 500 };
+      }
+      if (rows.length === 0) {
+        return { success: false, error: 'NOT_FOUND', code: 404 };
+      }
+      const updatedAtRaw = rows[0]?._updatedDate ?? rows[0]?.['_updatedDate'];
+      const updatedAt = updatedAtRaw instanceof Date ? updatedAtRaw.toISOString() : new Date().toISOString();
+      return {
+        success: true,
+        field,
+        value,
+        updatedAt,
+      };
+    } catch (error: any) {
+      console.error('❌ [updateField] Error:', error.message);
+      return { success: false, error: 'DB_ERROR', code: 500 };
     }
   }
 

@@ -33,6 +33,8 @@ router.get('/medical-history/patient/:numeroId', videoController.getPatientHisto
 router.get('/medical-history/:historiaId/preview', videoController.getPreviewHTML);
 router.get('/medical-history/:historiaId', videoController.getMedicalHistory);
 router.post('/medical-history', videoController.updateMedicalHistory);
+// Phase 1 — auto-save por field (PATCH)
+router.patch('/medical-history/:historiaId/field', videoController.updateMedicalHistoryField);
 
 // AI Suggestions
 router.post('/ai-suggestions', videoController.generateAISuggestions);

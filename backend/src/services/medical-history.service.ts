@@ -90,6 +90,11 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'actividad_frecuencia', type: 'string' },
   { field: 'actividad_duracion_min', type: 'number' },
   { field: 'actividad_fuerza_semanal', type: 'number' },
+  // ---- Phase 2: nuevos campos Anamnesis ----
+  { field: 'ant_quirurgico_tiempo', type: 'string' },
+  { field: 'planificacion_familiar_flag', type: 'boolean' },
+  { field: 'actividad_duracion', type: 'string' },
+  { field: 'actividad_fuerza_semanal_label', type: 'string' },
 
   // ---- Clasificación de Riesgo ----
   { field: 'downton_caidas', type: 'boolean' },
@@ -103,6 +108,11 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'downton_auditivo', type: 'boolean' },
   { field: 'downton_marcha', type: 'boolean' },
   { field: 'downton_riesgo', type: 'string' },
+  // ---- Phase 2: nuevos campos Downton ----
+  { field: 'downton_med_antiparkinson', type: 'boolean' },
+  { field: 'downton_med_antidepresivos', type: 'boolean' },
+  { field: 'downton_med_otros', type: 'boolean' },
+  { field: 'downton_def_extremidades', type: 'boolean' },
   { field: 'acsm_edad_hombre', type: 'boolean' },
   { field: 'acsm_edad_mujer', type: 'boolean' },
   { field: 'acsm_familiar_cardiaco', type: 'boolean' },
@@ -115,6 +125,12 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'acsm_diabetes', type: 'boolean' },
   { field: 'acsm_signos_sintomas', type: 'boolean' },
   { field: 'acsm_enfermedad_conocida', type: 'boolean' },
+  // ---- Phase 2: nuevos campos ACSM ----
+  { field: 'acsm_edad', type: 'boolean' },
+  { field: 'acsm_genero', type: 'boolean' },
+  { field: 'acsm_enf_pulmonar', type: 'boolean' },
+  { field: 'acsm_enf_cardiovascular', type: 'boolean' },
+  { field: 'acsm_enf_renal', type: 'boolean' },
   { field: 'acsm_riesgo', type: 'string' },
   { field: 'bt_factor_1', type: 'boolean' },
   { field: 'bt_factor_2', type: 'boolean' },
@@ -142,6 +158,8 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'postura_cad_inf', type: 'string' },
   { field: 'hallazgos_descripcion', type: 'string' },
   { field: 'hallazgos_stretching', type: 'string' },
+  // ---- Phase 2: numeric stretching (cm) ----
+  { field: 'hallazgos_stretching_cm', type: 'number' },
   { field: 'hallazgos_observaciones', type: 'string' },
   { field: 'hallazgos_dolor', type: 'string' },
   { field: 'mov_tren_superior', type: 'string' },

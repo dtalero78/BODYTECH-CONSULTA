@@ -124,19 +124,84 @@ export interface MedicalHistoryFull {
   abortos?: number;
   fum?: string | Date | null;
   planificacion?: string;
+  planificacionFamiliarFlag?: boolean;
   actividadFrecuencia?: string;
+  actividadDuracion?: string;
   actividadDuracionMin?: number;
   actividadFuerzaSemanal?: number;
+  actividadFuerzaSemanalLabel?: string;
+  antQuirurgicoTiempo?: string;
 
-  // ---- Phase 1: Riesgo (placeholder) ----
+  // ---- Phase 2: Riesgo ----
+  downtonCaidas?: boolean;
+  downtonEstadoMental?: boolean;
+  downtonMedicamentos?: boolean;
+  downtonMedAntiparkinson?: boolean;
+  downtonMedAntidepresivos?: boolean;
+  downtonMedOtros?: boolean;
+  downtonDeficitsSensoriales?: boolean;
+  downtonVisual?: boolean;
+  downtonAuditivo?: boolean;
+  downtonDefExtremidades?: boolean;
   downtonRiesgo?: string;
+
+  acsmSedentarismo?: boolean;
+  acsmTabaquismo?: boolean;
+  acsmHipertension?: boolean;
+  acsmDislipidemia?: boolean;
+  acsmObesidad?: boolean;
+  acsmEdad?: boolean;
+  acsmFamiliarCardiaco?: boolean;
+  acsmGenero?: boolean;
+  acsmDiabetes?: boolean;
+  acsmEnfPulmonar?: boolean;
+  acsmEnfCardiovascular?: boolean;
+  acsmEnfRenal?: boolean;
   acsmRiesgo?: string;
+
+  btFactor1?: boolean;
+  btFactor2?: boolean;
+  btFactor3?: boolean;
   riesgoFinal?: string;
 
-  // ---- Phase 1: Examen físico (placeholder) ----
+  // ---- Phase 2: Examen físico ----
   ccPesoAnterior?: number;
   ccPesoNuevo?: number;
+  ccEstaturaAnterior?: number;
+  ccEstaturaNuevo?: number;
+  ccMasaMuscularAnterior?: number;
+  ccMasaMuscularNuevo?: number;
+  ccImcAnterior?: number;
+  ccImcNuevo?: number;
+  ccImmAnterior?: number;
+  ccImmNuevo?: number;
+  ccGrasaAnterior?: number;
+  ccGrasaNuevo?: number;
+  ccPerimetroAbdominalAnterior?: number;
+  ccPerimetroAbdominalNuevo?: number;
   ccObservacion?: string;
+  posturaEspalda?: string;
+  posturaCadSup?: string;
+  posturaCadInf?: string;
+  hallazgosDescripcion?: string;
+  hallazgosStretching?: string;
+  hallazgosStretchingCm?: number;
+  hallazgosObservaciones?: string;
+  hallazgosDolor?: string;
+  movTrenSuperior?: string;
+  fuerzaSuperior?: number;
+  fuerzaAbdominal?: number;
+  fuerzaInferior?: number;
+  tecnicaSentadilla?: string;
+  estabilidadPlancha?: number;
+  fcr?: number;
+  fcm?: number;
+  tas?: number;
+  tad?: number;
+  equilibrioUnipodal?: string;
+  riesgoMarcha?: string;
+  riesgoOm?: string;
+  marchaEstacionaria?: string;
 
   // ---- Phase 1: Intervención y conducta (placeholder) ----
   intervencionAnalisis?: string;

@@ -43,6 +43,54 @@ body {
   }
 }
 
+/* ============================================
+   Phase 2 — Anamnesis / Riesgo / Examen físico
+============================================ */
+@keyframes bump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.is-bumping {
+  animation: bump 220ms ease-out;
+}
+
+@keyframes rowFlash {
+  0% {
+    background-color: rgba(0, 168, 132, 0);
+  }
+  20% {
+    background-color: rgba(0, 168, 132, 0.12);
+  }
+  100% {
+    background-color: rgba(0, 168, 132, 0);
+  }
+}
+.is-flashing {
+  animation: rowFlash 320ms ease-out;
+}
+
+/* Patrón de revelar/colapsar usando grid-template-rows 0fr → 1fr.
+   Más fluido que max-height con contenido variable. */
+.reveal-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms ease-out;
+}
+.reveal-grid.is-open {
+  grid-template-rows: 1fr;
+}
+.reveal-grid > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Scrollbars del panel — coherente con el design system WhatsApp-like */
 .font-figtree *::-webkit-scrollbar {
   width: 8px;

@@ -30,6 +30,19 @@ const TAB_LABELS: Record<TabId, string> = {
   t7: 'Observaciones',
 };
 
+function isFilled(v: unknown): boolean {
+  return v !== null && v !== undefined && v !== '';
+}
+
+function coerceBool(v: unknown): boolean {
+  if (v === true) return true;
+  if (typeof v === 'string') {
+    const x = v.trim();
+    return x === 'true' || x === 'Sí' || x === 'SI' || x === 'sí' || x === 'si';
+  }
+  return false;
+}
+
 function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   const t1Filled = [
     data?.generoBiologico,
@@ -45,12 +58,76 @@ function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
     data?.ocupacion,
     data?.eps,
     data?.tipoVinculacion,
-  ].filter((v) => v !== null && v !== undefined && v !== '').length;
+  ].filter(isFilled).length;
+
+  // ----- t2: Anamnesis (3 secciones) -----
+  const t2Section1 =
+    [
+      data?.objetivoBodytech,
+      data?.modalidad,
+      data?.servicioAtencion,
+      data?.lugarAtencion,
+      data?.puertaEntrada,
+      data?.causa,
+      data?.tipoConsulta,
+      data?.motivoConsultaTexto,
+    ].filter(isFilled).length >= 1;
+
+  const anyAntFlag =
+    coerceBool(data?.antPatologicoFlag) ||
+    coerceBool(data?.antQuirurgicoFlag) ||
+    coerceBool(data?.antOsteomuscularFlag) ||
+    coerceBool(data?.antFarmacologicoFlag) ||
+    coerceBool(data?.antAlergicosFlag) ||
+    coerceBool(data?.antFamiliaresFlag) ||
+    coerceBool(data?.embarazoActual) ||
+    coerceBool(data?.planificacionFamiliarFlag);
+  const anyAntDetail =
+    isFilled(data?.antPatologicoTipo) ||
+    isFilled(data?.antQuirurgicoObs) ||
+    isFilled(data?.antOsteomuscularTipo) ||
+    isFilled(data?.antFarmacologicoObs);
+  const t2Section2 = anyAntFlag || anyAntDetail;
+
+  const t2Section3 =
+    [data?.actividadFrecuencia, data?.actividadDuracion, data?.actividadFuerzaSemanalLabel].filter(
+      isFilled
+    ).length >= 1;
+
+  const t2Filled = [t2Section1, t2Section2, t2Section3].filter(Boolean).length;
+
+  // ----- t3: Riesgo (3 secciones) -----
+  const t3Section1 = isFilled(data?.downtonRiesgo);
+  const t3Section2 = isFilled(data?.acsmRiesgo);
+  const t3Section3 = isFilled(data?.riesgoFinal);
+  const t3Filled = [t3Section1, t3Section2, t3Section3].filter(Boolean).length;
+  const t3Warn = data?.riesgoFinal === 'ALTO';
+
+  // ----- t4: Examen físico (15 keys) -----
+  const t4Keys = [
+    data?.ccPesoNuevo,
+    data?.ccEstaturaNuevo,
+    data?.ccImcNuevo,
+    data?.ccGrasaNuevo,
+    data?.ccPerimetroAbdominalNuevo,
+    data?.posturaEspalda,
+    data?.hallazgosDescripcion,
+    data?.hallazgosDolor,
+    data?.fuerzaInferior,
+    data?.fcm,
+    data?.tas,
+    data?.tad,
+    data?.equilibrioUnipodal,
+    data?.riesgoMarcha,
+    data?.riesgoOm,
+  ];
+  const t4Filled = t4Keys.filter(isFilled).length;
+
   return [
     { id: 't1', label: 'Datos Básicos', filled: t1Filled, total: 13 },
-    { id: 't2', label: 'Anamnesis', filled: 0, total: 3 },
-    { id: 't3', label: 'Clasificación de riesgo', filled: 0, total: 3, warn: true },
-    { id: 't4', label: 'Examen físico', filled: 0, total: 15 },
+    { id: 't2', label: 'Anamnesis', filled: t2Filled, total: 3 },
+    { id: 't3', label: 'Clasificación de riesgo', filled: t3Filled, total: 3, warn: t3Warn },
+    { id: 't4', label: 'Examen físico', filled: t4Filled, total: 15 },
     { id: 't5', label: 'Intervención', filled: 0, total: 2 },
     { id: 't6', label: 'Conducta', filled: 0, total: 1 },
     { id: 't7', label: 'Observaciones', filled: 0, total: 1 },
@@ -123,9 +200,30 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
                   onPatchLocal={patchLocal}
                 />
               )}
-              {activeTab === 't2' && <AnamnesisTab />}
-              {activeTab === 't3' && <RiesgoTab />}
-              {activeTab === 't4' && <ExamenFisicoTab />}
+              {activeTab === 't2' && (
+                <AnamnesisTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
+              {activeTab === 't3' && (
+                <RiesgoTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
+              {activeTab === 't4' && (
+                <ExamenFisicoTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
               {activeTab === 't5' && <IntervencionTab />}
               {activeTab === 't6' && <ConductaTab />}
               {activeTab === 't7' && <ObservacionesTab />}

@@ -320,7 +320,30 @@ class PostgresService {
           -- Conducta
           ADD COLUMN IF NOT EXISTS "aptitud" VARCHAR(40),
           ADD COLUMN IF NOT EXISTS "control_fecha" DATE,
-          ADD COLUMN IF NOT EXISTS "exoneracion_programa" BOOLEAN DEFAULT FALSE
+          ADD COLUMN IF NOT EXISTS "exoneracion_programa" BOOLEAN DEFAULT FALSE,
+
+          -- ===== Phase 2 — Anamnesis / Riesgo / Examen físico =====
+          -- Anamnesis (campos adicionales)
+          ADD COLUMN IF NOT EXISTS "ant_quirurgico_tiempo" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "planificacion_familiar_flag" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "actividad_duracion" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "actividad_fuerza_semanal_label" VARCHAR(40),
+
+          -- Downton (medicamentos detallados + déficits sensoriales detallados)
+          ADD COLUMN IF NOT EXISTS "downton_med_antiparkinson" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_med_antidepresivos" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_med_otros" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "downton_def_extremidades" BOOLEAN DEFAULT FALSE,
+
+          -- ACSM (factores Phase 2)
+          ADD COLUMN IF NOT EXISTS "acsm_edad" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_genero" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_enf_pulmonar" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_enf_cardiovascular" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "acsm_enf_renal" BOOLEAN DEFAULT FALSE,
+
+          -- Examen físico — stretching numérico
+          ADD COLUMN IF NOT EXISTS "hallazgos_stretching_cm" NUMERIC(5,2)
       `);
 
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');

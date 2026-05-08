@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Dropdown, type DropdownOption } from './Dropdown';
+import { PillToggle } from './PillToggle';
 import { useFieldAutoSave } from './hooks/useFieldAutoSave';
 
 interface CommonProps {
@@ -13,6 +14,20 @@ interface CommonProps {
   onSaved: (field: string, value: unknown) => void;
   label?: string;
   required?: boolean;
+}
+
+/**
+ * Helper para coerce de cualquier raw a boolean — alineado con la coerción del backend.
+ * `'true' | true | 'Sí' | 'SI' | 'sí' | 'si' | 1` → true; cualquier otra cosa (incl. null) → false.
+ */
+function coerceBool(raw: unknown): boolean {
+  if (raw === true) return true;
+  if (typeof raw === 'string') {
+    const v = raw.trim();
+    return v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si';
+  }
+  if (typeof raw === 'number') return raw !== 0;
+  return false;
 }
 
 export function TextField(
@@ -54,6 +69,92 @@ export function TextField(
         }`}
       />
       {props.error && <span className="text-[11px] text-[#ef4444]">{props.error}</span>}
+    </div>
+  );
+}
+
+/**
+ * Textarea con auto-save (mismo patrón que TextField).
+ */
+export function TextareaField(
+  props: CommonProps & {
+    placeholder?: string;
+    rows?: number;
+    minHeight?: number;
+  }
+) {
+  const initial = props.initialValue == null ? '' : String(props.initialValue);
+  const [v, setV] = useState<string>(initial);
+
+  useEffect(() => {
+    setV(props.initialValue == null ? '' : String(props.initialValue));
+  }, [props.initialValue]);
+
+  useFieldAutoSave({
+    historiaId: props.historiaId,
+    field: props.field,
+    value: v === '' ? null : v,
+    onSaved: props.onSaved,
+  });
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {props.label && (
+        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        </label>
+      )}
+      <textarea
+        rows={props.rows ?? 3}
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        placeholder={props.placeholder}
+        style={props.minHeight ? { minHeight: props.minHeight } : undefined}
+        className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] focus:border-[#00a884] resize-y"
+      />
+    </div>
+  );
+}
+
+interface PillToggleFieldProps extends CommonProps {
+  trueLabel?: string;
+  falseLabel?: string;
+  /** Render compacto sin label arriba (útil dentro de filas con header). */
+  inline?: boolean;
+}
+
+/**
+ * Toggle binario "Sí / No" con autosave.
+ * El backend acepta `boolean` directamente; el frontend persiste boolean (no string).
+ */
+export function PillToggleField(props: PillToggleFieldProps) {
+  const [v, setV] = useState<boolean>(coerceBool(props.initialValue));
+
+  useEffect(() => {
+    setV(coerceBool(props.initialValue));
+  }, [props.initialValue]);
+
+  useFieldAutoSave({
+    historiaId: props.historiaId,
+    field: props.field,
+    value: v,
+    onSaved: props.onSaved,
+  });
+
+  if (props.inline) {
+    return (
+      <PillToggle value={v} onChange={setV} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {props.label && (
+        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        </label>
+      )}
+      <PillToggle value={v} onChange={setV} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
     </div>
   );
 }

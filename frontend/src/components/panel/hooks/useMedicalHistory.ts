@@ -48,9 +48,14 @@ export function useMedicalHistory(historiaId: string | undefined): UseMedicalHis
   }, [fetchOnce]);
 
   const patchLocal = useCallback((field: string, value: unknown) => {
+    // El backend recibe snake_case (genero_biologico) pero el cache `data`
+    // está en camelCase (generoBiologico) porque así lo devuelve el GET.
+    // Convertir antes de mergear, sino la UI nunca refleja el cambio y el %
+    // nunca avanza.
+    const camelField = field.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
     setData((prev) => {
       if (!prev) return prev;
-      return { ...prev, [field]: value as never };
+      return { ...prev, [camelField]: value as never };
     });
   }, []);
 

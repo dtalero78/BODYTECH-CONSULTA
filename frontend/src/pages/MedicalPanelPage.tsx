@@ -504,13 +504,16 @@ export function MedicalPanelPage() {
                 <p className="text-gray-400 text-sm">Código: {medicoCode}</p>
               </div>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
-            >
-              {isLoading ? '⟳' : '↻ Actualizar'}
-            </button>
+            <div className="flex items-center gap-4">
+              <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-10 w-auto" />
+              <button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
+              >
+                {isLoading ? '⟳' : '↻ Actualizar'}
+              </button>
+            </div>
           </div>
 
           {/* Estadísticas */}

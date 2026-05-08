@@ -63,12 +63,14 @@ class WhatsAppService {
     }
 
     const toNumber = this.formatPhoneNumber(phone);
-    const videoCallUrl = `https://bodytech.app/panel-medico/patient/${roomNameWithParams}`;
+    const baseUrl = process.env.PUBLIC_APP_URL || 'https://dolphin-app-58o7k.ondigitalocean.app';
+    const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
 
     const messageBody =
-      `Hola ${patientName}, Te saludamos del Bodytech. ` +
+      `Hola ${patientName},\n\n` +
+      `Te saludamos de VIP Salud Ocupacional.\n\n` +
       `Tienes una consulta médica a las ${appointmentTime}.\n\n` +
-      `Ingresa a tu videollamada aquí:\n${videoCallUrl}`;
+      `Para ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
 
     try {
       console.log(`📱 [WHAPI] Enviando WhatsApp a: ${toNumber} (intento ${attempt}/${this.maxRetries})`);

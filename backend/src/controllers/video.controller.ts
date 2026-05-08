@@ -256,8 +256,8 @@ class VideoController {
    * Body: { phone: string, roomNameWithParams: string, patientName: string, appointmentTime: string }
    *
    * Usa el template aprobado de Twilio con variables:
-   * Template Bodytech: "Hola {{1}}, Te saludamos del Bodytech. Tienes una consulta médica a las {{2}}..."
-   * Button URL: https://bodytech.app/panel-medico/patient/{{3}}
+   * Template VIP: "Hola {{1}}, Te saludamos de VIP Salud Ocupacional. Tienes una consulta médica a las {{2}}..."
+   * Button URL: {PUBLIC_APP_URL}/panel-medico/patient/{{3}}
    */
   async sendWhatsApp(req: Request, res: Response): Promise<void> {
     try {
@@ -281,8 +281,9 @@ class VideoController {
       if (result.success) {
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
         try {
-          const videoCallUrl = `https://bodytech.app/panel-medico/patient/${roomNameWithParams}`;
-          const messageBody = `Hola ${patientName}, Te saludamos del Bodytech. Tienes una consulta médica a las ${appointmentTime}.\n\nLink de videollamada: ${videoCallUrl}`;
+          const baseUrl = process.env.PUBLIC_APP_URL || 'https://dolphin-app-58o7k.ondigitalocean.app';
+          const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
+          const messageBody = `Hola ${patientName},\n\nTe saludamos de VIP Salud Ocupacional.\n\nTienes una consulta médica a las ${appointmentTime}.\n\nPara ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
 
           // Formatear número de teléfono con prefijo +
           const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;

@@ -45,6 +45,26 @@ export function useAutoSave({
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
 
+  // Refs sincronizadas con la última versión de los valores — necesarias
+  // para que el cleanup de unmount tenga acceso a los valores actuales sin
+  // capturarlos por closure obsoleta.
+  const valueRef = useRef<unknown>(value);
+  const historiaIdRef = useRef<string | undefined>(historiaId);
+  const enabledRef = useRef<boolean>(enabled);
+  const fieldRef = useRef<string>(field);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+  useEffect(() => {
+    historiaIdRef.current = historiaId;
+  }, [historiaId]);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+  useEffect(() => {
+    fieldRef.current = field;
+  }, [field]);
+
   const send = useCallback(
     async (val: unknown, attempt = 1): Promise<void> => {
       if (!historiaId) return;
@@ -107,6 +127,43 @@ export function useAutoSave({
   const retry = useCallback(() => {
     void send(value);
   }, [send, value]);
+
+  // Fix bug "click Guardado antes del debounce aborta PATCH":
+  // al desmontar el componente (modal cerrado por click "Guardado", "Cancelar",
+  // X, Esc, click fuera o cambio de tab), si hay un timer pendiente con un
+  // valor distinto al último enviado, hacemos flush fire-and-forget. Esto
+  // garantiza que ningún cambio reciente del médico se pierda por timing.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        const v = valueRef.current;
+        const hid = historiaIdRef.current;
+        if (
+          enabledRef.current &&
+          hid &&
+          v !== lastSentValueRef.current &&
+          v !== initialValueRef.current
+        ) {
+          // Fire-and-forget: el componente ya está desmontado, no esperamos
+          // setStatus ni callbacks de UI. Solo persistencia.
+          lastSentValueRef.current = v;
+          axios
+            .patch(`${API_BASE_URL}/api/video/medical-history/${hid}/field`, {
+              field: fieldRef.current,
+              value: v,
+            })
+            .catch(() => {
+              // Silenciar errores: el usuario ya cerró el modal y no podemos
+              // mostrar feedback. El próximo GET reflejará la falta de save
+              // si ocurrió.
+            });
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // SOLO en unmount — los refs garantizan acceso a valores actuales
 
   return { ...status, retry };
 }

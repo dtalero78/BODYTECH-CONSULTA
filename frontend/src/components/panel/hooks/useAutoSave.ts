@@ -159,12 +159,20 @@ export function useAutoSave({
           v !== initialValueRef.current
         ) {
           // Fire-and-forget: el componente ya está desmontado, no esperamos
-          // setStatus ni callbacks de UI. Solo persistencia.
+          // setStatus ni feedback visual. Solo persistencia + actualizar cache
+          // del orquestador (patchLocal) para que el modal muestre el valor
+          // correcto si se reabre en la misma sesión.
           lastSentValueRef.current = v;
+          const savedField = fieldRef.current;
           axios
             .patch(`${API_BASE_URL}/api/video/medical-history/${hid}/field`, {
-              field: fieldRef.current,
+              field: savedField,
               value: v,
+            })
+            .then((res) => {
+              if (res.data?.success) {
+                onSavedRef.current?.(savedField, v);
+              }
             })
             .catch(() => {
               // Silenciar errores: el usuario ya cerró el modal y no podemos

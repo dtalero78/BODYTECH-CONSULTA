@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
+// Cliente OpenAI compartido. Phase 3 (transcription.service.ts) lo reutiliza
+// para Whisper + GPT-4o-mini en lugar de instanciar un nuevo cliente.
+export const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 

@@ -135,10 +135,57 @@ function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
 }
 
 function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationPanelProps) {
-  const { data, loading, error, patchLocal } = useMedicalHistory(historiaId);
+  const { data, loading, error, patchLocal, refetch } = useMedicalHistory(historiaId);
   const [activeTab, setActiveTab] = useState<TabId>('t1');
   const [fabOpen, setFabOpen] = useState(false);
   const { aggregate, retryAll } = useSaveCtx();
+  // Phase 3 — Transcripción post-llamada.
+  const [showTranscriptionBadge, setShowTranscriptionBadge] = useState(false);
+
+  // ----- Phase 3 — Polling del status de transcripción -----
+  // Cuando el GET inicial devuelve transcriptionStatus pending|processing,
+  // hacemos polling cada 30s. Al detectar 'done', refetcheamos para que los
+  // campos auto-rellenados aparezcan en la UI y mostramos un badge verde.
+  // Si llega 'error' (o ya viene 'done' / null) no se inicia ningún interval.
+  useEffect(() => {
+    const status = data?.transcriptionStatus;
+    const shouldPoll = status === 'pending' || status === 'processing';
+    if (!shouldPoll) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+        const res = await fetch(
+          `${apiBase}/api/video/medical-history/${historiaId}`,
+          { credentials: 'omit' }
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        const newStatus = json?.data?.transcriptionStatus;
+        if (newStatus === 'done') {
+          await refetch();
+          if (!cancelled) {
+            setShowTranscriptionBadge(true);
+          }
+          window.clearInterval(interval);
+        } else if (newStatus === 'error') {
+          // Cortamos polling sin badge. Log a consola para diagnóstico.
+          console.warn('[Transcription] pipeline marcó error para', historiaId);
+          window.clearInterval(interval);
+        }
+      } catch (e) {
+        // Mantener polling vivo si hay un blip transitorio.
+        console.warn('[Transcription] poll fallo transitorio:', e);
+      }
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [data, historiaId, refetch]);
 
   // Atajo M y N — solo si el foco no está en un editable.
   useEffect(() => {
@@ -177,6 +224,8 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
         saveState={aggregate}
         sectionTitle={sectionTitle}
         onRetrySave={retryAll}
+        transcriptionReady={showTranscriptionBadge}
+        onDismissTranscriptionBadge={() => setShowTranscriptionBadge(false)}
       />
       <div className="flex-1 overflow-y-auto relative">
         {loading && (

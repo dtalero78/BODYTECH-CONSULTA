@@ -343,7 +343,20 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "acsm_enf_renal" BOOLEAN DEFAULT FALSE,
 
           -- Examen físico — stretching numérico
-          ADD COLUMN IF NOT EXISTS "hallazgos_stretching_cm" NUMERIC(5,2)
+          ADD COLUMN IF NOT EXISTS "hallazgos_stretching_cm" NUMERIC(5,2),
+
+          -- ===== Phase 3 — Transcripción post-llamada =====
+          ADD COLUMN IF NOT EXISTS "transcription_status" TEXT,
+          ADD COLUMN IF NOT EXISTS "transcription_text" TEXT
+      `);
+
+      // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS room_historia_map (
+          room_name TEXT PRIMARY KEY,
+          historia_id TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
       `);
 
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');

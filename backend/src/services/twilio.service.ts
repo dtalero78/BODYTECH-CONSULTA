@@ -60,19 +60,36 @@ class TwilioService {
 
   /**
    * Crear una sala de video en Twilio
+   *
+   * Phase 3 — Transcripción post-llamada:
+   * - Default cambia de 'go' a 'group-small' para soportar grabación.
+   *   Twilio sólo permite `recordParticipantsOnConnect` en rooms type
+   *   `group` / `group-small`. `peer-to-peer` y `go` NO graban.
+   * - `maxParticipants` se ajusta al límite de cada tipo.
+   *
    * @param roomName - Nombre único de la sala
-   * @param type - Tipo de sala (group, peer-to-peer, group-small)
+   * @param type - Tipo de sala (group, peer-to-peer, group-small, go)
    * @returns Información de la sala creada
    */
   async createRoom(
     roomName: string,
-    type: 'group' | 'peer-to-peer' | 'group-small' | 'go' = 'go'
+    type: 'group' | 'peer-to-peer' | 'group-small' | 'go' = 'group-small'
   ) {
     try {
+      // maxParticipants: peer-to-peer = 2, group-small = 4, group/go = 50.
+      const maxParticipants =
+        type === 'peer-to-peer' ? 2 : type === 'group-small' ? 4 : 50;
+
+      // Sólo activar recording en rooms tipo group / group-small (Twilio rechaza
+      // recordParticipantsOnConnect=true en go / peer-to-peer).
+      const recordParticipantsOnConnect =
+        type === 'group' || type === 'group-small';
+
       const room = await this.client.video.v1.rooms.create({
         uniqueName: roomName,
         type,
-        maxParticipants: type === 'peer-to-peer' ? 2 : 50,
+        maxParticipants,
+        recordParticipantsOnConnect,
       });
 
       return {

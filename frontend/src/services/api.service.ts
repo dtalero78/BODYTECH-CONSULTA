@@ -114,6 +114,21 @@ class ApiService {
   }
 
   /**
+   * Phase 3 — Vincular roomName con la historia clínica activa al iniciar la
+   * sesión de video. El backend persiste el mapping y marca
+   * transcription_status='pending'. Cuando Twilio termine la grabación, el
+   * webhook recording-ready usará este mapping para resolver el historiaId.
+   *
+   * Fire-and-forget desde useVideoRoom: si falla, no rompemos la conexión.
+   */
+  async sessionStart(roomName: string, historiaId: string): Promise<void> {
+    await this.client.post('/api/video/events/session-start', {
+      roomName,
+      historiaId,
+    });
+  }
+
+  /**
    * Obtener lista de pacientes actualmente conectados
    * @param medicoCode - Opcional: filtrar solo pacientes de este médico
    */

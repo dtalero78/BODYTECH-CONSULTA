@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
+import twilio from 'twilio';
 import twilioService from '../services/twilio.service';
 import { sessionTracker } from '../services/session-tracker.service';
 import whatsappService from '../services/whatsapp.service';
 import medicalHistoryService from '../services/medical-history.service';
 import openaiService from '../services/openai.service';
 import postgresService from '../services/postgres.service';
+import transcriptionService from '../services/transcription.service';
 
 class VideoController {
   /**
@@ -23,10 +25,12 @@ class VideoController {
         return;
       }
 
-      // Intentar crear la sala como 'go' (tipo actual de Twilio, reemplaza legacy peer-to-peer)
+      // Phase 3 — usar el default 'group-small' del service para habilitar
+      // grabación por participante (recordParticipantsOnConnect). 'go' no
+      // soporta recording rules en Twilio.
       try {
-        await twilioService.createRoom(roomName, 'go');
-        console.log(`Room created as go: ${roomName}`);
+        await twilioService.createRoom(roomName);
+        console.log(`Room created (group-small with recording): ${roomName}`);
       } catch (error: any) {
         // Si la sala ya existe, continuar (error code 53113)
         if (error.code === 53113) {
@@ -564,6 +568,122 @@ class VideoController {
         error: 'Failed to fetch connected patients',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  }
+
+  /**
+   * Phase 3 — Vincular un roomName con la historia clínica activa al iniciar
+   * la sesión de video. El doctor llama esto en cuanto Video.connect() resuelve.
+   *
+   * POST /api/video/events/session-start
+   * Body: { roomName: string, historiaId: string }
+   */
+  async sessionStart(req: Request, res: Response): Promise<void> {
+    try {
+      const { roomName, historiaId } = req.body ?? {};
+
+      if (!roomName || !historiaId || typeof roomName !== 'string' || typeof historiaId !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'roomName and historiaId are required',
+        });
+        return;
+      }
+
+      await transcriptionService.linkRoomToHistoria(roomName.trim(), historiaId.trim());
+
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('[SessionStart] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to register session start',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Phase 3 — Webhook de Twilio cuando un recording termina (status=completed).
+   * Validamos firma con TWILIO_AUTH_TOKEN y disparamos el pipeline en background.
+   *
+   * POST /api/video/webhooks/recording-ready
+   * Content-Type: application/x-www-form-urlencoded (Twilio)
+   *
+   * Twilio envía campos como RoomName, RecordingSid, MediaUrl, RecordingUrl, etc.
+   * Respondemos 200 SIEMPRE que la firma sea válida — los retries de Twilio
+   * cuestan caro y el pipeline corre asíncrono.
+   */
+  async recordingReadyWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const signature = req.header('x-twilio-signature') || '';
+
+      // Construir la URL pública con la que Twilio firmó. PUBLIC_BASE_URL
+      // permite override cuando estamos detrás de un proxy (DigitalOcean App
+      // Platform, Cloudflare, etc.). Si no está, derivar del request.
+      const baseUrl =
+        process.env.PUBLIC_BASE_URL ||
+        `${(req.headers['x-forwarded-proto'] as string) || req.protocol}://${req.get('host')}`;
+      const url = `${baseUrl.replace(/\/+$/, '')}${req.originalUrl}`;
+
+      if (!authToken) {
+        console.error('[Transcription] TWILIO_AUTH_TOKEN no configurado, no puedo validar firma');
+        res.status(500).send();
+        return;
+      }
+
+      // Body se asume application/x-www-form-urlencoded (express.urlencoded ya
+      // está montado en index.ts).
+      const params = (req.body ?? {}) as Record<string, string>;
+
+      const valid = twilio.validateRequest(authToken, signature, url, params);
+      if (!valid) {
+        console.warn(
+          `[Transcription] Firma Twilio inválida. url=${url} signature=${signature.slice(0, 12)}…`
+        );
+        res.status(403).send();
+        return;
+      }
+
+      const roomName = params.RoomName || params.roomName || '';
+      const recordingSid = params.RecordingSid || params.recordingSid || '';
+      // Twilio puede mandar `MediaUrl` (recording API) o `RecordingUrl`
+      // (status-callback estándar). Aceptamos ambos.
+      const mediaUrl =
+        params.MediaUrl ||
+        params.RecordingUrl ||
+        params.mediaUrl ||
+        params.recordingUrl ||
+        '';
+
+      // Responder 200 inmediato — el pipeline corre en background sin await.
+      // Si faltan campos, igual respondemos 200 para no romper retries de Twilio.
+      res.status(200).send();
+
+      if (!roomName || !mediaUrl) {
+        console.warn(
+          `[Transcription] Webhook sin RoomName o MediaUrl. roomName=${roomName} mediaUrl=${mediaUrl}`
+        );
+        return;
+      }
+
+      console.log(
+        `[Transcription] Webhook recibido room=${roomName} sid=${recordingSid}`
+      );
+
+      // Fire-and-forget. Errores se loguean dentro del service.
+      transcriptionService
+        .processRecording(roomName, recordingSid, mediaUrl)
+        .catch((err) => {
+          console.error('[Transcription] processRecording lanzó (no debería):', err);
+        });
+    } catch (error) {
+      console.error('[Transcription] recordingReadyWebhook error:', error);
+      // Si ya respondimos no podemos volver a responder; solo loguear.
+      if (!res.headersSent) {
+        res.status(500).send();
+      }
     }
   }
 }

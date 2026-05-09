@@ -14,6 +14,14 @@ interface UseVideoRoomOptions {
   role?: 'doctor' | 'patient';
   documento?: string;
   medicoCode?: string;
+  /**
+   * Phase 3 — id de la HistoriaClinica activa.
+   * Cuando role==='doctor' y se pasa historiaId, useVideoRoom dispara un
+   * fire-and-forget POST a /api/video/events/session-start para vincular el
+   * roomName con la historia. Necesario para que el webhook de Twilio sepa
+   * a qué historia llenar con la transcripción.
+   */
+  historiaId?: string;
 }
 
 interface UseVideoRoomReturn {
@@ -99,6 +107,7 @@ export const useVideoRoom = ({
   role,
   documento,
   medicoCode,
+  historiaId,
 }: UseVideoRoomOptions): UseVideoRoomReturn => {
   const [room, setRoom] = useState<Room | null>(null);
   const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null);
@@ -148,6 +157,21 @@ export const useVideoRoom = ({
         } catch (err) {
           console.error('Error tracking participant connection:', err);
         }
+
+        // Phase 3 — vincular el room con la historia clínica activa cuando
+        // el doctor entra. El webhook de Twilio usará este mapping al
+        // terminar el recording. Fire-and-forget: si falla no rompemos la
+        // llamada.
+        if (role === 'doctor' && historiaId) {
+          apiService
+            .sessionStart(roomName, historiaId)
+            .then(() => {
+              console.log('[SessionStart] room linked to historia', { roomName, historiaId });
+            })
+            .catch((err) => {
+              console.warn('[SessionStart] error vinculando room↔historia:', err);
+            });
+        }
       }
 
       // Agregar participantes remotos existentes
@@ -192,7 +216,7 @@ export const useVideoRoom = ({
     } finally {
       setIsConnecting(false);
     }
-  }, [identity, roomName, role]);
+  }, [identity, roomName, role, documento, medicoCode, historiaId]);
 
   const disconnectFromRoom = useCallback(() => {
     if (room) {

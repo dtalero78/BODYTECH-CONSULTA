@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, CloudOff, Cloud } from 'lucide-react';
+import { Maximize2, Minimize2, CloudOff, Cloud, Sparkles } from 'lucide-react';
 import type { MedicalHistoryFull, SaveStatus } from './types';
 
 interface PanelHeaderProps {
@@ -10,6 +10,14 @@ interface PanelHeaderProps {
   /** Título de la sección actual (ej. "Datos Básicos"). */
   sectionTitle: string;
   onRetrySave?: () => void;
+  /**
+   * Phase 3 — true cuando la transcripción post-llamada terminó y los
+   * campos auto-rellenados ya están en el panel. Renderiza un badge verde
+   * animado que invita al médico a revisar.
+   */
+  transcriptionReady?: boolean;
+  /** Phase 3 — handler para descartar el badge cuando el médico hace click. */
+  onDismissTranscriptionBadge?: () => void;
 }
 
 function getInitials(d: MedicalHistoryFull | null): string {
@@ -40,6 +48,8 @@ export function PanelHeader({
   saveState,
   sectionTitle,
   onRetrySave,
+  transcriptionReady,
+  onDismissTranscriptionBadge,
 }: PanelHeaderProps) {
   const initials = getInitials(data);
   const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Paciente';
@@ -82,6 +92,20 @@ export function PanelHeader({
       </div>
 
       <div className="ml-auto flex items-center gap-3 min-w-0">
+        {transcriptionReady && (
+          <button
+            type="button"
+            role="status"
+            aria-live="polite"
+            onClick={onDismissTranscriptionBadge}
+            title="La transcripción post-llamada llenó campos. Click para revisar y descartar el aviso."
+            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-[rgba(0,168,132,0.15)] text-[#34d399] border-[rgba(0,168,132,0.45)] text-[12px] font-semibold animate-pulse hover:bg-[rgba(0,168,132,0.25)] transition flex-shrink-0"
+          >
+            <Sparkles size={13} />
+            <span>Transcripción lista · Revisar</span>
+          </button>
+        )}
+
         <div className="flex items-center gap-2.5 px-2.5 py-1 rounded-full bg-[#2a3942] min-w-0">
           <span
             className="w-7 h-7 rounded-full grid place-items-center font-bold text-[12px] text-white flex-shrink-0"

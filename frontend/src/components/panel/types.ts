@@ -210,6 +210,11 @@ export interface MedicalHistoryFull {
   controlFecha?: string | Date | null;
   exoneracionPrograma?: boolean;
 
+  // ---- Phase 3: Transcripción post-llamada ----
+  /** 'pending' | 'processing' | 'done' | 'error' | null */
+  transcriptionStatus?: string | null;
+  transcriptionText?: string | null;
+
   // Cualquier otro campo que el backend devuelva
   [key: string]: unknown;
 }

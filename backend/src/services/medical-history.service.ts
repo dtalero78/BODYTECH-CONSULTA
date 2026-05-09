@@ -192,6 +192,12 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'aptitud', type: 'string' },
   { field: 'control_fecha', type: 'date' },
   { field: 'exoneracion_programa', type: 'boolean' },
+
+  // ---- Phase 3: Transcripción post-llamada ----
+  // Estos campos son escritos por transcription.service.ts (no por la UI),
+  // pero pasan por updateField() para reutilizar la coerción + audit centralizada.
+  { field: 'transcription_status', type: 'string' },
+  { field: 'transcription_text', type: 'string' },
 ];
 
 export const EDITABLE_FIELDS: ReadonlyArray<string> = EDITABLE_FIELD_DEFS.map((d) => d.field);

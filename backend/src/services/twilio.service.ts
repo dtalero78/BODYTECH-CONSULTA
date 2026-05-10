@@ -85,11 +85,17 @@ class TwilioService {
       const recordParticipantsOnConnect =
         type === 'group' || type === 'group-small';
 
+      const baseUrl = process.env.BASE_URL || '';
+      const statusCallback = baseUrl
+        ? `${baseUrl}/api/video/webhooks/room-completed`
+        : undefined;
+
       const room = await this.client.video.v1.rooms.create({
         uniqueName: roomName,
         type,
         maxParticipants,
         recordParticipantsOnConnect,
+        ...(statusCallback && { statusCallback, statusCallbackMethod: 'POST' }),
       });
 
       return {

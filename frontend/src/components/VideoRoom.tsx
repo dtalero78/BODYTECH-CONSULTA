@@ -7,6 +7,7 @@ import { VideoControls } from './VideoControls';
 import { PosturalAnalysisModal } from './PosturalAnalysisModal';
 import { PosturalAnalysisPatient } from './PosturalAnalysisPatient';
 import { MedicalConsultationPanel } from './panel/MedicalConsultationPanel';
+import apiService from '../services/api.service';
 
 interface VideoRoomProps {
   identity: string;
@@ -71,6 +72,12 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
 
   const handleLeave = () => {
     disconnectFromRoom();
+    // El médico cierra el room explícitamente para disparar el webhook
+    // inmediatamente (statusCallback → composición + transcripción).
+    // El paciente solo se desconecta; el room lo cierra el médico.
+    if (role === 'doctor') {
+      apiService.endRoom(roomName).catch(() => {});
+    }
     onLeave?.();
   };
 

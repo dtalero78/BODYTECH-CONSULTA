@@ -663,18 +663,6 @@ class VideoController {
             return;
           }
 
-          // Verificar si ya tiene composition para evitar duplicados
-          const existing = await postgresService.query(
-            `SELECT "composition_sid" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
-            [historiaId]
-          );
-          if (existing?.[0]?.composition_sid) {
-            console.log(
-              `[Webhook room-completed] Historia ${historiaId} ya tiene composition — ignorando`
-            );
-            return;
-          }
-
           const comp = await twilioService.createComposition(RoomSid);
 
           await postgresService.query(

@@ -5,6 +5,7 @@
  * Wix queda como backup secundario.
  */
 
+import { randomUUID } from 'crypto';
 import postgresService from './postgres.service';
 
 interface PatientStats {
@@ -49,6 +50,77 @@ interface PatientDetails extends Patient {
   fechaConsulta?: Date;
   diagnostico?: string;
   tratamiento?: string;
+}
+
+export interface OrdenItem {
+  _id: string;
+  numeroId: string;
+  primerNombre: string;
+  segundoNombre?: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  celular: string;
+  empresa?: string;
+  codEmpresa?: string;
+  tipoExamen?: string;
+  examenes?: string;
+  medico?: string;
+  fechaAtencion?: string;
+  horaAtencion?: string;
+  atendido?: string;
+  ciudad?: string;
+}
+
+export interface OrdenFilters {
+  page?: number;
+  limit?: number;
+  from?: string;
+  to?: string;
+  status?: string;
+  medico?: string;
+  q?: string;
+}
+
+export interface OrdenCreateInput {
+  primerNombre: string;
+  segundoNombre?: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  numeroId: string;
+  celular: string;
+  empresa?: string;
+  codEmpresa?: string;
+  tipoExamen?: string;
+  examenes?: string;
+  medico: string;
+  fechaAtencion: string;  // YYYY-MM-DD
+  horaAtencion: string;   // HH:MM
+  ciudad?: string;
+}
+
+export interface OrdenUpdateInput {
+  primerNombre?: string;
+  primerApellido?: string;
+  celular?: string;
+  empresa?: string;
+  tipoExamen?: string;
+  examenes?: string;
+  medico?: string;
+  fechaAtencion?: string; // YYYY-MM-DD
+  horaAtencion?: string;  // HH:MM
+  atendido?: string;
+  ciudad?: string;
+}
+
+/**
+ * Convierte una fecha YYYY-MM-DD a los límites del día en Colombia (UTC-5).
+ */
+function colombiaDay(yyyy_mm_dd: string): { start: Date; end: Date } {
+  const [y, m, d] = yyyy_mm_dd.split('-').map(Number);
+  return {
+    start: new Date(Date.UTC(y, m - 1, d, 5, 0, 0, 0)),
+    end: new Date(Date.UTC(y, m - 1, d + 1, 4, 59, 59, 999)),
+  };
 }
 
 class MedicalPanelService {
@@ -314,6 +386,261 @@ class MedicalPanelService {
       return null;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // CRUD de Órdenes
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Lista órdenes con filtros y paginación.
+   */
+  async listOrdenes(filters: OrdenFilters = {}): Promise<{
+    ordenes: OrdenItem[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    try {
+      const page = filters.page ?? 0;
+      const limit = filters.limit ?? 20;
+      const offset = page * limit;
+
+      const conditions: string[] = ['1=1'];
+      const params: unknown[] = [];
+      let paramIndex = 1;
+
+      if (filters.status && filters.status !== 'all') {
+        conditions.push(`"atendido" = $${paramIndex++}`);
+        params.push(filters.status);
+      }
+
+      if (filters.medico) {
+        conditions.push(`"medico" = $${paramIndex++}`);
+        params.push(filters.medico);
+      }
+
+      if (filters.from) {
+        const { start } = colombiaDay(filters.from);
+        conditions.push(`"fechaAtencion" >= $${paramIndex++}`);
+        params.push(start);
+      }
+
+      if (filters.to) {
+        const { end } = colombiaDay(filters.to);
+        conditions.push(`"fechaAtencion" <= $${paramIndex++}`);
+        params.push(end);
+      }
+
+      if (filters.q) {
+        const like = `%${filters.q}%`;
+        conditions.push(
+          `("numeroId" ILIKE $${paramIndex} OR "primerNombre" ILIKE $${paramIndex} OR "primerApellido" ILIKE $${paramIndex})`
+        );
+        params.push(like);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const countResult = await postgresService.query(
+        `SELECT COUNT(*) AS count FROM "HistoriaClinica" WHERE ${whereClause}`,
+        params
+      );
+      const total = parseInt(countResult?.[0]?.count ?? '0', 10);
+
+      const dataParams = [...params, limit, offset];
+      const rows = await postgresService.query(
+        `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
+                "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
+                "fechaAtencion", "horaAtencion", "atendido", "ciudad"
+         FROM "HistoriaClinica"
+         WHERE ${whereClause}
+         ORDER BY "fechaAtencion" DESC NULLS LAST
+         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        dataParams
+      );
+
+      const ordenes: OrdenItem[] = (rows ?? []).map((row: Record<string, unknown>) => ({
+        _id: row._id as string,
+        numeroId: row.numeroId as string,
+        primerNombre: (row.primerNombre as string) ?? '',
+        segundoNombre: (row.segundoNombre as string) ?? undefined,
+        primerApellido: (row.primerApellido as string) ?? '',
+        segundoApellido: (row.segundoApellido as string) ?? undefined,
+        celular: (row.celular as string) ?? '',
+        empresa: (row.empresa as string) ?? undefined,
+        codEmpresa: (row.codEmpresa as string) ?? undefined,
+        tipoExamen: (row.tipoExamen as string) ?? undefined,
+        examenes: (row.examenes as string) ?? undefined,
+        medico: (row.medico as string) ?? undefined,
+        fechaAtencion: row.fechaAtencion ? String(row.fechaAtencion) : undefined,
+        horaAtencion: (row.horaAtencion as string) ?? undefined,
+        atendido: (row.atendido as string) ?? undefined,
+        ciudad: (row.ciudad as string) ?? undefined,
+      }));
+
+      return {
+        ordenes,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      console.error('❌ Error listando órdenes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea una nueva orden (fila) en HistoriaClinica.
+   */
+  async createOrden(data: OrdenCreateInput): Promise<OrdenItem> {
+    try {
+      const id = randomUUID();
+
+      // Construir timestamp Colombia combinando fecha + hora.
+      // Colombia = UTC-5, por tanto UTC = hora_local + 5 h.
+      const [h, min] = data.horaAtencion.split(':').map(Number);
+      const [y, m, d] = data.fechaAtencion.split('-').map(Number);
+      const fechaTs = new Date(Date.UTC(y, m - 1, d, h + 5, min, 0));
+
+      const result = await postgresService.query(
+        `INSERT INTO "HistoriaClinica" (
+           "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
+           "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
+           "fechaAtencion", "horaAtencion", "atendido", "ciudad"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         RETURNING "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
+                   "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
+                   "fechaAtencion", "horaAtencion", "atendido", "ciudad"`,
+        [
+          id,
+          data.numeroId,
+          data.primerNombre,
+          data.segundoNombre ?? null,
+          data.primerApellido,
+          data.segundoApellido ?? null,
+          data.celular,
+          data.empresa ?? null,
+          data.codEmpresa ?? null,
+          data.tipoExamen ?? null,
+          data.examenes ?? null,
+          data.medico,
+          fechaTs,
+          data.horaAtencion,
+          'PENDIENTE',
+          data.ciudad ?? null,
+        ]
+      );
+
+      if (!result || result.length === 0) {
+        throw new Error('INSERT no retornó fila');
+      }
+
+      const row = result[0] as Record<string, unknown>;
+      return {
+        _id: row._id as string,
+        numeroId: row.numeroId as string,
+        primerNombre: (row.primerNombre as string) ?? '',
+        segundoNombre: (row.segundoNombre as string) ?? undefined,
+        primerApellido: (row.primerApellido as string) ?? '',
+        segundoApellido: (row.segundoApellido as string) ?? undefined,
+        celular: (row.celular as string) ?? '',
+        empresa: (row.empresa as string) ?? undefined,
+        codEmpresa: (row.codEmpresa as string) ?? undefined,
+        tipoExamen: (row.tipoExamen as string) ?? undefined,
+        examenes: (row.examenes as string) ?? undefined,
+        medico: (row.medico as string) ?? undefined,
+        fechaAtencion: row.fechaAtencion ? String(row.fechaAtencion) : undefined,
+        horaAtencion: (row.horaAtencion as string) ?? undefined,
+        atendido: (row.atendido as string) ?? 'PENDIENTE',
+        ciudad: (row.ciudad as string) ?? undefined,
+      };
+    } catch (error) {
+      console.error('❌ Error creando orden:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza campos arbitrarios de una orden existente.
+   */
+  async updateOrden(id: string, fields: OrdenUpdateInput): Promise<boolean> {
+    try {
+      const ALLOWED_DIRECT: Array<keyof OrdenUpdateInput> = [
+        'primerNombre',
+        'primerApellido',
+        'celular',
+        'empresa',
+        'tipoExamen',
+        'examenes',
+        'medico',
+        'horaAtencion',
+        'atendido',
+        'ciudad',
+      ];
+
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      let paramIndex = 1;
+
+      for (const key of ALLOWED_DIRECT) {
+        if (fields[key] !== undefined) {
+          sets.push(`"${key}" = $${paramIndex++}`);
+          vals.push(fields[key]);
+        }
+      }
+
+      // fechaAtencion se recalcula si viene junto con horaAtencion, o solo fecha.
+      if (fields.fechaAtencion) {
+        const hora = fields.horaAtencion ?? '00:00';
+        const [h, min] = hora.split(':').map(Number);
+        const [y, mo, d] = fields.fechaAtencion.split('-').map(Number);
+        const fechaTs = new Date(Date.UTC(y, mo - 1, d, h + 5, min, 0));
+        sets.push(`"fechaAtencion" = $${paramIndex++}`);
+        vals.push(fechaTs);
+      }
+
+      if (sets.length === 0) {
+        return true; // Nada que actualizar
+      }
+
+      vals.push(id);
+      const result = await postgresService.query(
+        `UPDATE "HistoriaClinica"
+         SET ${sets.join(', ')}
+         WHERE "_id" = $${paramIndex}
+         RETURNING "_id"`,
+        vals
+      );
+
+      return result !== null && result.length > 0;
+    } catch (error) {
+      console.error('❌ Error actualizando orden:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina una orden por su _id.
+   */
+  async deleteOrden(id: string): Promise<boolean> {
+    try {
+      const result = await postgresService.query(
+        `DELETE FROM "HistoriaClinica" WHERE "_id" = $1 RETURNING "_id"`,
+        [id]
+      );
+      return result !== null && result.length > 0;
+    } catch (error) {
+      console.error('❌ Error eliminando orden:', error);
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utilidades de sala y teléfono
+  // ---------------------------------------------------------------------------
 
   /**
    * Genera un nombre de sala para videollamada

@@ -185,7 +185,7 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [data, historiaId, refetch]);
+  }, [data?.transcriptionStatus, historiaId, refetch]);
 
   // Atajo M y N — solo si el foco no está en un editable.
   useEffect(() => {

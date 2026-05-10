@@ -18,4 +18,10 @@ router.get('/patients/details/:documento', medicalPanelController.getPatientDeta
 // Marcar paciente como "No Contesta"
 router.patch('/patients/:patientId/no-answer', medicalPanelController.markAsNoAnswer);
 
+// CRUD de Órdenes
+router.get('/ordenes', medicalPanelController.listOrdenes);
+router.post('/ordenes', medicalPanelController.createOrden);
+router.patch('/ordenes/:id', medicalPanelController.updateOrden);
+router.delete('/ordenes/:id', medicalPanelController.deleteOrden);
+
 export default router;

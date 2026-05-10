@@ -4,6 +4,7 @@ import { DoctorRoomPage } from './pages/DoctorRoomPage';
 import { PatientPage } from './pages/PatientPage';
 import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
+import { OrdenesPage } from './pages/OrdenesPage';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
         <Route path="/panel-medico" element={<MedicalPanelPage />} />
         <Route path="/historias" element={<HistoriasClinicasPage />} />
+        <Route path="/ordenes" element={<OrdenesPage />} />
       </Routes>
     </BrowserRouter>
   );

@@ -63,7 +63,7 @@ class WhatsAppService {
     }
 
     const toNumber = this.formatPhoneNumber(phone);
-    const baseUrl = process.env.PUBLIC_APP_URL || 'https://dolphin-app-58o7k.ondigitalocean.app';
+    const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
     const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
 
     const messageBody =

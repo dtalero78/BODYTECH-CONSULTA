@@ -285,7 +285,7 @@ class VideoController {
       if (result.success) {
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
         try {
-          const baseUrl = process.env.PUBLIC_APP_URL || 'https://dolphin-app-58o7k.ondigitalocean.app';
+          const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
           const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
           const messageBody = `Hola ${patientName},\n\nTe saludamos de VIP Salud Ocupacional.\n\nTienes una consulta médica a las ${appointmentTime}.\n\nPara ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
 

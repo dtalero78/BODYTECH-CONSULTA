@@ -278,7 +278,7 @@ export function MedicalPanelPage() {
       const params = new URLSearchParams({
         nombre: patient.primerNombre,
         apellido: patient.primerApellido,
-        documento: patient._id,
+        documento: patient.numeroId,
         doctor: medicoCode
       });
       const roomNameWithParams = `${roomName}?${params.toString()}`;

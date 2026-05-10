@@ -685,6 +685,15 @@ class VideoController {
             return;
           }
 
+          // Si endRoom ya creó la composición directamente, no duplicar
+          const alreadyHasComposition = await twilioService.roomHasComposition(RoomSid);
+          if (alreadyHasComposition) {
+            console.log(
+              `[Webhook room-completed] Room ${RoomName} ya tiene composition — ignorando`
+            );
+            return;
+          }
+
           const comp = await twilioService.createComposition(RoomSid);
 
           await postgresService.query(

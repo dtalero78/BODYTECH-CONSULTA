@@ -231,6 +231,12 @@ class TwilioService {
       roomSid: composition.roomSid ?? roomSid,
     };
   }
+
+  /** Devuelve true si ya existe al menos una composición para el roomSid dado. */
+  async roomHasComposition(roomSid: string): Promise<boolean> {
+    const list = await this.client.video.v1.compositions.list({ roomSid, limit: 1 });
+    return list.length > 0;
+  }
 }
 
 export default new TwilioService();

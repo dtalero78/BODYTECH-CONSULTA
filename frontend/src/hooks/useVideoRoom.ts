@@ -128,6 +128,14 @@ export const useVideoRoom = ({
       setIsConnecting(true);
       setError(null);
 
+      // Pre-crear el room con recordParticipantsOnConnect=true y statusCallback.
+      // Si ya existe Twilio devuelve 53113 y el backend lo ignora silenciosamente.
+      try {
+        await apiService.createRoom(roomName, 'group');
+      } catch {
+        // ignorar — el room puede ya existir o el backend ya lo manejó
+      }
+
       // Obtener token del backend
       const token = await apiService.getVideoToken(identity, roomName);
 

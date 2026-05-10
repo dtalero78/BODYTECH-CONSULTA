@@ -25,12 +25,11 @@ class VideoController {
         return;
       }
 
-      // Phase 3 — usar el default 'group-small' del service para habilitar
-      // grabación por participante (recordParticipantsOnConnect). 'go' no
-      // soporta recording rules en Twilio.
+      // Pre-crear el room como 'group' con recordParticipantsOnConnect=true.
+      // group-small fue deprecado por Twilio (error 53126).
       try {
         await twilioService.createRoom(roomName);
-        console.log(`Room created (group-small with recording): ${roomName}`);
+        console.log(`Room created (group with recording): ${roomName}`);
       } catch (error: any) {
         // Si la sala ya existe, continuar (error code 53113)
         if (error.code === 53113) {
@@ -62,7 +61,7 @@ class VideoController {
   /**
    * Crear una nueva sala de video
    * POST /api/video/rooms
-   * Body: { roomName: string, type?: 'group' | 'peer-to-peer' | 'group-small' }
+   * Body: { roomName: string, type?: 'group' | 'peer-to-peer' }
    */
   async createRoom(req: Request, res: Response): Promise<void> {
     try {

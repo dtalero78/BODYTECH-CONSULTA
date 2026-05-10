@@ -51,7 +51,7 @@ class ApiService {
   /**
    * Crear una sala de video
    */
-  async createRoom(roomName: string, type?: 'group' | 'peer-to-peer' | 'group-small') {
+  async createRoom(roomName: string, type?: 'group' | 'peer-to-peer') {
     const response = await this.client.post('/api/video/rooms', {
       roomName,
       type,

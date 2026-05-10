@@ -120,11 +120,33 @@ class VideoController {
     try {
       const { roomName } = req.params;
 
-      const room = await twilioService.endRoom(roomName);
+      const result = await twilioService.endRoom(roomName, true);
+
+      // Guardar composition_sid en HistoriaClinica si hay historia vinculada
+      if (result.compositionSid) {
+        (async () => {
+          try {
+            const rows = await postgresService.query(
+              `SELECT historia_id FROM room_historia_map WHERE room_name = $1 LIMIT 1`,
+              [roomName]
+            );
+            const historiaId: string | undefined = rows?.[0]?.historia_id;
+            if (historiaId) {
+              await postgresService.query(
+                `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+                [result.compositionSid, historiaId]
+              );
+              console.log(`[EndRoom] Composition ${result.compositionSid} guardada para historia ${historiaId}`);
+            }
+          } catch (err: any) {
+            console.error(`[EndRoom] Error guardando composition_sid:`, err.message);
+          }
+        })();
+      }
 
       res.status(200).json({
         success: true,
-        data: room,
+        data: result,
       });
     } catch (error) {
       console.error('Error ending room:', error);

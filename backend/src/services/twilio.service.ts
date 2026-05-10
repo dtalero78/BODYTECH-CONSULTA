@@ -126,18 +126,32 @@ class TwilioService {
   }
 
   /**
-   * Finalizar una sala de video
+   * Finalizar una sala de video y opcionalmente crear la composición MP4.
    * @param roomSidOrUniqueName - SID o nombre único de la sala
+   * @param createComposition - Si true, crea la composición inmediatamente tras cerrar
    */
-  async endRoom(roomSidOrUniqueName: string) {
+  async endRoom(roomSidOrUniqueName: string, createComposition = false) {
     try {
       const room = await this.client.video.v1
         .rooms(roomSidOrUniqueName)
         .update({ status: 'completed' });
 
+      let compositionSid: string | undefined;
+
+      if (createComposition) {
+        try {
+          const comp = await this.createComposition(room.sid);
+          compositionSid = comp.sid;
+          console.log(`[Twilio] Composition created: ${comp.sid} for room ${room.sid}`);
+        } catch (err: any) {
+          console.error(`[Twilio] Error creating composition for room ${room.sid}:`, err.message);
+        }
+      }
+
       return {
         sid: room.sid,
         status: room.status,
+        compositionSid,
       };
     } catch (error) {
       console.error('Error ending room:', error);

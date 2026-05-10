@@ -347,7 +347,10 @@ class PostgresService {
 
           -- ===== Phase 3 — Transcripción post-llamada =====
           ADD COLUMN IF NOT EXISTS "transcription_status" TEXT,
-          ADD COLUMN IF NOT EXISTS "transcription_text" TEXT
+          ADD COLUMN IF NOT EXISTS "transcription_text" TEXT,
+
+          -- ===== Phase 4 — Twilio Compositions =====
+          ADD COLUMN IF NOT EXISTS "composition_sid" TEXT
       `);
 
       // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio

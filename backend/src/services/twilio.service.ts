@@ -196,6 +196,31 @@ class TwilioService {
       throw error;
     }
   }
+
+  /**
+   * Crear una Composition de Twilio Video para una sala completada.
+   * Combina todos los tracks de audio y video en un único archivo mp4.
+   *
+   * @param roomSid - SID de la sala (RMxxx), no el uniqueName
+   * @returns sid, status y roomSid de la composition creada
+   */
+  async createComposition(
+    roomSid: string
+  ): Promise<{ sid: string; status: string; roomSid: string }> {
+    const composition = await this.client.video.v1.compositions.create({
+      roomSid,
+      audioSources: ['*'],
+      videoLayout: { grid: { video_sources: ['*'] } },
+      format: 'mp4',
+      resolution: '640x480',
+    });
+
+    return {
+      sid: composition.sid,
+      status: composition.status,
+      roomSid: composition.roomSid ?? roomSid,
+    };
+  }
 }
 
 export default new TwilioService();

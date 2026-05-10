@@ -22,12 +22,15 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
   const [isPanelMaxed, setIsPanelMaxed] = useState(false);
 
+  const [cameraWarnDismissed, setCameraWarnDismissed] = useState(false);
+
   const {
     localParticipant,
     remoteParticipants,
     isConnecting,
     isConnected,
     error,
+    cameraWarning,
     connectToRoom,
     disconnectFromRoom,
     toggleAudio,
@@ -200,6 +203,14 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
   // Bloque de columna de video (reusable entre estados normal y maxed).
   const videoColumn = (
     <div className="relative w-full h-full bg-[#0b141a] flex flex-col overflow-hidden">
+      {/* Banner de advertencia de cámara — no bloqueante */}
+      {cameraWarning && !cameraWarnDismissed && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md bg-amber-500/90 backdrop-blur text-white text-xs rounded-xl px-4 py-2 flex items-start gap-2 shadow-lg">
+          <span className="text-base leading-none mt-0.5">⚠️</span>
+          <span className="flex-1">{cameraWarning}</span>
+          <button onClick={() => setCameraWarnDismissed(true)} className="ml-1 text-white/70 hover:text-white leading-none text-base">✕</button>
+        </div>
+      )}
       {/* Header tipo WhatsApp — solo para vista paciente o cuando no hay panel */}
       {!showPanel && (
         <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">

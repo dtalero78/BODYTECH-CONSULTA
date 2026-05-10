@@ -31,6 +31,7 @@ interface UseVideoRoomReturn {
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
+  cameraWarning: string | null;
   connectToRoom: () => Promise<void>;
   disconnectFromRoom: () => void;
   toggleAudio: () => void;
@@ -120,6 +121,7 @@ export const useVideoRoom = ({
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [localVideoTrack, setLocalVideoTrack] = useState<LocalVideoTrack | null>(null);
+  const [cameraWarning, setCameraWarning] = useState<string | null>(null);
 
   const connectToRoom = useCallback(async () => {
     try {
@@ -148,6 +150,10 @@ export const useVideoRoom = ({
       const videoTrack = Array.from(connectedRoom.localParticipant.videoTracks.values())[0]?.track as LocalVideoTrack;
       if (videoTrack) {
         setLocalVideoTrack(videoTrack);
+      } else {
+        // SDK conectó pero sin cámara: permiso denegado o cámara en uso por otra app/tab.
+        console.warn('[VideoRoom] Conectado sin track de video. Permiso denegado o cámara ocupada.');
+        setCameraWarning('Tu cámara no está disponible. Verifica que ninguna otra aplicación o pestaña la esté usando y que el navegador tenga permiso de cámara.');
       }
 
       // Registrar conexión para reportes (si se proporcionó rol)
@@ -310,6 +316,7 @@ export const useVideoRoom = ({
     isConnecting,
     isConnected,
     error,
+    cameraWarning,
     connectToRoom,
     disconnectFromRoom,
     toggleAudio,

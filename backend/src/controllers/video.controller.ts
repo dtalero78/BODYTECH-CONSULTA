@@ -604,6 +604,102 @@ class VideoController {
   }
 
   /**
+   * Phase 4 — Webhook de Twilio cuando una sala de video se completa (status=completed).
+   * Crea una Composition mp4 (audio + video de todos los participantes) y guarda
+   * el composition_sid en la HistoriaClinica vinculada.
+   *
+   * POST /api/video/webhooks/room-completed
+   * Content-Type: application/x-www-form-urlencoded (Twilio)
+   *
+   * Twilio envía: RoomSid, RoomName, RoomStatus, etc.
+   * Respondemos 200 inmediato; la composition se crea en background.
+   */
+  async roomCompletedWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+      const signature = (req.headers['x-twilio-signature'] as string) || '';
+
+      const baseUrl =
+        process.env.PUBLIC_BASE_URL ||
+        `${(req.headers['x-forwarded-proto'] as string) || req.protocol}://${req.get('host')}`;
+      const url = `${baseUrl.replace(/\/+$/, '')}${req.originalUrl}`;
+
+      if (authToken && signature) {
+        const valid = twilio.validateRequest(
+          authToken,
+          signature,
+          url,
+          (req.body ?? {}) as Record<string, string>
+        );
+        if (!valid) {
+          console.warn(`[Webhook room-completed] Firma Twilio inválida. url=${url}`);
+          res.status(403).json({ error: 'Invalid Twilio signature' });
+          return;
+        }
+      }
+
+      const { RoomSid, RoomName, RoomStatus } = (req.body ?? {}) as Record<string, string>;
+
+      // Responder inmediatamente — Twilio exige 200 rápido
+      res.sendStatus(200);
+
+      if (RoomStatus !== 'completed') return;
+
+      console.log(`[Webhook room-completed] ${RoomName} (${RoomSid})`);
+
+      // Procesar en background — errores solo se loguean para no afectar al webhook
+      (async () => {
+        try {
+          // Buscar la historia clínica vinculada al room
+          const rows = await postgresService.query(
+            `SELECT historia_id FROM room_historia_map WHERE room_name = $1 LIMIT 1`,
+            [RoomName]
+          );
+          const historiaId: string | undefined = rows?.[0]?.historia_id;
+
+          if (!historiaId) {
+            console.log(
+              `[Webhook room-completed] Sin historia vinculada para ${RoomName} — ignorando`
+            );
+            return;
+          }
+
+          // Verificar si ya tiene composition para evitar duplicados
+          const existing = await postgresService.query(
+            `SELECT "composition_sid" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+            [historiaId]
+          );
+          if (existing?.[0]?.composition_sid) {
+            console.log(
+              `[Webhook room-completed] Historia ${historiaId} ya tiene composition — ignorando`
+            );
+            return;
+          }
+
+          const comp = await twilioService.createComposition(RoomSid);
+
+          await postgresService.query(
+            `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+            [comp.sid, historiaId]
+          );
+
+          console.log(
+            `[Webhook room-completed] Composition ${comp.sid} (status: ${comp.status}) creada para historia ${historiaId}`
+          );
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[Webhook room-completed] Error en background:`, msg);
+        }
+      })();
+    } catch (error) {
+      console.error('[Webhook room-completed] Error inesperado:', error);
+      if (!res.headersSent) {
+        res.status(500).send();
+      }
+    }
+  }
+
+  /**
    * Phase 3 — Webhook de Twilio cuando un recording termina (status=completed).
    * Validamos firma con TWILIO_AUTH_TOKEN y disparamos el pipeline en background.
    *

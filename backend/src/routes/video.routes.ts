@@ -27,6 +27,9 @@ router.get('/events/connected-patients', videoController.getConnectedPatients);
 router.post('/events/session-start', videoController.sessionStart);
 router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
 
+// Phase 4 — Twilio Compositions (se dispara cuando la sala pasa a completed)
+router.post('/webhooks/room-completed', videoController.roomCompletedWebhook);
+
 // WhatsApp
 router.post('/whatsapp/send', videoController.sendWhatsApp);
 

@@ -5,6 +5,7 @@ import { PatientPage } from './pages/PatientPage';
 import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
 import { OrdenesPage } from './pages/OrdenesPage';
+import { CalidadPage } from './pages/CalidadPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/panel-medico" element={<MedicalPanelPage />} />
         <Route path="/historias" element={<HistoriasClinicasPage />} />
         <Route path="/ordenes" element={<OrdenesPage />} />
+        <Route path="/calidad" element={<CalidadPage />} />
       </Routes>
     </BrowserRouter>
   );

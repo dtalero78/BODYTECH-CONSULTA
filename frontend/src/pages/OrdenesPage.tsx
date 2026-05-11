@@ -428,6 +428,15 @@ export function OrdenesPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-2">
+                            <a
+                              href={`/calidad?historiaId=${o._id}`}
+                              title="Evaluar calidad de consulta"
+                              className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 0-2 2h-2a2 2 0 0 0-2-2z" />
+                              </svg>
+                            </a>
                             <button
                               onClick={() => openEdit(o)}
                               title="Editar"
@@ -498,12 +507,20 @@ export function OrdenesPage() {
                     <div className="text-xs text-gray-400">{fmtFecha(o.fechaAtencion, o.horaAtencion)}</div>
                     {o.medico && <div className="text-xs text-gray-500">Médico: {o.medico}</div>}
                   </div>
-                  <button
-                    onClick={() => openEdit(o)}
-                    className="w-full mt-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
-                  >
-                    Ver / Editar
-                  </button>
+                  <div className="flex gap-2 mt-1">
+                    <a
+                      href={`/calidad?historiaId=${o._id}`}
+                      className="flex-1 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium transition-colors text-center"
+                    >
+                      Evaluar
+                    </a>
+                    <button
+                      onClick={() => openEdit(o)}
+                      className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
+                    >
+                      Ver / Editar
+                    </button>
+                  </div>
                 </div>
               ))}
               {totalPages > 1 && (

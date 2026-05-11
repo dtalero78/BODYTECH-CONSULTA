@@ -362,6 +362,23 @@ class PostgresService {
         )
       `);
 
+      // ===== Módulo de evaluación de calidad de consultas =====
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS consulta_evaluaciones (
+          id SERIAL PRIMARY KEY,
+          historia_id TEXT NOT NULL,
+          estado TEXT NOT NULL DEFAULT 'procesando',
+          session_id TEXT,
+          puntaje_total NUMERIC,
+          evaluacion JSONB,
+          transcript TEXT,
+          error_msg TEXT,
+          pasos JSONB DEFAULT '[]',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

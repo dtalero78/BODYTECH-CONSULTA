@@ -36,7 +36,6 @@ export interface SessionInfo {
 export interface EvaluacionRow {
   id: number;
   historia_id: string;
-  composition_sid: string | null;
   transcript: string | null;
   evaluacion: EvaluacionResult | null;
   puntaje_total: number | null;
@@ -415,7 +414,7 @@ class CalidadService {
   /** Obtiene una evaluación por id. */
   async getEvaluacion(id: number): Promise<EvaluacionRow | null> {
     const rows = await postgresService.query(
-      `SELECT id, historia_id, composition_sid, transcript, evaluacion, puntaje_total,
+      `SELECT id, historia_id, transcript, evaluacion, puntaje_total,
               estado, session_id, error_msg, pasos, created_at, updated_at
        FROM consulta_evaluaciones
        WHERE id = $1

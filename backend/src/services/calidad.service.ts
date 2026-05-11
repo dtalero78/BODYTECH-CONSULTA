@@ -316,8 +316,8 @@ class CalidadService {
   async getSession(historiaId: string): Promise<SessionInfo> {
     const rows = await postgresService.query(
       `SELECT "_id", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
-              "nombres", "numeroId", "empresa", "fechaConsulta", "fechaAtencion",
-              "medico", "composition_sid"
+              "numeroId", "empresa", "fechaConsulta", "fechaAtencion",
+              "medico", composition_sid
        FROM "HistoriaClinica"
        WHERE "_id" = $1
        LIMIT 1`,
@@ -342,9 +342,7 @@ class CalidadService {
       [hc.primerNombre, hc.segundoNombre, hc.primerApellido, hc.segundoApellido]
         .filter(Boolean)
         .join(' ')
-        .trim() ||
-      (hc.nombres as string | null) ||
-      null;
+        .trim() || null;
 
     return {
       found: true,

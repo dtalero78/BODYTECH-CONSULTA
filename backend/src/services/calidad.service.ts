@@ -13,6 +13,7 @@
  */
 
 import axios from 'axios';
+import { spawn } from 'child_process';
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
@@ -164,6 +165,46 @@ async function descargarMp4ComoBuffer(url: string): Promise<Buffer> {
 }
 
 /**
+ * Extrae la pista de audio de un buffer MP4 usando ffmpeg (stdin → stdout).
+ * Salida: MP3 mono 16kHz 64kbps — tamaño típico ~2-4 MB para una consulta de 30 min.
+ */
+function extraerAudio(mp4Buffer: Buffer): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', 'pipe:0',      // leer desde stdin
+      '-vn',               // sin video
+      '-acodec', 'libmp3lame',
+      '-ar', '16000',      // 16kHz suficiente para voz
+      '-ac', '1',          // mono
+      '-b:a', '64k',       // 64 kbps
+      '-f', 'mp3',
+      'pipe:1',            // escribir a stdout
+    ]);
+
+    const chunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    ffmpeg.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+    ffmpeg.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+    ffmpeg.on('close', (code: number | null) => {
+      if (code !== 0) {
+        const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-2000);
+        return reject(new Error(`ffmpeg salió con código ${code}: ${errMsg}`));
+      }
+      resolve(Buffer.concat(chunks));
+    });
+
+    ffmpeg.on('error', (err: Error) => {
+      reject(new Error(`Error al iniciar ffmpeg: ${err.message}`));
+    });
+
+    ffmpeg.stdin.write(mp4Buffer);
+    ffmpeg.stdin.end();
+  });
+}
+
+/**
  * Busca el formulario pre-consulta del paciente por numero_id.
  * No rompe si la tabla no existe o no hay registro.
  */
@@ -223,14 +264,21 @@ async function procesarEvaluacion(
     const mp4Buffer = await descargarMp4ComoBuffer(mp4Url);
     const mbVideo = (mp4Buffer.byteLength / (1024 * 1024)).toFixed(2);
     console.log(`${tag} MP4 en buffer: ${mbVideo} MB`);
-    await agregarPaso(evaluacionId, `Grabación descargada (${mbVideo} MB). Transcribiendo con Whisper...`);
+    await agregarPaso(evaluacionId, `Grabación descargada (${mbVideo} MB). Extrayendo audio...`);
 
     // 3. Estado → transcribiendo
     await setEstado(evaluacionId, 'transcribiendo');
 
-    // 4. Whisper (el buffer MP4 contiene audio; Whisper acepta varios formatos de contenedor)
+    // 3b. Extraer solo el audio con ffmpeg (evita el límite de 25 MB de Whisper)
+    console.log(`${tag} Extrayendo audio con ffmpeg...`);
+    const audioBuffer = await extraerAudio(mp4Buffer);
+    const mbAudio = (audioBuffer.byteLength / (1024 * 1024)).toFixed(2);
+    console.log(`${tag} Audio extraído: ${mbAudio} MB`);
+    await agregarPaso(evaluacionId, `Audio extraído (${mbAudio} MB). Transcribiendo con Whisper...`);
+
+    // 4. Whisper
     console.log(`${tag} Transcribiendo con Whisper (es)...`);
-    const audioFile = await toFile(mp4Buffer, 'recording.mp4', { type: 'video/mp4' });
+    const audioFile = await toFile(audioBuffer, 'recording.mp3', { type: 'audio/mpeg' });
     const whisperResp = await openai.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',

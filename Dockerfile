@@ -27,6 +27,8 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:20-alpine
 
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 # Copiar package.json del backend y instalar solo dependencias de produccion

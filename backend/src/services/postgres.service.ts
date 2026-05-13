@@ -350,7 +350,27 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "transcription_text" TEXT,
 
           -- ===== Phase 4 — Twilio Compositions =====
-          ADD COLUMN IF NOT EXISTS "composition_sid" TEXT
+          ADD COLUMN IF NOT EXISTS "composition_sid" TEXT,
+
+          -- ===== Phase 5 — Mejoras clínicas historia =====
+          -- Antecedente osteomuscular (campos adicionales)
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_lateralidad" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_evolucion" VARCHAR(50),
+
+          -- Antecedente familiar (consanguinidad)
+          ADD COLUMN IF NOT EXISTS "ant_familiares_consanguinidad" VARCHAR(100),
+
+          -- Actividad física (nivel calculado)
+          ADD COLUMN IF NOT EXISTS "actividad_nivel" VARCHAR(50),
+
+          -- Postura (descripción libre)
+          ADD COLUMN IF NOT EXISTS "postura_descripcion" TEXT,
+
+          -- Equilibrio unipodal (segundos)
+          ADD COLUMN IF NOT EXISTS "equilibrio_unipodal_segundos" INTEGER,
+
+          -- Phase 5: lista JSON de antecedentes osteomusculares múltiples
+          ADD COLUMN IF NOT EXISTS "ant_osteomuscular_lista" TEXT
       `);
 
       // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio

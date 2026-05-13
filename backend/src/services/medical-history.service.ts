@@ -95,6 +95,14 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'planificacion_familiar_flag', type: 'boolean' },
   { field: 'actividad_duracion', type: 'string' },
   { field: 'actividad_fuerza_semanal_label', type: 'string' },
+  // ---- Phase 5: nuevos campos osteomuscular ----
+  { field: 'ant_osteomuscular_lista', type: 'string' },
+  { field: 'ant_osteomuscular_lateralidad', type: 'string' },
+  { field: 'ant_osteomuscular_evolucion', type: 'string' },
+  // ---- Phase 5: nuevos campos familiar ----
+  { field: 'ant_familiares_consanguinidad', type: 'string' },
+  // ---- Phase 5: actividad nivel ----
+  { field: 'actividad_nivel', type: 'string' },
 
   // ---- Clasificación de Riesgo ----
   { field: 'downton_caidas', type: 'boolean' },
@@ -156,6 +164,7 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'postura_espalda', type: 'string' },
   { field: 'postura_cad_sup', type: 'string' },
   { field: 'postura_cad_inf', type: 'string' },
+  { field: 'postura_descripcion', type: 'string' },
   { field: 'hallazgos_descripcion', type: 'string' },
   { field: 'hallazgos_stretching', type: 'string' },
   // ---- Phase 2: numeric stretching (cm) ----
@@ -173,6 +182,7 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'tas', type: 'number' },
   { field: 'tad', type: 'number' },
   { field: 'equilibrio_unipodal', type: 'string' },
+  { field: 'equilibrio_unipodal_segundos', type: 'number' },
   { field: 'riesgo_marcha', type: 'string' },
   { field: 'marcha_estacionaria', type: 'string' },
   { field: 'riesgo_om', type: 'string' },

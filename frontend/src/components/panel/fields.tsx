@@ -33,8 +33,10 @@ function coerceBool(raw: unknown): boolean {
 export function TextField(
   props: CommonProps & {
     placeholder?: string;
-    type?: 'text' | 'email' | 'tel' | 'date';
+    type?: 'text' | 'email' | 'tel' | 'date' | 'number';
     error?: string;
+    min?: number;
+    max?: number;
   }
 ) {
   const initial = props.initialValue == null ? '' : String(props.initialValue);
@@ -52,6 +54,16 @@ export function TextField(
     onSaved: props.onSaved,
   });
 
+  const rangeError: string | null = (() => {
+    if (props.type !== 'number' || v === '') return null;
+    const num = Number(v);
+    if (isNaN(num)) return null;
+    if (props.min !== undefined && num < props.min) return `Valor mínimo: ${props.min}`;
+    if (props.max !== undefined && num > props.max) return `Valor máximo: ${props.max}`;
+    return null;
+  })();
+  const displayError = props.error ?? rangeError;
+
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
@@ -64,11 +76,13 @@ export function TextField(
         value={v}
         onChange={(e) => setV(e.target.value)}
         placeholder={props.placeholder}
+        min={props.min}
+        max={props.max}
         className={`w-full bg-[#2a3942] border text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] ${
-          props.error ? 'border-[#ef4444]' : 'border-[#324049] focus:border-[#00a884]'
+          displayError ? 'border-[#ef4444]' : 'border-[#324049] focus:border-[#00a884]'
         }`}
       />
-      {props.error && <span className="text-[11px] text-[#ef4444]">{props.error}</span>}
+      {displayError && <span className="text-[11px] text-[#ef4444]">{displayError}</span>}
     </div>
   );
 }

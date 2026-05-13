@@ -17,35 +17,9 @@ interface ExamenFisicoTabProps {
 
 type ModalKey = 'composicion' | 'examen' | null;
 
-const POSTURA_ESPALDA_OPTS: ReadonlyArray<DropdownOption> = [
+const POSTURA_OPTS: ReadonlyArray<DropdownOption> = [
   'Normal',
-  'Cifosis',
-  'Lordosis',
-  'Escoliosis',
-  'Mixta',
-].map((v) => ({ value: v, label: v }));
-
-const POSTURA_CAD_SUP_OPTS: ReadonlyArray<DropdownOption> = [
-  'Normal',
-  'Asimetría',
-  'Anteversión',
-  'Retroversión',
-].map((v) => ({ value: v, label: v }));
-
-const POSTURA_CAD_INF_OPTS: ReadonlyArray<DropdownOption> = [
-  'Normal',
-  'Genu valgo',
-  'Genu varo',
-  'Pie plano',
-  'Pie cavo',
-].map((v) => ({ value: v, label: v }));
-
-const HALLAZGOS_DOLOR_OPTS: ReadonlyArray<DropdownOption> = [
-  'Sin dolor (0)',
-  'Leve (1-3)',
-  'Moderado (4-6)',
-  'Severo (7-9)',
-  'Insoportable (10)',
+  'Anormal',
 ].map((v) => ({ value: v, label: v }));
 
 const MOV_TREN_SUPERIOR_OPTS: ReadonlyArray<DropdownOption> = [
@@ -60,11 +34,11 @@ const EQUILIBRIO_OPTS: ReadonlyArray<DropdownOption> = [
   'Ausente',
 ].map((v) => ({ value: v, label: v }));
 
-const RIESGO_MARCHA_OPTS: ReadonlyArray<DropdownOption> = [
-  'Sin riesgo',
-  'Riesgo bajo',
-  'Riesgo moderado',
-  'Riesgo alto',
+const MARCHA_FUNCIONAL_OPTS: ReadonlyArray<DropdownOption> = [
+  'Logra',
+  'No logra',
+  'Logra con apoyo',
+  'Logra parcialmente',
 ].map((v) => ({ value: v, label: v }));
 
 const RIESGO_OM_OPTS: ReadonlyArray<DropdownOption> = [
@@ -87,6 +61,9 @@ interface CCRow {
   nuevoReadonly?: boolean;
   /** Valor calculado para nuevoReadonly (ej. IMC). */
   nuevoCalculated?: number | null;
+  type?: 'text' | 'number';
+  min?: number;
+  max?: number;
 }
 
 function toNum(v: unknown): number | null {
@@ -252,7 +229,8 @@ export function ExamenFisicoTab({
       nuevoField: 'cc_peso_nuevo',
       anteriorValue: data?.ccPesoAnterior,
       nuevoValue: data?.ccPesoNuevo,
-      direction: 'down-good',
+      direction: 'neutral',
+      type: 'number', min: 20, max: 300,
     },
     {
       label: 'Estatura (cm)',
@@ -261,6 +239,7 @@ export function ExamenFisicoTab({
       anteriorValue: data?.ccEstaturaAnterior,
       nuevoValue: data?.ccEstaturaNuevo,
       direction: 'neutral',
+      type: 'number', min: 100, max: 250,
     },
     {
       label: '% Masa muscular',
@@ -269,6 +248,7 @@ export function ExamenFisicoTab({
       anteriorValue: data?.ccMasaMuscularAnterior,
       nuevoValue: data?.ccMasaMuscularNuevo,
       direction: 'up-good',
+      type: 'number', min: 0, max: 100,
     },
     {
       label: 'IMC',
@@ -279,6 +259,7 @@ export function ExamenFisicoTab({
       direction: 'neutral',
       nuevoReadonly: true,
       nuevoCalculated: imcNuevoCalc,
+      type: 'number', min: 10, max: 60,
     },
     {
       label: 'IMM',
@@ -287,6 +268,7 @@ export function ExamenFisicoTab({
       anteriorValue: data?.ccImmAnterior,
       nuevoValue: data?.ccImmNuevo,
       direction: 'up-good',
+      type: 'number', min: 0, max: 30,
     },
     {
       label: '% Grasa',
@@ -295,6 +277,7 @@ export function ExamenFisicoTab({
       anteriorValue: data?.ccGrasaAnterior,
       nuevoValue: data?.ccGrasaNuevo,
       direction: 'down-good',
+      type: 'number', min: 0, max: 80,
     },
     {
       label: 'Perímetro abdominal (cm)',
@@ -303,6 +286,7 @@ export function ExamenFisicoTab({
       anteriorValue: data?.ccPerimetroAbdominalAnterior,
       nuevoValue: data?.ccPerimetroAbdominalNuevo,
       direction: 'down-good',
+      type: 'number', min: 40, max: 200,
     },
   ];
 
@@ -368,7 +352,9 @@ export function ExamenFisicoTab({
                 field={row.anteriorField}
                 initialValue={row.anteriorValue}
                 onSaved={onPatchLocal}
-                type="text"
+                type={row.type ?? 'text'}
+                min={row.min}
+                max={row.max}
                 placeholder="—"
               />
               {row.nuevoReadonly ? (
@@ -383,7 +369,9 @@ export function ExamenFisicoTab({
                   field={row.nuevoField}
                   initialValue={row.nuevoValue}
                   onSaved={onPatchLocal}
-                  type="text"
+                  type={row.type ?? 'text'}
+                  min={row.min}
+                  max={row.max}
                   placeholder="—"
                 />
               )}
@@ -444,7 +432,7 @@ export function ExamenFisicoTab({
                 initialValue={data?.posturaEspalda}
                 onSaved={onPatchLocal}
                 label="Espalda"
-                options={POSTURA_ESPALDA_OPTS}
+                options={POSTURA_OPTS}
               />
               <SelectField
                 historiaId={historiaId}
@@ -452,7 +440,7 @@ export function ExamenFisicoTab({
                 initialValue={data?.posturaCadSup}
                 onSaved={onPatchLocal}
                 label="Cadena superior"
-                options={POSTURA_CAD_SUP_OPTS}
+                options={POSTURA_OPTS}
               />
               <SelectField
                 historiaId={historiaId}
@@ -460,8 +448,24 @@ export function ExamenFisicoTab({
                 initialValue={data?.posturaCadInf}
                 onSaved={onPatchLocal}
                 label="Cadena inferior"
-                options={POSTURA_CAD_INF_OPTS}
+                options={POSTURA_OPTS}
               />
+              {/* Descripción libre cuando hay hallazgos anormales */}
+              {(data?.posturaEspalda === 'Anormal' ||
+                data?.posturaCadSup === 'Anormal' ||
+                data?.posturaCadInf === 'Anormal') && (
+                <div className="md:col-span-3">
+                  <TextareaField
+                    historiaId={historiaId}
+                    field="postura_descripcion"
+                    initialValue={data?.posturaDescripcion}
+                    onSaved={onPatchLocal}
+                    label="Descripción de hallazgos posturales"
+                    rows={2}
+                    placeholder="Describir las alteraciones encontradas..."
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -487,16 +491,21 @@ export function ExamenFisicoTab({
                 initialValue={data?.hallazgosStretchingCm}
                 onSaved={onPatchLocal}
                 label="Stretching isquiotibiales (cm)"
-                type="text"
+                type="number"
                 placeholder="cm"
+                min={-50}
+                max={50}
               />
-              <SelectField
+              <TextField
                 historiaId={historiaId}
                 field="hallazgos_dolor"
                 initialValue={data?.hallazgosDolor}
                 onSaved={onPatchLocal}
-                label="Dolor (EVA)"
-                options={HALLAZGOS_DOLOR_OPTS}
+                label="Dolor EVA (0–10)"
+                type="number"
+                placeholder="0"
+                min={0}
+                max={10}
               />
               <div className="md:col-span-2">
                 <TextareaField
@@ -530,24 +539,33 @@ export function ExamenFisicoTab({
                 field="fuerza_superior"
                 initialValue={data?.fuerzaSuperior}
                 onSaved={onPatchLocal}
-                label="Fuerza superior"
-                type="text"
+                label="Fuerza superior (reps)"
+                type="number"
+                placeholder="repeticiones"
+                min={0}
+                max={200}
               />
               <TextField
                 historiaId={historiaId}
                 field="fuerza_abdominal"
                 initialValue={data?.fuerzaAbdominal}
                 onSaved={onPatchLocal}
-                label="Fuerza abdominal"
-                type="text"
+                label="Fuerza abdominal (reps)"
+                type="number"
+                placeholder="repeticiones"
+                min={0}
+                max={200}
               />
               <TextField
                 historiaId={historiaId}
                 field="fuerza_inferior"
                 initialValue={data?.fuerzaInferior}
                 onSaved={onPatchLocal}
-                label="Fuerza inferior"
-                type="text"
+                label="Fuerza inferior (reps)"
+                type="number"
+                placeholder="repeticiones"
+                min={0}
+                max={200}
               />
               <TextField
                 historiaId={historiaId}
@@ -563,7 +581,10 @@ export function ExamenFisicoTab({
                 initialValue={data?.estabilidadPlancha}
                 onSaved={onPatchLocal}
                 label="Estabilidad plancha (s)"
-                type="text"
+                type="number"
+                placeholder="segundos"
+                min={0}
+                max={600}
               />
             </div>
           </div>
@@ -584,24 +605,33 @@ export function ExamenFisicoTab({
                 field="fcm"
                 initialValue={data?.fcm}
                 onSaved={onPatchLocal}
-                label="FCM"
-                type="text"
+                label="FCM (lpm)"
+                type="number"
+                placeholder="lpm"
+                min={40}
+                max={220}
               />
               <TextField
                 historiaId={historiaId}
                 field="tas"
                 initialValue={data?.tas}
                 onSaved={onPatchLocal}
-                label="TAS"
-                type="text"
+                label="TAS (mmHg)"
+                type="number"
+                placeholder="mmHg"
+                min={60}
+                max={250}
               />
               <TextField
                 historiaId={historiaId}
                 field="tad"
                 initialValue={data?.tad}
                 onSaved={onPatchLocal}
-                label="TAD"
-                type="text"
+                label="TAD (mmHg)"
+                type="number"
+                placeholder="mmHg"
+                min={40}
+                max={180}
               />
             </div>
             {/* Persistencia FCR — solo si existe edad */}
@@ -630,13 +660,24 @@ export function ExamenFisicoTab({
                 label="Equilibrio unipodal"
                 options={EQUILIBRIO_OPTS}
               />
+              <TextField
+                historiaId={historiaId}
+                field="equilibrio_unipodal_segundos"
+                initialValue={data?.equilibrioUnipodalSegundos}
+                onSaved={onPatchLocal}
+                label="Equilibrio unipodal (segundos)"
+                type="number"
+                placeholder="seg"
+                min={0}
+                max={300}
+              />
               <SelectField
                 historiaId={historiaId}
                 field="riesgo_marcha"
                 initialValue={data?.riesgoMarcha}
                 onSaved={onPatchLocal}
-                label="Riesgo de marcha"
-                options={RIESGO_MARCHA_OPTS}
+                label="Evaluación funcional de marcha"
+                options={MARCHA_FUNCIONAL_OPTS}
               />
               <SelectField
                 historiaId={historiaId}
@@ -652,7 +693,10 @@ export function ExamenFisicoTab({
                 initialValue={data?.marchaEstacionaria}
                 onSaved={onPatchLocal}
                 label="Marcha estacionaria"
-                type="text"
+                type="number"
+                placeholder="pasos"
+                min={0}
+                max={500}
               />
             </div>
           </div>

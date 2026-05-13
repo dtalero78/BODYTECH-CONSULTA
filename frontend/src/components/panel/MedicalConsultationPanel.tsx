@@ -90,9 +90,7 @@ function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   const t2Section2 = anyAntFlag || anyAntDetail;
 
   const t2Section3 =
-    [data?.actividadFrecuencia, data?.actividadDuracion, data?.actividadFuerzaSemanalLabel].filter(
-      isFilled
-    ).length >= 1;
+    isFilled(data?.actividadFrecuencia) || data?.actividadDuracionMin != null;
 
   const t2Filled = [t2Section1, t2Section2, t2Section3].filter(Boolean).length;
 
@@ -128,9 +126,9 @@ function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
     { id: 't2', label: 'Anamnesis', filled: t2Filled, total: 3 },
     { id: 't3', label: 'Clasificación de riesgo', filled: t3Filled, total: 3, warn: t3Warn },
     { id: 't4', label: 'Examen físico', filled: t4Filled, total: 15 },
-    { id: 't5', label: 'Intervención', filled: 0, total: 2 },
-    { id: 't6', label: 'Conducta', filled: 0, total: 1 },
-    { id: 't7', label: 'Observaciones', filled: 0, total: 1 },
+    { id: 't5', label: 'Intervención', filled: [data?.intervencionAnalisis, data?.intervencionTipoTecnologia, data?.intervencionTipoMeta, data?.dxTecnologiaSalud].filter(isFilled).length, total: 4 },
+    { id: 't6', label: 'Conducta', filled: [data?.aptitud, data?.controlFecha].filter(isFilled).length, total: 2 },
+    { id: 't7', label: 'Observaciones', filled: [data?.mdConceptoFinal, data?.mdRecomendacionesMedicasAdicionales].filter(isFilled).length, total: 2 },
   ];
 }
 
@@ -273,9 +271,30 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
                   onPatchLocal={patchLocal}
                 />
               )}
-              {activeTab === 't5' && <IntervencionTab />}
-              {activeTab === 't6' && <ConductaTab />}
-              {activeTab === 't7' && <ObservacionesTab />}
+              {activeTab === 't5' && (
+                <IntervencionTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
+              {activeTab === 't6' && (
+                <ConductaTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
+              {activeTab === 't7' && (
+                <ObservacionesTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
             </div>
           </>
         )}

@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from 'react';
-import { ClipboardList, HeartPulse, Dumbbell } from 'lucide-react';
+import { useState, useEffect, type ReactNode } from 'react';
+import { ClipboardList, HeartPulse, Dumbbell, Plus, Trash2 } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, SelectField, TextareaField, PillToggleField } from '../fields';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+import { useFieldAutoSave } from '../hooks/useFieldAutoSave';
+import { Dropdown } from '../Dropdown';
 
 interface AnamnesisTabProps {
   historiaId: string | undefined;
@@ -110,25 +112,32 @@ const ANT_FAMILIAR_TIPO_OPTS: ReadonlyArray<DropdownOption> = [
   'Cáncer primer grado',
 ].map((v) => ({ value: v, label: v }));
 
-const ACTIVIDAD_FRECUENCIA_OPTS: ReadonlyArray<DropdownOption> = [
-  'Nunca',
-  '1-2 veces/semana',
-  '3-4 veces/semana',
-  '5+ veces/semana',
+const ANT_ALERGICOS_CATEGORIA_OPTS: ReadonlyArray<DropdownOption> = [
+  'Alimento',
+  'Químico',
+  'Biológico',
+  'Ambiental',
+  'Otro',
 ].map((v) => ({ value: v, label: v }));
 
-const ACTIVIDAD_DURACION_OPTS: ReadonlyArray<DropdownOption> = [
-  '<30 min',
-  '30-60 min',
-  '60-90 min',
-  '>90 min',
+const ANT_OSTEOMUSCULAR_LATERALIDAD_OPTS: ReadonlyArray<DropdownOption> = [
+  'Derecha',
+  'Izquierda',
+  'Bilateral',
 ].map((v) => ({ value: v, label: v }));
 
-const ACTIVIDAD_FUERZA_OPTS: ReadonlyArray<DropdownOption> = [
-  'Nunca',
-  '1-2 veces',
-  '3-4 veces',
-  '5+ veces',
+const ANT_OSTEOMUSCULAR_EVOLUCION_OPTS: ReadonlyArray<DropdownOption> = [
+  'Agudo',
+  'Crónico',
+  'Recurrente',
+  'Resuelto',
+].map((v) => ({ value: v, label: v }));
+
+const ANT_FAMILIARES_CONSANGUINIDAD_OPTS: ReadonlyArray<DropdownOption> = [
+  'Primer grado (padres, hermanos, hijos)',
+  'Segundo grado (abuelos, tíos, nietos)',
+  'Tercer grado (primos)',
+  'Otro',
 ].map((v) => ({ value: v, label: v }));
 
 function isFilled(v: unknown): boolean {
@@ -142,6 +151,238 @@ function coerceBool(v: unknown): boolean {
     return x === 'true' || x === 'Sí' || x === 'SI' || x === 'sí' || x === 'si';
   }
   return false;
+}
+
+function clasificarActividad(dias: number | null, minutos: number | null): string | null {
+  if (dias === null || minutos === null) return null;
+  const minSemana = dias * minutos;
+  if (dias === 0 || minSemana === 0) return 'Sedentario';
+  if (minSemana < 150) return 'Irregularmente activo';
+  if (minSemana < 300) return 'Activo';
+  return 'Muy activo';
+}
+
+// ---- Múltiples antecedentes osteomusculares ----
+
+interface OmEntrada {
+  id: string;
+  tipo: string;
+  lateralidad: string;
+  evolucion: string;
+  fecha: string;
+  obs: string;
+}
+
+function parseOmList(json: string | undefined): OmEntrada[] {
+  try {
+    const arr = JSON.parse(json || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function OmListManager({
+  historiaId,
+  listaJson,
+  legacyTipo,
+  legacyLateralidad,
+  legacyEvolucion,
+  legacyObs,
+  onPatchLocal,
+}: {
+  historiaId: string | undefined;
+  listaJson: string | undefined;
+  legacyTipo?: string;
+  legacyLateralidad?: string;
+  legacyEvolucion?: string;
+  legacyObs?: string;
+  onPatchLocal: (field: string, value: unknown) => void;
+}) {
+  const [entries, setEntries] = useState<OmEntrada[]>(() => {
+    const list = parseOmList(listaJson);
+    // Auto-migrar datos del formato anterior si la lista está vacía
+    if (list.length === 0 && (legacyTipo || legacyObs)) {
+      return [
+        {
+          id: 'legacy-0',
+          tipo: legacyTipo || '',
+          lateralidad: legacyLateralidad || '',
+          evolucion: legacyEvolucion || '',
+          fecha: '',
+          obs: legacyObs || '',
+        },
+      ];
+    }
+    return list;
+  });
+
+  const [showForm, setShowForm] = useState(false);
+  const emptyForm = { tipo: '', lateralidad: '', evolucion: '', fecha: '', obs: '' };
+  const [form, setForm] = useState(emptyForm);
+
+  // Sync desde fuera (refetch)
+  useEffect(() => {
+    const incoming = parseOmList(listaJson);
+    if (incoming.length > 0) setEntries(incoming);
+  }, [listaJson]);
+
+  // Serializar para auto-save
+  const serialized = entries.length === 0 ? null : JSON.stringify(entries);
+
+  useFieldAutoSave({
+    historiaId,
+    field: 'ant_osteomuscular_lista',
+    value: serialized,
+    onSaved: onPatchLocal,
+    serverValue: listaJson || null,
+  });
+
+  const addEntry = () => {
+    if (!form.tipo) return;
+    setEntries((prev) => [...prev, { ...form, id: Date.now().toString(36) }]);
+    setForm(emptyForm);
+    setShowForm(false);
+  };
+
+  const removeEntry = (id: string) => {
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const TIPO_OPTS = ANT_OSTEOMUSCULAR_TIPO_OPTS;
+  const LAT_OPTS = ANT_OSTEOMUSCULAR_LATERALIDAD_OPTS;
+  const EVO_OPTS = ANT_OSTEOMUSCULAR_EVOLUCION_OPTS;
+
+  return (
+    <div className="md:col-span-2 pt-1">
+      {/* Lista de entradas existentes */}
+      {entries.length > 0 && (
+        <div className="mb-3 flex flex-col gap-2">
+          {entries.map((entry, idx) => (
+            <div
+              key={entry.id}
+              className="flex items-start justify-between gap-3 p-3 rounded-xl bg-[#1a2530] border border-[#324049]"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] font-semibold text-[#e9edef]">
+                  {idx + 1}. {entry.tipo || '—'}
+                  {entry.lateralidad && ` · ${entry.lateralidad}`}
+                  {entry.evolucion && ` · ${entry.evolucion}`}
+                  {entry.fecha && (
+                    <span className="text-[#6b7882] font-normal ml-1">({entry.fecha})</span>
+                  )}
+                </div>
+                {entry.obs && (
+                  <div className="text-[11.5px] text-[#a4b1b9] mt-0.5 line-clamp-2">{entry.obs}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => removeEntry(entry.id)}
+                className="text-[#6b7882] hover:text-[#ef4444] transition-colors shrink-0 mt-0.5"
+                title="Eliminar"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulario de nuevo antecedente */}
+      {showForm && (
+        <div className="mb-3 p-3.5 rounded-xl bg-[#1a2530] border border-[#00a884]/40">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+                Tipo de lesión <span className="text-[#ef4444]">*</span>
+              </label>
+              <Dropdown
+                value={form.tipo}
+                options={TIPO_OPTS}
+                onChange={(v) => setForm((f) => ({ ...f, tipo: v }))}
+                placeholder="Seleccionar..."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+                Lateralidad
+              </label>
+              <Dropdown
+                value={form.lateralidad}
+                options={LAT_OPTS}
+                onChange={(v) => setForm((f) => ({ ...f, lateralidad: v }))}
+                placeholder="Seleccionar..."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+                Evolución
+              </label>
+              <Dropdown
+                value={form.evolucion}
+                options={EVO_OPTS}
+                onChange={(v) => setForm((f) => ({ ...f, evolucion: v }))}
+                placeholder="Seleccionar..."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+                Fecha aproximada
+              </label>
+              <input
+                type="date"
+                value={form.fecha}
+                onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
+                className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[#00a884] transition-colors"
+              />
+            </div>
+            <div className="md:col-span-2 flex flex-col gap-1.5">
+              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+                Observaciones
+              </label>
+              <textarea
+                rows={2}
+                value={form.obs}
+                onChange={(e) => setForm((f) => ({ ...f, obs: e.target.value }))}
+                placeholder="Descripción, tratamiento, recurrencia..."
+                className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[#00a884] resize-y transition-colors"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setForm(emptyForm); }}
+              className="px-3.5 py-1.5 rounded-lg text-[12.5px] text-[#a4b1b9] hover:text-[#e9edef] transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={addEntry}
+              disabled={!form.tipo}
+              className="px-3.5 py-1.5 rounded-lg text-[12.5px] bg-[#00a884] text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00c99a] transition-colors"
+            >
+              Agregar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Botón para mostrar formulario */}
+      {!showForm && (
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 text-[12.5px] text-[#00a884] hover:text-[#00c99a] font-semibold transition-colors"
+        >
+          <Plus size={14} />
+          Agregar antecedente osteomuscular
+        </button>
+      )}
+    </div>
+  );
 }
 
 interface AntRowProps {
@@ -226,16 +467,29 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
       ? 'Sin antecedentes registrados'
       : `${antFilled} de ${antRowsCount} antecedentes registrados`;
 
-  // ----- Card 2.3: Antecedentes deportivos -----
-  const deportVals = [data?.actividadFrecuencia, data?.actividadDuracion, data?.actividadFuerzaSemanalLabel];
+  // ---- Card 2.3: Antecedentes deportivos -----
+  // actividad_frecuencia = días/semana (número 0-7), actividad_duracion_min = minutos (número)
+  const frecDias = typeof data?.actividadFrecuencia === 'string' && data.actividadFrecuencia !== ''
+    ? Number(data.actividadFrecuencia)
+    : typeof data?.actividadFrecuencia === 'number'
+      ? data.actividadFrecuencia
+      : null;
+  const durMin = data?.actividadDuracionMin ?? null;
+
+  const nivelActividad = clasificarActividad(frecDias, durMin);
+
+  const deportVals = [
+    frecDias !== null ? String(frecDias) : null,
+    durMin !== null ? String(durMin) : null,
+  ];
   const deportFilled = deportVals.filter(isFilled).length;
   const deportState =
     deportFilled === 0 ? 'empty' : deportFilled === deportVals.length ? 'complete' : 'partial';
   const deportSubtitle =
     deportFilled === 0
       ? 'Sin información'
-      : deportState === 'complete'
-        ? `${data?.actividadFrecuencia} · ${data?.actividadDuracion}`
+      : nivelActividad
+        ? `${nivelActividad} · ${frecDias} días · ${durMin} min/sesión`
         : `${deportFilled} de ${deportVals.length} campos completos`;
 
   return (
@@ -424,24 +678,15 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
             historiaId={historiaId}
             onPatchLocal={onPatchLocal}
           >
-            <SelectField
+            <OmListManager
               historiaId={historiaId}
-              field="ant_osteomuscular_tipo"
-              initialValue={data?.antOsteomuscularTipo}
-              onSaved={onPatchLocal}
-              label="Tipo"
-              options={ANT_OSTEOMUSCULAR_TIPO_OPTS}
+              listaJson={data?.antOsteomuscularLista}
+              legacyTipo={data?.antOsteomuscularTipo}
+              legacyLateralidad={data?.antOsteomuscularLateralidad}
+              legacyEvolucion={data?.antOsteomuscularEvolucion}
+              legacyObs={data?.antOsteomuscularObs}
+              onPatchLocal={onPatchLocal}
             />
-            <div className="md:col-span-2">
-              <TextareaField
-                historiaId={historiaId}
-                field="ant_osteomuscular_obs"
-                initialValue={data?.antOsteomuscularObs}
-                onSaved={onPatchLocal}
-                label="Observaciones"
-                rows={2}
-              />
-            </div>
           </AntRow>
 
           {/* 4. Farmacológico */}
@@ -471,7 +716,27 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
             flagValue={data?.antAlergicosFlag}
             historiaId={historiaId}
             onPatchLocal={onPatchLocal}
-          />
+          >
+            <SelectField
+              historiaId={historiaId}
+              field="ant_alergicos_tipo"
+              initialValue={data?.antAlergicosTipo}
+              onSaved={onPatchLocal}
+              label="Categoría"
+              options={ANT_ALERGICOS_CATEGORIA_OPTS}
+            />
+            <div className="md:col-span-2">
+              <TextareaField
+                historiaId={historiaId}
+                field="ant_alergicos_obs"
+                initialValue={data?.antAlergicosObs}
+                onSaved={onPatchLocal}
+                label="Descripción y observaciones"
+                rows={2}
+                placeholder="Agente alérgico, reacción, tratamiento..."
+              />
+            </div>
+          </AntRow>
 
           {/* 6. Familiar */}
           <AntRow
@@ -486,9 +751,27 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
               field="ant_familiares_tipo"
               initialValue={data?.antFamiliaresTipo}
               onSaved={onPatchLocal}
-              label="Tipo"
+              label="Tipo de antecedente"
               options={ANT_FAMILIAR_TIPO_OPTS}
             />
+            <SelectField
+              historiaId={historiaId}
+              field="ant_familiares_consanguinidad"
+              initialValue={data?.antFamiliaresConsanguinidad}
+              onSaved={onPatchLocal}
+              label="Grado de consanguinidad"
+              options={ANT_FAMILIARES_CONSANGUINIDAD_OPTS}
+            />
+            <div className="md:col-span-2">
+              <TextareaField
+                historiaId={historiaId}
+                field="ant_familiares_obs"
+                initialValue={data?.antFamiliaresObs}
+                onSaved={onPatchLocal}
+                label="Observaciones"
+                rows={2}
+              />
+            </div>
           </AntRow>
 
           {/* 7. Embarazo (solo Femenino) */}
@@ -551,7 +834,19 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
             flagValue={data?.planificacionFamiliarFlag}
             historiaId={historiaId}
             onPatchLocal={onPatchLocal}
-          />
+          >
+            <div className="md:col-span-2">
+              <TextareaField
+                historiaId={historiaId}
+                field="planificacion"
+                initialValue={data?.planificacion}
+                onSaved={onPatchLocal}
+                label="Método de planificación familiar"
+                rows={2}
+                placeholder="Método anticonceptivo, tiempo de uso, observaciones..."
+              />
+            </div>
+          </AntRow>
         </div>
       </Modal>
 
@@ -564,31 +859,40 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
         icon={<Dumbbell size={18} />}
         isMaxed={isMaxed}
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          <SelectField
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <TextField
             historiaId={historiaId}
             field="actividad_frecuencia"
             initialValue={data?.actividadFrecuencia}
             onSaved={onPatchLocal}
-            label="Frecuencia de actividad física"
-            options={ACTIVIDAD_FRECUENCIA_OPTS}
+            label="Días de actividad por semana (0–7)"
+            type="number"
+            placeholder="0"
           />
-          <SelectField
+          <TextField
             historiaId={historiaId}
-            field="actividad_duracion"
-            initialValue={data?.actividadDuracion}
+            field="actividad_duracion_min"
+            initialValue={data?.actividadDuracionMin}
             onSaved={onPatchLocal}
-            label="Duración por sesión"
-            options={ACTIVIDAD_DURACION_OPTS}
+            label="Duración por sesión (minutos)"
+            type="number"
+            placeholder="0"
           />
-          <SelectField
-            historiaId={historiaId}
-            field="actividad_fuerza_semanal_label"
-            initialValue={data?.actividadFuerzaSemanalLabel}
-            onSaved={onPatchLocal}
-            label="Ejercicio de fuerza por semana"
-            options={ACTIVIDAD_FUERZA_OPTS}
-          />
+          {nivelActividad && (
+            <div className="md:col-span-2 flex items-center gap-3 p-3.5 rounded-xl bg-[#1a2530] border border-[#324049]">
+              <div className="text-[11.5px] text-[#6b7882] uppercase tracking-widest font-semibold flex-1">
+                Nivel de actividad calculado
+              </div>
+              <div className={`text-[13.5px] font-bold ${
+                nivelActividad === 'Muy activo' ? 'text-[#34d399]' :
+                nivelActividad === 'Activo' ? 'text-[#60a5fa]' :
+                nivelActividad === 'Irregularmente activo' ? 'text-[#fbbf24]' :
+                'text-[#ef4444]'
+              }`}>
+                {nivelActividad}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

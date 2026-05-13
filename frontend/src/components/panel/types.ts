@@ -132,6 +132,15 @@ export interface MedicalHistoryFull {
   actividadFuerzaSemanalLabel?: string;
   antQuirurgicoTiempo?: string;
 
+  // ---- Phase 5: nuevos campos ----
+  antOsteomuscularLateralidad?: string;
+  antOsteomuscularEvolucion?: string;
+  antOsteomuscularLista?: string;
+  antFamiliaresConsanguinidad?: string;
+  actividadNivel?: string;
+  posturaDescripcion?: string;
+  equilibrioUnipodalSegundos?: number;
+
   // ---- Phase 2: Riesgo ----
   downtonCaidas?: boolean;
   downtonEstadoMental?: boolean;
@@ -203,9 +212,16 @@ export interface MedicalHistoryFull {
   riesgoOm?: string;
   marchaEstacionaria?: string;
 
-  // ---- Phase 1: Intervención y conducta (placeholder) ----
+  // ---- Phase 1: Intervención y conducta ----
   intervencionAnalisis?: string;
+  intervencionTipoTecnologia?: string;
   intervencionEducacionSi?: boolean;
+  intervencionEducacionTipo?: string;
+  intervencionTipoMeta?: string;
+  intervencionMetaTexto?: string;
+  dxTecnologiaSalud?: string;
+  dxProcedimiento?: string;
+  dxTipo?: string;
   aptitud?: string;
   controlFecha?: string | Date | null;
   exoneracionPrograma?: boolean;

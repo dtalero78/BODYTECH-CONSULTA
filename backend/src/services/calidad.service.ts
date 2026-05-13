@@ -14,7 +14,10 @@
 
 import axios from 'axios';
 import { spawn } from 'child_process';
-import { Readable } from 'stream';
+import { randomBytes } from 'crypto';
+import { writeFile, readFile, unlink } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
@@ -169,46 +172,55 @@ async function descargarMp4ComoBuffer(url: string): Promise<Buffer> {
  * Extrae la pista de audio de un buffer MP4 usando ffmpeg (stdin → stdout).
  * Salida: MP3 mono 16kHz 64kbps — tamaño típico ~2-4 MB para una consulta de 30 min.
  */
-function extraerAudio(mp4Buffer: Buffer): Promise<Buffer> {
-  return new Promise<Buffer>((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
-      '-i', 'pipe:0',
-      '-map', '0:a',       // forzar selección de pista de audio
-      '-acodec', 'libmp3lame',
-      '-ar', '16000',      // 16kHz suficiente para voz
-      '-ac', '1',          // mono
-      '-b:a', '64k',       // 64 kbps
-      '-f', 'mp3',
-      'pipe:1',
-    ]);
+/**
+ * Extrae la pista de audio de un buffer MP4 usando ffmpeg con archivos temporales.
+ * El MP4 requiere seeking para leer el átomo moov — no funciona con pipe stdin.
+ * Salida: MP3 mono 16kHz 64kbps (~2-5 MB para una consulta de 40 min).
+ */
+async function extraerAudio(mp4Buffer: Buffer): Promise<Buffer> {
+  const id = randomBytes(8).toString('hex');
+  const inputPath = join(tmpdir(), `calidad-${id}.mp4`);
+  const outputPath = join(tmpdir(), `calidad-${id}.mp3`);
 
-    const chunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
+  try {
+    await writeFile(inputPath, mp4Buffer);
 
-    ffmpeg.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    ffmpeg.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+    await new Promise<void>((resolve, reject) => {
+      const stderrChunks: Buffer[] = [];
+      const ffmpeg = spawn('ffmpeg', [
+        '-i', inputPath,
+        '-map', '0:a',
+        '-acodec', 'libmp3lame',
+        '-ar', '16000',
+        '-ac', '1',
+        '-b:a', '64k',
+        '-y',             // sobreescribir sin preguntar
+        outputPath,
+      ]);
 
-    ffmpeg.on('close', (code: number | null) => {
-      if (code !== 0) {
-        const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-2000);
-        return reject(new Error(`ffmpeg salió con código ${code}: ${errMsg}`));
-      }
-      const result = Buffer.concat(chunks);
-      if (result.length === 0) {
-        const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-3000);
-        return reject(new Error(`ffmpeg produjo 0 bytes. stderr:\n${errMsg}`));
-      }
-      resolve(result);
+      ffmpeg.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+      ffmpeg.on('error', (err: Error) =>
+        reject(new Error(`Error al iniciar ffmpeg: ${err.message}`))
+      );
+      ffmpeg.on('close', (code: number | null) => {
+        if (code !== 0) {
+          const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-2000);
+          reject(new Error(`ffmpeg salió con código ${code}: ${errMsg}`));
+        } else {
+          resolve();
+        }
+      });
     });
 
-    ffmpeg.on('error', (err: Error) => {
-      reject(new Error(`Error al iniciar ffmpeg: ${err.message}`));
-    });
-
-    // Usar stream para manejar backpressure en buffers grandes (>64 KB)
-    ffmpeg.stdin.on('error', () => { /* ignorar EPIPE */ });
-    Readable.from(mp4Buffer).pipe(ffmpeg.stdin);
-  });
+    const audioBuffer = await readFile(outputPath);
+    if (audioBuffer.length === 0) {
+      throw new Error('ffmpeg produjo archivo de audio vacío');
+    }
+    return audioBuffer;
+  } finally {
+    await unlink(inputPath).catch(() => {});
+    await unlink(outputPath).catch(() => {});
+  }
 }
 
 /**

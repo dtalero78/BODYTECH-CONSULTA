@@ -14,6 +14,7 @@
 
 import axios from 'axios';
 import { spawn } from 'child_process';
+import { Readable } from 'stream';
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
@@ -171,14 +172,14 @@ async function descargarMp4ComoBuffer(url: string): Promise<Buffer> {
 function extraerAudio(mp4Buffer: Buffer): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', [
-      '-i', 'pipe:0',      // leer desde stdin
-      '-vn',               // sin video
+      '-i', 'pipe:0',
+      '-map', '0:a',       // forzar selección de pista de audio
       '-acodec', 'libmp3lame',
       '-ar', '16000',      // 16kHz suficiente para voz
       '-ac', '1',          // mono
       '-b:a', '64k',       // 64 kbps
       '-f', 'mp3',
-      'pipe:1',            // escribir a stdout
+      'pipe:1',
     ]);
 
     const chunks: Buffer[] = [];
@@ -192,15 +193,21 @@ function extraerAudio(mp4Buffer: Buffer): Promise<Buffer> {
         const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-2000);
         return reject(new Error(`ffmpeg salió con código ${code}: ${errMsg}`));
       }
-      resolve(Buffer.concat(chunks));
+      const result = Buffer.concat(chunks);
+      if (result.length === 0) {
+        const errMsg = Buffer.concat(stderrChunks).toString('utf8').slice(-3000);
+        return reject(new Error(`ffmpeg produjo 0 bytes. stderr:\n${errMsg}`));
+      }
+      resolve(result);
     });
 
     ffmpeg.on('error', (err: Error) => {
       reject(new Error(`Error al iniciar ffmpeg: ${err.message}`));
     });
 
-    ffmpeg.stdin.write(mp4Buffer);
-    ffmpeg.stdin.end();
+    // Usar stream para manejar backpressure en buffers grandes (>64 KB)
+    ffmpeg.stdin.on('error', () => { /* ignorar EPIPE */ });
+    Readable.from(mp4Buffer).pipe(ffmpeg.stdin);
   });
 }
 

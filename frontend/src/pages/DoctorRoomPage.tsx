@@ -10,7 +10,7 @@ export const DoctorRoomPage = () => {
 
   // Extraer parámetros de la URL
   const doctorParam = searchParams.get('doctor');
-  const historiaIdParam = searchParams.get('documento'); // ID de la historia clínica (el parámetro aún se llama "documento" en la URL)
+  const historiaIdParam = searchParams.get('historiaId') || searchParams.get('documento');
   const pacienteParam = searchParams.get('paciente'); // Nombre del paciente
 
   // Auto-llenar nombre del doctor si viene en la URL

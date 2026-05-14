@@ -13,6 +13,7 @@ import twilioVoiceRoutes from './routes/twilio-voice.routes';
 import calidadRoutes from './routes/calidad.routes';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
+import { errorHandler } from './middleware/error.middleware';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -100,14 +101,9 @@ app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-// Error handler
-app.use((err: Error, _req: Request, res: Response) => {
-  console.error('Error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: appConfig.nodeEnv === 'development' ? err.message : undefined,
-  });
-});
+// Error handler global — DEBE registrarse al final, después de todas las
+// rutas (Express identifica los handlers de error por su aridad de 4 args).
+app.use(errorHandler);
 
 // Run database migrations
 import postgresService from './services/postgres.service';

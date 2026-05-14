@@ -641,8 +641,39 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
     </div>
   </div>
 
+  ${(hc.intervencionAnalisis || hc.intervencionTipoTecnologia || hc.intervencionTipoMeta || hc.dxTecnologiaSalud || hc.dxProcedimiento || hc.dxTipo) ? `
+  <!-- VIII. INTERVENCIÓN Y PROCEDIMIENTO -->
+  <div class="section">
+    <div class="section-title">VIII. Intervención y Procedimiento</div>
+    <div class="section-body">
+      <div class="grid-3">
+        ${hc.intervencionTipoTecnologia ? celda('Tipo de tecnología', hc.intervencionTipoTecnologia) : ''}
+        ${hc.dxTipo ? celda('Tipo de diagnóstico', hc.dxTipo) : ''}
+        ${hc.dxTecnologiaSalud ? celda('CIE-10', hc.dxTecnologiaSalud) : ''}
+        ${hc.dxProcedimiento ? celda('CUPS / Procedimiento', hc.dxProcedimiento) : ''}
+        ${hc.intervencionTipoMeta ? celda('Meta de intervención', hc.intervencionTipoMeta) : ''}
+        ${hc.intervencionEducacionSi ? celda('Educación al paciente', hc.intervencionEducacionTipo || 'Sí') : ''}
+      </div>
+      ${hc.intervencionMetaTexto ? `<div style="margin-top:4px">${celda('Descripción de la meta', hc.intervencionMetaTexto, true)}</div>` : ''}
+      ${hc.intervencionAnalisis ? `<div style="margin-top:4px">${celda('Análisis de intervención', hc.intervencionAnalisis, true)}</div>` : ''}
+    </div>
+  </div>` : ''}
+
+  ${(hc.aptitud || hc.controlFecha || hc.exoneracionPrograma) ? `
+  <!-- IX. CONDUCTA Y REMISIÓN -->
+  <div class="section">
+    <div class="section-title">IX. Conducta y Remisión</div>
+    <div class="section-body">
+      <div class="grid-3">
+        ${hc.aptitud ? `<div class="cell"><span class="label">Aptitud</span><span class="value"><span class="badge ${hc.aptitud === 'Apto' ? 'badge-apto' : hc.aptitud === 'No apto' ? 'badge-no-apto' : 'badge-pendiente'}" style="font-size:8.5pt;padding:2px 10px">${v(hc.aptitud)}</span></span></div>` : ''}
+        ${hc.controlFecha ? celda('Próximo control', fmtFecha(hc.controlFecha)) : ''}
+        ${hc.exoneracionPrograma ? celda('Exoneración de programa', 'Sí') : ''}
+      </div>
+    </div>
+  </div>` : ''}
+
   ${datosNutri && Object.keys(datosNutri).length > 0 ? `
-  <!-- VIII. DATOS NUTRICIONALES -->
+  <!-- X. DATOS NUTRICIONALES -->
   ${buildDatosNutricionalesHTML(datosNutri)}` : ''}
 
   <!-- CONCEPTO MÉDICO FINAL -->

@@ -128,7 +128,7 @@ class MedicalPanelService {
    */
   formatPhoneNumber(phone: string): string {
     // Eliminar espacios y caracteres especiales
-    let cleaned = phone.replace(/[\s\(\)\+\-]/g, '');
+    const cleaned = phone.replace(/[\s()+-]/g, '');
 
     // Si ya tiene código de país, retornar con +
     if (cleaned.startsWith('57') && cleaned.length >= 10) {

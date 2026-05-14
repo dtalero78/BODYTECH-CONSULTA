@@ -231,7 +231,7 @@ export function MedicalPanelPage() {
 
   const formatPhoneNumber = (phone: string): string => {
     // Limpiar espacios, paréntesis, guiones
-    let cleaned = phone.replace(/[\s\(\)\-]/g, '');
+    const cleaned = phone.replace(/[\s()-]/g, '');
 
     // Si ya tiene +, retornarlo limpio
     if (cleaned.startsWith('+')) {

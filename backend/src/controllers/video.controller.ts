@@ -393,7 +393,7 @@ class VideoController {
       const { historiaId } = req.params;
 
       if (!historiaId) {
-        res.status(400).json({ error: 'historiaId is required' });
+        res.status(400).json({ success: false, error: 'historiaId requerido' });
         return;
       }
 
@@ -402,7 +402,7 @@ class VideoController {
       if (!medicalHistory) {
         res.status(404).json({
           success: false,
-          error: 'Medical history not found for this patient',
+          error: 'No se encontró historia clínica para este paciente',
         });
         return;
       }
@@ -457,7 +457,7 @@ class VideoController {
 
       if (!payload.historiaId) {
         console.error('❌ [updateMedicalHistory] historiaId no encontrado en payload');
-        res.status(400).json({ error: 'historiaId is required' });
+        res.status(400).json({ success: false, error: 'historiaId requerido' });
         return;
       }
 
@@ -487,9 +487,10 @@ class VideoController {
         error: publicError,
       });
     } catch (error) {
-      console.error('Error updating medical history:', error);
+      console.error('Error al actualizar historia clínica:', error);
       res.status(500).json({
-        error: 'Failed to update medical history',
+        success: false,
+        error: 'Error al actualizar historia clínica',
       });
     }
   }

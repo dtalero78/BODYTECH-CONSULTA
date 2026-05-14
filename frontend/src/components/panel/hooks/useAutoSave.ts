@@ -177,7 +177,6 @@ export function useAutoSave({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, delay, enabled, historiaId, send]);
 
   const retry = useCallback(() => {
@@ -226,7 +225,6 @@ export function useAutoSave({
         }
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // SOLO en unmount — los refs garantizan acceso a valores actuales
 
   return { ...status, retry };

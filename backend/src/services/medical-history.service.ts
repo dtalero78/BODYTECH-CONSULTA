@@ -208,6 +208,24 @@ const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   // pero pasan por updateField() para reutilizar la coerción + audit centralizada.
   { field: 'transcription_status', type: 'string' },
   { field: 'transcription_text', type: 'string' },
+  // ─────────────────────────────────────────────────────────────────────────
+  // Auditoría EDITABLE_FIELD_DEFS ↔ runMigrations() (Round 1):
+  //   - Todos los campos snake_case y camelCase legacy listados arriba tienen
+  //     su columna en `postgres.service.ts → runMigrations()` (CREATE TABLE o
+  //     `ADD COLUMN IF NOT EXISTS`). Verificado 2026-05-13.
+  //   - Excepciones documentadas (columnas SIN entrada en EDITABLE_FIELD_DEFS,
+  //     intencionalmente):
+  //       · `composition_sid` (Phase 4): escrito directamente por
+  //         video.controller.ts → roomCompletedWebhook vía SQL. NO se edita
+  //         desde el panel. Mapeado en getMedicalHistory() explícitamente.
+  //       · `datosNutricionales` (JSONB): persiste vía
+  //         historiaClinicaPostgresService.upsert(), no por whitelist.
+  //       · Legacy Wix: `empresa`, `pvEstado`, `examenes`, `horaAtencion`,
+  //         `_createdDate`, `_updatedDate`, `numeroId`, `primerNombre`,
+  //         `segundoNombre`, `primerApellido`, `segundoApellido`, `celular`,
+  //         `email`, `fechaConsulta`, `atendido`, `medico`, `ciudad` — son
+  //         identidad / estado de la consulta, no campos del editor.
+  // ─────────────────────────────────────────────────────────────────────────
 ];
 
 export const EDITABLE_FIELDS: ReadonlyArray<string> = EDITABLE_FIELD_DEFS.map((d) => d.field);
@@ -685,6 +703,11 @@ class MedicalHistoryService {
           ciudad: row.ciudad,
           eps: row.eps,
           datosNutricionales: row.datosNutricionales || null,
+          // Phase 4 — Twilio Composition: la columna `composition_sid` se escribe
+          // desde el webhook `roomCompletedWebhook`. NO está en EDITABLE_FIELD_DEFS
+          // (no editable por la UI), por eso el spread `extra` (basado en
+          // SNAKE_KEYS) no la incluye. Mapeo explícito para que el frontend la lea.
+          compositionSid: row.composition_sid ?? null,
           fechaAtencion: row.fechaAtencion,
           fechaConsulta: row.fechaConsulta,
           atendido: row.atendido,
@@ -989,19 +1012,21 @@ class MedicalHistoryService {
     }
   }
 
-  async updateMedicalHistory(payload: UpdateMedicalHistoryPayload): Promise<{ success: boolean; error?: string }> {
+  async updateMedicalHistory(payload: UpdateMedicalHistoryPayload): Promise<{ success: boolean; error?: string; code?: number }> {
     try {
       console.log(`💾 Actualizando historia clínica para ID: ${payload.historiaId}`);
 
       if (!payload.mdConceptoFinal) {
-        return { success: false, error: 'El campo Concepto Final es obligatorio' };
+        // Validación previa al insert: el controller mapea code=400.
+        return { success: false, error: 'CONCEPTO_FINAL_REQUIRED', code: 400 };
       }
 
       // PASO 0: Obtener datos base del paciente
       const historiaBase = await this.getMedicalHistory(payload.historiaId);
 
       if (!historiaBase) {
-        return { success: false, error: 'No se encontró historia clínica' };
+        // No existe la historia: el controller mapea code=404.
+        return { success: false, error: 'NOT_FOUND', code: 404 };
       }
 
       // PASO 1: Guardar en PostgreSQL PRIMERO (fuente principal - OBLIGATORIO)
@@ -1042,7 +1067,7 @@ class MedicalHistoryService {
 
       if (!pgSuccess) {
         console.error(`❌ [PostgreSQL] Error guardando historia clínica ${payload.historiaId}`);
-        return { success: false, error: 'Error guardando en PostgreSQL' };
+        return { success: false, error: 'DB_ERROR', code: 500 };
       }
 
       console.log(`✅ [PostgreSQL] Historia clínica guardada exitosamente para ${payload.historiaId}`);
@@ -1128,10 +1153,13 @@ class MedicalHistoryService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('❌ Error actualizando historia clínica:', error.message);
+      // No exponer error.message crudo al cliente — el controller traduce a 500
+      // genérico. Loguear server-side para diagnóstico.
+      console.error('❌ Error actualizando historia clínica:', error?.message);
       return {
         success: false,
-        error: error.message || 'Error al actualizar historia clínica'
+        error: 'INTERNAL_ERROR',
+        code: 500,
       };
     }
   }

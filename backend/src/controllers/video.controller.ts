@@ -468,12 +468,24 @@ class VideoController {
           success: true,
           message: 'Medical history updated successfully',
         });
-      } else {
-        res.status(500).json({
-          success: false,
-          error: result.error || 'Failed to update medical history',
-        });
+        return;
       }
+
+      // Mapeo de códigos del service → HTTP status + mensaje genérico (no
+      // exponer detalles internos de DB / upstream). Textos en español
+      // preservados para no cambiar la UX existente.
+      const code = result.code ?? 500;
+      const errKey = result.error || 'UPDATE_FAILED';
+      let publicError = 'Error al actualizar historia clínica';
+      if (errKey === 'CONCEPTO_FINAL_REQUIRED') {
+        publicError = 'El campo Concepto Final es obligatorio';
+      } else if (errKey === 'NOT_FOUND') {
+        publicError = 'No se encontró historia clínica';
+      }
+      res.status(code).json({
+        success: false,
+        error: publicError,
+      });
     } catch (error) {
       console.error('Error updating medical history:', error);
       res.status(500).json({

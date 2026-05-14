@@ -163,17 +163,34 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
   const riesgoFinal = computeRiesgoFinal(data, acsmCat);
 
   // ===== Card states =====
-  const downtonComplete = !!data?.downtonRiesgo;
+  // Completion = cuántos de los 4 campos principales tienen un valor explícito
+  // (true/false cuenta igual — "No" es una respuesta válida)
+  const isSet = (v: unknown) => v !== null && v !== undefined;
+  const downtonMainFilled = [
+    data?.downtonCaidas,
+    data?.downtonEstadoMental,
+    data?.downtonMedicamentos,
+    data?.downtonDeficitsSensoriales,
+  ].filter(isSet).length;
+  const downtonPct = Math.round((downtonMainFilled / 4) * 100);
+  const downtonComplete = downtonMainFilled === 4;
   const downtonCardState = downtonComplete
     ? 'complete'
-    : data?.downtonRiesgo || downtonScore > 0
+    : downtonMainFilled > 0
       ? 'partial'
       : 'empty';
 
-  const acsmComplete = !!data?.acsmRiesgo;
+  const acsmMainFilled = [
+    data?.acsmSedentarismo, data?.acsmTabaquismo, data?.acsmHipertension,
+    data?.acsmDislipidemia, data?.acsmObesidad, data?.acsmEdad,
+    data?.acsmFamiliarCardiaco, data?.acsmGenero, data?.acsmDiabetes,
+    data?.acsmEnfPulmonar, data?.acsmEnfCardiovascular, data?.acsmEnfRenal,
+  ].filter(isSet).length;
+  const acsmPct = Math.round((acsmMainFilled / 12) * 100);
+  const acsmComplete = acsmMainFilled === 12;
   const acsmCardState = acsmComplete
     ? 'complete'
-    : data?.acsmRiesgo || acsmCount > 0
+    : acsmMainFilled > 0
       ? 'partial'
       : 'empty';
 
@@ -214,7 +231,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
           </span>
         }
         state={downtonCardState}
-        completionPct={Math.min(100, downtonScore * 25)}
+        completionPct={downtonPct}
         onEdit={() => setOpenModal('downton')}
       />
 
@@ -237,7 +254,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
           </span>
         }
         state={acsmCardState}
-        completionPct={Math.round((acsmCount / 12) * 100)}
+        completionPct={acsmPct}
         onEdit={() => setOpenModal('acsm')}
       />
 

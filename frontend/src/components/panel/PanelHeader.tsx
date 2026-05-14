@@ -1,5 +1,10 @@
-import { Maximize2, Minimize2, CloudOff, Cloud, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Maximize2, Minimize2, CloudOff, Cloud, Sparkles, Download } from 'lucide-react';
 import type { MedicalHistoryFull, SaveStatus } from './types';
+
+// Run 6 — Misma resolución que `api.service.ts`. En prod queda '' (relative,
+// same-origin); en dev (vite :5173 → express :3000) usa VITE_API_BASE_URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 interface PanelHeaderProps {
   data: MedicalHistoryFull | null;
@@ -53,6 +58,40 @@ export function PanelHeader({
 }: PanelHeaderProps) {
   const initials = getInitials(data);
   const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Paciente';
+
+  // Run 6 — Descarga del PDF. `historiaId` viene del response del backend
+  // (`MedicalHistoryFull.historiaId` es alias de `_id`). El botón sólo se
+  // renderiza cuando exista, así que aquí asumimos string.
+  const historiaId = data?.historiaId || data?._id;
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  async function handleDownloadPdf() {
+    if (!historiaId || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const token = localStorage.getItem('bsl_auth_token');
+      const res = await fetch(`${API_BASE_URL}/api/video/medical-history/${historiaId}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        throw new Error(`PDF download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `historia-${historiaId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('PDF error:', e);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   const subtitleParts = [
     data?.edad ? `${data.edad} a` : '',
     data?.genero ? data.genero[0]?.toUpperCase() : '',
@@ -92,6 +131,20 @@ export function PanelHeader({
       </div>
 
       <div className="ml-auto flex items-center gap-3 min-w-0">
+        {historiaId && (
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf || !historiaId}
+            title="Descargar historia clínica en PDF"
+            aria-label="Descargar PDF"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[rgba(59,130,246,0.45)] bg-[rgba(59,130,246,0.15)] text-[#60a5fa] text-[12px] font-semibold hover:bg-[rgba(59,130,246,0.25)] transition flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Download size={13} />
+            <span>{downloadingPdf ? 'Generando...' : 'PDF'}</span>
+          </button>
+        )}
+
         {transcriptionReady && (
           <button
             type="button"

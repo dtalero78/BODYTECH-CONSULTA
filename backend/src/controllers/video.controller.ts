@@ -8,6 +8,7 @@ import medicalHistoryService from '../services/medical-history.service';
 import openaiService from '../services/openai.service';
 import postgresService from '../services/postgres.service';
 import transcriptionService from '../services/transcription.service';
+import pdfService from '../services/pdf.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -414,6 +415,45 @@ class VideoController {
         success: true,
         ...result,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Run 6 — Descarga la historia clínica como PDF (A4) generado con Puppeteer.
+   * GET /api/video/medical-history/:id/pdf
+   *
+   * Reusa exactamente el mismo HTML que `/preview` (mismo `getPreviewHTML`),
+   * lo convierte a PDF con `pdfService.htmlToPdf` y lo envía como descarga.
+   * Si la historia no existe, responde 404 con el mismo shape JSON que el
+   * resto del controller.
+   *
+   * Auth: el route mount aplica `requireAuthMiddleware` (JWT obligatorio).
+   * Errores de Puppeteer caen en `error.middleware.ts` vía `next(err)`.
+   */
+  async getHistoriaPdf(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        res.status(400).json({ success: false, error: 'historiaId requerido' });
+        return;
+      }
+
+      const html = await medicalHistoryService.getPreviewHTML(id);
+
+      if (html === null) {
+        res.status(404).json({ success: false, error: 'NOT_FOUND' });
+        return;
+      }
+
+      const pdfBuffer = await pdfService.htmlToPdf(html);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=historia-${id}.pdf`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.end(pdfBuffer);
     } catch (error) {
       next(error);
     }

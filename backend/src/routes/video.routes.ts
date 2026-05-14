@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import videoController from '../controllers/video.controller';
+import { requireAuthMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -37,6 +38,9 @@ router.post('/whatsapp/send', videoController.sendWhatsApp);
 // IMPORTANTE: Las rutas específicas deben ir ANTES de '/:historiaId' para evitar conflictos
 router.get('/medical-history/atendidos', videoController.getAtendidos);
 router.get('/medical-history/patient/:numeroId', videoController.getPatientHistory);
+// Run 6 — PDF descarga. Va antes de la ruta genérica para que `:id/pdf` no
+// caiga en `:historiaId`. Protegida con JWT (solo médicos autenticados).
+router.get('/medical-history/:id/pdf', requireAuthMiddleware, videoController.getHistoriaPdf);
 router.get('/medical-history/:historiaId/preview', videoController.getPreviewHTML);
 router.get('/medical-history/:historiaId', videoController.getMedicalHistory);
 router.post('/medical-history', videoController.updateMedicalHistory);

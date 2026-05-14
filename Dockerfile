@@ -27,7 +27,7 @@ RUN npm run build
 # Stage 3: Production image
 FROM node:20-alpine
 
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg chromium chromium-chromedriver nss freetype harfbuzz ca-certificates ttf-freefont
 
 WORKDIR /app
 
@@ -42,6 +42,11 @@ COPY --from=backend-builder /app/backend/dist ./dist
 COPY --from=frontend-builder /app/frontend/dist ./frontend-dist
 
 EXPOSE 3000
+
+# Puppeteer-core apunta al Chromium del sistema (Alpine).
+# El paquete `puppeteer` bundled descarga un Chromium incompatible con musl libc.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 
 # El backend sirve tanto la API como el frontend estatico
 CMD ["node", "dist/index.js"]

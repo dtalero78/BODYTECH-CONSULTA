@@ -1,55 +1,55 @@
-import axios from 'axios';
+import twilio from 'twilio';
 
-/**
- * Servicio para enviar mensajes de WhatsApp usando WHAPI (gate.whapi.cloud)
- */
 class WhatsAppService {
-  private readonly apiUrl: string;
-  private readonly token: string;
+  private readonly client: twilio.Twilio;
+  private readonly fromNumber: string;
+  private readonly templateSid: string;
   private readonly maxRetries = 3;
 
   constructor() {
-    this.apiUrl = process.env.WHAPI_URL || 'https://gate.whapi.cloud/messages/text';
-    this.token = process.env.WHAPI_TOKEN || 'due3eWCwuBM2Xqd6cPujuTRqSbMb68lt';
+    const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
+    const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+    this.fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+15557455529';
+    this.templateSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID || 'HXb3cafc049dcc310e2cfbfffb6e943c4e';
 
-    if (!this.token) {
-      console.warn('⚠️  WHAPI_TOKEN no configurado - servicio de WhatsApp no disponible');
+    if (!accountSid || !authToken) {
+      console.warn('⚠️  Twilio credentials not configured — WhatsApp service unavailable');
     } else {
-      console.log('✅ WHAPI WhatsApp Service inicializado');
+      console.log('✅ Twilio WhatsApp Service inicializado');
+      console.log(`   From: ${this.fromNumber}`);
+      console.log(`   Template SID: ${this.templateSid}`);
     }
+
+    this.client = twilio(accountSid, authToken);
   }
 
-  /**
-   * Espera un tiempo determinado (para backoff exponencial)
-   */
+  private formatPhoneNumber(phone: string): string {
+    const clean = phone.replace(/[\s()\-+]/g, '');
+    if (clean.length === 10 && clean.startsWith('3')) return `whatsapp:57${clean}`;
+    if (clean.startsWith('57') && clean.length === 12) return `whatsapp:${clean}`;
+    return `whatsapp:${clean}`;
+  }
+
   private async sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Formatea un número de teléfono para WHAPI
-   * WHAPI espera el número con código de país sin + (ej: 573001234567)
-   */
-  private formatPhoneNumber(phone: string): string {
-    const cleanPhone = phone.replace(/[\s\(\)\-\+]/g, '');
+  private isRetryableError(error: any): boolean {
+    const codes = [20429, 20500, 20503, 30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008];
+    if (error.code && codes.includes(error.code)) return true;
+    if (['ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND'].includes(error.code)) return true;
+    return false;
+  }
 
-    // Si tiene exactamente 10 dígitos y empieza con 3, es colombiano local
-    if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {
-      return `57${cleanPhone}`;
-    }
-
-    return cleanPhone;
+  private getErrorMessage(error: any): string {
+    if (['ECONNABORTED', 'ETIMEDOUT'].includes(error.code)) return 'Timeout — Twilio tardó demasiado';
+    if (error.code) return `Error ${error.code}: ${error.message || 'Error de Twilio'}`;
+    return error.message || 'Error desconocido al enviar WhatsApp';
   }
 
   /**
-   * Envía un mensaje de texto al paciente con el link de la videollamada
-   * Reemplaza el template de Twilio con un mensaje de texto libre via WHAPI
-   *
-   * @param phone Número de teléfono (ejemplo: 573001234567 o +573001234567)
-   * @param roomNameWithParams Path completo: "consulta-abc123?nombre=Juan&apellido=Perez&documento=123&doctor=JUAN"
-   * @param patientName Primer nombre del paciente
-   * @param appointmentTime Hora de la cita (ejemplo: "3:00 PM")
-   * @param attempt Número de intento actual (uso interno)
+   * Envía la plantilla aprobada de Bodytech al paciente.
+   * Variables: {{1}} nombre, {{2}} hora, {{3}} roomNameWithParams
    */
   async sendTemplateMessage(
     phone: string,
@@ -58,134 +58,69 @@ class WhatsAppService {
     appointmentTime: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
-    if (!this.token) {
-      return { success: false, error: 'WHAPI token no configurado' };
-    }
-
     const toNumber = this.formatPhoneNumber(phone);
-    const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
-    const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
-
-    const messageBody =
-      `Hola ${patientName},\n\n` +
-      `Te saludamos de VIP Salud Ocupacional.\n\n` +
-      `Tienes una consulta médica a las ${appointmentTime}.\n\n` +
-      `Para ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
 
     try {
-      console.log(`📱 [WHAPI] Enviando WhatsApp a: ${toNumber} (intento ${attempt}/${this.maxRetries})`);
+      console.log(`📱 [Twilio WA] Enviando template a ${toNumber} (intento ${attempt}/${this.maxRetries})`);
 
-      const response = await axios.post(this.apiUrl, {
-        typing_time: 0,
+      const msg = await this.client.messages.create({
+        from: this.fromNumber,
         to: toNumber,
-        body: messageBody,
-      }, {
-        headers: {
-          'accept': 'application/json',
-          'authorization': `Bearer ${this.token}`,
-          'content-type': 'application/json',
-        },
-        timeout: 15000,
+        contentSid: this.templateSid,
+        contentVariables: JSON.stringify({
+          '1': patientName,
+          '2': appointmentTime,
+          '3': roomNameWithParams,
+        }),
       });
 
-      const messageId = response.data?.message?.id || response.data?.id || '';
-      console.log(`✅ [WHAPI] WhatsApp enviado exitosamente a ${toNumber}`);
-      console.log(`   Message ID: ${messageId}`);
-
-      return { success: true, messageSid: messageId };
+      console.log(`✅ [Twilio WA] Enviado — SID: ${msg.sid}`);
+      return { success: true, messageSid: msg.sid };
     } catch (error: any) {
-      const shouldRetry = attempt < this.maxRetries && this.isRetryableError(error);
-
-      if (shouldRetry) {
-        const backoffMs = Math.pow(2, attempt) * 1000;
-        console.warn(`⚠️  [WHAPI] Error intento ${attempt}/${this.maxRetries}. Reintentando en ${backoffMs / 1000}s...`);
-        await this.sleep(backoffMs);
+      if (this.isRetryableError(error) && attempt < this.maxRetries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
+        await this.sleep(wait);
         return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, attempt + 1);
       }
-
-      const errorMessage = this.getErrorMessage(error);
-      console.error(`❌ [WHAPI] Error enviando WhatsApp después de ${attempt} intentos:`, errorMessage);
-      return { success: false, error: errorMessage };
+      const msg = this.getErrorMessage(error);
+      console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);
+      return { success: false, error: msg };
     }
   }
 
   /**
-   * Envía un mensaje de texto libre por WhatsApp via WHAPI
-   * @param phone Número de teléfono (ejemplo: 573001234567 o +573001234567)
-   * @param message Mensaje a enviar
-   * @param attempt Número de intento actual (uso interno)
+   * Envía mensaje de texto libre (para reportes internos, etc.)
    */
   async sendTextMessage(
     phone: string,
     message: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
-    if (!this.token) {
-      return { success: false, error: 'WHAPI token no configurado' };
-    }
-
     const toNumber = this.formatPhoneNumber(phone);
 
     try {
-      console.log(`📱 [WHAPI] Enviando texto a: ${toNumber} (intento ${attempt}/${this.maxRetries})`);
+      console.log(`📱 [Twilio WA] Enviando texto a ${toNumber} (intento ${attempt}/${this.maxRetries})`);
 
-      const response = await axios.post(this.apiUrl, {
-        typing_time: 0,
+      const msg = await this.client.messages.create({
+        from: this.fromNumber,
         to: toNumber,
         body: message,
-      }, {
-        headers: {
-          'accept': 'application/json',
-          'authorization': `Bearer ${this.token}`,
-          'content-type': 'application/json',
-        },
-        timeout: 15000,
       });
 
-      const messageId = response.data?.message?.id || response.data?.id || '';
-      console.log(`✅ [WHAPI] Texto enviado exitosamente a ${toNumber}`);
-
-      return { success: true, messageSid: messageId };
+      console.log(`✅ [Twilio WA] Texto enviado — SID: ${msg.sid}`);
+      return { success: true, messageSid: msg.sid };
     } catch (error: any) {
-      const shouldRetry = attempt < this.maxRetries && this.isRetryableError(error);
-
-      if (shouldRetry) {
-        const backoffMs = Math.pow(2, attempt) * 1000;
-        console.warn(`⚠️  [WHAPI] Error intento ${attempt}/${this.maxRetries}. Reintentando en ${backoffMs / 1000}s...`);
-        await this.sleep(backoffMs);
+      if (this.isRetryableError(error) && attempt < this.maxRetries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
+        await this.sleep(wait);
         return this.sendTextMessage(phone, message, attempt + 1);
       }
-
-      const errorMessage = this.getErrorMessage(error);
-      console.error(`❌ [WHAPI] Error enviando texto después de ${attempt} intentos:`, errorMessage);
-      return { success: false, error: errorMessage };
+      const msg = this.getErrorMessage(error);
+      console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);
+      return { success: false, error: msg };
     }
-  }
-
-  private isRetryableError(error: any): boolean {
-    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
-      return true;
-    }
-    if (error.response?.status && error.response.status >= 500) {
-      return true;
-    }
-    if (error.response?.status === 429) {
-      return true;
-    }
-    return false;
-  }
-
-  private getErrorMessage(error: any): string {
-    if (error.response?.data?.message) {
-      return `WHAPI Error: ${error.response.data.message}`;
-    }
-    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-      return 'Timeout - WHAPI tardó demasiado en responder';
-    }
-    if (error.message) {
-      return error.message;
-    }
-    return 'Error desconocido al enviar WhatsApp';
   }
 }
 

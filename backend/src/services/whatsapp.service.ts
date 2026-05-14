@@ -9,7 +9,7 @@ class WhatsAppService {
   constructor() {
     const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
     const authToken = process.env.TWILIO_AUTH_TOKEN || '';
-    this.fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+15557455529';
+    this.fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+576016284820';
     this.templateSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID || 'HXb3cafc049dcc310e2cfbfffb6e943c4e';
 
     if (!accountSid || !authToken) {

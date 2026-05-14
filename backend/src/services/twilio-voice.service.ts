@@ -17,7 +17,7 @@ class TwilioVoiceService {
     // Intentar usar variables específicas de VOICE primero, luego hacer fallback a las generales
     this.accountSid = process.env.TWILIO_VOICE_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '';
     this.authToken = process.env.TWILIO_VOICE_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '';
-    this.twilioPhoneNumber = '+576015148805'; // Número de Twilio Voice
+    this.twilioPhoneNumber = '+576016284820'; // Número de Twilio Voice
     this.baseUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Calls.json`;
 
     // Log para debugging (solo primeros/últimos caracteres por seguridad)

@@ -153,7 +153,7 @@ function coerceBool(v: unknown): boolean {
   return false;
 }
 
-function clasificarActividad(
+export function clasificarActividad(
   dias: number | null | undefined,
   minutos: number | null | undefined,
 ): string | null {

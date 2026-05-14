@@ -43,7 +43,7 @@ function coerceBool(v: unknown): boolean {
   return false;
 }
 
-function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
+export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   const t1Filled = [
     data?.generoBiologico,
     data?.identidadGenero,

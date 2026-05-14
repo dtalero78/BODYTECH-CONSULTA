@@ -5,6 +5,38 @@ import type { SaveStatus } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
+/**
+ * Comparación tolerante de dos valores (números y strings numéricos con
+ * tolerancia float de 0.01, `null`/`undefined` colapsados como equivalentes).
+ *
+ * Extraída a módulo-level para poder testearla de forma unitaria. NO usa
+ * closures sobre nada del hook — sólo `a` y `b`. El cuerpo es idéntico al
+ * de la versión interna que vivía dentro de `useAutoSave`.
+ */
+export function valuesEquivalent(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || a === undefined || b === null || b === undefined) {
+    return (a == null) && (b == null);
+  }
+  if (typeof a === 'number' && typeof b === 'number') {
+    if (Number.isNaN(a) || Number.isNaN(b)) return false;
+    return Math.abs(a - b) < 0.01; // Tolerancia IMC / floats
+  }
+  // Comparar number/string que representan el mismo valor (ej. server devuelve
+  // "23.4" string, calc devuelve 23.4 number).
+  if (
+    (typeof a === 'number' && typeof b === 'string') ||
+    (typeof a === 'string' && typeof b === 'number')
+  ) {
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) {
+      return Math.abs(na - nb) < 0.01;
+    }
+  }
+  return false;
+}
+
 interface UseAutoSaveOptions {
   historiaId: string | undefined;
   /** Nombre del campo (snake_case o camelCase legacy). */
@@ -79,30 +111,6 @@ export function useAutoSave({
   useEffect(() => {
     serverValueRef.current = serverValue;
   }, [serverValue]);
-
-  function valuesEquivalent(a: unknown, b: unknown): boolean {
-    if (a === b) return true;
-    if (a === null || a === undefined || b === null || b === undefined) {
-      return (a == null) && (b == null);
-    }
-    if (typeof a === 'number' && typeof b === 'number') {
-      if (Number.isNaN(a) || Number.isNaN(b)) return false;
-      return Math.abs(a - b) < 0.01; // Tolerancia IMC / floats
-    }
-    // Comparar number/string que representan el mismo valor (ej. server devuelve
-    // "23.4" string, calc devuelve 23.4 number).
-    if (
-      (typeof a === 'number' && typeof b === 'string') ||
-      (typeof a === 'string' && typeof b === 'number')
-    ) {
-      const na = Number(a);
-      const nb = Number(b);
-      if (Number.isFinite(na) && Number.isFinite(nb)) {
-        return Math.abs(na - nb) < 0.01;
-      }
-    }
-    return false;
-  }
 
   // Refs sincronizadas con la última versión de los valores — necesarias
   // para que el cleanup de unmount tenga acceso a los valores actuales sin

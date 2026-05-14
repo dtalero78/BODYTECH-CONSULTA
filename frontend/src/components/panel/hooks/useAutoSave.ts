@@ -149,11 +149,13 @@ export function useAutoSave({
         error: null,
       });
       onSavedRef.current?.(vars.field, vars.value);
-      // Belt-and-suspenders: revalidar la historia en background. La UI ya
-      // está actualizada via `onSaved → patchLocal → setQueryData`, así que
-      // esto sólo refresca el cache si hubo cambios concurrentes en el server.
-      // staleTime: 30_000 amortigua refetches durante edición fluida.
-      queryClient.invalidateQueries({ queryKey: ['medical-history', vars.historiaId] });
+      // Marcar como stale sin refetch inmediato — patchLocal ya actualizó el
+      // cache local. El GET se dispara sólo cuando el componente se remonte o
+      // el usuario navegue de vuelta, no en cada keystroke.
+      queryClient.invalidateQueries({
+        queryKey: ['medical-history', vars.historiaId],
+        refetchType: 'none',
+      });
     },
     onError: (err) => {
       const msg = err instanceof Error ? err.message : 'SAVE_FAILED';

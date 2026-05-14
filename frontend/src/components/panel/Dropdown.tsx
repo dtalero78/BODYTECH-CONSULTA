@@ -35,6 +35,7 @@ export function Dropdown({
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -56,13 +57,14 @@ export function Dropdown({
     });
   }, [open]);
 
-  // Cerrar al click fuera
+  // Cerrar al click fuera — verifica tanto el trigger como el portal
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      const inTrigger = wrapRef.current?.contains(target);
+      const inList = listRef.current?.contains(target);
+      if (!inTrigger && !inList) setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -120,6 +122,7 @@ export function Dropdown({
 
       {open && createPortal(
         <div
+          ref={listRef}
           className="bg-[#23323b] border border-[#00a884] rounded-2xl shadow-2xl overflow-hidden"
           style={{
             ...dropdownStyle,

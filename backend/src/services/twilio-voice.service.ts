@@ -35,7 +35,7 @@ class TwilioVoiceService {
    * @param nombrePaciente - Nombre del paciente para personalizar el mensaje
    * @returns Resultado de la llamada
    */
-  async makeVoiceCall(toNumber: string, nombrePaciente: string = 'paciente'): Promise<VoiceCallResponse> {
+  async makeVoiceCall(toNumber: string, _nombrePaciente: string = 'paciente'): Promise<VoiceCallResponse> {
     if (!this.accountSid || !this.authToken) {
       return {
         success: false,
@@ -49,8 +49,8 @@ class TwilioVoiceService {
       console.log(`📞 Using Account SID: ${this.accountSid.substring(0, 8)}...${this.accountSid.substring(this.accountSid.length - 4)}`);
       console.log(`📞 Using Auth Token: ***${this.authToken.substring(this.authToken.length - 4)}`);
 
-      // Construir URL del webhook de voz
-      const webhookUrl = `https://www.bsl.com.co/_functions/voice?nombre=${encodeURIComponent(nombrePaciente)}`;
+      // Construir URL del webhook de voz (TwiML propio de Bodytech)
+      const webhookUrl = 'https://bodytech.app/api/twilio/voice-twiml';
       console.log(`📞 URL de webhook: ${webhookUrl}`);
 
       // Credenciales Basic Auth

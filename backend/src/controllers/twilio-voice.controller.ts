@@ -3,6 +3,17 @@ import twilioVoiceService from '../services/twilio-voice.service';
 
 export class TwilioVoiceController {
   /**
+   * GET /api/twilio/voice-twiml
+   * Webhook TwiML: reproduce el audio de bienvenida de Bodytech
+   */
+  voiceTwiml(_req: Request, res: Response): void {
+    const audioUrl = 'https://bodytech.app/pbxBody.mp3';
+    res.type('text/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Response><Play>${audioUrl}</Play></Response>`
+    );
+  }
+
+  /**
    * POST /api/twilio/voice-call
    * Realiza una llamada de voz usando Twilio
    */

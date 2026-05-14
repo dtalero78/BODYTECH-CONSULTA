@@ -655,7 +655,7 @@ class MedicalPanelService {
    * Formatea número telefónico con prefijo internacional
    */
   formatPhoneNumber(phone: string): string {
-    let cleaned = phone.replace(/[\s\(\)\+\-]/g, '');
+    const cleaned = phone.replace(/[\s\(\)\+\-]/g, '');
 
     if (cleaned.startsWith('57') && cleaned.length >= 10) {
       return '+' + cleaned;

@@ -13,7 +13,7 @@ export function normalizarTelefonoConPrefijo57(celular: string | null | undefine
   if (!celular) return null;
 
   // Limpiar prefijo whatsapp:, espacios, guiones, paréntesis y el signo +
-  let telefono = celular
+  const telefono = celular
     .toString()
     .replace(/^whatsapp:/i, '')  // Quitar prefijo whatsapp:
     .replace(/[\s\-\(\)]/g, '')   // Quitar espacios, guiones, paréntesis

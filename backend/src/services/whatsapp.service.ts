@@ -31,7 +31,7 @@ class WhatsAppService {
    * WHAPI espera el número con código de país sin + (ej: 573001234567)
    */
   private formatPhoneNumber(phone: string): string {
-    let cleanPhone = phone.replace(/[\s\(\)\-\+]/g, '');
+    const cleanPhone = phone.replace(/[\s\(\)\-\+]/g, '');
 
     // Si tiene exactamente 10 dígitos y empieza con 3, es colombiano local
     if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {

@@ -290,7 +290,7 @@ export function MedicalPanelPage() {
       console.log('[MedicalPanel] Disconnecting Socket.io');
       newSocket.disconnect();
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, medicoCode]);
 
   // Función para sincronizar estado de pacientes conectados desde el backend
   const syncConnectedPatients = async () => {
@@ -747,7 +747,7 @@ export function MedicalPanelPage() {
                           )}
                         </span>
                       </div>
-                      {connectedPatients.has(searchResult._id) && (
+                      {connectedPatients.has(searchResult.numeroId) && (
                         <div className="flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
                           <div className="relative flex items-center justify-center w-2 h-2">
                             <div className="absolute w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
@@ -929,7 +929,7 @@ export function MedicalPanelPage() {
                               </span>
                             )}
                           </h3>
-                          {connectedPatients.has(patient._id) && (
+                          {connectedPatients.has(patient.numeroId) && (
                             <div className="flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
                               <div className="relative flex items-center justify-center w-2 h-2">
                                 <div className="absolute w-2 h-2 bg-green-500 rounded-full animate-ping"></div>

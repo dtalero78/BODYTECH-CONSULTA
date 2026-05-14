@@ -64,6 +64,7 @@ class TwilioVoiceService {
       params.append('To', toNumber);
       params.append('From', this.twilioPhoneNumber);
       params.append('Url', webhookUrl);
+      params.append('Method', 'GET');
 
       const response = await axios.post(this.baseUrl, params.toString(), {
         auth,

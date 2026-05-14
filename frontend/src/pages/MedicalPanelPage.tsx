@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
+import authService, { Sede } from '../services/auth.service';
 
 // Helper function para reproducir sonido de notificación
 const playNotificationSound = () => {
@@ -68,6 +69,8 @@ const speakText = (text: string) => {
 export function MedicalPanelPage() {
   const queryClient = useQueryClient();
   const [medicoCode, setMedicoCode] = useState('');
+  const [sedeId, setSedeId] = useState('');
+  const [sedes, setSedes] = useState<Sede[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   // `isValidating` reemplaza el `isLoading` original SOLO para el flujo de
   // login (botón "Entrar" mostrando "Cargando..."). Los estados de fetch de
@@ -90,6 +93,32 @@ export function MedicalPanelPage() {
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
 
   const pageSize = 10;
+
+  // Run 5 — Multi-sede login: al montar, cargar lista de sedes para popular
+  // el <select>, y si ya hay sesión persistida, restaurarla sin volver a
+  // golpear el server (el JWT se valida en cada request del panel; si está
+  // expirado, la primera query devolverá 401 y se podrá deslogear).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await authService.getSedes();
+        if (!cancelled) setSedes(list);
+      } catch (err) {
+        console.error('[MedicalPanel] Error cargando sedes:', err);
+      }
+    })();
+
+    if (authService.isLoggedIn()) {
+      setMedicoCode(authService.getMedicoCode() ?? '');
+      setSedeId(authService.getSedeId() ?? '');
+      setIsLoggedIn(true);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ----- Stats diarias del médico -----
   const statsQuery = useQuery({
@@ -132,31 +161,55 @@ export function MedicalPanelPage() {
   const isLoading = statsQuery.isFetching || patientsQuery.isFetching;
   const isSearching = patientSearchQuery.isFetching;
 
-  // Pre-validar el código del médico antes de marcar `isLoggedIn`. Usamos
-  // `queryClient.fetchQuery` para gatekeep igual que el `loadData` original:
-  // si el GET falla, no entramos al panel y mostramos el error en el form
-  // de login.
+  // Run 5: el login ahora golpea `POST /api/auth/login` que valida la sede y
+  // emite un JWT. Si el server responde 401 (sede inactiva / inexistente)
+  // mostramos error específico. Las queries posteriores (`daily-stats`,
+  // `pending-patients`) reusan el JWT vía el interceptor de axios.
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicoCode) {
       setError('Por favor ingrese el código de médico');
       return;
     }
+    if (!sedeId) {
+      setError('Por favor seleccione una sede');
+      return;
+    }
     setIsValidating(true);
     setError(null);
     try {
-      await queryClient.fetchQuery({
-        queryKey: ['daily-stats', medicoCode],
-        queryFn: () => medicalPanelService.getDailyStats(medicoCode),
-        staleTime: 30_000,
-      });
+      await authService.login(medicoCode, sedeId);
       setIsLoggedIn(true);
-    } catch (err) {
-      console.error('Error cargando datos:', err);
-      setError('Error al cargar los datos. Verifique el código de médico.');
+    } catch (err: any) {
+      console.error('Error en login:', err);
+      const code = err?.response?.data?.error;
+      if (code === 'SEDE_NOT_FOUND') {
+        setError('Sede no encontrada o inactiva. Verifique la selección.');
+      } else if (code === 'VALIDATION_ERROR') {
+        setError('Datos de login inválidos.');
+      } else {
+        setError('Error al iniciar sesión. Verifique los datos.');
+      }
     } finally {
       setIsValidating(false);
     }
+  };
+
+  // Run 5: cierre de sesión — limpia localStorage y resetea el estado local
+  // para volver al form de login.
+  const handleLogout = () => {
+    authService.logout();
+    setIsLoggedIn(false);
+    setMedicoCode('');
+    setSedeId('');
+    setCurrentPage(0);
+    setConnectedPatients(new Set());
+    setPatientRooms({});
+    setContactedPatients(new Set());
+    setSearchDocument('');
+    setSearchSubmitted('');
+    setSearchError(null);
+    queryClient.clear();
   };
 
   const handleRefresh = () => {
@@ -492,6 +545,26 @@ export function MedicalPanelPage() {
               />
             </div>
 
+            <div>
+              <label htmlFor="sedeId" className="block text-sm font-medium text-gray-300 mb-2">
+                Sede
+              </label>
+              <select
+                id="sedeId"
+                value={sedeId}
+                onChange={(e) => setSedeId(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-[#2a3942] border border-gray-600 rounded-xl text-white focus:outline-none focus:border-[#00a884] transition"
+              >
+                <option value="">-- Seleccionar sede --</option>
+                {sedes.map((s) => (
+                  <option key={s.sedeId} value={s.sedeId}>
+                    {s.nombre} ({s.ciudad})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
                 {error}
@@ -535,7 +608,15 @@ export function MedicalPanelPage() {
               <img src="/bodyLogo.jpg" alt="BSL Logo" className="h-12 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-white">Panel Médico</h1>
-                <p className="text-gray-400 text-sm">Código: {medicoCode}</p>
+                <p className="text-gray-400 text-sm">
+                  Código: {medicoCode}
+                  {sedeId && (
+                    <>
+                      <span className="mx-2 text-gray-600">·</span>
+                      Sede: {sedeId}
+                    </>
+                  )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -546,6 +627,12 @@ export function MedicalPanelPage() {
                 className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
               >
                 {isLoading ? '⟳' : '↻ Actualizar'}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-gray-700 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition font-semibold"
+              >
+                Cerrar sesión
               </button>
             </div>
           </div>

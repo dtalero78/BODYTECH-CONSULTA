@@ -6,6 +6,7 @@ import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import appConfig from './config/app.config';
+import authRoutes from './routes/auth.routes';
 import videoRoutes from './routes/video.routes';
 import telemedicineRoutes from './routes/telemedicine.routes';
 import medicalPanelRoutes from './routes/medical-panel.routes';
@@ -15,6 +16,10 @@ import { telemedicineSocketService } from './services/telemedicine-socket.servic
 import { sessionTracker } from './services/session-tracker.service';
 import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
+import {
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+} from './middleware/auth.middleware';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -77,6 +82,12 @@ if (appConfig.nodeEnv === 'development') {
   app.use(morgan('dev'));
 }
 
+// Run 5 — Multi-sede login: si el request lleva `Authorization: Bearer <jwt>`,
+// enriquece `req.medicoCode` y `req.sedeId`. NUNCA corta el request — sólo
+// agrega contexto. Va ANTES de `sedeMiddleware` para que el JWT (cuando
+// exista) gane sobre cualquier header `X-Sede-Id` que el cliente mande.
+app.use(optionalAuthMiddleware);
+
 // Run 4 — Multi-tenancy: extrae `sedeId` del header `X-Sede-Id` (o ?sede=)
 // y lo deja en `(req as any).sedeId` con default `'bsl'`. Debe ir DESPUÉS de
 // CORS / body parser y ANTES de cualquier `app.use('/api/...', ...)`.
@@ -92,9 +103,14 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // API Routes
+// `/api/auth` es público (login + listado de sedes para el form).
+app.use('/api/auth', authRoutes);
+// `/api/video` y `/api/telemedicine` son públicos — pacientes acceden por link
+// de WhatsApp sin cuenta y NO tienen JWT.
 app.use('/api/video', videoRoutes);
 app.use('/api/telemedicine', telemedicineRoutes);
-app.use('/api/medical-panel', medicalPanelRoutes);
+// `/api/medical-panel` exige JWT válido (médicos logueados).
+app.use('/api/medical-panel', requireAuthMiddleware, medicalPanelRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
 app.use('/api/calidad', calidadRoutes);
 

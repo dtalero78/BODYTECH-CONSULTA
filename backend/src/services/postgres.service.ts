@@ -389,6 +389,27 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS sede_id VARCHAR(50) NOT NULL DEFAULT 'bsl';
       `);
 
+      // ===== Run 5 — Multi-sede Login =====
+      // Tabla de sedes activas. PK = sede_id (varchar slug). Idempotente:
+      // CREATE TABLE IF NOT EXISTS + INSERT ... ON CONFLICT DO NOTHING.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS sedes (
+          sede_id  VARCHAR(50)  PRIMARY KEY,
+          nombre   VARCHAR(200) NOT NULL,
+          ciudad   VARCHAR(100) NOT NULL,
+          activa   BOOLEAN      NOT NULL DEFAULT true
+        )
+      `);
+      await this.query(`
+        INSERT INTO sedes (sede_id, nombre, ciudad) VALUES
+          ('bsl',          'Bodytech Sede Principal', 'Bogotá'),
+          ('bt-chapinero', 'Bodytech Chapinero',      'Bogotá'),
+          ('bt-salitre',   'Bodytech Salitre',        'Bogotá'),
+          ('bt-medellin',  'Bodytech Medellín',       'Medellín'),
+          ('bt-cali',      'Bodytech Cali',           'Cali')
+        ON CONFLICT (sede_id) DO NOTHING
+      `);
+
       // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio
       await this.query(`
         CREATE TABLE IF NOT EXISTS room_historia_map (

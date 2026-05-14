@@ -53,6 +53,18 @@ class MedicalPanelService {
         'Content-Type': 'application/json',
       },
     });
+
+    // Run 5 — Multi-sede login: este servicio mantiene su propio cliente
+    // axios (no usa el `apiService` compartido). El interceptor inyecta el
+    // JWT en cada request para que `/api/medical-panel/*` (que ahora exige
+    // `requireAuthMiddleware`) no devuelva 401.
+    this.client.interceptors.request.use((config) => {
+      const token = localStorage.getItem('bsl_auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
   }
 
   /**

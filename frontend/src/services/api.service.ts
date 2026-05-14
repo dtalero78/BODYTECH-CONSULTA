@@ -34,6 +34,18 @@ class ApiService {
         'Content-Type': 'application/json',
       },
     });
+
+    // Run 5 — Multi-sede login: inyectar JWT en cada request si hay sesión.
+    // El key `bsl_auth_token` se setea desde `authService.login()`. Si no hay
+    // sesión (paciente / pre-login), el header no se agrega y el request
+    // sigue siendo público.
+    this.client.interceptors.request.use((config) => {
+      const token = localStorage.getItem('bsl_auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
   }
 
   /**

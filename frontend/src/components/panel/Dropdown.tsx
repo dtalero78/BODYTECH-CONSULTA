@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 
 export interface DropdownOption {
@@ -31,7 +32,9 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -39,6 +42,19 @@ export function Dropdown({
     const q = query.toLowerCase();
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
+
+  // Posicionar como fixed al abrir para escapar overflow:hidden del modal
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: 'fixed',
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+  }, [open]);
 
   // Cerrar al click fuera
   useEffect(() => {
@@ -90,6 +106,7 @@ export function Dropdown({
   return (
     <div className="relative" ref={wrapRef}>
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
@@ -101,10 +118,11 @@ export function Dropdown({
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
-          className="absolute top-[calc(100%+6px)] left-0 right-0 z-30 bg-[#23323b] border border-[#00a884] rounded-2xl shadow-2xl overflow-hidden"
+          className="bg-[#23323b] border border-[#00a884] rounded-2xl shadow-2xl overflow-hidden"
           style={{
+            ...dropdownStyle,
             transformOrigin: 'top center',
             animation: 'panelScaleY 180ms ease-out',
           }}
@@ -148,7 +166,8 @@ export function Dropdown({
             <span>↑↓ navegar</span>
             <span>Enter seleccionar · Esc cerrar</span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

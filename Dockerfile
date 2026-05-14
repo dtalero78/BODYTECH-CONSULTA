@@ -19,7 +19,9 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN npm ci
+# npm install (no npm ci) — el package-lock.json generado en macOS arm64 no
+# incluye los binarios @esbuild/linux-x64 que Alpine necesita.
+RUN npm install
 
 COPY frontend/ .
 RUN npm run build

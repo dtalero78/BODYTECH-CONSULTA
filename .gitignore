@@ -33,3 +33,4 @@ build/
 build_*.py
 guion-*.md
 my-video/
+.claude/

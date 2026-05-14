@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 import authService, { Sede } from '../services/auth.service';
+import { AgendarCitaModal } from '../components/AgendarCitaModal';
 
 // Helper function para reproducir sonido de notificación
 const playNotificationSound = () => {
@@ -91,6 +93,7 @@ export function MedicalPanelPage() {
   const [connectedPatients, setConnectedPatients] = useState<Set<string>>(new Set());
   const [patientRooms, setPatientRooms] = useState<{ [patientId: string]: string }>({});
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
+  const [showAgendarModal, setShowAgendarModal] = useState(false);
 
   const pageSize = 10;
 
@@ -622,6 +625,13 @@ export function MedicalPanelPage() {
             <div className="flex items-center gap-4">
               <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-10 w-auto" />
               <button
+                onClick={() => setShowAgendarModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+              >
+                <Plus size={16} />
+                Agendar Cita
+              </button>
+              <button
                 onClick={handleRefresh}
                 disabled={isLoading}
                 className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
@@ -1080,6 +1090,16 @@ export function MedicalPanelPage() {
           )}
         </div>
       </div>
+
+      <AgendarCitaModal
+        open={showAgendarModal}
+        medicoCode={medicoCode}
+        onClose={() => setShowAgendarModal(false)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
+          queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
+        }}
+      />
     </div>
   );
 }

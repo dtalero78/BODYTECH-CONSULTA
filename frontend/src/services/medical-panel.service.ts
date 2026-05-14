@@ -43,6 +43,26 @@ export interface PatientDetails extends Patient {
   fechaConsulta?: Date;
 }
 
+/**
+ * Payload para crear una orden / cita médica desde el panel.
+ * Subset estricto del `OrdenCreateInput` del backend (no incluye
+ * `codEmpresa` ni `examenes`, que no entran en este formulario).
+ */
+export interface OrdenCreatePayload {
+  primerNombre: string;
+  segundoNombre?: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  numeroId: string;
+  celular: string;
+  empresa?: string;
+  tipoExamen?: string;
+  medico: string;
+  fechaAtencion: string; // YYYY-MM-DD
+  horaAtencion: string;  // HH:MM
+  ciudad?: string;
+}
+
 class MedicalPanelService {
   private client: AxiosInstance;
 
@@ -171,6 +191,58 @@ class MedicalPanelService {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 7);
     return `consulta-${timestamp}-${random}`;
+  }
+
+  /**
+   * Crea una nueva orden / cita médica.
+   * `medico` debe venir del `medicoCode` del estado del panel.
+   */
+  async createOrden(
+    data: OrdenCreatePayload
+  ): Promise<{ success: boolean; data?: unknown }> {
+    const res = await this.client.post('/api/medical-panel/ordenes', data);
+    return res.data;
+  }
+
+  /**
+   * Busca un paciente por documento para pre-llenar el formulario de
+   * "Agendar Cita". Devuelve un shape reducido (no es `Patient` completo)
+   * o `null` si no se encuentra. Nunca lanza — el modal usa el resultado
+   * para decidir si pre-llena o no.
+   *
+   * Nombre distinto al `searchPatientByDocument` existente para no romper
+   * el flujo de "Buscar Paciente" del panel (que espera el `Patient`
+   * completo y consume el throw como error).
+   */
+  async lookupPatientForOrden(
+    documento: string
+  ): Promise<{
+    numeroId: string;
+    primerNombre: string;
+    segundoNombre?: string;
+    primerApellido: string;
+    segundoApellido?: string;
+    celular: string;
+  } | null> {
+    try {
+      const res = await this.client.get(
+        `/api/medical-panel/patients/search/${documento}`
+      );
+      // El endpoint puede devolver el paciente directamente o envuelto
+      // en { data }. Probamos ambos shapes.
+      const raw = ((res.data && (res.data as any).data) ?? res.data) as any;
+      if (!raw || !raw.numeroId) return null;
+      return {
+        numeroId: String(raw.numeroId),
+        primerNombre: raw.primerNombre ?? '',
+        segundoNombre: raw.segundoNombre,
+        primerApellido: raw.primerApellido ?? '',
+        segundoApellido: raw.segundoApellido,
+        celular: raw.celular ?? '',
+      };
+    } catch {
+      return null;
+    }
   }
 }
 

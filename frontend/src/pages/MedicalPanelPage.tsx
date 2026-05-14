@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import medicalPanelService, { Patient, PatientStats } from '../services/medical-panel.service';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 
 // Helper function para reproducir sonido de notificación
@@ -65,17 +66,20 @@ const speakText = (text: string) => {
 };
 
 export function MedicalPanelPage() {
+  const queryClient = useQueryClient();
   const [medicoCode, setMedicoCode] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [stats, setStats] = useState<PatientStats | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  // `isValidating` reemplaza el `isLoading` original SOLO para el flujo de
+  // login (botón "Entrar" mostrando "Cargando..."). Los estados de fetch de
+  // las listas ahora vienen de TanStack Query.
+  const [isValidating, setIsValidating] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [collapsedItems, setCollapsedItems] = useState<{ [key: string]: boolean }>({});
   const [searchDocument, setSearchDocument] = useState('');
-  const [searchResult, setSearchResult] = useState<Patient | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
+  // `searchSubmitted` se setea sólo al click "Buscar". Lo usamos como queryKey
+  // y `enabled`, así que la query sólo dispara al submit (no al tipear) y el
+  // resultado visible no desaparece mientras el usuario edita el input.
+  const [searchSubmitted, setSearchSubmitted] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attendingPatient, setAttendingPatient] = useState<string | null>(null);
@@ -87,57 +91,83 @@ export function MedicalPanelPage() {
 
   const pageSize = 10;
 
-  const loadData = async () => {
+  // ----- Stats diarias del médico -----
+  const statsQuery = useQuery({
+    queryKey: ['daily-stats', medicoCode],
+    queryFn: () => medicalPanelService.getDailyStats(medicoCode),
+    enabled: isLoggedIn && !!medicoCode,
+    staleTime: 30_000,
+  });
+
+  // ----- Lista paginada de pacientes pendientes -----
+  const patientsQuery = useQuery({
+    queryKey: ['pending-patients', medicoCode, currentPage, pageSize],
+    queryFn: () => medicalPanelService.getPendingPatients(medicoCode, currentPage, pageSize),
+    enabled: isLoggedIn && !!medicoCode,
+    staleTime: 30_000,
+  });
+
+  // ----- Búsqueda por documento -----
+  // `enabled` se ata a `searchSubmitted` (no a `searchDocument`) para que la
+  // query sólo dispare al click "Buscar". El resultado se cachea por
+  // documento — si se busca el mismo documento de nuevo (clearSearch + retipear
+  // + Buscar), se reusa hasta `staleTime`.
+  const patientSearchQuery = useQuery<Patient | null, Error>({
+    queryKey: ['patient-search', searchSubmitted],
+    queryFn: async () => {
+      const result = await medicalPanelService.searchPatientByDocument(searchSubmitted);
+      return (result ?? null) as Patient | null;
+    },
+    enabled: !!searchSubmitted,
+    retry: 1,
+    staleTime: 30_000,
+  });
+
+  const stats = statsQuery.data ?? null;
+  const patients: Patient[] = patientsQuery.data?.patients ?? [];
+  const totalPages = patientsQuery.data?.totalPages ?? 0;
+  const searchResult = patientSearchQuery.data ?? null;
+  // `isLoading` (compat) es true si alguna de las queries principales está
+  // refetcheando. Para el botón de login usamos `isValidating`.
+  const isLoading = statsQuery.isFetching || patientsQuery.isFetching;
+  const isSearching = patientSearchQuery.isFetching;
+
+  // Pre-validar el código del médico antes de marcar `isLoggedIn`. Usamos
+  // `queryClient.fetchQuery` para gatekeep igual que el `loadData` original:
+  // si el GET falla, no entramos al panel y mostramos el error en el form
+  // de login.
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!medicoCode) {
       setError('Por favor ingrese el código de médico');
       return;
     }
-
-    setIsLoading(true);
+    setIsValidating(true);
     setError(null);
-
     try {
-      // Cargar estadísticas
-      const statsData = await medicalPanelService.getDailyStats(medicoCode);
-      setStats(statsData);
-
-      // Cargar pacientes pendientes
-      const patientsData = await medicalPanelService.getPendingPatients(
-        medicoCode,
-        currentPage,
-        pageSize
-      );
-
-      setPatients(patientsData.patients);
-      setTotalPages(patientsData.totalPages);
+      await queryClient.fetchQuery({
+        queryKey: ['daily-stats', medicoCode],
+        queryFn: () => medicalPanelService.getDailyStats(medicoCode),
+        staleTime: 30_000,
+      });
       setIsLoggedIn(true);
     } catch (err) {
       console.error('Error cargando datos:', err);
       setError('Error al cargar los datos. Verifique el código de médico.');
     } finally {
-      setIsLoading(false);
+      setIsValidating(false);
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await loadData();
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
+    queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
   };
 
-  const handleRefresh = async () => {
-    await loadData();
-  };
-
-  const handlePageChange = async (newPage: number) => {
+  const handlePageChange = (newPage: number) => {
     if (newPage < 0 || newPage >= totalPages) return;
     setCurrentPage(newPage);
   };
-
-  useEffect(() => {
-    if (isLoggedIn && medicoCode) {
-      loadData();
-    }
-  }, [currentPage]);
 
   // Socket.io para notificaciones en tiempo real de pacientes conectados
   useEffect(() => {
@@ -223,7 +253,10 @@ export function MedicalPanelPage() {
     try {
       await medicalPanelService.markAsNoAnswer(patientId);
       setCollapsedItems({ ...collapsedItems, [patientId]: true });
-      await loadData(); // Recargar datos
+      // Recargar datos: invalidar las queries principales para que TanStack
+      // Query refetchee con los valores actuales.
+      queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
+      queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
     } catch (err) {
       console.error('Error marcando como no contesta:', err);
     }
@@ -375,40 +408,41 @@ export function MedicalPanelPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!searchDocument.trim()) {
+    const doc = searchDocument.trim();
+    if (!doc) {
       setSearchError('Por favor ingrese un documento o celular');
       return;
     }
-
-    setIsSearching(true);
     setSearchError(null);
-    setSearchResult(null);
-
-    try {
-      // Buscar sin filtro de médico (busca en toda la base de datos)
-      const result = await medicalPanelService.searchPatientByDocument(
-        searchDocument.trim()
-        // No enviamos medicoCode para buscar en todos los pacientes
-      );
-
-      if (result) {
-        setSearchResult(result);
-      } else {
-        setSearchError('No se encontró paciente con ese documento o celular');
-      }
-    } catch (err) {
-      console.error('Error buscando paciente:', err);
-      setSearchError('Error al buscar paciente');
-    } finally {
-      setIsSearching(false);
+    // Caso 1: documento distinto al previo → setSearchSubmitted cambia la
+    // queryKey, `enabled` lo dispara. No-op para refetch manual.
+    // Caso 2: mismo documento → la queryKey no cambia y `enabled` ya estaba
+    // true; forzamos refetch explícito.
+    if (doc === searchSubmitted) {
+      await patientSearchQuery.refetch();
+    } else {
+      setSearchSubmitted(doc);
     }
   };
 
+  // Si la búsqueda terminó y no hubo paciente, mostrar el mensaje "no
+  // encontrado". Se hace en efecto porque `data === null` es un caso de éxito,
+  // no de error de la query.
+  useEffect(() => {
+    if (!searchSubmitted) return;
+    if (patientSearchQuery.isFetching) return;
+    if (patientSearchQuery.error) {
+      setSearchError('Error al buscar paciente');
+    } else if (patientSearchQuery.data === null) {
+      setSearchError('No se encontró paciente con ese documento o celular');
+    }
+  }, [searchSubmitted, patientSearchQuery.isFetching, patientSearchQuery.error, patientSearchQuery.data]);
+
   const clearSearch = () => {
     setSearchDocument('');
-    setSearchResult(null);
+    setSearchSubmitted('');
     setSearchError(null);
+    queryClient.removeQueries({ queryKey: ['patient-search'] });
   };
 
   const generateWhatsAppMessage = (patient: Patient, includeLink: boolean = false) => {
@@ -466,10 +500,10 @@ export function MedicalPanelPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isValidating}
               className="w-full bg-[#00a884] text-white px-6 py-3 rounded-xl hover:bg-[#008f6f] transition font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Cargando...' : 'Entrar'}
+              {isValidating ? 'Cargando...' : 'Entrar'}
             </button>
           </form>
 

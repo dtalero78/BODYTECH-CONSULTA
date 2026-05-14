@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import apiService from '../services/api.service';
 
 interface HistoriaClinicaItem {
@@ -221,35 +222,37 @@ function InfoItem({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function HistoriasClinicasPage() {
-  const [historias, setHistorias] = useState<HistoriaClinicaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPaginas, setTotalPaginas] = useState(0);
-  const [total, setTotal] = useState(0);
   const [buscar, setBuscar] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [selectedHistoria, setSelectedHistoria] = useState<HistoriaClinicaItem | null>(null);
   const limit = 20;
 
-  const fetchAtendidos = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await apiService.getAtendidos({ page, limit, buscar: buscar || undefined });
-      setHistorias(result.data);
-      setTotalPaginas(result.totalPaginas);
-      setTotal(result.total);
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar historias');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, buscar]);
+  // queryKey incluye page + buscar — al cambiar cualquiera, TanStack Query
+  // dispara un nuevo fetch automáticamente; no necesitamos un useEffect.
+  const atendidosQuery = useQuery<
+    { data: HistoriaClinicaItem[]; total: number; page: number; limit: number; totalPaginas: number },
+    Error
+  >({
+    queryKey: ['atendidos', page, buscar],
+    queryFn: () =>
+      apiService.getAtendidos({ page, limit, buscar: buscar || undefined }) as Promise<{
+        data: HistoriaClinicaItem[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPaginas: number;
+      }>,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    fetchAtendidos();
-  }, [fetchAtendidos]);
+  const historias = atendidosQuery.data?.data ?? [];
+  const totalPaginas = atendidosQuery.data?.totalPaginas ?? 0;
+  const total = atendidosQuery.data?.total ?? 0;
+  // Mostrar el spinner mientras hay fetch en vuelo (carga inicial o cambio de
+  // página/búsqueda), igual que antes.
+  const isLoading = atendidosQuery.isFetching;
+  const error = atendidosQuery.error ? atendidosQuery.error.message || 'Error al cargar historias' : null;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

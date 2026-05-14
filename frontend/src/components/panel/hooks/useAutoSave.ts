@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SaveStatus } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -25,12 +26,24 @@ interface UseAutoSaveOptions {
   serverValue?: unknown;
 }
 
+interface PatchVars {
+  historiaId: string;
+  field: string;
+  value: unknown;
+}
+
 /**
  * Auto-save por field. Debounce 800ms (configurable). Reintenta una vez con
- * backoff de 1s antes de marcar error.
+ * backoff de 1s antes de marcar error (vía `useMutation` con
+ * `retry: 1`, `retryDelay: 1000`).
  *
  * En el primer render NO dispara — solo cuando `value` cambia respecto al
  * valor "anclado" en el primer render.
+ *
+ * Bajo el capó usa `useMutation` para el envío, pero conserva todas las refs
+ * y guards anti-PATCH-redundante del diseño original. El cleanup de unmount
+ * sigue usando `axios.patch` directo (fire-and-forget) porque al desmontar
+ * el componente la mutación se cancela.
  */
 export function useAutoSave({
   historiaId,
@@ -41,6 +54,7 @@ export function useAutoSave({
   enabled = true,
   serverValue,
 }: UseAutoSaveOptions): SaveStatus & { retry: () => void } {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<SaveStatus>({
     saving: false,
     lastSavedAt: null,
@@ -110,39 +124,57 @@ export function useAutoSave({
     fieldRef.current = field;
   }, [field]);
 
-  const send = useCallback(
-    async (val: unknown, attempt = 1): Promise<void> => {
-      if (!historiaId) return;
-      setStatus((s) => ({ ...s, saving: true, error: null }));
-      try {
-        const res = await axios.patch(`${API_BASE_URL}/api/video/medical-history/${historiaId}/field`, {
-          field,
-          value: val,
-        });
-        if (res.data?.success) {
-          setStatus({
-            saving: false,
-            lastSavedAt: new Date(),
-            error: null,
-          });
-          onSavedRef.current?.(field, val);
-        } else {
-          throw new Error(res.data?.error || 'SAVE_FAILED');
-        }
-      } catch (e: unknown) {
-        if (attempt < 2) {
-          // Reintento con backoff de 1s
-          await new Promise((r) => setTimeout(r, 1000));
-          await send(val, attempt + 1);
-          return;
-        }
-        const msg = e instanceof Error ? e.message : 'SAVE_FAILED';
-        setStatus({
-          saving: false,
-          lastSavedAt: null,
-          error: msg,
-        });
+  // Mutación encargada del PATCH. retry: 1 + retryDelay: 1000 reemplaza el
+  // reintento manual con backoff de 1s del diseño original.
+  const mutation = useMutation<unknown, Error, PatchVars>({
+    mutationFn: async ({ historiaId: hid, field: f, value: v }) => {
+      const res = await axios.patch(
+        `${API_BASE_URL}/api/video/medical-history/${hid}/field`,
+        { field: f, value: v }
+      );
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || 'SAVE_FAILED');
       }
+      return res.data;
+    },
+    retry: 1,
+    retryDelay: 1000,
+    onMutate: () => {
+      setStatus((s) => ({ ...s, saving: true, error: null }));
+    },
+    onSuccess: (_data, vars) => {
+      setStatus({
+        saving: false,
+        lastSavedAt: new Date(),
+        error: null,
+      });
+      onSavedRef.current?.(vars.field, vars.value);
+      // Belt-and-suspenders: revalidar la historia en background. La UI ya
+      // está actualizada via `onSaved → patchLocal → setQueryData`, así que
+      // esto sólo refresca el cache si hubo cambios concurrentes en el server.
+      // staleTime: 30_000 amortigua refetches durante edición fluida.
+      queryClient.invalidateQueries({ queryKey: ['medical-history', vars.historiaId] });
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : 'SAVE_FAILED';
+      setStatus({
+        saving: false,
+        lastSavedAt: null,
+        error: msg,
+      });
+    },
+  });
+
+  // `mutation.mutate` cambia de identidad en cada render → guardarlo en ref
+  // para que `send` (y los efectos que dependen de él) no se re-creen
+  // innecesariamente.
+  const mutateRef = useRef(mutation.mutate);
+  mutateRef.current = mutation.mutate;
+
+  const send = useCallback(
+    (val: unknown): void => {
+      if (!historiaId) return;
+      mutateRef.current({ historiaId, field, value: val });
     },
     [historiaId, field]
   );
@@ -171,7 +203,7 @@ export function useAutoSave({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       lastSentValueRef.current = value;
-      void send(value);
+      send(value);
     }, delay);
 
     return () => {
@@ -180,7 +212,7 @@ export function useAutoSave({
   }, [value, delay, enabled, historiaId, send]);
 
   const retry = useCallback(() => {
-    void send(value);
+    send(value);
   }, [send, value]);
 
   // Fix bug "click Guardado antes del debounce aborta PATCH":
@@ -188,6 +220,11 @@ export function useAutoSave({
   // X, Esc, click fuera o cambio de tab), si hay un timer pendiente con un
   // valor distinto al último enviado, hacemos flush fire-and-forget. Esto
   // garantiza que ningún cambio reciente del médico se pierda por timing.
+  //
+  // Importante: el flush usa axios.patch directo, NO la mutación, porque al
+  // desmontar React Query cancela mutaciones en vuelo y el componente ya no
+  // existe para reportar status. El cache se actualiza vía onSavedRef cuando
+  // resuelve el patch (el patchLocal del orchestrator hace setQueryData).
   useEffect(() => {
     return () => {
       if (timerRef.current) {

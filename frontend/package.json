@@ -11,6 +11,8 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-query-devtools": "^5.100.10",
     "@twilio/video-processors": "^3.1.0",
     "axios": "^1.6.2",
     "jspdf": "^3.0.3",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PanelHeader } from './PanelHeader';
 import { PatientStrip } from './PatientStrip';
 import { Tabs, type TabDef } from './Tabs';
@@ -133,57 +133,37 @@ function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
 }
 
 function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationPanelProps) {
-  const { data, loading, error, patchLocal, refetch } = useMedicalHistory(historiaId);
+  const { data, loading, error, patchLocal } = useMedicalHistory(historiaId);
   const [activeTab, setActiveTab] = useState<TabId>('t1');
   const [fabOpen, setFabOpen] = useState(false);
   const { aggregate, retryAll } = useSaveCtx();
   // Phase 3 — Transcripción post-llamada.
   const [showTranscriptionBadge, setShowTranscriptionBadge] = useState(false);
+  // Ref con el último status observado, para detectar la transición a 'done'
+  // sin disparar el badge en cargas frescas donde el estado ya viene en 'done'
+  // (no fue el resultado de un polling vivo).
+  const lastTranscriptionStatusRef = useRef<string | null | undefined>(undefined);
 
-  // ----- Phase 3 — Polling del status de transcripción -----
-  // Cuando el GET inicial devuelve transcriptionStatus pending|processing,
-  // hacemos polling cada 30s. Al detectar 'done', refetcheamos para que los
-  // campos auto-rellenados aparezcan en la UI y mostramos un badge verde.
-  // Si llega 'error' (o ya viene 'done' / null) no se inicia ningún interval.
+  // ----- Phase 3 — Detección de transición a 'done' -----
+  // El polling cada 30s ahora vive en `useMedicalHistory` vía `refetchInterval`.
+  // Aquí sólo observamos `transcriptionStatus`: cuando pasa de un estado de
+  // polling (`pending`/`processing`) a `done`, mostramos el badge. Cuando pasa
+  // a `error`, el `refetchInterval` devuelve `false` y el polling para solo;
+  // no mostramos badge.
   useEffect(() => {
-    const status = data?.transcriptionStatus;
-    const shouldPoll = status === 'pending' || status === 'processing';
-    if (!shouldPoll) return;
-
-    let cancelled = false;
-    const interval = window.setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const apiBase = import.meta.env.VITE_API_BASE_URL || '';
-        const res = await fetch(
-          `${apiBase}/api/video/medical-history/${historiaId}`,
-          { credentials: 'omit' }
-        );
-        if (!res.ok) return;
-        const json = await res.json();
-        const newStatus = json?.data?.transcriptionStatus;
-        if (newStatus === 'done') {
-          await refetch();
-          if (!cancelled) {
-            setShowTranscriptionBadge(true);
-          }
-          window.clearInterval(interval);
-        } else if (newStatus === 'error') {
-          // Cortamos polling sin badge. Log a consola para diagnóstico.
-          console.warn('[Transcription] pipeline marcó error para', historiaId);
-          window.clearInterval(interval);
-        }
-      } catch (e) {
-        // Mantener polling vivo si hay un blip transitorio.
-        console.warn('[Transcription] poll fallo transitorio:', e);
-      }
-    }, 30_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [data?.transcriptionStatus, historiaId, refetch]);
+    const prev = lastTranscriptionStatusRef.current;
+    const curr = data?.transcriptionStatus;
+    if (
+      (prev === 'pending' || prev === 'processing') &&
+      curr === 'done'
+    ) {
+      setShowTranscriptionBadge(true);
+    }
+    if (curr === 'error' && (prev === 'pending' || prev === 'processing')) {
+      console.warn('[Transcription] pipeline marcó error para', historiaId);
+    }
+    lastTranscriptionStatusRef.current = curr;
+  }, [data?.transcriptionStatus, historiaId]);
 
   // Atajo M y N — solo si el foco no está en un editable.
   useEffect(() => {

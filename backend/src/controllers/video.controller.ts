@@ -53,7 +53,6 @@ class VideoController {
       console.error('Error generating token:', error);
       res.status(500).json({
         error: 'Failed to generate token',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -84,7 +83,6 @@ class VideoController {
       console.error('Error creating room:', error);
       res.status(500).json({
         error: 'Failed to create room',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -107,7 +105,6 @@ class VideoController {
       console.error('Error fetching room:', error);
       res.status(500).json({
         error: 'Failed to fetch room',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -152,7 +149,6 @@ class VideoController {
       console.error('Error ending room:', error);
       res.status(500).json({
         error: 'Failed to end room',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -175,7 +171,6 @@ class VideoController {
       console.error('Error listing participants:', error);
       res.status(500).json({
         error: 'Failed to list participants',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -201,7 +196,6 @@ class VideoController {
       console.error('Error disconnecting participant:', error);
       res.status(500).json({
         error: 'Failed to disconnect participant',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -239,7 +233,6 @@ class VideoController {
       console.error('Error tracking participant connection:', error);
       res.status(500).json({
         error: 'Failed to track participant connection',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -270,7 +263,6 @@ class VideoController {
       console.error('Error tracking participant disconnection:', error);
       res.status(500).json({
         error: 'Failed to track participant disconnection',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -341,7 +333,6 @@ class VideoController {
       console.error('Error sending WhatsApp:', error);
       res.status(500).json({
         error: 'Failed to send WhatsApp',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -366,7 +357,6 @@ class VideoController {
       console.error('Error fetching atendidos:', error);
       res.status(500).json({
         error: 'Failed to fetch atendidos',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -425,7 +415,6 @@ class VideoController {
       console.error('Error fetching medical history:', error);
       res.status(500).json({
         error: 'Failed to fetch medical history',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -453,7 +442,6 @@ class VideoController {
       console.error('Error fetching patient history:', error);
       res.status(500).json({
         error: 'Failed to fetch patient history',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -490,7 +478,6 @@ class VideoController {
       console.error('Error updating medical history:', error);
       res.status(500).json({
         error: 'Failed to update medical history',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -534,7 +521,6 @@ class VideoController {
         success: false,
         error: 'INTERNAL_ERROR',
         code: 'INTERNAL_ERROR',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -565,7 +551,6 @@ class VideoController {
       console.error('Error generating AI suggestions:', error);
       res.status(500).json({
         error: 'Failed to generate AI suggestions',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -587,7 +572,6 @@ class VideoController {
       console.error('Error fetching connected patients:', error);
       res.status(500).json({
         error: 'Failed to fetch connected patients',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }
@@ -619,7 +603,6 @@ class VideoController {
       res.status(500).json({
         success: false,
         error: 'Failed to register session start',
-        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   }

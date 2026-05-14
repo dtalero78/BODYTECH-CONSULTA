@@ -149,12 +149,17 @@ function CalcAutosave({
   serverValue?: unknown;
   onPatchLocal: (field: string, value: unknown) => void;
 }) {
+  // Si el calculado es null (peso/estatura/edad faltan), NO emitimos PATCH —
+  // preservamos el valor que ya hay en DB. Si los inputs cambian a algo válido,
+  // `enabled` vuelve a true y el debounce normal de useAutoSave persistirá.
+  const hasValue = value !== null && value !== undefined;
   useFieldAutoSave({
     historiaId,
     field,
     value,
     serverValue,
     onSaved: onPatchLocal,
+    enabled: hasValue,
   });
   return null;
 }

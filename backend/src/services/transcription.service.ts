@@ -258,6 +258,7 @@ class TranscriptionService {
 
       let applied = 0;
       let skipped = 0;
+      let attempted = 0; // claves que pasaron whitelist y se intentaron persistir
       for (const key of keys) {
         // Sólo aceptar claves del set permitido y que el whitelist global expone.
         if (!TARGET_FIELDS_SET.has(key)) {
@@ -270,27 +271,39 @@ class TranscriptionService {
           skipped++;
           continue;
         }
+        attempted++;
         const value = obj[key];
-        // Permitimos null/undefined sólo cuando el modelo explícitamente envía null;
-        // si lo manda como undefined no entra en Object.keys().
-        const r = await medicalHistoryService.updateField(historiaId, key as TranscriptionTargetField, value);
-        if (r.success) {
-          applied++;
-        } else {
-          console.warn(
-            `[Transcription] updateField falló key=${key} value=${JSON.stringify(value)} err=${r.error}`
+        // try/catch por campo: si uno lanza/falla, los demás siguen.
+        try {
+          const r = await medicalHistoryService.updateField(historiaId, key as TranscriptionTargetField, value);
+          if (r.success) {
+            applied++;
+          } else {
+            console.warn(
+              `[Transcription] updateField falló key=${key} value=${JSON.stringify(value)} err=${r.error}`
+            );
+            skipped++;
+          }
+        } catch (perFieldErr: any) {
+          console.error(
+            `[Transcription] updateField lanzó key=${key} err=${perFieldErr?.message || perFieldErr}`
           );
           skipped++;
         }
       }
       console.log(
-        `[Transcription] PATCH completados: ${applied} OK / ${skipped} skip`
+        `[Transcription] PATCH completados: ${applied} OK / ${skipped} skip (intentados=${attempted})`
       );
 
-      // 6) Status final
-      await this.markStatus(historiaId, 'done');
+      // 6) Status final:
+      //   - 'done'  si al menos un campo se aplicó OK, o si GPT no devolvió ninguna
+      //     clave aplicable (transcript persistido pero sin extracciones — esperado).
+      //   - 'error' si se intentó persistir N>0 campos y TODOS fallaron.
+      const finalStatus: 'done' | 'error' =
+        attempted > 0 && applied === 0 ? 'error' : 'done';
+      await this.markStatus(historiaId, finalStatus);
       console.log(
-        `[Transcription] DONE historia=${historiaId} ms=${Date.now() - t0}`
+        `[Transcription] ${finalStatus.toUpperCase()} historia=${historiaId} ms=${Date.now() - t0}`
       );
     } catch (err: any) {
       console.error(

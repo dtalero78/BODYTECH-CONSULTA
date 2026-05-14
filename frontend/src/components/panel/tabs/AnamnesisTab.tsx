@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { ClipboardList, HeartPulse, Dumbbell, Plus, Trash2 } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
@@ -153,10 +153,25 @@ function coerceBool(v: unknown): boolean {
   return false;
 }
 
-function clasificarActividad(dias: number | null, minutos: number | null): string | null {
-  if (dias === null || minutos === null) return null;
+function clasificarActividad(
+  dias: number | null | undefined,
+  minutos: number | null | undefined,
+): string | null {
+  // Guard contra null/undefined/NaN/Infinity para evitar `NaN * x` o `Infinity` en cálculo.
+  if (
+    dias === null ||
+    dias === undefined ||
+    minutos === null ||
+    minutos === undefined ||
+    !Number.isFinite(dias) ||
+    !Number.isFinite(minutos)
+  ) {
+    return null;
+  }
+  // No clasificar como 'Sedentario' por defecto si los inputs son 0 — devolver null
+  // (no clasificable) para no escribir un nivel inexacto al servidor.
+  if (dias <= 0 || minutos <= 0) return null;
   const minSemana = dias * minutos;
-  if (dias === 0 || minSemana === 0) return 'Sedentario';
   if (minSemana < 150) return 'Irregularmente activo';
   if (minSemana < 300) return 'Activo';
   return 'Muy activo';
@@ -199,10 +214,16 @@ function OmListManager({
   legacyObs?: string;
   onPatchLocal: (field: string, value: unknown) => void;
 }) {
+  // hasMigratedRef garantiza que la auto-migración legacy se ejecute UNA SOLA VEZ
+  // por carga de historia. Si no, cada refetch del padre podría re-migrar y
+  // pisar ediciones del médico.
+  const hasMigratedRef = useRef(false);
+
   const [entries, setEntries] = useState<OmEntrada[]>(() => {
     const list = parseOmList(listaJson);
     // Auto-migrar datos del formato anterior si la lista está vacía
     if (list.length === 0 && (legacyTipo || legacyObs)) {
+      hasMigratedRef.current = true;
       return [
         {
           id: 'legacy-0',
@@ -214,6 +235,7 @@ function OmListManager({
         },
       ];
     }
+    if (list.length > 0) hasMigratedRef.current = true;
     return list;
   });
 
@@ -221,10 +243,43 @@ function OmListManager({
   const emptyForm = { tipo: '', lateralidad: '', evolucion: '', fecha: '', obs: '' };
   const [form, setForm] = useState(emptyForm);
 
-  // Sync desde fuera (refetch)
+  // Sync desde fuera (refetch / patchLocal).
+  //
+  // Reglas:
+  //  - Si el incoming es deep-equal a lo que ya tenemos en estado, NO hacemos
+  //    setEntries (rompe el bucle de useEffect que dispararía cada render).
+  //  - Si incoming tiene entradas y difiere del estado actual, adoptamos
+  //    incoming (vino del servidor, es la fuente de verdad).
+  //  - Si incoming está vacío y ya marcamos hasMigratedRef, NO sobrescribimos —
+  //    el doctor pudo haber eliminado todas las entradas localmente y aún no se
+  //    persistió.
   useEffect(() => {
     const incoming = parseOmList(listaJson);
-    if (incoming.length > 0) setEntries(incoming);
+    setEntries((prev) => {
+      if (incoming.length === 0) {
+        // No pisar el estado local si el servidor sigue null y ya migramos
+        if (hasMigratedRef.current) return prev;
+        return prev.length === 0 ? prev : [];
+      }
+      // Deep-compare por contenido para evitar re-renders en loop
+      const sameLength = prev.length === incoming.length;
+      const sameContent =
+        sameLength &&
+        prev.every((p, i) => {
+          const q = incoming[i];
+          return (
+            p.id === q.id &&
+            p.tipo === q.tipo &&
+            p.lateralidad === q.lateralidad &&
+            p.evolucion === q.evolucion &&
+            p.fecha === q.fecha &&
+            p.obs === q.obs
+          );
+        });
+      if (sameContent) return prev;
+      hasMigratedRef.current = true;
+      return incoming;
+    });
   }, [listaJson]);
 
   // Serializar para auto-save

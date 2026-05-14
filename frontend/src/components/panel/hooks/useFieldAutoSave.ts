@@ -9,13 +9,18 @@ interface UseFieldAutoSaveOptions {
   delay?: number;
   onSaved?: (field: string, value: unknown) => void;
   serverValue?: unknown;
+  /**
+   * Si false, NO se dispara PATCH (útil para CalcAutosave cuando los inputs
+   * están incompletos — preserva lo que ya hay en el servidor).
+   */
+  enabled?: boolean;
 }
 
 /**
  * Wrapper de useAutoSave que reporta su estado al SaveContext del orchestrator.
  */
-export function useFieldAutoSave({ historiaId, field, value, delay, onSaved, serverValue }: UseFieldAutoSaveOptions) {
-  const status = useAutoSave({ historiaId, field, value, delay, onSaved, serverValue });
+export function useFieldAutoSave({ historiaId, field, value, delay, onSaved, serverValue, enabled }: UseFieldAutoSaveOptions) {
+  const status = useAutoSave({ historiaId, field, value, delay, onSaved, serverValue, enabled });
   const { report, registerRetry } = useSaveCtx();
 
   useEffect(() => {

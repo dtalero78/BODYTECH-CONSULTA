@@ -52,7 +52,10 @@ export function useMedicalHistory(historiaId: string | undefined): UseMedicalHis
     // está en camelCase (generoBiologico) porque así lo devuelve el GET.
     // Convertir antes de mergear, sino la UI nunca refleja el cambio y el %
     // nunca avanza.
-    const camelField = field.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+    //
+    // Incluir `_<dígito>` además de `_<letra>` para que `bt_factor_1` → `btFactor1`,
+    // que es como el GET ya lo devuelve (snakeToCamel del backend acepta digit).
+    const camelField = field.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
     setData((prev) => {
       if (!prev) return prev;
       return { ...prev, [camelField]: value as never };

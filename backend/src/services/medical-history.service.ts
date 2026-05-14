@@ -225,7 +225,10 @@ const EDITABLE_FIELD_TYPE_MAP: Readonly<Record<string, EditableFieldType>> = EDI
 const SNAKE_KEYS = new Set<string>(EDITABLE_FIELD_DEFS.map((d) => d.field));
 
 function snakeToCamel(s: string): string {
-  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  // Soporta `_letra` y `_dígito` para que columnas como `bt_factor_1` mapeen a
+  // `btFactor1` (sin guion bajo residual). Si solo manejáramos `_[a-z]`, el
+  // frontend leería `btFactor_1` y el campo nunca se reflejaría en la UI.
+  return s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 type FieldValue = string | number | boolean | null;
@@ -239,25 +242,120 @@ interface UpdateFieldResult {
   code?: number;
 }
 
+// Subset de campos `string` que en realidad almacenan JSON serializado.
+// Para estos aceptamos array/objeto (lo stringificamos) o string ya pre-encoded
+// (lo validamos con JSON.parse). El frontend hoy serializa, pero esta puerta
+// trasera evita regresiones si en el futuro envía el array directo.
+const JSON_STRING_FIELDS = new Set<string>(['ant_osteomuscular_lista']);
+
+// Reglas para 'date': aceptar YYYY-MM-DD o ISO 8601 con T (con/sin TZ).
+// Rechaza strings ambiguos como 'Sep 32' que `new Date()` ingeriría sin chistar.
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_DATETIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+function isValidDateString(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return false;
+
+  // Match YYYY-MM-DD primero
+  let m = DATE_ONLY_RE.exec(s);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (mo < 1 || mo > 12) return false;
+    if (d < 1 || d > 31) return false;
+    // Verificar día real del mes (ej. 31 feb es inválido)
+    const probe = new Date(Date.UTC(y, mo - 1, d));
+    if (
+      probe.getUTCFullYear() !== y ||
+      probe.getUTCMonth() !== mo - 1 ||
+      probe.getUTCDate() !== d
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  // Match ISO 8601 con tiempo
+  m = ISO_DATETIME_RE.exec(s);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const hh = Number(m[4]);
+    const mm = Number(m[5]);
+    const ss = m[6] !== undefined ? Number(m[6]) : 0;
+    if (mo < 1 || mo > 12) return false;
+    if (d < 1 || d > 31) return false;
+    if (hh > 23 || mm > 59 || ss > 59) return false;
+    const probe = new Date(Date.UTC(y, mo - 1, d));
+    if (
+      probe.getUTCFullYear() !== y ||
+      probe.getUTCMonth() !== mo - 1 ||
+      probe.getUTCDate() !== d
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 function coerceValue(field: string, raw: unknown): { ok: true; value: FieldValue } | { ok: false; error: string } {
   const type = EDITABLE_FIELD_TYPE_MAP[field];
   if (!type) return { ok: false, error: 'INVALID_FIELD' };
 
-  // null o '' => NULL
+  // null o undefined => NULL explícito.
   if (raw === null || raw === undefined) return { ok: true, value: null };
+  // String vacío para tipos no-string => NULL.
   if (typeof raw === 'string' && raw.trim() === '' && type !== 'string') return { ok: true, value: null };
 
   switch (type) {
     case 'string': {
+      // Tratamiento especial para columnas TEXT que almacenan JSON.
+      if (JSON_STRING_FIELDS.has(field)) {
+        // Aceptar array/objeto plano: serializamos.
+        if (Array.isArray(raw) || (typeof raw === 'object' && raw !== null)) {
+          try {
+            return { ok: true, value: JSON.stringify(raw) };
+          } catch {
+            return { ok: false, error: 'INVALID_VALUE' };
+          }
+        }
+        // Aceptar string ya pre-encoded — validamos parse.
+        if (typeof raw === 'string') {
+          try {
+            JSON.parse(raw);
+            return { ok: true, value: raw };
+          } catch {
+            return { ok: false, error: 'INVALID_VALUE' };
+          }
+        }
+        return { ok: false, error: 'INVALID_VALUE' };
+      }
       if (typeof raw === 'string') return { ok: true, value: raw };
       if (typeof raw === 'number' || typeof raw === 'boolean') return { ok: true, value: String(raw) };
       return { ok: false, error: 'INVALID_VALUE' };
     }
     case 'number': {
-      if (typeof raw === 'number' && !isNaN(raw)) return { ok: true, value: raw };
+      if (typeof raw === 'number') {
+        if (!Number.isFinite(raw)) return { ok: false, error: 'INVALID_VALUE' };
+        return { ok: true, value: raw };
+      }
       if (typeof raw === 'string') {
-        const n = Number(raw);
-        if (!isNaN(n)) return { ok: true, value: n };
+        const trimmed = raw.trim();
+        if (trimmed === '') return { ok: true, value: null };
+        // Rechazar strings no numéricos. `Number('')` daría 0 pero ya filtramos arriba.
+        // `Number('abc')` → NaN.
+        if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+          return { ok: false, error: 'INVALID_VALUE' };
+        }
+        const n = Number(trimmed);
+        if (!Number.isFinite(n)) return { ok: false, error: 'INVALID_VALUE' };
+        return { ok: true, value: n };
       }
       return { ok: false, error: 'INVALID_VALUE' };
     }
@@ -265,19 +363,27 @@ function coerceValue(field: string, raw: unknown): { ok: true; value: FieldValue
       if (typeof raw === 'boolean') return { ok: true, value: raw };
       if (typeof raw === 'string') {
         const v = raw.trim();
-        if (v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si') return { ok: true, value: true };
-        if (v === 'false' || v === 'No' || v === 'NO' || v === 'no') return { ok: true, value: false };
+        if (v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si' || v === '1') {
+          return { ok: true, value: true };
+        }
+        if (v === 'false' || v === 'No' || v === 'NO' || v === 'no' || v === '0') {
+          return { ok: true, value: false };
+        }
+        return { ok: false, error: 'INVALID_VALUE' };
       }
-      if (typeof raw === 'number') return { ok: true, value: raw !== 0 };
+      if (typeof raw === 'number') {
+        if (raw === 1) return { ok: true, value: true };
+        if (raw === 0) return { ok: true, value: false };
+        return { ok: false, error: 'INVALID_VALUE' };
+      }
       return { ok: false, error: 'INVALID_VALUE' };
     }
     case 'date': {
-      if (typeof raw === 'string') {
-        // Aceptar 'YYYY-MM-DD' o ISO; '' ya se convirtió a null arriba
-        const d = new Date(raw);
-        if (!isNaN(d.getTime())) return { ok: true, value: raw };
-      }
-      return { ok: false, error: 'INVALID_VALUE' };
+      if (typeof raw !== 'string') return { ok: false, error: 'INVALID_VALUE' };
+      // `new Date(raw)` ingiere strings ambiguas (ej. 'Sep 32 2025') sin lanzar;
+      // validamos con regex + chequeo de día real antes de aceptar.
+      if (!isValidDateString(raw)) return { ok: false, error: 'INVALID_VALUE' };
+      return { ok: true, value: raw };
     }
     default:
       return { ok: false, error: 'INVALID_VALUE' };

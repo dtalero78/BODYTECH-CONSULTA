@@ -152,6 +152,11 @@ export interface MedicalHistoryFull {
   downtonVisual?: boolean;
   downtonAuditivo?: boolean;
   downtonDefExtremidades?: boolean;
+  // Phase 1 Downton (presentes en EDITABLE_FIELDS — agregados al tipo para evitar huérfanos backend).
+  downtonDeambulacion?: boolean;
+  downtonNeurologico?: boolean;
+  downtonCardiovascular?: boolean;
+  downtonMarcha?: boolean;
   downtonRiesgo?: string;
 
   acsmSedentarismo?: boolean;
@@ -166,6 +171,12 @@ export interface MedicalHistoryFull {
   acsmEnfPulmonar?: boolean;
   acsmEnfCardiovascular?: boolean;
   acsmEnfRenal?: boolean;
+  // Phase 1 ACSM (presentes en EDITABLE_FIELDS — agregados al tipo para evitar huérfanos backend).
+  acsmEdadHombre?: boolean;
+  acsmEdadMujer?: boolean;
+  acsmPrediabetes?: boolean;
+  acsmSignosSintomas?: boolean;
+  acsmEnfermedadConocida?: boolean;
   acsmRiesgo?: string;
 
   btFactor1?: boolean;
@@ -230,6 +241,9 @@ export interface MedicalHistoryFull {
   /** 'pending' | 'processing' | 'done' | 'error' | null */
   transcriptionStatus?: string | null;
   transcriptionText?: string | null;
+
+  // ---- Phase 4: Twilio Composition (escrito por backend tras el webhook room-completed) ----
+  compositionSid?: string | null;
 
   // Cualquier otro campo que el backend devuelva
   [key: string]: unknown;

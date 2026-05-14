@@ -26,10 +26,12 @@ export class TwilioVoiceController {
         res.status(500).json(result);
       }
     } catch (error: any) {
+      // No exponer error.message ni stack al cliente (puede contener detalles
+      // de Twilio / credenciales). Loguear internamente para diagnóstico.
       console.error('Error in makeVoiceCall controller:', error);
       res.status(500).json({
         success: false,
-        error: error.message || 'Error making voice call'
+        error: 'Error making voice call'
       });
     }
   }

@@ -57,6 +57,39 @@ export function useAutoSave({
   const onSavedRef = useRef(onSaved);
   onSavedRef.current = onSaved;
 
+  // Para campos calculados (CalcAutosave) mantener el último serverValue
+  // observado. Si el `value` local coincide con ese serverValue (dentro de
+  // tolerancia de float), suprimimos el PATCH — evita reescribir 23.4=23.4 o
+  // disparar saves redundantes en cada re-render del padre.
+  const serverValueRef = useRef<unknown>(serverValue);
+  useEffect(() => {
+    serverValueRef.current = serverValue;
+  }, [serverValue]);
+
+  function valuesEquivalent(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (a === null || a === undefined || b === null || b === undefined) {
+      return (a == null) && (b == null);
+    }
+    if (typeof a === 'number' && typeof b === 'number') {
+      if (Number.isNaN(a) || Number.isNaN(b)) return false;
+      return Math.abs(a - b) < 0.01; // Tolerancia IMC / floats
+    }
+    // Comparar number/string que representan el mismo valor (ej. server devuelve
+    // "23.4" string, calc devuelve 23.4 number).
+    if (
+      (typeof a === 'number' && typeof b === 'string') ||
+      (typeof a === 'string' && typeof b === 'number')
+    ) {
+      const na = Number(a);
+      const nb = Number(b);
+      if (Number.isFinite(na) && Number.isFinite(nb)) {
+        return Math.abs(na - nb) < 0.01;
+      }
+    }
+    return false;
+  }
+
   // Refs sincronizadas con la última versión de los valores — necesarias
   // para que el cleanup de unmount tenga acceso a los valores actuales sin
   // capturarlos por closure obsoleta.
@@ -125,6 +158,16 @@ export function useAutoSave({
     if (value === lastSentValueRef.current) {
       return;
     }
+    // Para CalcAutosave (serverValue presente): si el valor calculado ya coincide
+    // con lo que hay en DB (con tolerancia float), no emitir PATCH redundante.
+    if (
+      serverValueRef.current !== undefined &&
+      valuesEquivalent(value, serverValueRef.current)
+    ) {
+      // Anclar el lastSent para que un re-render no vuelva a programar el timer.
+      lastSentValueRef.current = value;
+      return;
+    }
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       lastSentValueRef.current = value;
@@ -134,6 +177,7 @@ export function useAutoSave({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, delay, enabled, historiaId, send]);
 
   const retry = useCallback(() => {

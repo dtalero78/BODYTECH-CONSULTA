@@ -3,6 +3,11 @@ import axios from 'axios';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
+function authHeaders() {
+  const token = localStorage.getItem('bsl_auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 interface OrdenItem {
   _id: string;
   numeroId: string;
@@ -123,7 +128,7 @@ export function OrdenesPage() {
       if (currentFilters.from) params.from = currentFilters.from;
       if (currentFilters.to) params.to = currentFilters.to;
 
-      const res = await axios.get(`${API}/api/medical-panel/ordenes`, { params });
+      const res = await axios.get(`${API}/api/medical-panel/ordenes`, { params, headers: authHeaders() });
       setOrdenes(res.data.ordenes ?? []);
       setTotal(res.data.total ?? 0);
       setTotalPages(res.data.totalPages ?? 0);
@@ -224,10 +229,10 @@ export function OrdenesPage() {
       });
 
       if (isNew) {
-        await axios.post(`${API}/api/medical-panel/ordenes`, body);
+        await axios.post(`${API}/api/medical-panel/ordenes`, body, { headers: authHeaders() });
       } else {
         const id = (modalOrden as OrdenItem)._id;
-        await axios.patch(`${API}/api/medical-panel/ordenes/${id}`, body);
+        await axios.patch(`${API}/api/medical-panel/ordenes/${id}`, body, { headers: authHeaders() });
       }
       setModalOrden(null);
       fetchOrdenes(filters, page);
@@ -243,7 +248,7 @@ export function OrdenesPage() {
     if (!deleteId) return;
     setDeleting(true);
     try {
-      await axios.delete(`${API}/api/medical-panel/ordenes/${deleteId}`);
+      await axios.delete(`${API}/api/medical-panel/ordenes/${deleteId}`, { headers: authHeaders() });
       setDeleteId(null);
       fetchOrdenes(filters, page);
     } catch (err: any) {

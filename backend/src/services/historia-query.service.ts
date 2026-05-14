@@ -1,4 +1,5 @@
 import postgresService from './postgres.service';
+import { historiaClinicaRepository } from '../repositories';
 import { generarHTMLHistoriaClinica } from '../helpers/historia-clinica-html';
 import { SNAKE_KEYS, snakeToCamel } from './historia-field-coercion.service';
 
@@ -124,68 +125,17 @@ class HistoriaQueryService {
   /**
    * Obtiene la historia clínica de un paciente desde PostgreSQL
    */
-  async getMedicalHistory(historiaId: string): Promise<MedicalHistoryData | null> {
+  async getMedicalHistory(historiaId: string, sedeId?: string): Promise<MedicalHistoryData | null> {
     try {
       console.log(`📋 Obteniendo historia clínica para ID: ${historiaId}`);
 
-      // PASO 1: Intentar obtener de PostgreSQL con JOIN a formularios para datos demográficos y antecedentes
-      const pgResult = await postgresService.query(
-        `SELECT
-          h.*,
-          f.edad as f_edad,
-          f.genero as f_genero,
-          f.email as f_email,
-          f.estado_civil as f_estado_civil,
-          f.hijos as f_hijos,
-          f.ejercicio as f_ejercicio,
-          f.foto_url as f_foto,
-          -- Antecedentes personales
-          f.cirugia_ocular,
-          f.cirugia_programada,
-          f.condicion_medica,
-          f.dolor_cabeza,
-          f.dolor_espalda,
-          f.embarazo,
-          f.enfermedad_higado,
-          f.enfermedad_pulmonar,
-          f.fuma,
-          f.consumo_licor,
-          f.hernias,
-          f.hormigueos,
-          f.presion_alta,
-          f.problemas_azucar,
-          f.problemas_cardiacos,
-          f.problemas_sueno,
-          f.usa_anteojos,
-          f.usa_lentes_contacto,
-          f.varices,
-          f.hepatitis,
-          f.trastorno_psicologico,
-          f.sintomas_psicologicos,
-          f.diagnostico_cancer,
-          f.enfermedades_laborales,
-          f.enfermedad_osteomuscular,
-          f.enfermedad_autoinmune,
-          f.ruido_jaqueca,
-          -- Antecedentes familiares
-          f.familia_hereditarias,
-          f.familia_geneticas,
-          f.familia_diabetes,
-          f.familia_hipertension,
-          f.familia_infartos,
-          f.familia_cancer,
-          f.familia_trastornos,
-          f.familia_infecciosas
-        FROM "HistoriaClinica" h
-        LEFT JOIN formularios f ON h."numeroId" = f.numero_id
-        WHERE h."_id" = $1
-        ORDER BY f.fecha_registro DESC
-        LIMIT 1`,
-        [historiaId]
-      );
+      // Run 4 — Multi-tenancy: la lectura se delega al repositorio que aplica
+      // `AND h."sede_id" = $N` cuando `sedeId` está definido. El SQL del SELECT
+      // (incluyendo el JOIN a `formularios` y todos los alias) vive ahora en
+      // `HistoriaClinicaRepository.findById`.
+      const row = await historiaClinicaRepository.findById(historiaId, sedeId);
 
-      if (pgResult && pgResult.length > 0) {
-        const row = pgResult[0];
+      if (row) {
         console.log(`✅ [PostgreSQL] Historia clínica encontrada para ${historiaId}`);
 
         // Mapeo automático snake_case -> camelCase de TODAS las columnas nuevas Phase 1.
@@ -300,7 +250,7 @@ class HistoriaQueryService {
   /**
    * Lista historias clínicas de personas atendidas con paginación y búsqueda
    */
-  async getAtendidos(options: { page?: number; limit?: number; buscar?: string }): Promise<{
+  async getAtendidos(options: { page?: number; limit?: number; buscar?: string; sedeId?: string }): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any[];
     total: number;
@@ -311,8 +261,8 @@ class HistoriaQueryService {
     try {
       const page = options.page || 1;
       const limit = options.limit || 20;
-      const offset = (page - 1) * limit;
       const buscar = options.buscar?.trim();
+      const sedeId = options.sedeId;
 
       console.log(
         `📋 Listando atendidos (página ${page}, limit ${limit}${
@@ -320,75 +270,16 @@ class HistoriaQueryService {
         })...`
       );
 
-      let whereClause = 'WHERE h."atendido" = \'ATENDIDO\' AND h."fechaConsulta" IS NOT NULL';
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const params: any[] = [];
-      let paramIndex = 1;
-
-      if (buscar && buscar.length >= 2) {
-        whereClause += ` AND (
-          h."numeroId" ILIKE $${paramIndex}
-          OR h."primerNombre" ILIKE $${paramIndex}
-          OR h."primerApellido" ILIKE $${paramIndex}
-          OR CONCAT(h."primerNombre", ' ', h."primerApellido") ILIKE $${paramIndex}
-        )`;
-        params.push(`%${buscar}%`);
-        paramIndex++;
-      }
-
-      // Count total
-      const countResult = await postgresService.query(
-        `SELECT COUNT(*) as total FROM "HistoriaClinica" h ${whereClause}`,
-        params
-      );
-      const total = parseInt(countResult?.[0]?.total || '0', 10);
+      // Run 4 — Multi-tenancy: delegamos al repositorio las dos queries
+      // (count + select paginado). El SQL es idéntico al previo + filtro
+      // opcional `AND h."sede_id" = $N`.
+      const { rows: dataResult, total } = await historiaClinicaRepository.findAtendidos({
+        page,
+        limit,
+        buscar,
+        sedeId,
+      });
       const totalPaginas = Math.ceil(total / limit);
-
-      // Get paginated data with formulario join for extra fields
-      const dataResult = await postgresService.query(
-        `SELECT
-          h."_id",
-          h."numeroId",
-          h."primerNombre",
-          h."segundoNombre",
-          h."primerApellido",
-          h."segundoApellido",
-          h."celular",
-          h."email",
-          h."codEmpresa",
-          h."empresa",
-          h."cargo",
-          h."tipoExamen",
-          h."mdConceptoFinal",
-          h."mdDx1",
-          h."mdDx2",
-          h."mdAntecedentes",
-          h."mdObsParaMiDocYa",
-          h."mdObservacionesCertificado",
-          h."mdRecomendacionesMedicasAdicionales",
-          h."talla",
-          h."peso",
-          h."motivoConsulta",
-          h."diagnostico",
-          h."tratamiento",
-          h."fechaAtencion",
-          h."fechaConsulta",
-          h."atendido",
-          h."medico",
-          h."ciudad",
-          h."examenes",
-          h."horaAtencion",
-          h."datosNutricionales",
-          f.edad as "f_edad",
-          f.genero as "f_genero",
-          f.foto_url as "f_foto"
-        FROM "HistoriaClinica" h
-        LEFT JOIN formularios f ON h."numeroId" = f.numero_id
-        ${whereClause}
-        ORDER BY h."fechaConsulta" DESC
-        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-        [...params, limit, offset]
-      );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (dataResult || []).map((row: any) => ({

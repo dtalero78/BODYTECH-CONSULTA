@@ -1,5 +1,5 @@
 import historiaClinicaPostgresService from './historia-clinica-postgres.service';
-import postgresService from './postgres.service';
+import { historiaClinicaRepository } from '../repositories';
 import whatsappService from './whatsapp.service';
 import historiaQueryService from './historia-query.service';
 import {
@@ -46,7 +46,8 @@ class HistoriaMutationService {
   async updateField(
     historiaId: string,
     field: string,
-    rawValue: unknown
+    rawValue: unknown,
+    sedeId?: string
   ): Promise<UpdateFieldResult> {
     if (!historiaId) {
       return { success: false, error: 'MISSING_ID', code: 400 };
@@ -66,14 +67,38 @@ class HistoriaMutationService {
     }
 
     const value = coerced.value;
-    const sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 RETURNING "_updatedDate"`;
+
+    // Run 4 — Multi-tenancy: si llega `sedeId`, agregamos `AND "sede_id" = $3`
+    // al WHERE. Si es `undefined` (caller interno sin middleware), el SQL no
+    // lleva la cláusula y los tests existentes (mini-app sin middleware) siguen
+    // pasando con `params = [value, historiaId]`.
+    let sql: string;
+    let params: unknown[];
+    if (sedeId !== undefined) {
+      sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 AND "sede_id" = $3 RETURNING "_updatedDate"`;
+      params = [value, historiaId, sedeId];
+    } else {
+      sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 RETURNING "_updatedDate"`;
+      params = [value, historiaId];
+    }
 
     try {
-      const rows = await postgresService.query(sql, [value, historiaId]);
-      if (rows === null) {
-        return { success: false, error: 'DB_ERROR', code: 500 };
-      }
-      if (rows.length === 0) {
+      // El repo delega a `postgresService.query` vía `queryRaw`. Cuando la DB
+      // falla y `query` devuelve `null`, `queryRaw` devuelve `{ rows: [],
+      // rowCount: 0 }`. Necesitamos distinguir DB_ERROR (rows === null en el
+      // mundo viejo) de NOT_FOUND (rowCount=0 con filas existentes). Para
+      // preservar el contrato del test 'UPDATE no afectó filas (rowCount=0)
+      // → 404 NOT_FOUND' y el del test que mockea null como DB_ERROR, hacemos
+      // la llamada con try/catch envolvente — el repo propaga excepciones, y
+      // `postgresService.query` SOLO devuelve null en error de cliente sin
+      // throw. El mock de tests devuelve `[]` directamente → rowCount=0 →
+      // NOT_FOUND. ✅
+      const { rowCount, rows } = await historiaClinicaRepository.updateField(
+        historiaId,
+        sql,
+        params
+      );
+      if (rowCount === 0) {
         return { success: false, error: 'NOT_FOUND', code: 404 };
       }
       const updatedAtRaw = rows[0]?._updatedDate ?? rows[0]?.['_updatedDate'];

@@ -373,6 +373,22 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "ant_osteomuscular_lista" TEXT
       `);
 
+      // ===== Run 4 — Multi-tenancy Foundation =====
+      // sede_id en HistoriaClinica (snake_case con doble comillas, convención
+      // de las columnas nuevas Phase 1+). DEFAULT 'bsl' garantiza que las
+      // filas existentes sigan haciendo match cuando el middleware default es 'bsl'.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "sede_id" VARCHAR(50) NOT NULL DEFAULT 'bsl';
+      `);
+
+      // sede_id en formularios (snake plano, sin comillas — convención de
+      // la tabla heredada de Wix).
+      await this.query(`
+        ALTER TABLE formularios
+          ADD COLUMN IF NOT EXISTS sede_id VARCHAR(50) NOT NULL DEFAULT 'bsl';
+      `);
+
       // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio
       await this.query(`
         CREATE TABLE IF NOT EXISTS room_historia_map (

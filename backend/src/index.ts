@@ -14,6 +14,7 @@ import calidadRoutes from './routes/calidad.routes';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
 import { errorHandler } from './middleware/error.middleware';
+import { sedeMiddleware } from './middleware/sede.middleware';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -75,6 +76,11 @@ app.use(express.urlencoded({ extended: true }));
 if (appConfig.nodeEnv === 'development') {
   app.use(morgan('dev'));
 }
+
+// Run 4 — Multi-tenancy: extrae `sedeId` del header `X-Sede-Id` (o ?sede=)
+// y lo deja en `(req as any).sedeId` con default `'bsl'`. Debe ir DESPUÉS de
+// CORS / body parser y ANTES de cualquier `app.use('/api/...', ...)`.
+app.use(sedeMiddleware);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

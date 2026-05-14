@@ -401,10 +401,13 @@ class VideoController {
     const { page, limit, buscar } = parsed.data;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sedeId = (req as any).sedeId as string | undefined;
       const result = await medicalHistoryService.getAtendidos({
         page: page ?? 1,
         limit: limit ?? 20,
         buscar,
+        sedeId,
       });
 
       res.status(200).json({
@@ -451,7 +454,9 @@ class VideoController {
         return;
       }
 
-      const medicalHistory = await medicalHistoryService.getMedicalHistory(historiaId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sedeId = (req as any).sedeId as string | undefined;
+      const medicalHistory = await medicalHistoryService.getMedicalHistory(historiaId, sedeId);
 
       if (!medicalHistory) {
         res.status(404).json({
@@ -565,7 +570,9 @@ class VideoController {
     const { field, value } = bodyParsed.data;
 
     try {
-      const result = await medicalHistoryService.updateField(historiaId, field, value);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sedeId = (req as any).sedeId as string | undefined;
+      const result = await medicalHistoryService.updateField(historiaId, field, value, sedeId);
 
       if (result.success) {
         res.status(200).json(result);

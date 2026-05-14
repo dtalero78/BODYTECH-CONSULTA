@@ -65,7 +65,6 @@ export const PatientPage = () => {
         </div>
 
         <div className="space-y-5">
-          {/* Banner de médico si viene desde Wix */}
           {doctorParam && (
             <div className="bg-[#00a884]/10 border border-[#00a884]/30 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2">

@@ -1,4 +1,3 @@
-import axios from 'axios';
 import historiaClinicaPostgresService from './historia-clinica-postgres.service';
 import postgresService from './postgres.service';
 import whatsappService from './whatsapp.service';
@@ -541,15 +540,8 @@ interface PatientHistoryRecord {
 }
 
 class MedicalHistoryService {
-  private wixBaseUrl: string;
-
-  constructor() {
-    this.wixBaseUrl = process.env.WIX_FUNCTIONS_URL || 'https://www.bsl.com.co/_functions';
-  }
-
   /**
-   * Obtiene la historia clínica de un paciente desde PostgreSQL (principal)
-   * Si no existe en PostgreSQL, intenta obtener de Wix como fallback
+   * Obtiene la historia clínica de un paciente desde PostgreSQL
    */
   async getMedicalHistory(historiaId: string): Promise<MedicalHistoryData | null> {
     try {
@@ -713,17 +705,6 @@ class MedicalHistoryService {
           atendido: row.atendido,
           medico: row.medico,
         } as MedicalHistoryData;
-      }
-
-      // PASO 2: Fallback a Wix si no está en PostgreSQL
-      console.log(`⚠️  [PostgreSQL] No encontrado, intentando Wix para ${historiaId}`);
-      const response = await axios.get(`${this.wixBaseUrl}/getHistoriaClinica`, {
-        params: { historiaId: historiaId },
-      });
-
-      if (response.data && response.data.success && response.data.data) {
-        console.log(`✅ [Wix] Historia clínica encontrada para ${historiaId}`);
-        return response.data.data as MedicalHistoryData;
       }
 
       console.warn(`⚠️  No se encontró historia clínica para ${historiaId}`);
@@ -1120,35 +1101,6 @@ class MedicalHistoryService {
         console.log(`📤 [Certificado] Enviando link por WhatsApp a ${celularFormateado}...`);
       } else {
         console.log(`ℹ️  [Certificado] No se envía certificado para ${historiaBase.codEmpresa || 'N/A'}`);
-      }
-
-      // PASO 2: Guardar en Wix como BACKUP (obligatorio pero no bloquea si falla)
-      console.log(`💾 [Wix] Guardando backup de historia clínica ${payload.historiaId}...`);
-
-      try {
-        const response = await axios.post(`${this.wixBaseUrl}/updateHistoriaClinica`, {
-          historiaId: payload.historiaId,
-          mdAntecedentes: payload.mdAntecedentes,
-          mdObsParaMiDocYa: payload.mdObsParaMiDocYa,
-          mdObservacionesCertificado: payload.mdObservacionesCertificado,
-          mdRecomendacionesMedicasAdicionales: payload.mdRecomendacionesMedicasAdicionales,
-          mdConceptoFinal: payload.mdConceptoFinal,
-          mdDx1: payload.mdDx1,
-          mdDx2: payload.mdDx2,
-          talla: payload.talla,
-          peso: payload.peso,
-          cargo: payload.cargo,
-          atendido: 'ATENDIDO',
-        });
-
-        if (response.data && response.data.success) {
-          console.log(`✅ [Wix] Backup guardado exitosamente para ${payload.historiaId}`);
-        } else {
-          console.warn(`⚠️  [Wix] Respuesta inesperada al guardar backup: ${JSON.stringify(response.data)}`);
-        }
-      } catch (wixError: any) {
-        // Log error pero no fallar - PostgreSQL ya tiene los datos
-        console.error(`⚠️  [Wix] Error guardando backup (no crítico): ${wixError.message}`);
       }
 
       return { success: true };

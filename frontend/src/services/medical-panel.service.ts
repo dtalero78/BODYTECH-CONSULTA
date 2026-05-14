@@ -63,6 +63,53 @@ export interface OrdenCreatePayload {
   ciudad?: string;
 }
 
+/**
+ * Filtros para listar órdenes / citas desde la vista Agenda del panel.
+ * `medico` es obligatorio y siempre viene del `medicoCode` del estado del
+ * panel — no se expone al usuario. El resto de filtros se envían sólo si
+ * están definidos (no se envía `busqueda=` vacío al backend).
+ */
+export interface OrdenListFilters {
+  medico: string;
+  fechaDesde?: string; // YYYY-MM-DD
+  fechaHasta?: string; // YYYY-MM-DD
+  busqueda?: string;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Fila de orden / cita devuelta por el listado de la Agenda.
+ * Mantiene los nombres camelCase que ya usa el resto del panel.
+ */
+export interface OrdenRow {
+  id: number;
+  primerNombre: string;
+  segundoNombre?: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  numeroId: string;
+  celular: string;
+  empresa?: string;
+  tipoExamen?: string;
+  medico: string;
+  fechaAtencion: string; // YYYY-MM-DD
+  horaAtencion: string;  // HH:MM
+  ciudad?: string;
+  createdAt?: string;
+}
+
+/**
+ * Respuesta paginada del endpoint `GET /api/medical-panel/ordenes`.
+ */
+export interface OrdenListResponse {
+  success: boolean;
+  data: OrdenRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
 class MedicalPanelService {
   private client: AxiosInstance;
 
@@ -243,6 +290,52 @@ class MedicalPanelService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Lista órdenes / citas filtradas por rango de fecha + búsqueda libre.
+   * Construye la querystring con `URLSearchParams` y omite los filtros
+   * opcionales no definidos (no envía `busqueda=` vacío al backend).
+   * El JWT se inyecta automáticamente vía el interceptor de axios.
+   */
+  async listOrdenes(filters: OrdenListFilters): Promise<OrdenListResponse> {
+    const params = new URLSearchParams();
+    params.set('medico', filters.medico);
+    if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
+    if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
+    if (filters.busqueda) params.set('busqueda', filters.busqueda);
+    if (filters.page !== undefined) params.set('page', String(filters.page));
+    if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+    const res = await this.client.get<OrdenListResponse>(
+      `/api/medical-panel/ordenes?${params.toString()}`
+    );
+    return res.data;
+  }
+
+  /**
+   * Actualiza una orden / cita existente. `medico`, `id` y `createdAt` no
+   * son editables. Sólo se envían los campos presentes en `data` (el
+   * backend acepta `Partial<...>`).
+   */
+  async updateOrden(
+    id: number,
+    data: Partial<Omit<OrdenRow, 'id' | 'createdAt' | 'medico'>>
+  ): Promise<{ success: boolean }> {
+    const res = await this.client.patch<{ success: boolean }>(
+      `/api/medical-panel/ordenes/${id}`,
+      data
+    );
+    return res.data;
+  }
+
+  /**
+   * Elimina una orden / cita por id.
+   */
+  async deleteOrden(id: number): Promise<{ success: boolean }> {
+    const res = await this.client.delete<{ success: boolean }>(
+      `/api/medical-panel/ordenes/${id}`
+    );
+    return res.data;
   }
 }
 

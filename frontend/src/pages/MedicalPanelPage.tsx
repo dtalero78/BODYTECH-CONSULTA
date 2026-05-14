@@ -6,6 +6,7 @@ import medicalPanelService, { Patient } from '../services/medical-panel.service'
 import apiService from '../services/api.service';
 import authService, { Sede } from '../services/auth.service';
 import { AgendarCitaModal } from '../components/AgendarCitaModal';
+import { AgendaView } from '../components/AgendaView';
 
 // Helper function para reproducir sonido de notificación
 const playNotificationSound = () => {
@@ -94,6 +95,7 @@ export function MedicalPanelPage() {
   const [patientRooms, setPatientRooms] = useState<{ [patientId: string]: string }>({});
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
   const [showAgendarModal, setShowAgendarModal] = useState(false);
+  const [panelView, setPanelView] = useState<'hoy' | 'agenda'>('hoy');
 
   const pageSize = 10;
 
@@ -624,6 +626,28 @@ export function MedicalPanelPage() {
             </div>
             <div className="flex items-center gap-4">
               <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-10 w-auto" />
+              <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                <button
+                  onClick={() => setPanelView('hoy')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    panelView === 'hoy'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Hoy
+                </button>
+                <button
+                  onClick={() => setPanelView('agenda')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    panelView === 'agenda'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Agenda
+                </button>
+              </div>
               <button
                 onClick={() => setShowAgendarModal(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
@@ -648,7 +672,7 @@ export function MedicalPanelPage() {
           </div>
 
           {/* Estadísticas */}
-          {stats && (
+          {panelView === 'hoy' && stats && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-[#2a3942] rounded-xl p-4">
                 <div className="text-gray-400 text-sm mb-1">Programados Hoy</div>
@@ -666,6 +690,8 @@ export function MedicalPanelPage() {
           )}
         </div>
 
+        {panelView === 'hoy' && (
+        <>
         {/* Búsqueda */}
         <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
           <h2 className="text-xl font-bold text-white mb-4">Buscar Paciente</h2>
@@ -1089,6 +1115,10 @@ export function MedicalPanelPage() {
             </div>
           )}
         </div>
+        </>
+        )}
+
+        {panelView === 'agenda' && <AgendaView medicoCode={medicoCode} />}
       </div>
 
       <AgendarCitaModal

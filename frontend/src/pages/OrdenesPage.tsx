@@ -103,6 +103,8 @@ function nombreCompleto(o: OrdenItem) {
 
 export function OrdenesPage() {
   const navigate = useNavigate();
+  const isAuthenticated = authService.isLoggedIn();
+
   const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '' });
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(0);
@@ -119,10 +121,10 @@ export function OrdenesPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!authService.isLoggedIn()) {
+    if (!isAuthenticated) {
       navigate('/ordenes-login', { replace: true });
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   const fetchOrdenes = useCallback(async (currentFilters: typeof filters, currentPage: number) => {
     setLoading(true);
@@ -149,8 +151,8 @@ export function OrdenesPage() {
   }, []);
 
   useEffect(() => {
-    fetchOrdenes(filters, page);
-  }, [filters, page, fetchOrdenes]);
+    if (isAuthenticated) fetchOrdenes(filters, page);
+  }, [filters, page, fetchOrdenes, isAuthenticated]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

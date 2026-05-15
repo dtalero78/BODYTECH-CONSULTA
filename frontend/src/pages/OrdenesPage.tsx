@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import authService from '../services/auth.service';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
 function authHeaders() {
-  const token = localStorage.getItem('bsl_auth_token');
+  const token = authService.getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -100,6 +102,7 @@ function nombreCompleto(o: OrdenItem) {
 }
 
 export function OrdenesPage() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '' });
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(0);
@@ -114,6 +117,12 @@ export function OrdenesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!authService.isLoggedIn()) {
+      navigate('/ordenes-login', { replace: true });
+    }
+  }, [navigate]);
 
   const fetchOrdenes = useCallback(async (currentFilters: typeof filters, currentPage: number) => {
     setLoading(true);

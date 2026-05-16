@@ -152,7 +152,7 @@ export function usePatientBot({
 
     try {
       // 1. Ephemeral key
-      const sessionData = await apiService.createBotSession('nova');
+      const sessionData = await apiService.createBotSession('coral');
       const ephemeralKey: string = sessionData.client_secret.value;
 
       // 2. AudioContext único a 24kHz para entrada y salida
@@ -198,7 +198,7 @@ export function usePatientBot({
           session: {
             modalities: ['audio', 'text'],
             instructions: PATIENT_SYSTEM_PROMPT,
-            voice: 'nova',
+            voice: 'coral',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
             turn_detection: {

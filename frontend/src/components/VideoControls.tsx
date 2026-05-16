@@ -14,6 +14,11 @@ interface VideoControlsProps {
   currentBackgroundEffect?: 'none' | 'blur' | 'virtual';
   showPosturalAnalysis?: boolean;
   onOpenPosturalAnalysis?: () => void;
+  // BOT_VOZ: Para rollback eliminar las 4 props siguientes y el botón en el JSX.
+  showBotControl?: boolean;
+  isBotActive?: boolean;
+  isBotConnecting?: boolean;
+  onToggleBot?: () => void;
 }
 
 export const VideoControls = ({
@@ -30,6 +35,10 @@ export const VideoControls = ({
   currentBackgroundEffect = 'none',
   showPosturalAnalysis = false,
   onOpenPosturalAnalysis,
+  showBotControl = false,
+  isBotActive = false,
+  isBotConnecting = false,
+  onToggleBot,
 }: VideoControlsProps) => {
   return (
     <div className="bg-gradient-to-t from-black/80 via-black/60 to-transparent pb-safe">
@@ -98,6 +107,31 @@ export const VideoControls = ({
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
+          </button>
+        )}
+
+        {/* BOT_VOZ: Botón bot de voz. Para rollback: eliminar este bloque. */}
+        {showBotControl && onToggleBot && (
+          <button
+            onClick={onToggleBot}
+            disabled={isBotConnecting}
+            className={`w-14 h-14 rounded-full transition-all flex items-center justify-center ${
+              isBotActive
+                ? 'bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-400 ring-offset-2 ring-offset-black/50'
+                : 'bg-[#374045] hover:bg-[#4a5459] text-white'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            title={isBotActive ? 'Detener bot' : 'Activar bot médico'}
+          >
+            {isBotConnecting ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2a2 2 0 012 2v1h2a2 2 0 012 2v2h1a2 2 0 012 2v2a2 2 0 01-2 2h-1v2a2 2 0 01-2 2h-2v1a2 2 0 01-4 0v-1H8a2 2 0 01-2-2v-2H5a2 2 0 01-2-2v-2a2 2 0 012-2h1V7a2 2 0 012-2h2V4a2 2 0 012-2zm0 2v1h-2V4h2zm-4 3v10h8V7H8zm2 2h4v2h-4V9zm0 4h4v2h-4v-2z"/>
+              </svg>
+            )}
           </button>
         )}
 

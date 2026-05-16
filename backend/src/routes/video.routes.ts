@@ -50,4 +50,8 @@ router.patch('/medical-history/:historiaId/field', videoController.updateMedical
 // AI Suggestions
 router.post('/ai-suggestions', videoController.generateAISuggestions);
 
+// BOT_VOZ: ephemeral key para bots de testing (doctor y paciente).
+// Para rollback: eliminar esta línea y el método createBotSession en video.controller.ts.
+router.post('/bot/session-token', videoController.createBotSession);
+
 export default router;

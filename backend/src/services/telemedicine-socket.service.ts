@@ -54,6 +54,18 @@ class TelemedicineSocketService {
         this.handleEndSession(socket, data);
       });
 
+      // BOT_VOZ: los bots se unen a una sala sin lógica de sesión.
+      // Para rollback: eliminar los dos bloques siguientes.
+      socket.on('join-bot-room', (data: { roomName: string }) => {
+        socket.join(data.roomName);
+        console.log(`[BotVoz] Socket ${socket.id} joined bot room ${data.roomName}`);
+      });
+
+      socket.on('bot-turn-done', (data: { roomName: string; transcript?: string }) => {
+        socket.to(data.roomName).emit('bot-turn-done', { transcript: data.transcript ?? '' });
+        console.log(`[BotVoz] bot-turn-done relayed for room ${data.roomName}`);
+      });
+
       // Desconexión
       socket.on('disconnect', () => {
         this.handleDisconnect(socket);

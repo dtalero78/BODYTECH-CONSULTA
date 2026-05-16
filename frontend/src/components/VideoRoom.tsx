@@ -322,7 +322,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         currentBackgroundEffect={currentEffect}
         showPosturalAnalysis={role === 'doctor'}
         onOpenPosturalAnalysis={handleOpenPosturalAnalysis}
-        showBotControl={true}
+        showBotControl={role === 'doctor'}
         isBotActive={activeBot.isActive}
         isBotConnecting={activeBot.isConnecting}
         onToggleBot={handleToggleBot}

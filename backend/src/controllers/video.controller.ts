@@ -884,45 +884,6 @@ class VideoController {
       }
     }
   }
-
-  /**
-   * Generar ephemeral key de OpenAI Realtime para el bot de voz.
-   * POST /api/video/bot/session-token
-   * Body: { voice?: string }
-   * Retorna: { client_secret: { value: string }, ... }
-   *
-   * BOT_VOZ: endpoint exclusivo para los bots de testing.
-   * Para rollback: eliminar este método y la ruta /bot/session-token en video.routes.ts.
-   */
-  async createBotSession(req: Request, res: Response): Promise<void> {
-    try {
-      const voice = (req.body?.voice as string) || 'alloy';
-      const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          voice,
-        }),
-      });
-
-      if (!response.ok) {
-        const err = await response.text();
-        console.error('[BotVoz] OpenAI session error:', err);
-        res.status(502).json({ error: 'openai_session_failed', detail: err });
-        return;
-      }
-
-      const data = await response.json();
-      res.json(data);
-    } catch (error) {
-      console.error('[BotVoz] createBotSession error:', error);
-      res.status(500).json({ error: 'internal_error' });
-    }
-  }
 }
 
 export default new VideoController();

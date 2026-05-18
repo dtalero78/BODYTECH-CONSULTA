@@ -2,9 +2,6 @@ import { useState } from 'react';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { usePosturalAnalysis } from '../hooks/usePosturalAnalysis';
-// BOT_VOZ: Para rollback eliminar estas dos importaciones y todos los bloques marcados BOT_VOZ.
-import { useDoctorBot } from '../hooks/useDoctorBot';
-import { usePatientBot } from '../hooks/usePatientBot';
 import { Participant } from './Participant';
 import { VideoControls } from './VideoControls';
 import { PosturalAnalysisModal } from './PosturalAnalysisModal';
@@ -25,9 +22,8 @@ interface VideoRoomProps {
 export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, onLeave }: VideoRoomProps) => {
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
   const [isPanelMaxed, setIsPanelMaxed] = useState(false);
+
   const [cameraWarnDismissed, setCameraWarnDismissed] = useState(false);
-  // BOT_VOZ: estado del panel de transcript. Para rollback eliminar.
-  const [isBotTranscriptOpen, setIsBotTranscriptOpen] = useState(false);
 
   const {
     localParticipant,
@@ -73,21 +69,6 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     endSession,
     sendPoseData,
   } = posturalAnalysis;
-
-    // BOT_VOZ: hooks de bots (ambos siempre se llaman — no se pueden llamar condicionalmente).
-  // Para rollback: eliminar estos dos hooks y la variable activeBot.
-  const doctorBot = useDoctorBot({ roomName, localParticipant });
-  const patientBot = usePatientBot({ roomName, localParticipant, remoteParticipants });
-  const activeBot = role === 'doctor' ? doctorBot : patientBot;
-
-  const handleToggleBot = () => {
-    if (activeBot.isActive) {
-      activeBot.deactivateBot();
-    } else {
-      activeBot.activateBot();
-      setIsBotTranscriptOpen(true);
-    }
-  };
 
   const handleLeave = () => {
     disconnectFromRoom();
@@ -322,42 +303,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
         currentBackgroundEffect={currentEffect}
         showPosturalAnalysis={role === 'doctor'}
         onOpenPosturalAnalysis={handleOpenPosturalAnalysis}
-        showBotControl={role === 'doctor'}
-        isBotActive={activeBot.isActive}
-        isBotConnecting={activeBot.isConnecting}
-        onToggleBot={handleToggleBot}
       />
-
-      {/* BOT_VOZ: Panel de transcript. Para rollback: eliminar este bloque. */}
-      {isBotTranscriptOpen && (activeBot.isActive || activeBot.transcript.length > 0) && (
-        <div className="absolute bottom-32 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 bg-black/85 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden z-30 max-h-64 flex flex-col">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
-            <span className="text-white text-sm font-medium">
-              {activeBot.isActive ? '🤖 Bot activo' : '🤖 Transcripción bot'}
-            </span>
-            <button
-              onClick={() => setIsBotTranscriptOpen(false)}
-              className="text-white/50 hover:text-white text-lg leading-none"
-            >✕</button>
-          </div>
-          <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
-            {activeBot.transcript.length === 0 && (
-              <p className="text-white/40 text-xs italic">Iniciando consulta…</p>
-            )}
-            {activeBot.transcript.map((entry, i) => (
-              <div key={i} className={`text-xs ${entry.role === 'doctor' ? 'text-blue-300' : 'text-green-300'}`}>
-                <span className="font-semibold">{entry.role === 'doctor' ? 'Médico: ' : 'Paciente: '}</span>
-                {entry.text}
-              </div>
-            ))}
-          </div>
-          {activeBot.error && (
-            <div className="px-4 py-2 bg-red-900/50 text-red-300 text-xs border-t border-red-700/50">
-              {activeBot.error}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 

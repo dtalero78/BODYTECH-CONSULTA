@@ -252,15 +252,6 @@ class ApiService {
       patientName,
     });
   }
-
-  /**
-   * BOT_VOZ: Obtener ephemeral key de OpenAI Realtime para bots de testing.
-   * Para rollback: eliminar este método.
-   */
-  async createBotSession(voice: string = 'alloy'): Promise<{ client_secret: { value: string } }> {
-    const response = await this.client.post('/api/video/bot/session-token', { voice });
-    return response.data;
-  }
 }
 
 export default new ApiService();

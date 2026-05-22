@@ -436,6 +436,39 @@ class PostgresService {
         )
       `);
 
+      // ===== Integración Trepsi <-> Bodytech (spec v2.1) =====
+      // Tabla principal del ciclo de vida de citas creadas por Trepsi.
+      // - cita_id (PK) es el id que envía Trepsi → llave de idempotencia.
+      // - historia_id apunta a HistoriaClinica._id (creada en el mismo insert).
+      // - payload conserva el JSON crudo enviado por Trepsi para auditoría /
+      //   reconciliación / debugging.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS trepsi_appointments (
+          cita_id           VARCHAR(120) PRIMARY KEY,
+          historia_id       TEXT NOT NULL,
+          estado            VARCHAR(30) NOT NULL DEFAULT 'scheduled',
+          fecha_atencion    TIMESTAMPTZ,
+          duracion_minutos  INTEGER DEFAULT 30,
+          medico_codigo     VARCHAR(80),
+          medico_nombre     VARCHAR(200),
+          tipo_consulta     VARCHAR(80),
+          sede_origen       VARCHAR(120),
+          observaciones     TEXT,
+          reschedule_motivo TEXT,
+          payload           JSONB,
+          created_at        TIMESTAMPTZ DEFAULT NOW(),
+          updated_at        TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_appointments_historia
+          ON trepsi_appointments (historia_id)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_appointments_estado_fecha
+          ON trepsi_appointments (estado, fecha_atencion)
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

@@ -107,6 +107,46 @@ function isFechaInPast(iso: string): boolean {
   return t < Date.now() - 60 * 1000; // 1 min de gracia para clock skew
 }
 
+/**
+ * Mapea campos del payload `historiaClinica` (camelCase de la spec Trepsi) a
+ * columnas de la tabla HistoriaClinica. Solo se incluyen mapeos directos —
+ * todo lo demás (hábitos, medicación, alergias, adjuntos, etc.) se persiste
+ * en `trepsi_appointments.payload` para auditoría.
+ *
+ * Devuelve un mapa `{ columna_snake_case: valor }` listo para construir un
+ * UPDATE / INSERT. Si un campo del input es `undefined`, no se incluye.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapHistoriaToColumns(hc: Record<string, any>): Record<string, unknown> {
+  const cols: Record<string, unknown> = {};
+
+  if (typeof hc.motivoConsulta === 'string') {
+    cols['motivoConsulta'] = hc.motivoConsulta.slice(0, 4000);
+    cols['motivo_consulta_texto'] = hc.motivoConsulta.slice(0, 4000);
+  }
+
+  if (typeof hc.antecedentesFamiliares === 'string') {
+    cols['ant_familiares_obs'] = hc.antecedentesFamiliares;
+  }
+
+  const sv = hc.signosVitales;
+  if (sv && typeof sv === 'object') {
+    if (typeof sv.ta === 'string') {
+      const m = sv.ta.match(/^(\d{2,3})\s*\/\s*(\d{2,3})$/);
+      if (m) {
+        cols['tas'] = parseInt(m[1], 10);
+        cols['tad'] = parseInt(m[2], 10);
+      }
+    }
+    if (sv.fc != null && !Number.isNaN(Number(sv.fc))) cols['fcr'] = parseInt(String(sv.fc), 10);
+    if (sv.peso != null && !Number.isNaN(Number(sv.peso))) cols['cc_peso_nuevo'] = Number(sv.peso);
+    if (sv.talla != null && !Number.isNaN(Number(sv.talla))) cols['cc_estatura_nuevo'] = Number(sv.talla);
+    if (sv.imc != null && !Number.isNaN(Number(sv.imc))) cols['cc_imc_nuevo'] = Number(sv.imc);
+  }
+
+  return cols;
+}
+
 function rowToRecord(row: Record<string, unknown>): AppointmentRecord {
   return {
     citaId: String(row.cita_id),
@@ -440,6 +480,133 @@ class TrepsiService {
       };
     }
     return { ok: true, status: 200, data: rowToRecord(updated[0]) };
+  }
+
+  /**
+   * Actualiza la historia clínica de una cita que aún no se ha atendido ni
+   * cancelado. Aplica el patch sobre las columnas mapeadas de HistoriaClinica
+   * y deja el objeto completo (incluyendo campos no mapeados) en
+   * `trepsi_appointments.payload.historiaClinica` para auditoría.
+   *
+   * Rechaza con 409 si la cita está cancelada o atendida.
+   */
+  async updateHistoria(
+    citaId: string,
+    historiaPartial: Record<string, unknown>
+  ): Promise<ServiceResult<AppointmentRecord>> {
+    if (!historiaPartial || Object.keys(historiaPartial).length === 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: {
+          code: 'EMPTY_PATCH',
+          message: 'Debe enviar al menos un campo de historiaClinica a actualizar.',
+        },
+      };
+    }
+
+    const existing = await postgresService.query(
+      'SELECT * FROM trepsi_appointments WHERE cita_id = $1',
+      [citaId]
+    );
+    if (existing === null) {
+      return {
+        ok: false,
+        status: 500,
+        error: { code: 'DB_ERROR', message: 'Error consultando base de datos.' },
+      };
+    }
+    if (existing.length === 0) {
+      return {
+        ok: false,
+        status: 404,
+        error: { code: 'NOT_FOUND', message: 'citaId no encontrada.' },
+      };
+    }
+
+    const cita = existing[0];
+    if (cita.estado === 'cancelled') {
+      return {
+        ok: false,
+        status: 409,
+        error: {
+          code: 'ALREADY_CANCELLED',
+          message: 'La cita está cancelada; la historia clínica no puede modificarse.',
+        },
+      };
+    }
+    if (cita.estado === 'attended') {
+      return {
+        ok: false,
+        status: 409,
+        error: {
+          code: 'ALREADY_ATTENDED',
+          message:
+            'La consulta ya fue atendida; la historia clínica fue consignada por el médico y no puede modificarse desde Trepsi.',
+        },
+      };
+    }
+
+    const historiaId = String(cita.historia_id);
+
+    // Mapear los campos a columnas de HistoriaClinica donde haya equivalencia
+    // directa. Lo que no mapea se queda en el payload JSONB.
+    const colUpdates = mapHistoriaToColumns(historiaPartial);
+    if (Object.keys(colUpdates).length > 0) {
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      for (const [col, value] of Object.entries(colUpdates)) {
+        sets.push(`"${col}" = $${i++}`);
+        params.push(value);
+      }
+      sets.push('"_updatedDate" = NOW()');
+      params.push(historiaId);
+      const hcResult = await postgresService.query(
+        `UPDATE "HistoriaClinica" SET ${sets.join(', ')} WHERE "_id" = $${i}`,
+        params
+      );
+      if (hcResult === null) {
+        return {
+          ok: false,
+          status: 500,
+          error: { code: 'DB_ERROR', message: 'Error actualizando historia clínica.' },
+        };
+      }
+    }
+
+    // Merge del payload: { ...payload, historiaClinica: { ...payload.historiaClinica, ...patch } }
+    // payload puede venir como objeto (pg lo deserializa) o como string crudo.
+    let currentPayload: Record<string, unknown> = {};
+    if (cita.payload && typeof cita.payload === 'object') {
+      currentPayload = cita.payload as Record<string, unknown>;
+    } else if (typeof cita.payload === 'string') {
+      try {
+        currentPayload = JSON.parse(cita.payload);
+      } catch {
+        currentPayload = {};
+      }
+    }
+    const currentHistoria = (currentPayload.historiaClinica || {}) as Record<string, unknown>;
+    const mergedHistoria = { ...currentHistoria, ...historiaPartial };
+    const newPayload = { ...currentPayload, historiaClinica: mergedHistoria };
+
+    const apptUpdate = await postgresService.query(
+      `UPDATE trepsi_appointments
+         SET payload = $1, updated_at = NOW()
+         WHERE cita_id = $2
+         RETURNING *`,
+      [JSON.stringify(newPayload), citaId]
+    );
+    if (apptUpdate === null || apptUpdate.length === 0) {
+      return {
+        ok: false,
+        status: 500,
+        error: { code: 'DB_ERROR', message: 'Error actualizando registro de la cita.' },
+      };
+    }
+
+    return { ok: true, status: 200, data: rowToRecord(apptUpdate[0]) };
   }
 
   async get(citaId: string): Promise<ServiceResult<AppointmentRecord>> {

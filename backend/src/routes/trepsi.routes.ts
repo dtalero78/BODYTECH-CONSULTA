@@ -20,6 +20,7 @@ const router = Router();
 
 router.post('/appointments', trepsiController.createAppointment);
 router.post('/appointments/:citaId/schedule', trepsiController.reschedule);
+router.patch('/appointments/:citaId/historia', trepsiController.patchHistoria);
 router.delete('/appointments/:citaId', trepsiController.cancel);
 router.get('/appointments/:citaId', trepsiController.get);
 

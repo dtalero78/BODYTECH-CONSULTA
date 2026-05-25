@@ -67,6 +67,61 @@ const createSchema = z.object({
   observaciones: z.string().max(1000).optional(),
 });
 
+// PATCH /appointments/:citaId/historia — todos los campos son opcionales,
+// pero al menos uno debe enviarse. consentimientoInformado se ignora si llega
+// (no se puede cambiar retroactivamente; el consentimiento ya se dio al crear).
+const patchHistoriaSchema = z
+  .object({
+    motivoConsulta: z.string().min(1).optional(),
+    enfermedadActual: z.string().optional(),
+    antecedentesPersonales: z
+      .object({
+        patologicos: z.array(z.string()).optional(),
+        quirurgicos: z.array(z.string()).optional(),
+        alergicos: z.array(z.string()).optional(),
+        farmacologicos: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    antecedentesFamiliares: z.string().optional(),
+    habitos: z.object({}).passthrough().optional(),
+    medicacionActual: z
+      .array(
+        z.object({
+          nombre: z.string(),
+          dosis: z.string().optional(),
+          frecuencia: z.string().optional(),
+        })
+      )
+      .optional(),
+    alergias: z
+      .array(
+        z.object({
+          sustancia: z.string(),
+          reaccion: z.string().nullable().optional(),
+        })
+      )
+      .optional(),
+    signosVitales: z
+      .object({
+        ta: z.string().optional(),
+        fc: z.number().optional(),
+        fr: z.number().optional(),
+        temp: z.number().optional(),
+        peso: z.number().optional(),
+        talla: z.number().optional(),
+        imc: z.number().optional(),
+      })
+      .passthrough()
+      .optional(),
+    adjuntos: z.array(z.object({}).passthrough()).optional(),
+  })
+  .passthrough()
+  .refine(
+    (v) => Object.keys(v).length > 0,
+    'Debe enviar al menos un campo de historiaClinica.'
+  );
+
 const scheduleSchema = z
   .object({
     fechaAtencion: z
@@ -182,6 +237,52 @@ class TrepsiController {
           citaId: result.data.citaId,
           fechaAtencion: result.data.fechaAtencion,
           estado: result.data.estado,
+        });
+        return;
+      }
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  patchHistoria = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const citaId = req.params.citaId;
+      if (!citaId) {
+        res.status(400).json({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'citaId es requerido en la URL.' },
+        });
+        return;
+      }
+
+      const parsed = patchHistoriaSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Uno o más campos son inválidos.',
+            details: zodToDetails(parsed.error),
+          },
+        });
+        return;
+      }
+
+      // consentimientoInformado no puede modificarse vía PATCH — se ignora si llega.
+      const { consentimientoInformado: _ignored, ...patch } = parsed.data as Record<string, unknown>;
+      void _ignored;
+
+      const result = await trepsiService.updateHistoria(citaId, patch);
+
+      if (result.ok && result.data) {
+        res.status(result.status).json({
+          ok: true,
+          citaId: result.data.citaId,
+          historiaClinicaId: result.data.historiaClinicaId,
+          estado: result.data.estado,
+          updatedAt: result.data.updatedAt,
         });
         return;
       }

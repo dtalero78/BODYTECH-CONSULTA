@@ -1,11 +1,22 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, ArrowLeft, Users, CheckCircle2, Clock, Stethoscope } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ArrowLeft,
+  Users,
+  CheckCircle2,
+  Clock,
+  Stethoscope,
+  X,
+  UserCog,
+} from 'lucide-react';
 import calendarioService, {
   MesResumen,
   DiaDetalle,
   CitaListItem,
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
+import { ReasignarModal } from './ReasignarModal';
 
 interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
@@ -368,12 +379,21 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
   const [data, setData] = useState<DiaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
   const [filtroMedico, setFiltroMedico] = useState<string | undefined>(medico);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reasignarOpen, setReasignarOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const result = await calendarioService.getDia(fecha, filtroMedico);
       setData(result);
+      // Limpia selección sobre IDs que ya no existen tras un reload
+      setSelectedIds((prev) => {
+        const visibles = new Set(result.citas.map((c) => c.id));
+        const next = new Set<string>();
+        for (const id of prev) if (visibles.has(id)) next.add(id);
+        return next;
+      });
     } catch (err: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const msg = (err as any)?.response?.data?.error?.message || 'Error cargando el día.';
@@ -386,6 +406,32 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  function toggleId(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    if (!data) return;
+    setSelectedIds(new Set(data.citas.map((c) => c.id)));
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  const selectedCitas = useMemo(() => {
+    if (!data) return [];
+    return data.citas.filter((c) => selectedIds.has(c.id));
+  }, [data, selectedIds]);
+
+  const todasSeleccionadas =
+    data !== null && data.citas.length > 0 && selectedIds.size === data.citas.length;
 
   // Agrupar citas por hora (HH)
   const porHora = useMemo(() => {
@@ -486,8 +532,31 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
         </div>
       )}
 
+      {/* Toolbar de selección masiva */}
+      {data && data.total > 0 && (
+        <div className="flex items-center justify-between mb-2 px-1">
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={todasSeleccionadas}
+              onChange={(e) => (e.target.checked ? selectAllVisible() : clearSelection())}
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+            />
+            Seleccionar todas las visibles
+          </label>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={clearSelection}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              Limpiar selección ({selectedIds.size})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Timeline */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-20">
         {loading ? (
           <div className="p-12 text-center text-sm text-gray-500">Cargando citas...</div>
         ) : !data || data.total === 0 ? (
@@ -502,37 +571,95 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
                   {hora === 'Sin hora' ? '--' : `${hora}:00`}
                 </div>
                 <div className="flex-1 py-2 divide-y divide-gray-50">
-                  {porHora.get(hora)!.map((c) => (
-                    <div key={c.id} className="px-3 py-2 grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-1 text-xs font-medium text-gray-600">
-                        {c.horaAtencion?.slice(0, 5) ?? '—'}
+                  {porHora.get(hora)!.map((c) => {
+                    const isSelected = selectedIds.has(c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className={`px-3 py-2 grid grid-cols-12 gap-2 items-center transition-colors ${
+                          isSelected ? 'bg-blue-50/40' : ''
+                        }`}
+                      >
+                        <div className="col-span-1 flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleId(c.id)}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="col-span-1 text-xs font-medium text-gray-600">
+                          {c.horaAtencion?.slice(0, 5) ?? '—'}
+                        </div>
+                        <div className="col-span-4 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{c.nombre}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {c.numeroId} {c.celular ? `· ${c.celular}` : ''}
+                          </p>
+                        </div>
+                        <div className="col-span-4 text-xs text-gray-600 truncate">
+                          {c.medicoCodigo ? profesionalNombre(c.medicoCodigo) : '—'}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium border rounded-full ${statusBadge(
+                              c.atendido
+                            )}`}
+                          >
+                            {(c.atendido || 'PENDIENTE').toUpperCase()}
+                          </span>
+                        </div>
                       </div>
-                      <div className="col-span-5 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{c.nombre}</p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {c.numeroId} {c.celular ? `· ${c.celular}` : ''}
-                        </p>
-                      </div>
-                      <div className="col-span-4 text-xs text-gray-600 truncate">
-                        {c.medicoCodigo ? profesionalNombre(c.medicoCodigo) : '—'}
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium border rounded-full ${statusBadge(
-                            c.atendido
-                          )}`}
-                        >
-                          {(c.atendido || 'PENDIENTE').toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Bulk action bar — flotante en bottom cuando hay selección */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-800 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-4">
+          <span className="text-sm font-medium">
+            {selectedIds.size} cita{selectedIds.size !== 1 ? 's' : ''} seleccionada
+            {selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={clearSelection}
+            className="px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg flex items-center gap-1.5"
+          >
+            <X className="w-3.5 h-3.5" />
+            Cancelar
+          </button>
+          <button
+            onClick={() => setReasignarOpen(true)}
+            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center gap-1.5 font-medium"
+          >
+            <UserCog className="w-3.5 h-3.5" />
+            Reasignar médico
+          </button>
+        </div>
+      )}
+
+      {/* Modal Reasignar */}
+      <ReasignarModal
+        isOpen={reasignarOpen}
+        onClose={() => setReasignarOpen(false)}
+        citas={selectedCitas}
+        profesionales={profesionales}
+        fechaActual={fecha}
+        onSaved={(afectadas) => {
+          showToast({
+            type: 'success',
+            message: `${afectadas} cita${afectadas !== 1 ? 's' : ''} reasignada${afectadas !== 1 ? 's' : ''}.`,
+          });
+          clearSelection();
+          reload();
+        }}
+        onError={(message) => showToast({ type: 'error', message })}
+      />
     </div>
   );
 }

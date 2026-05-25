@@ -14,6 +14,7 @@ import twilioVoiceRoutes from './routes/twilio-voice.routes';
 import calidadRoutes from './routes/calidad.routes';
 import trepsiRoutes from './routes/trepsi.routes';
 import profesionalesRoutes from './routes/profesionales.routes';
+import calendarioRoutes from './routes/calendario.routes';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
@@ -116,6 +117,7 @@ app.use('/api/telemedicine', telemedicineRoutes);
 app.use('/api/medical-panel', requireAuthMiddleware, medicalPanelRoutes);
 // Panel Coordinador — gestión de médicos/coaches y disponibilidad horaria.
 app.use('/api/profesionales', requireAuthMiddleware, profesionalesRoutes);
+app.use('/api/calendario', requireAuthMiddleware, calendarioRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
 app.use('/api/calidad', calidadRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —

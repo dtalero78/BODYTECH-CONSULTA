@@ -242,20 +242,25 @@ export function CoordinadorPage() {
         )}
       </main>
 
-      {/* Modal crear/editar */}
-      <ProfesionalFormModal
-        isOpen={formOpen}
-        onClose={() => setFormOpen(false)}
-        editing={editing}
-        onSaved={(p) => {
-          showToast({
-            type: 'success',
-            message: editing ? `${nombreCompleto(p)} actualizado.` : `${nombreCompleto(p)} creado.`,
-          });
-          reload();
-        }}
-        onError={(message) => showToast({ type: 'error', message })}
-      />
+      {/* Modal crear/editar — sólo montar cuando esté abierto, para que el
+          estado interno (form, dropdowns) se inicialice fresh cada vez y no
+          quede contaminado por interacciones previas. */}
+      {formOpen && (
+        <ProfesionalFormModal
+          key={editing ? `edit-${editing.id}` : 'new'}
+          isOpen={formOpen}
+          onClose={() => setFormOpen(false)}
+          editing={editing}
+          onSaved={(p) => {
+            showToast({
+              type: 'success',
+              message: editing ? `${nombreCompleto(p)} actualizado.` : `${nombreCompleto(p)} creado.`,
+            });
+            reload();
+          }}
+          onError={(message) => showToast({ type: 'error', message })}
+        />
+      )}
 
       {/* Modal disponibilidad */}
       <DisponibilidadModal

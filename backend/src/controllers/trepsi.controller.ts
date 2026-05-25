@@ -10,6 +10,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import trepsiService from '../services/trepsi.service';
+import profesionalesService from '../services/profesionales.service';
 
 // ---------------------------------------------------------------------------
 // Zod schemas (espejo de la spec)
@@ -312,6 +313,40 @@ class TrepsiController {
         return;
       }
       respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * GET /medicos — devuelve médicos activos (rol='medico') de TODAS las sedes
+   * para que Trepsi pueda asignarlos en POST /appointments.
+   * No expone firma ni campos internos sensibles.
+   */
+  listMedicos = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await profesionalesService.list({
+        // sedeId=null → sin filtro por sede; Trepsi necesita ver TODOS los
+        // médicos activos del sistema para poder asignarlos.
+        sedeId: null,
+        rol: 'medico',
+        activo: true,
+      });
+      if (!result.ok || !result.data) {
+        res.status(result.status).json({ ok: false, error: result.error });
+        return;
+      }
+      const medicos = result.data.map((m) => ({
+        codigo: m.codigo,
+        nombre:
+          m.alias ||
+          [m.primerNombre, m.segundoNombre, m.primerApellido, m.segundoApellido]
+            .filter(Boolean)
+            .join(' '),
+        especialidad: m.especialidad,
+        tiempoConsultaMinutos: m.tiempoConsulta,
+      }));
+      res.status(200).json({ ok: true, medicos });
     } catch (err) {
       next(err);
     }

@@ -436,6 +436,67 @@ class PostgresService {
         )
       `);
 
+      // ===== Panel Coordinador — Profesionales (médicos + coaches) =====
+      // Una sola tabla para médicos y coaches, diferenciados por `rol`.
+      // Multi-sede vía `sede_id` igual que HistoriaClinica.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS profesionales (
+          id                          SERIAL PRIMARY KEY,
+          sede_id                     VARCHAR(50) NOT NULL DEFAULT 'bsl',
+          rol                         VARCHAR(20) NOT NULL DEFAULT 'medico',
+          codigo                      VARCHAR(80) NOT NULL,
+          primer_nombre               VARCHAR(100) NOT NULL,
+          segundo_nombre              VARCHAR(100),
+          primer_apellido             VARCHAR(100) NOT NULL,
+          segundo_apellido            VARCHAR(100),
+          alias                       VARCHAR(200),
+          especialidad                VARCHAR(120),
+          numero_licencia             VARCHAR(80),
+          tipo_licencia               VARCHAR(80),
+          fecha_vencimiento_licencia  DATE,
+          tiempo_consulta             INTEGER NOT NULL DEFAULT 30,
+          firma                       TEXT,
+          email                       VARCHAR(200),
+          celular                     VARCHAR(30),
+          activo                      BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT profesionales_rol_chk CHECK (rol IN ('medico', 'coach')),
+          CONSTRAINT profesionales_codigo_sede_uq UNIQUE (codigo, sede_id)
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_profesionales_sede_rol_activo
+          ON profesionales (sede_id, rol, activo)
+      `);
+
+      // Disponibilidad horaria: cada fila es UN rango (permite múltiples
+      // rangos por día/modalidad, ej. lunes 8-12 y 14-18).
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS profesionales_disponibilidad (
+          id              SERIAL PRIMARY KEY,
+          profesional_id  INTEGER NOT NULL REFERENCES profesionales(id) ON DELETE CASCADE,
+          sede_id         VARCHAR(50) NOT NULL DEFAULT 'bsl',
+          dia_semana      SMALLINT NOT NULL,
+          hora_inicio     TIME NOT NULL,
+          hora_fin        TIME NOT NULL,
+          modalidad       VARCHAR(20) NOT NULL DEFAULT 'virtual',
+          activo          BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT prof_disp_dia_chk CHECK (dia_semana BETWEEN 0 AND 6),
+          CONSTRAINT prof_disp_modalidad_chk CHECK (modalidad IN ('presencial', 'virtual')),
+          CONSTRAINT prof_disp_rango_chk CHECK (hora_inicio < hora_fin)
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_prof_disp_profesional_modalidad
+          ON profesionales_disponibilidad (profesional_id, modalidad, activo)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_prof_disp_sede_modalidad_dia
+          ON profesionales_disponibilidad (sede_id, modalidad, dia_semana, activo)
+      `);
+
       // ===== Integración Trepsi <-> Bodytech (spec v2.1) =====
       // Tabla principal del ciclo de vida de citas creadas por Trepsi.
       // - cita_id (PK) es el id que envía Trepsi → llave de idempotencia.

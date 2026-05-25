@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Upload, Trash2 } from 'lucide-react';
 import profesionalesService, {
   Profesional,
   ProfesionalInput,
   Rol,
 } from '../../services/profesionales.service';
+
+// Tamaño máximo de la firma en bytes (base64 ya codificado pesa ~33% más
+// que el archivo original, así que limitamos el archivo crudo a ~1.5 MB
+// para quedar bajo 2 MB en base64).
+const MAX_FIRMA_BYTES = 1.5 * 1024 * 1024;
 
 interface Props {
   isOpen: boolean;
@@ -28,6 +33,7 @@ const EMPTY: ProfesionalInput = {
   tipoLicencia: null,
   fechaVencimientoLicencia: null,
   tiempoConsulta: 30,
+  firma: null,
   email: null,
   celular: null,
 };
@@ -35,6 +41,7 @@ const EMPTY: ProfesionalInput = {
 export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onError }: Props) {
   const [form, setForm] = useState<ProfesionalInput>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editing) {
@@ -51,6 +58,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
         tipoLicencia: editing.tipoLicencia,
         fechaVencimientoLicencia: editing.fechaVencimientoLicencia,
         tiempoConsulta: editing.tiempoConsulta,
+        firma: editing.firma,
         email: editing.email,
         celular: editing.celular,
       });
@@ -58,6 +66,30 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       setForm(EMPTY);
     }
   }, [editing, isOpen]);
+
+  async function handleFirmaUpload(file: File) {
+    if (file.size > MAX_FIRMA_BYTES) {
+      onError(
+        `La firma pesa ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo permitido: 1.5 MB.`
+      );
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      onError('La firma debe ser una imagen (PNG, JPG, SVG).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        update('firma', result);
+      }
+    };
+    reader.onerror = () => {
+      onError('No se pudo leer el archivo.');
+    };
+    reader.readAsDataURL(file);
+  }
 
   if (!isOpen) return null;
 
@@ -275,6 +307,61 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+          </div>
+
+          {/* Firma */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              Firma <span className="text-gray-400">(PNG, JPG o SVG · máx 1.5 MB)</span>
+            </label>
+            {form.firma ? (
+              <div className="flex items-start gap-3 border border-gray-200 rounded-lg p-3">
+                <img
+                  src={form.firma}
+                  alt="Firma"
+                  className="h-20 w-auto max-w-[200px] object-contain border border-gray-100 rounded bg-white"
+                />
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1.5 border border-blue-200"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Reemplazar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update('firma', null)}
+                    className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 border border-red-200"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Quitar firma
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-6 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:border-blue-300 flex flex-col items-center gap-2 transition-colors"
+              >
+                <Upload className="w-5 h-5 text-gray-400" />
+                <span>Click para subir firma</span>
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFirmaUpload(file);
+                // Reset input para permitir re-subir el mismo archivo
+                if (e.target) e.target.value = '';
+              }}
+            />
           </div>
 
           <div className="flex gap-3 justify-end pt-3 border-t border-gray-100">

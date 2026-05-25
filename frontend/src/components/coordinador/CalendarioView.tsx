@@ -9,6 +9,7 @@ import {
   Stethoscope,
   X,
   UserCog,
+  Download,
 } from 'lucide-react';
 import calendarioService, {
   MesResumen,
@@ -17,6 +18,7 @@ import calendarioService, {
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import { ReasignarModal } from './ReasignarModal';
+import { CalendarioStats } from './CalendarioStats';
 
 interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
@@ -333,6 +335,11 @@ export function CalendarioView({ showToast }: Props) {
           )}
         </div>
       </div>
+
+      {/* Gráficas */}
+      {mesData && mesData.totalCitas > 0 && (
+        <CalendarioStats mes={mesData} profesionales={profesionales} />
+      )}
     </div>
   );
 }
@@ -503,6 +510,16 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
             Quitar filtro
           </button>
         )}
+        {data && data.total > 0 && (
+          <button
+            onClick={() => exportDiaCSV(data, profesionales, fecha)}
+            className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-lg flex items-center gap-1.5"
+            title="Exportar día a CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exportar CSV
+          </button>
+        )}
       </div>
 
       {/* Cards de médicos */}
@@ -662,4 +679,71 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
       />
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Export CSV
+// ---------------------------------------------------------------------------
+
+function exportDiaCSV(data: DiaDetalle, profesionales: Profesional[], fecha: string): void {
+  function nombreMedico(codigo: string | null): string {
+    if (!codigo) return '';
+    if (codigo === '__SIN_ASIGNAR__') return 'Sin asignar';
+    const p = profesionales.find((x) => x.codigo === codigo);
+    if (!p) return codigo;
+    return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
+  }
+  function escapeCsv(value: string | null | undefined): string {
+    if (value === null || value === undefined) return '';
+    const s = String(value);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  }
+
+  const headers = [
+    'Hora',
+    'Documento',
+    'Nombre',
+    'Celular',
+    'Email',
+    'Médico (código)',
+    'Médico (nombre)',
+    'Estado',
+    'Tipo consulta',
+    'Empresa',
+    'Motivo consulta',
+  ];
+  const lines: string[] = [headers.map(escapeCsv).join(',')];
+  for (const c of data.citas) {
+    lines.push(
+      [
+        c.horaAtencion ?? '',
+        c.numeroId,
+        c.nombre,
+        c.celular ?? '',
+        c.email ?? '',
+        c.medicoCodigo ?? '',
+        nombreMedico(c.medicoCodigo),
+        c.atendido ?? 'PENDIENTE',
+        c.tipoConsulta ?? '',
+        c.empresa ?? '',
+        c.motivoConsulta ?? '',
+      ]
+        .map(escapeCsv)
+        .join(',')
+    );
+  }
+  // BOM para que Excel abra UTF-8 correctamente
+  const csv = '﻿' + lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `citas-${fecha}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

@@ -9,6 +9,8 @@ import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
 import { OrdenesPage } from './pages/OrdenesPage';
 import { OrdenesLoginPage } from './pages/OrdenesLoginPage';
 import { CalidadPage } from './pages/CalidadPage';
+import { CoordinadorLoginPage } from './pages/CoordinadorLoginPage';
+import { CoordinadorPage } from './pages/CoordinadorPage';
 import { queryClient } from './lib/queryClient';
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
@@ -37,6 +39,8 @@ function App() {
           <Route path="/ordenes-login" element={<OrdenesLoginPage />} />
           <Route path="/ordenes" element={<OrdenesPage />} />
           <Route path="/calidad" element={<CalidadPage />} />
+          <Route path="/coordinador-login" element={<CoordinadorLoginPage />} />
+          <Route path="/coordinador" element={<CoordinadorPage />} />
         </Routes>
       </BrowserRouter>
       {ReactQueryDevtools && (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import {
   Plus,
@@ -7,8 +7,14 @@ import {
   Trash2,
   BarChart3,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import authService from '../../services/auth.service';
+import profesionalesService, { Profesional } from '../../services/profesionales.service';
+import calendarioService, {
+  Modalidad,
+  HorariosDisponibles,
+} from '../../services/calendario.service';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -127,6 +133,53 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Profesionales (médicos + coaches) + slots disponibles
+  const [profesionales, setProfesionales] = useState<Profesional[]>([]);
+  const [modalidad, setModalidad] = useState<Modalidad>('virtual');
+  const [horarios, setHorarios] = useState<HorariosDisponibles | null>(null);
+  const [loadingHorarios, setLoadingHorarios] = useState(false);
+
+  // Carga profesionales (médicos + coaches activos) una sola vez
+  useEffect(() => {
+    profesionalesService
+      .list({ activo: true })
+      .then(setProfesionales)
+      .catch(() => setProfesionales([]));
+  }, []);
+
+  const medicoSeleccionado = useMemo(
+    () => profesionales.find((p) => p.codigo === formData.medico) ?? null,
+    [profesionales, formData.medico]
+  );
+
+  // Cargar slots cuando hay médico + fecha + modalidad (sólo si el modal está abierto)
+  useEffect(() => {
+    if (modalOrden === null) {
+      setHorarios(null);
+      return;
+    }
+    if (!medicoSeleccionado || !formData.fechaAtencion) {
+      setHorarios(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingHorarios(true);
+    calendarioService
+      .getHorariosDisponibles(formData.fechaAtencion, medicoSeleccionado.id, modalidad)
+      .then((data) => {
+        if (!cancelled) setHorarios(data);
+      })
+      .catch(() => {
+        if (!cancelled) setHorarios(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHorarios(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOrden, medicoSeleccionado, formData.fechaAtencion, modalidad]);
 
   const fetchOrdenes = useCallback(async (currentFilters: typeof filters, currentPage: number) => {
     setLoading(true);
@@ -646,12 +699,40 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
                   Datos de la cita
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField
-                    label="Médico *"
-                    value={formData.medico}
-                    onChange={(v) => handleField('medico', v)}
-                    placeholder="Ej: BODYTECH, NUBIA"
-                  />
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Médico *</label>
+                    <select
+                      value={formData.medico}
+                      onChange={(e) => {
+                        handleField('medico', e.target.value);
+                        // Al cambiar médico, la hora previa puede no estar disponible
+                        handleField('horaAtencion', '');
+                      }}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Seleccionar profesional...</option>
+                      {profesionales.map((p) => (
+                        <option key={p.id} value={p.codigo}>
+                          {p.alias || `${p.primerNombre} ${p.primerApellido}`} · {p.codigo} ·{' '}
+                          {p.rol === 'coach' ? 'Coach' : 'Médico'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Modalidad</label>
+                    <select
+                      value={modalidad}
+                      onChange={(e) => {
+                        setModalidad(e.target.value as Modalidad);
+                        handleField('horaAtencion', '');
+                      }}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="virtual">Virtual</option>
+                      <option value="presencial">Presencial</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipo de Examen</label>
                     <select
@@ -666,6 +747,11 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
                       <option value="Otro">Otro</option>
                     </select>
                   </div>
+                  <FormField
+                    label="Empresa"
+                    value={formData.empresa}
+                    onChange={(v) => handleField('empresa', v)}
+                  />
                   <div className="sm:col-span-2">
                     <FormField
                       label="Exámenes"
@@ -675,31 +761,88 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
                     />
                   </div>
                   <FormField
-                    label="Empresa"
-                    value={formData.empresa}
-                    onChange={(v) => handleField('empresa', v)}
-                  />
-                  <FormField
                     label="Ciudad"
                     value={formData.ciudad}
                     onChange={(v) => handleField('ciudad', v)}
                   />
-                  <FormField
-                    label="Fecha de Atención *"
-                    type="date"
-                    value={formData.fechaAtencion}
-                    onChange={(v) => handleField('fechaAtencion', v)}
-                  />
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Hora de Atención *</label>
+                    <label className="block text-xs text-gray-500 mb-1">Fecha de Atención *</label>
                     <input
-                      type="time"
-                      value={formData.horaAtencion}
-                      onChange={(e) => handleField('horaAtencion', e.target.value)}
-                      step="600"
+                      type="date"
+                      value={formData.fechaAtencion}
+                      onChange={(e) => {
+                        handleField('fechaAtencion', e.target.value);
+                        handleField('horaAtencion', '');
+                      }}
                       className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
+                  {/* Slots de hora según disponibilidad del médico */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Hora de Atención *{' '}
+                      <span className="text-gray-400">(según disponibilidad del médico)</span>
+                    </label>
+                    {!medicoSeleccionado || !formData.fechaAtencion ? (
+                      <div className="border border-gray-200 rounded-lg p-3 text-xs text-gray-400">
+                        Selecciona médico y fecha para ver los horarios disponibles.
+                      </div>
+                    ) : loadingHorarios ? (
+                      <div className="border border-gray-200 rounded-lg p-3 text-xs text-gray-400">
+                        Cargando horarios...
+                      </div>
+                    ) : !horarios || horarios.horarios.length === 0 ? (
+                      <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-800 flex-1">
+                          <p className="font-medium">Sin disponibilidad configurada</p>
+                          <p>
+                            {medicoSeleccionado.alias ||
+                              `${medicoSeleccionado.primerNombre} ${medicoSeleccionado.primerApellido}`}{' '}
+                            no tiene horarios en modalidad <strong>{modalidad}</strong> para este
+                            día. Puedes ingresar una hora manual:
+                          </p>
+                          <input
+                            type="time"
+                            value={formData.horaAtencion}
+                            onChange={(e) => handleField('horaAtencion', e.target.value)}
+                            step="600"
+                            className="mt-2 px-2 py-1 border border-amber-300 rounded-md text-xs"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                          {horarios.horarios.map((slot) => (
+                            <button
+                              key={slot.hora}
+                              type="button"
+                              onClick={() =>
+                                slot.disponible && handleField('horaAtencion', slot.hora)
+                              }
+                              disabled={!slot.disponible}
+                              className={`px-2 py-1.5 text-xs rounded-md border transition-colors ${
+                                formData.horaAtencion === slot.hora
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : slot.disponible
+                                    ? 'bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
+                                    : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed line-through'
+                              }`}
+                            >
+                              {slot.hora}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {horarios.horarios.filter((s) => s.disponible).length} libres de{' '}
+                          {horarios.horarios.length} · bloques de {horarios.tiempoConsulta} min
+                        </p>
+                      </>
+                    )}
+                  </div>
+
                   {isEditMode && (
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Estado</label>

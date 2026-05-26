@@ -7,13 +7,15 @@ import {
   AlertCircle,
   Users,
   CalendarDays,
+  FileText,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
+import { OrdenesView } from '../components/coordinador/OrdenesView';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
-type Tab = 'profesionales' | 'calendario';
+type Tab = 'profesionales' | 'calendario' | 'ordenes';
 
 export function CoordinadorPage() {
   const navigate = useNavigate();
@@ -103,15 +105,25 @@ export function CoordinadorPage() {
               icon={<CalendarDays className="w-4 h-4" />}
               label="Calendario"
             />
+            <TabButton
+              active={tab === 'ordenes'}
+              onClick={() => setTab('ordenes')}
+              icon={<FileText className="w-4 h-4" />}
+              label="Órdenes"
+            />
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-6">
-        {tab === 'profesionales' ? (
+        {tab === 'profesionales' && (
           <ProfesionalesView reloadKey={reloadKey} showToast={showToast} />
-        ) : (
+        )}
+        {tab === 'calendario' && (
           <CalendarioView showToast={showToast} key={`cal-${reloadKey}`} />
+        )}
+        {tab === 'ordenes' && (
+          <OrdenesView reloadKey={reloadKey} showToast={showToast} />
         )}
       </main>
     </div>

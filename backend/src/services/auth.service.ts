@@ -1,17 +1,14 @@
 // ============================================================================
-// authService — Run 5 (multi-sede login).
+// authService — Multi-sede login con validación contra tabla `profesionales`.
 //
 // Responsabilidades:
-//   1) Validar que una sede exista y esté activa.
-//   2) Emitir JWT con payload `{ medicoCode, sedeId }` (TTL 24h).
-//   3) Listar sedes activas (para popular el <select> del login).
-//   4) Verificar tokens recibidos en `Authorization: Bearer ...`.
-//
-// Nota: este run NO valida password ni PIN — el login es `medicoCode + sedeId`
-// y la única regla server-side es que la sede exista y `activa = true`. La
-// validación de que el `medicoCode` corresponda a un médico real queda
-// implícita en los endpoints de panel (`/api/medical-panel/stats/:medicoCode`),
-// que ya hacen JOIN contra la tabla `HistoriaClinica`.
+//   1) Validar que la sede exista y esté activa.
+//   2) Validar que el código corresponda a un profesional ACTIVO de esa sede
+//      (médico o coach). Sin password ni PIN — la entrega del código es la
+//      credencial.
+//   3) Emitir JWT con payload `{ medicoCode, sedeId, rol }` (TTL 24h).
+//   4) Listar sedes activas (para popular el <select> del login).
+//   5) Verificar tokens recibidos en `Authorization: Bearer ...`.
 // ============================================================================
 
 import jwt from 'jsonwebtoken';
@@ -23,6 +20,16 @@ const JWT_TTL = '24h';
 export interface AuthPayload {
   medicoCode: string;
   sedeId: string;
+  rol?: 'medico' | 'coach';
+}
+
+export type LoginErrorCode = 'SEDE_NOT_FOUND' | 'CODIGO_NOT_FOUND' | 'DB_ERROR';
+
+export interface LoginResult {
+  ok: boolean;
+  token?: string;
+  rol?: 'medico' | 'coach';
+  error?: LoginErrorCode;
 }
 
 export interface SedeRow {
@@ -33,26 +40,40 @@ export interface SedeRow {
 
 class AuthService {
   /**
-   * Login: valida que la sede exista y esté activa. Si OK, firma JWT.
-   *
-   * @returns Token (string) si OK; `null` si la sede no existe / no está activa
-   * o si el pool de Postgres no respondió.
+   * Login: valida sede activa + código de profesional activo en esa sede.
+   * Si todo OK, firma JWT con `{ medicoCode, sedeId, rol }`.
    */
-  async login(medicoCode: string, sedeId: string): Promise<string | null> {
-    const result = await postgresService.query(
-      'SELECT sede_id FROM sedes WHERE sede_id = $1 AND activa = true',
+  async login(medicoCode: string, sedeId: string): Promise<LoginResult> {
+    // 1) Sede activa
+    const sedeResult = await postgresService.query(
+      'SELECT sede_id FROM sedes WHERE sede_id = $1 AND activa = TRUE',
       [sedeId]
     );
-
-    // `query()` devuelve `any[] | null` — null = pool no inicializado / query
-    // falló. En cualquiera de los dos casos no podemos confirmar la sede.
-    if (!result || result.length === 0) {
-      return null;
+    if (sedeResult === null) {
+      return { ok: false, error: 'DB_ERROR' };
+    }
+    if (sedeResult.length === 0) {
+      return { ok: false, error: 'SEDE_NOT_FOUND' };
     }
 
-    const payload: AuthPayload = { medicoCode, sedeId };
+    // 2) Profesional activo con ese código en esa sede
+    const profResult = await postgresService.query(
+      `SELECT rol FROM profesionales
+        WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE
+        LIMIT 1`,
+      [medicoCode, sedeId]
+    );
+    if (profResult === null) {
+      return { ok: false, error: 'DB_ERROR' };
+    }
+    if (profResult.length === 0) {
+      return { ok: false, error: 'CODIGO_NOT_FOUND' };
+    }
+    const rol = profResult[0].rol === 'coach' ? 'coach' : 'medico';
+
+    const payload: AuthPayload = { medicoCode, sedeId, rol };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_TTL });
-    return token;
+    return { ok: true, token, rol };
   }
 
   /**

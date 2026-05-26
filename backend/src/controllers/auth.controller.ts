@@ -34,20 +34,22 @@ class AuthController {
 
       const { medicoCode, sedeId } = parsed.data;
 
-      const token = await authService.login(medicoCode, sedeId);
-      if (!token) {
-        res.status(401).json({
+      const result = await authService.login(medicoCode, sedeId);
+      if (!result.ok) {
+        const status = result.error === 'DB_ERROR' ? 500 : 401;
+        res.status(status).json({
           success: false,
-          error: 'SEDE_NOT_FOUND',
+          error: result.error ?? 'UNKNOWN',
         });
         return;
       }
 
       res.status(200).json({
         success: true,
-        token,
+        token: result.token,
         medicoCode,
         sedeId,
+        rol: result.rol,
       });
     } catch (err) {
       next(err);

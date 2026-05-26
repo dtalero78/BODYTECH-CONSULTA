@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
-import authService, { Sede } from '../services/auth.service';
+import authService, { Sede, loginErrorMessage } from '../services/auth.service';
 import { AgendarCitaModal } from '../components/AgendarCitaModal';
 import { AgendaView } from '../components/AgendaView';
 
@@ -185,16 +185,9 @@ export function MedicalPanelPage() {
     try {
       await authService.login(medicoCode, sedeId);
       setIsLoggedIn(true);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error en login:', err);
-      const code = err?.response?.data?.error;
-      if (code === 'SEDE_NOT_FOUND') {
-        setError('Sede no encontrada o inactiva. Verifique la selección.');
-      } else if (code === 'VALIDATION_ERROR') {
-        setError('Datos de login inválidos.');
-      } else {
-        setError('Error al iniciar sesión. Verifique los datos.');
-      }
+      setError(loginErrorMessage(err));
     } finally {
       setIsValidating(false);
     }

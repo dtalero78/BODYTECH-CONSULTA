@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService, { Sede } from '../services/auth.service';
+import authService, { Sede, loginErrorMessage } from '../services/auth.service';
 
 export function OrdenesLoginPage() {
   const navigate = useNavigate();
@@ -29,8 +29,8 @@ export function OrdenesLoginPage() {
     try {
       await authService.login(codigo.trim().toUpperCase(), sedeId);
       navigate('/ordenes', { replace: true });
-    } catch {
-      setError('Código o sede incorrectos. Verifica tus credenciales.');
+    } catch (err) {
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }

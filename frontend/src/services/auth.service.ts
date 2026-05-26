@@ -19,6 +19,29 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const TOKEN_KEY = 'bsl_auth_token';
 const MEDICO_KEY = 'bsl_medico_code';
 const SEDE_KEY = 'bsl_sede_id';
+const ROL_KEY = 'bsl_rol';
+
+/**
+ * Convierte un error de axios del endpoint /api/auth/login en un mensaje
+ * legible. Distingue entre código no registrado y sede inválida.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function loginErrorMessage(err: any): string {
+  const code = err?.response?.data?.error;
+  if (code === 'CODIGO_NOT_FOUND') {
+    return 'Tu código no está registrado como profesional activo en esta sede. Pide al coordinador que te dé de alta.';
+  }
+  if (code === 'SEDE_NOT_FOUND') {
+    return 'La sede seleccionada no existe o no está activa.';
+  }
+  if (code === 'VALIDATION_ERROR') {
+    return 'Código o sede inválidos.';
+  }
+  if (code === 'DB_ERROR') {
+    return 'Hubo un problema de conexión. Intenta de nuevo en unos segundos.';
+  }
+  return 'Código o sede incorrectos. Verifica tus credenciales.';
+}
 
 export interface Sede {
   sedeId: string;
@@ -45,13 +68,19 @@ class AuthService {
       medicoCode,
       sedeId,
     });
-    const { token, medicoCode: returnedCode, sedeId: returnedSede } = res.data || {};
+    const {
+      token,
+      medicoCode: returnedCode,
+      sedeId: returnedSede,
+      rol,
+    } = res.data || {};
     if (!token) {
       throw new Error('Login response missing token');
     }
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(MEDICO_KEY, returnedCode ?? medicoCode);
     localStorage.setItem(SEDE_KEY, returnedSede ?? sedeId);
+    if (rol) localStorage.setItem(ROL_KEY, rol);
   }
 
   /**
@@ -62,6 +91,13 @@ class AuthService {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(MEDICO_KEY);
     localStorage.removeItem(SEDE_KEY);
+    localStorage.removeItem(ROL_KEY);
+  }
+
+  getRol(): 'medico' | 'coach' | null {
+    const v = localStorage.getItem(ROL_KEY);
+    if (v === 'medico' || v === 'coach') return v;
+    return null;
   }
 
   getToken(): string | null {

@@ -2,15 +2,19 @@
 // bot-trepsi.service — Asistente técnico para el equipo Trepsi durante la
 // integración con la API de Bodytech.
 //
-// Usa Claude (Anthropic SDK). System prompt MUY restrictivo: solo responde
+// Usa GPT-4o-mini (OpenAI). System prompt MUY restrictivo: solo responde
 // sobre integración Trepsi <-> Bodytech, nada más. No expone credenciales,
 // datos internos ni temas fuera de scope.
 //
 // Sin contexto persistente: cada llamada recibe el historial como input.
 // El frontend mantiene el historial en memoria de la sesión.
+//
+// Nota: se eligió OpenAI por encima de Anthropic porque la API key de
+// Anthropic en producción tiene un cap de gasto que se agota. Si en el
+// futuro se quiere cambiar, basta con re-implementar la función `chat()`.
 // ============================================================================
 
-import Anthropic from '@anthropic-ai/sdk';
+import { openai } from './openai.service';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -26,7 +30,7 @@ export interface ChatResult {
   error?: { code: string; message: string };
 }
 
-const MODEL = 'claude-sonnet-4-5';
+const MODEL = 'gpt-4o-mini';
 const MAX_TURNS_HISTORY = 20; // pares user/assistant que conservamos
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_OUTPUT_TOKENS = 1024;
@@ -93,25 +97,13 @@ Header en cada request: \`Authorization: Bearer <API_KEY>\`. La API Key se entre
 
 // ---------------------------------------------------------------------------
 
-let _anthropic: Anthropic | null = null;
-
-function getAnthropic(): Anthropic {
-  if (!_anthropic) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY no configurada');
-    }
-    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  }
-  return _anthropic;
-}
-
 class BotTrepsiService {
   /**
    * Genera la respuesta del bot a partir del historial reciente.
    * Devuelve solo el texto de la respuesta (sin contexto extra).
    */
   async chat(history: ChatTurn[]): Promise<ChatResult> {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return {
         ok: false,
         status: 503,
@@ -180,31 +172,27 @@ class BotTrepsiService {
     const recent = history.slice(-MAX_TURNS_HISTORY);
 
     try {
-      const anthropic = getAnthropic();
-      const response = await anthropic.messages.create({
+      const response = await openai.chat.completions.create({
         model: MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        messages: recent.map((t) => ({
-          role: t.role,
-          content: t.content,
-        })),
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...recent.map((t) => ({ role: t.role, content: t.content })),
+        ],
       });
 
-      // El SDK devuelve `content` como array de bloques. Tomamos el primer
-      // bloque de texto.
-      const block = response.content.find((b) => b.type === 'text');
-      if (!block || block.type !== 'text') {
+      const reply = response.choices[0]?.message?.content;
+      if (typeof reply !== 'string' || reply.length === 0) {
         return {
           ok: false,
           status: 500,
           error: { code: 'NO_TEXT_REPLY', message: 'El modelo no devolvió texto.' },
         };
       }
-      return { ok: true, status: 200, reply: block.text };
+      return { ok: true, status: 200, reply };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[bot-trepsi] Error llamando a Anthropic:', msg);
+      console.error('[bot-trepsi] Error llamando a OpenAI:', msg);
       return {
         ok: false,
         status: 500,

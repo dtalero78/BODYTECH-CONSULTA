@@ -19,6 +19,7 @@ import trepsiController from '../controllers/trepsi.controller';
 const router = Router();
 
 router.get('/medicos', trepsiController.listMedicos);
+router.get('/horarios-disponibles', trepsiController.listHorariosDisponibles);
 router.post('/appointments', trepsiController.createAppointment);
 router.post('/appointments/:citaId/schedule', trepsiController.reschedule);
 router.patch('/appointments/:citaId/historia', trepsiController.patchHistoria);

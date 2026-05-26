@@ -11,6 +11,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import trepsiService from '../services/trepsi.service';
 import profesionalesService from '../services/profesionales.service';
+import calendarioService from '../services/calendario.service';
 
 // ---------------------------------------------------------------------------
 // Zod schemas (espejo de la spec)
@@ -319,17 +320,25 @@ class TrepsiController {
   };
 
   /**
-   * GET /medicos — devuelve médicos activos (rol='medico') de TODAS las sedes
-   * para que Trepsi pueda asignarlos en POST /appointments.
+   * GET /medicos — devuelve profesionales activos (médicos + coaches) de TODAS
+   * las sedes para que Trepsi pueda asignarlos en POST /appointments y mostrar
+   * disponibilidad al paciente.
+   *
+   * Filtro opcional por query param `?rol=medico|coach`. Si no se envía,
+   * devuelve ambos roles.
+   *
    * No expone firma ni campos internos sensibles.
    */
-  listMedicos = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  listMedicos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const rolRaw = req.query.rol;
+      let rol: 'medico' | 'coach' | undefined;
+      if (rolRaw === 'medico' || rolRaw === 'coach') rol = rolRaw;
+
       const result = await profesionalesService.list({
-        // sedeId=null → sin filtro por sede; Trepsi necesita ver TODOS los
-        // médicos activos del sistema para poder asignarlos.
+        // sedeId=null → sin filtro por sede.
         sedeId: null,
-        rol: 'medico',
+        rol,
         activo: true,
       });
       if (!result.ok || !result.data) {
@@ -343,10 +352,106 @@ class TrepsiController {
           [m.primerNombre, m.segundoNombre, m.primerApellido, m.segundoApellido]
             .filter(Boolean)
             .join(' '),
+        rol: m.rol,
         especialidad: m.especialidad,
         tiempoConsultaMinutos: m.tiempoConsulta,
       }));
       res.status(200).json({ ok: true, medicos });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * GET /horarios-disponibles?fecha=YYYY-MM-DD&medico=COD&modalidad=virtual
+   *
+   * Devuelve los slots libres del profesional para esa fecha, cruzando su
+   * disponibilidad teórica (panel coordinador) con las citas ya agendadas.
+   *
+   * Trepsi usa este endpoint para mostrar al paciente qué horas tiene disponibles
+   * el médico o coach al agendar.
+   */
+  listHorariosDisponibles = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
+      const medicoCodigo = typeof req.query.medico === 'string' ? req.query.medico : '';
+      const modalidadRaw = req.query.modalidad;
+      const modalidad =
+        modalidadRaw === 'presencial' ? 'presencial' : 'virtual';
+
+      if (!fecha || !medicoCodigo) {
+        res.status(400).json({
+          ok: false,
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Parámetros requeridos: fecha (YYYY-MM-DD), medico (código del profesional).',
+          },
+        });
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        res.status(400).json({
+          ok: false,
+          error: { code: 'INVALID_DATE', message: 'fecha debe ser YYYY-MM-DD.' },
+        });
+        return;
+      }
+
+      // Resolver profesional por código (sin filtrar sede). Devuelve id + sede.
+      const profResult = await profesionalesService.list({
+        sedeId: null,
+        activo: true,
+      });
+      if (!profResult.ok || !profResult.data) {
+        res.status(profResult.status).json({ ok: false, error: profResult.error });
+        return;
+      }
+      const prof = profResult.data.find((p) => p.codigo === medicoCodigo);
+      if (!prof) {
+        res.status(404).json({
+          ok: false,
+          error: {
+            code: 'MEDICO_NOT_FOUND',
+            message: `No se encontró profesional activo con código '${medicoCodigo}'.`,
+          },
+        });
+        return;
+      }
+
+      const horariosResult = await calendarioService.getHorariosDisponibles(
+        fecha,
+        prof.id,
+        prof.sedeId,
+        modalidad
+      );
+      if (!horariosResult.ok || !horariosResult.data) {
+        res.status(horariosResult.status).json({ ok: false, error: horariosResult.error });
+        return;
+      }
+
+      // Devolver solo los slots disponibles (más útil para Trepsi que la lista
+      // completa con marcados).
+      const data = horariosResult.data;
+      const slotsLibres = data.horarios.filter((s) => s.disponible).map((s) => s.hora);
+
+      res.status(200).json({
+        ok: true,
+        fecha: data.fecha,
+        medico: {
+          codigo: prof.codigo,
+          nombre:
+            prof.alias ||
+            [prof.primerNombre, prof.primerApellido].filter(Boolean).join(' '),
+          rol: prof.rol,
+        },
+        modalidad: data.modalidad,
+        tiempoConsultaMinutos: data.tiempoConsulta,
+        horariosDisponibles: slotsLibres,
+      });
     } catch (err) {
       next(err);
     }

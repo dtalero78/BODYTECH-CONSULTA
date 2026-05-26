@@ -11,6 +11,7 @@ import { OrdenesLoginPage } from './pages/OrdenesLoginPage';
 import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorLoginPage } from './pages/CoordinadorLoginPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
+import { BotTrepsiPage } from './pages/BotTrepsiPage';
 import { queryClient } from './lib/queryClient';
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
@@ -41,6 +42,7 @@ function App() {
           <Route path="/calidad" element={<CalidadPage />} />
           <Route path="/coordinador-login" element={<CoordinadorLoginPage />} />
           <Route path="/coordinador" element={<CoordinadorPage />} />
+          <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
         </Routes>
       </BrowserRouter>
       {ReactQueryDevtools && (

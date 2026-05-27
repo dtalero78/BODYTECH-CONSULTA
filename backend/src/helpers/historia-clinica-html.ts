@@ -3,6 +3,42 @@
  * Adaptado de BSL-PLATAFORMA2 para Bodytech ConsultaVideo
  */
 
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+// Embed del logo Bodytech como data-URI base64 para que Puppeteer lo renderice
+// sin necesidad de base URL (el PDF se construye con setContent, donde los
+// paths relativos como `/logoNegro.png` no resuelven a nada).
+//
+// Buscamos el archivo en los lugares donde puede estar según el entorno:
+//   - dev (cwd=backend/):     ../frontend/public/logoNegro.png
+//   - dev (cwd=repo root):    frontend/public/logoNegro.png
+//   - prod Docker (cwd=/app): frontend-dist/logoNegro.png
+//
+// Si no encontramos ningún logo, el header del PDF se renderiza sin imagen
+// (no rompe el render). Resolvemos UNA sola vez al cargar el módulo.
+const LOGO_DATA_URI: string = (() => {
+  const candidates = [
+    join(process.cwd(), '..', 'frontend', 'public', 'logoNegro.png'),
+    join(process.cwd(), 'frontend', 'public', 'logoNegro.png'),
+    join(process.cwd(), 'frontend-dist', 'logoNegro.png'),
+    join(__dirname, '..', '..', '..', 'frontend', 'public', 'logoNegro.png'),
+    join(__dirname, '..', '..', 'frontend-dist', 'logoNegro.png'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) {
+        const buf = readFileSync(p);
+        return `data:image/png;base64,${buf.toString('base64')}`;
+      }
+    } catch {
+      // sigue probando
+    }
+  }
+  console.warn('[historia-clinica-html] No se encontró logoNegro.png — PDF saldrá sin logo');
+  return '';
+})();
+
 function v(val: any, fallback = ''): string {
   if (val === null || val === undefined || val === '') return fallback;
   return String(val);
@@ -533,7 +569,7 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
   <!-- HEADER -->
   <div class="header">
     <div class="header-logo">
-      <img src="/bodyLogo.jpg" alt="Bodytech">
+      ${LOGO_DATA_URI ? `<img src="${LOGO_DATA_URI}" alt="Bodytech">` : ''}
     </div>
     <div class="header-info">
       <h1>Historia Clínica</h1>

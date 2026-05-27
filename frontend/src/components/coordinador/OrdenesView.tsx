@@ -724,24 +724,6 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                       <option value="presencial">Presencial</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-zinc-500 mb-1">Tipo de Examen</label>
-                    <select
-                      value={formData.tipoExamen}
-                      onChange={(e) => handleField('tipoExamen', e.target.value)}
-                      className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full bg-white focus:outline-none focus:border-zinc-400"
-                    >
-                      <option value="">Seleccionar…</option>
-                      <option value="Ingreso">Ingreso</option>
-                      <option value="Periódico">Periódico</option>
-                      <option value="Egreso">Egreso</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
-                  <FormField label="Empresa" value={formData.empresa} onChange={(v) => handleField('empresa', v)} />
-                  <div className="sm:col-span-2">
-                    <FormField label="Exámenes" value={formData.examenes} onChange={(v) => handleField('examenes', v)} placeholder="Ej: EXAMEN MÉDICO OCUPACIONAL, AUDIOMETRÍA" />
-                  </div>
                   <FormField label="Ciudad" value={formData.ciudad} onChange={(v) => handleField('ciudad', v)} />
                   <div>
                     <label className="block text-[11px] text-zinc-500 mb-1">Fecha de Atención *</label>

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Download,
   X,
+  Sparkles,
 } from 'lucide-react';
 import authService from '../../services/auth.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
@@ -411,6 +412,47 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
     }
   }
 
+  // Dispara una evaluación de calidad para una orden específica.
+  // Optimistic update: marca el row como 'procesando' y abre el modal para
+  // que el usuario vea el progreso (el modal sigue polleando con su effect).
+  async function dispatchCalidad(o: OrdenItem) {
+    try {
+      const res = await axios.post(
+        `${API}/api/calidad/evaluar/${o._id}`,
+        {},
+        { headers: authHeaders() },
+      );
+      const newId = res.data.evaluacionId ?? res.data.id;
+      setOrdenes((prev) =>
+        prev.map((row) =>
+          row._id === o._id
+            ? {
+                ...row,
+                calidadEvalId: typeof newId === 'number' ? newId : row.calidadEvalId,
+                calidadEstado: 'procesando',
+                calidadPuntaje: null,
+              }
+            : row,
+        ),
+      );
+      // Abrir modal con el nuevo evalId para que vea progreso
+      setCalidadTarget({
+        ...o,
+        calidadEvalId: typeof newId === 'number' ? newId : o.calidadEvalId,
+        calidadEstado: 'procesando',
+        calidadPuntaje: null,
+      });
+      showToast({ type: 'success', message: 'Evaluación de calidad iniciada.' });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string; message?: string } }; message?: string };
+      showToast({
+        type: 'error',
+        message:
+          e.response?.data?.error || e.response?.data?.message || e.message || 'No se pudo iniciar la evaluación.',
+      });
+    }
+  }
+
   const STATUS_OPTIONS = [
     { value: 'all', label: 'Todos' },
     { value: 'PENDIENTE', label: 'Pendiente' },
@@ -603,6 +645,26 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                       </td>
                       <td className="px-[14px] py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => dispatchCalidad(o)}
+                            disabled={
+                              o.calidadEstado === 'procesando' ||
+                              o.calidadEstado === 'transcribiendo' ||
+                              o.calidadEstado === 'evaluando'
+                            }
+                            title={
+                              o.calidadEstado === 'procesando' ||
+                              o.calidadEstado === 'transcribiendo' ||
+                              o.calidadEstado === 'evaluando'
+                                ? 'Evaluación en curso'
+                                : o.calidadEstado === 'completado'
+                                ? 'Re-evaluar calidad'
+                                : 'Evaluar calidad'
+                            }
+                            className="p-1.5 rounded text-zinc-400 hover:text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400 disabled:cursor-not-allowed"
+                          >
+                            <Sparkles className="w-[14px] h-[14px]" />
+                          </button>
                           <button
                             onClick={() => openEdit(o)}
                             title="Editar"

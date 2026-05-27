@@ -270,9 +270,10 @@ export function CalidadPage() {
   const [triggering, setTriggering] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
 
-  // History
-  const [historial, setHistorial] = useState<HistorialItem[]>([]);
-  const [historialLoading, setHistorialLoading] = useState(true);
+  // Historial: la sección está oculta. Mantenemos el fetch porque otros
+  // efectos (polling) lo invocan; el state local no se consume.
+  const [, setHistorial] = useState<HistorialItem[]>([]);
+  const [, setHistorialLoading] = useState(true);
 
   // Transcript expansion
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -391,19 +392,6 @@ export function CalidadPage() {
       setTriggering(false);
     }
   }, [historiaId, fetchEvaluacion, startPolling]);
-
-  // ── Load a historical evaluation ───────────────────────────────────────────
-  const handleLoadHistorial = useCallback(async (evalId: number) => {
-    const data = await fetchEvaluacion(evalId);
-    if (data) {
-      setCurrentEval(data);
-      setTranscriptOpen(false);
-      // If somehow it's still in-progress, start polling
-      if (IN_PROGRESS_STATES.includes(data.estado)) {
-        startPolling(evalId);
-      }
-    }
-  }, [fetchEvaluacion, startPolling]);
 
   // ── Effects ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -717,87 +705,9 @@ export function CalidadPage() {
           </div>
         )}
 
-        {/* ── History table ──────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-2">
-            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
-            </svg>
-            <span className="text-sm font-semibold text-gray-700">Historial de evaluaciones</span>
-            {historial.length > 0 && (
-              <span className="ml-auto text-xs text-gray-400">{historial.length} {historial.length === 1 ? 'evaluación' : 'evaluaciones'}</span>
-            )}
-          </div>
-
-          {historialLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : historial.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">
-              <svg className="mx-auto mb-3 w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2" />
-              </svg>
-              <p className="text-sm">No hay evaluaciones previas para esta consulta.</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {historial.map((item) => {
-                const colors = item.puntaje_total !== null ? scoreColor(item.puntaje_total) : null;
-                const isLoaded = currentEval?.id === item.id;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`flex items-center gap-4 px-5 py-3 transition-colors ${isLoaded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                  >
-                    {/* Date */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800">
-                        {new Date(item.created_at).toLocaleString('es-CO', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                      {item.estado === 'error' && item.error_msg && (
-                        <p className="text-xs text-red-500 truncate mt-0.5">{item.error_msg}</p>
-                      )}
-                    </div>
-
-                    {/* Score or Estado badge */}
-                    <div className="shrink-0">
-                      {item.puntaje_total !== null && colors ? (
-                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${colors.bg} ${colors.text}`}>
-                          {item.puntaje_total}
-                        </span>
-                      ) : (
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${estadoBadgeClass(item.estado)}`}>
-                          {estadoLabel(item.estado)}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Load button */}
-                    <button
-                      onClick={() => handleLoadHistorial(item.id)}
-                      disabled={isLoaded}
-                      className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                        isLoaded
-                          ? 'bg-blue-100 text-blue-600 cursor-default'
-                          : 'bg-gray-100 text-gray-700 hover:bg-blue-100 hover:text-blue-700'
-                      }`}
-                    >
-                      {isLoaded ? 'Cargado' : 'Cargar'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* Historial de evaluaciones — oculto por pedido del cliente; la
+            lógica de fetch + handleLoadHistorial se mantiene viva por si
+            volvemos a habilitarlo. */}
 
       </div>
     </div>

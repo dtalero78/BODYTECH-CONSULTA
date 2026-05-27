@@ -408,8 +408,15 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
   const nombreCompleto = [hc.primerNombre, hc.segundoNombre, hc.primerApellido, hc.segundoApellido]
     .filter(Boolean).join(' ').toUpperCase();
 
-  const talla = v(hc.talla || f.estatura);
-  const peso = v(hc.peso || f.peso);
+  // Talla / peso: prefiere los campos snake_case nuevos (cc_estatura_nuevo /
+  // cc_peso_nuevo) que el pipeline de transcripción rellena automáticamente.
+  // Cae a los legacy `hc.talla` / `hc.peso` y al formulario si no están.
+  const talla = v(hc.cc_estatura_nuevo || hc.talla || f.estatura);
+  const peso = v(hc.cc_peso_nuevo || hc.peso || f.peso);
+  // Signos vitales (snake_case del pipeline de transcripción)
+  const tas = hc.tas != null ? String(hc.tas) : '';
+  const tad = hc.tad != null ? String(hc.tad) : '';
+  const fcr = hc.fcr != null ? String(hc.fcr) : '';
   const imc = (talla && peso)
     ? (() => {
         const h = parseFloat(talla);
@@ -621,12 +628,32 @@ export function generarHTMLHistoriaClinica({ historia, formulario }: HistoriaCli
     <div class="section-title">VI. Anamnesis</div>
     <div class="section-body">
       <div class="grid-2">
-        ${celda('Motivo de Consulta', hc.motivoConsulta, true)}
-        ${celda('Antecedentes Médicos (MD)', hc.mdAntecedentes, true)}
+        ${celda('Motivo de Consulta', hc.motivo_consulta_texto || hc.motivoConsulta, true)}
+        ${celda('Antecedentes Patológicos', hc.ant_patologico_obs || hc.mdAntecedentes, true)}
+        ${hc.ant_farmacologico_obs ? celda('Antecedentes Farmacológicos', hc.ant_farmacologico_obs, true) : ''}
+        ${hc.ant_alergicos_obs ? celda('Antecedentes Alérgicos', hc.ant_alergicos_obs, true) : ''}
         ${celda('Observaciones para el Médico', hc.mdObsParaMiDocYa, true)}
       </div>
     </div>
   </div>
+
+  ${(hc.hallazgos_descripcion || hc.hallazgos_dolor || tas || tad || fcr) ? `
+  <!-- VI.b HALLAZGOS Y SIGNOS VITALES (auto-rellenado por transcripción) -->
+  <div class="section">
+    <div class="section-title">VI.b Hallazgos y signos vitales</div>
+    <div class="section-body">
+      <div class="grid-2">
+        ${hc.hallazgos_descripcion ? celda('Hallazgos del examen físico', hc.hallazgos_descripcion, true) : ''}
+        ${hc.hallazgos_dolor ? celda('Dolor', hc.hallazgos_dolor, true) : ''}
+      </div>
+      ${(tas || tad || fcr) ? `
+      <div class="grid-3" style="margin-top:6px">
+        ${tas ? celda('TAS (mmHg)', tas) : ''}
+        ${tad ? celda('TAD (mmHg)', tad) : ''}
+        ${fcr ? celda('FC reposo (lpm)', fcr) : ''}
+      </div>` : ''}
+    </div>
+  </div>` : ''}
 
   <!-- VII. EXAMEN FÍSICO Y DIAGNÓSTICO -->
   <div class="section">

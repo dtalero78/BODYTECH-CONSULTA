@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import apiService from '../services/api.service';
 
@@ -94,7 +95,43 @@ function FichaModal({ historia, onClose }: { historia: HistoriaClinicaItem; onCl
               <p className="text-sm text-gray-500">CC {historia.numeroId} | {historia.celular}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  const token = localStorage.getItem('bsl_auth_token');
+                  const base = import.meta.env.VITE_API_BASE_URL || '';
+                  const res = await fetch(`${base}/api/video/medical-history/${historia._id}/pdf`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  if (!res.ok) throw new Error(`PDF failed: ${res.status}`);
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `historia-${historia._id}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error('Download PDF failed:', err);
+                }
+              }}
+              className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+              title="Descargar la historia clínica como PDF"
+            >
+              Descargar PDF
+            </button>
+            <Link
+              to={`/historia/${historia._id}`}
+              className="px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100"
+              title="Abrir el panel completo con los 7 tabs (incluye campos auto-llenados por transcripción)"
+            >
+              Abrir historia completa
+            </Link>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none ml-1">&times;</button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">

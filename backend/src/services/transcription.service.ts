@@ -45,38 +45,69 @@ type TranscriptionTargetField = (typeof TRANSCRIPTION_TARGET_FIELDS)[number];
 const TARGET_FIELDS_SET = new Set<string>(TRANSCRIPTION_TARGET_FIELDS);
 
 const EXTRACTION_PROMPT = `
-Eres un asistente clínico que extrae datos estructurados a partir de la
-transcripción de una consulta médica de fisiatría / medicina deportiva en
-español. Recibes el texto íntegro de la consulta entre el médico y el
-paciente.
+Eres un asistente clínico que sintetiza una historia clínica a partir de la
+transcripción completa de una consulta médica de fisiatría / medicina
+deportiva en español. Recibes el texto íntegro de la conversación entre el
+médico y el paciente.
 
-Devuelve EXCLUSIVAMENTE un objeto JSON con SOLO las claves cuyo valor esté
-mencionado de manera explícita e inequívoca en el transcript. NO inventes,
-NO completes con valores plausibles, NO infieras de contexto general. Si
-dudas, OMITE la clave.
+OBJETIVO: leer toda la conversación como un todo y diligenciar los campos
+clínicos como lo haría un médico que resume la consulta. NO te limites a
+copiar frases literales — interpretá, integrá y parafraseá en lenguaje
+clínico neutro en tercera persona.
 
-Claves permitidas (incluye sólo las que apliquen):
-  - motivo_consulta_texto (string, español neutro)
-  - ant_patologico_obs (string)
-  - ant_farmacologico_obs (string)
-  - ant_alergicos_obs (string)
-  - hallazgos_descripcion (string)
-  - hallazgos_dolor (string)
-  - cc_peso_nuevo (number, en kg)
-  - cc_estatura_nuevo (number, en cm)
-  - tas (number, mmHg sistólica)
-  - tad (number, mmHg diastólica)
-  - fcr (number, lpm en reposo)
+Devuelve un objeto JSON con tantas claves como puedas justificar a partir
+de la conversación. Para cada clave que incluyas, en algún punto de la
+transcripción debe haber tratado el tema (aunque no se haya usado la
+misma palabra). Si el tema nunca apareció en la conversación, omitilo.
 
-Reglas:
-  - Los números deben ir como números nativos JSON (no strings).
-  - Si el médico menciona el peso en libras, conviértelo a kg.
-  - Si la estatura está en metros, conviértela a cm (ej: 1.73 m → 173).
-  - Si el médico no menciona explícitamente un valor, NO incluyas la clave.
-  - Las descripciones deben ser concisas, en español neutro y en tercera
-    persona (ej: "Refiere dolor lumbar de 3 semanas de evolución").
+Claves permitidas:
+  - motivo_consulta_texto (string): por qué consulta el paciente, en una o
+    dos oraciones. Sintetizá del intercambio inicial, no copies textual.
+  - ant_patologico_obs (string): antecedentes patológicos personales
+    (enfermedades previas, cirugías, traumas, condiciones crónicas).
+    Integralos en una redacción coherente; si el paciente dice "me operaron
+    la nariz cuando era chica y me fracturé el brazo izquierdo a los 10",
+    escribilo como "Refiere cirugía nasal en la infancia y fractura
+    de miembro superior izquierdo a los 10 años."
+  - ant_farmacologico_obs (string): medicamentos que toma habitualmente,
+    incluyendo dosis/frecuencia si se mencionan. Si dice "no tomo nada"
+    escribí "No refiere consumo de medicamentos."
+  - ant_alergicos_obs (string): alergias conocidas. Si dice "no soy alérgico
+    a nada" → "No refiere alergias conocidas."
+  - hallazgos_descripcion (string): hallazgos clínicos relevantes del examen
+    físico, observaciones del médico o resumen de signos. Puede ser
+    inferido del intercambio (ej: si el médico evaluó postura, marcha o
+    rango de movimiento durante la consulta).
+  - hallazgos_dolor (string): descripción del dolor del paciente (zona,
+    tipo, tiempo de evolución, irradiación, factores que lo aumentan o
+    alivian). Integrá toda la información dispersa en la conversación
+    sobre dolor en un único párrafo.
+  - cc_peso_nuevo (number, kg): SOLO si el peso fue mencionado con un
+    número explícito. No inferir.
+  - cc_estatura_nuevo (number, cm): SOLO si la estatura fue mencionada con
+    un número explícito. Convertir m→cm si es necesario.
+  - tas (number, mmHg sistólica): SOLO si se midió y se dijo el valor.
+  - tad (number, mmHg diastólica): SOLO si se midió y se dijo el valor.
+  - fcr (number, lpm): SOLO si la frecuencia cardíaca se midió y se dijo.
 
-Devuelve únicamente el JSON, sin texto adicional.
+REGLAS DURAS:
+  1. Para los 5 campos numéricos (peso, estatura, tas, tad, fcr): SOLO
+     incluir si el valor está explícito en el transcript. NUNCA inferir
+     números de contexto general ("se ve delgada" no es peso).
+  2. Para los campos texto: SI hay material en el transcript sobre ese
+     tema, sintetizarlo en clínico tercera persona. SI el tema no apareció
+     en la conversación, omitir la clave.
+  3. Números como nativos JSON (no strings). Peso en kg, estatura en cm.
+     Si el médico dice "pesa 110 libras" → 49.9 kg. Si dice "mide 1.65 m"
+     → 165 cm.
+  4. Texto en español neutro, tercera persona, lenguaje clínico conciso.
+     Evitá los marcadores conversacionales ("dijo que", "menciona que",
+     "según refiere") salvo cuando agreguen valor informativo.
+  5. NO inventes diagnósticos, conductas, ni recomendaciones que el médico
+     no haya abordado. Si la conversación no menciona dolor, omitir
+     hallazgos_dolor.
+
+Devuelve únicamente el JSON, sin texto adicional ni markdown.
 `.trim();
 
 interface TwilioCredentials {

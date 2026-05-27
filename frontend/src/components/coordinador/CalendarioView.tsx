@@ -2,14 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  ArrowLeft,
-  Users,
-  CheckCircle2,
-  Clock,
-  Stethoscope,
+  ChevronDown,
   X,
-  UserCog,
   Download,
+  Plus,
+  UserCog,
+  Maximize2,
 } from 'lucide-react';
 import calendarioService, {
   MesResumen,
@@ -18,10 +16,16 @@ import calendarioService, {
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import { ReasignarModal } from './ReasignarModal';
-import { CalendarioStats } from './CalendarioStats';
+import {
+  FONT_INTER,
+  FONT_MONO,
+  Pill,
+  SECTION_LABEL,
+} from './_tokens';
 
 interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
+  reportCount?: (count: number | null) => void;
 }
 
 const MESES = [
@@ -29,29 +33,10 @@ const MESES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
 
-const DIAS_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
-// Paleta pastel para diferenciar médicos. Se asigna por orden alfabético del
-// código, así que el mismo médico siempre tiene el mismo color durante la sesión.
-const PALETTE = [
-  'bg-blue-100 text-blue-700 border-blue-200',
-  'bg-purple-100 text-purple-700 border-purple-200',
-  'bg-pink-100 text-pink-700 border-pink-200',
-  'bg-teal-100 text-teal-700 border-teal-200',
-  'bg-amber-100 text-amber-700 border-amber-200',
-  'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'bg-cyan-100 text-cyan-700 border-cyan-200',
-  'bg-emerald-100 text-emerald-700 border-emerald-200',
-];
-
-function colorFor(codigo: string, allCodes: string[]): string {
-  const idx = allCodes.indexOf(codigo);
-  return PALETTE[idx >= 0 ? idx % PALETTE.length : 0];
-}
+const DIAS_CORTO_LU = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 function todayInBogota(): { year: number; month: number; day: number; iso: string } {
   const nowUtc = new Date();
-  // Colombia es UTC-5. Convertimos restando 5 horas y leemos como UTC.
   const ms = nowUtc.getTime() - 5 * 60 * 60 * 1000;
   const d = new Date(ms);
   const year = d.getUTCFullYear();
@@ -65,17 +50,57 @@ function fechaIso(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function prevMonthOf(year: number, month: number): { year: number; month: number } {
+  if (month === 1) return { year: year - 1, month: 12 };
+  return { year, month: month - 1 };
+}
+
+function densityLevel(total: number): 0 | 1 | 2 | 3 {
+  if (total <= 0) return 0;
+  if (total <= 5) return 1;
+  if (total <= 12) return 2;
+  return 3;
+}
+
+function densityBg(level: 0 | 1 | 2 | 3): string {
+  switch (level) {
+    case 0:
+      return 'bg-zinc-100';
+    case 1:
+      return 'bg-zinc-300';
+    case 2:
+      return 'bg-zinc-500';
+    case 3:
+      return 'bg-[#1f3a8a]';
+  }
+}
+
+// Formato delta: "+8.4%", "−4.4%", "±0"
+function formatDelta(current: number, previous: number | null): { text: string; tone: 'up' | 'down' | 'flat' } {
+  if (previous === null || previous === 0) {
+    return { text: '±0', tone: 'flat' };
+  }
+  const diff = ((current - previous) / previous) * 100;
+  if (Math.abs(diff) < 0.05) return { text: '±0', tone: 'flat' };
+  if (diff > 0) return { text: `+${diff.toFixed(1)}%`, tone: 'up' };
+  return { text: `−${Math.abs(diff).toFixed(1)}%`, tone: 'down' };
+}
+
 // ---------------------------------------------------------------------------
 
-export function CalendarioView({ showToast }: Props) {
+export function CalendarioView({ showToast, reportCount }: Props) {
   const today = useMemo(() => todayInBogota(), []);
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState(today.month);
   const [mesData, setMesData] = useState<MesResumen | null>(null);
+  const [prevMesData, setPrevMesData] = useState<MesResumen | null>(null);
   const [loadingMes, setLoadingMes] = useState(true);
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [filterMedico, setFilterMedico] = useState<string>(''); // codigo o ''
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [diaDetalle, setDiaDetalle] = useState<DiaDetalle | null>(null);
+  const [loadingDia, setLoadingDia] = useState(false);
+  const [showFullDayModal, setShowFullDayModal] = useState(false);
 
   // Cargar lista de profesionales para filtros y nombres
   useEffect(() => {
@@ -88,11 +113,20 @@ export function CalendarioView({ showToast }: Props) {
   const reloadMes = useCallback(async () => {
     setLoadingMes(true);
     try {
-      const data = await calendarioService.getMes(year, month, filterMedico || undefined);
+      const prev = prevMonthOf(year, month);
+      // Pedimos en paralelo el mes actual y el anterior (para el delta).
+      // Si el anterior falla, mostramos delta neutro.
+      const [data, prevData] = await Promise.all([
+        calendarioService.getMes(year, month, filterMedico || undefined),
+        calendarioService
+          .getMes(prev.year, prev.month, filterMedico || undefined)
+          .catch(() => null),
+      ]);
       setMesData(data);
+      setPrevMesData(prevData);
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msg = (err as any)?.response?.data?.error?.message || 'Error cargando el mes.';
+      const e = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = e?.response?.data?.error?.message || 'Error cargando el mes.';
       showToast({ type: 'error', message: msg });
     } finally {
       setLoadingMes(false);
@@ -102,6 +136,36 @@ export function CalendarioView({ showToast }: Props) {
   useEffect(() => {
     reloadMes();
   }, [reloadMes]);
+
+  // Reportar conteo de mes al sidebar
+  useEffect(() => {
+    if (!reportCount) return;
+    if (mesData) reportCount(mesData.totalCitas);
+  }, [mesData, reportCount]);
+
+  // Cargar detalle del día seleccionado
+  useEffect(() => {
+    if (!selectedDay) {
+      setDiaDetalle(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDia(true);
+    calendarioService
+      .getDia(selectedDay, filterMedico || undefined)
+      .then((d) => {
+        if (!cancelled) setDiaDetalle(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDiaDetalle(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDia(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDay, filterMedico]);
 
   function prevMonth() {
     setSelectedDay(null);
@@ -129,10 +193,12 @@ export function CalendarioView({ showToast }: Props) {
     setMonth(today.month);
   }
 
-  // Construir grid de 7 columnas
+  // Construir grid 7 columnas (lunes-domingo). Lunes = 0.
   const calendarCells = useMemo(() => {
     const firstDay = new Date(Date.UTC(year, month - 1, 1));
-    const startDow = firstDay.getUTCDay(); // 0-6 (Dom)
+    const jsDow = firstDay.getUTCDay(); // 0=Dom .. 6=Sáb
+    // Lun=0, Mar=1 ... Dom=6
+    const startDow = (jsDow + 6) % 7;
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
     const cells: Array<{ iso: string | null; day: number | null }> = [];
@@ -140,261 +206,663 @@ export function CalendarioView({ showToast }: Props) {
     for (let d = 1; d <= daysInMonth; d++) {
       cells.push({ iso: fechaIso(year, month, d), day: d });
     }
-    // Padding final para que el grid quede en filas completas (múltiplos de 7)
     while (cells.length % 7 !== 0) cells.push({ iso: null, day: null });
     return cells;
   }, [year, month]);
 
-  // Códigos de médicos vistos en el mes (para color)
-  const codigosVistos = useMemo(() => {
-    if (!mesData) return [];
-    const set = new Set<string>();
-    for (const fecha of Object.keys(mesData.porDia)) {
-      for (const codigo of Object.keys(mesData.porDia[fecha].porMedico)) {
-        set.add(codigo);
-      }
+  // Total máximo por hora del día seleccionado (para escalar las barras del heatmap)
+  const horasDistrib = useMemo(() => {
+    const buckets = new Array<number>(24).fill(0);
+    if (!diaDetalle) return buckets;
+    for (const c of diaDetalle.citas) {
+      if (!c.horaAtencion) continue;
+      const h = parseInt(c.horaAtencion.slice(0, 2), 10);
+      if (h >= 0 && h < 24) buckets[h]++;
     }
-    return Array.from(set).sort();
-  }, [mesData]);
+    return buckets;
+  }, [diaDetalle]);
 
-  function profesionalNombre(codigo: string): string {
-    if (codigo === '__SIN_ASIGNAR__') return 'Sin asignar';
-    const p = profesionales.find((x) => x.codigo === codigo);
-    if (!p) return codigo;
-    return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
-  }
+  const maxHora = useMemo(() => Math.max(1, ...horasDistrib), [horasDistrib]);
 
-  if (selectedDay) {
-    return (
-      <DiaView
-        fecha={selectedDay}
-        medico={filterMedico || undefined}
-        profesionales={profesionales}
-        onBack={() => {
-          setSelectedDay(null);
-          reloadMes();
-        }}
-        showToast={showToast}
-      />
-    );
-  }
+  // ----- Render -----
 
   return (
-    <div>
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label="Citas del mes"
-          value={mesData?.totalCitas ?? 0}
-          icon={<Users className="w-4 h-4" />}
-          color="text-blue-600 bg-blue-50"
-        />
-        <StatCard
-          label="Atendidas"
-          value={mesData?.totalAtendidos ?? 0}
-          icon={<CheckCircle2 className="w-4 h-4" />}
-          color="text-green-600 bg-green-50"
-        />
-        <StatCard
-          label="Pendientes"
-          value={mesData?.totalPendientes ?? 0}
-          icon={<Clock className="w-4 h-4" />}
-          color="text-amber-600 bg-amber-50"
-        />
-        <StatCard
-          label="Médicos activos"
-          value={mesData?.medicosActivos ?? 0}
-          icon={<Stethoscope className="w-4 h-4" />}
-          color="text-purple-600 bg-purple-50"
-        />
-      </div>
-
-      {/* Toolbar mes */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={prevMonth}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              aria-label="Mes anterior"
+    <div className="space-y-4">
+      <div
+        className="bg-white rounded-xl overflow-hidden"
+        style={{ boxShadow: 'inset 0 0 0 1px #e4e4e7' }}
+      >
+        {/* Header */}
+        <div className="px-8 pt-6 pb-5 flex items-start justify-between gap-6 border-b border-zinc-200">
+          <div>
+            <div
+              className="text-[11px] text-zinc-400 mb-1"
+              style={{ fontFamily: FONT_MONO }}
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <h2 className="text-base font-semibold text-gray-800 min-w-[160px] text-center">
-              {MESES[month - 1]} {year}
+              / calendario / {MESES[month - 1].toLowerCase()} {year}
+            </div>
+            <h2
+              className="text-[26px] font-semibold tracking-tight leading-tight"
+              style={{ fontFamily: FONT_INTER }}
+            >
+              <span className="text-zinc-900">{MESES[month - 1]}</span>{' '}
+              <span className="text-zinc-400 tabular-nums">{year}</span>
             </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1">
+              <button
+                onClick={prevMonth}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md text-zinc-600 bg-white border border-zinc-200 hover:bg-zinc-50"
+                aria-label="Mes anterior"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={goToday}
+                className="h-8 px-3 rounded-md text-[12.5px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50"
+              >
+                Hoy
+              </button>
+              <button
+                onClick={nextMonth}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md text-zinc-600 bg-white border border-zinc-200 hover:bg-zinc-50"
+                aria-label="Mes siguiente"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {/* Segmented control (visual; solo Mes funciona) */}
+            <div className="inline-flex items-center bg-zinc-100 rounded-md p-0.5 text-[12px] font-medium">
+              <button
+                className="h-7 px-2.5 rounded text-zinc-500 cursor-not-allowed"
+                title="Próximamente"
+              >
+                Día
+              </button>
+              <button
+                className="h-7 px-2.5 rounded text-zinc-500 cursor-not-allowed"
+                title="Próximamente"
+              >
+                Semana
+              </button>
+              <button
+                className="h-7 px-2.5 rounded bg-white text-zinc-900 shadow-sm"
+              >
+                Mes
+              </button>
+            </div>
             <button
-              onClick={nextMonth}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              aria-label="Mes siguiente"
+              type="button"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50"
             >
-              <ChevronRight className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
+              Exportar
             </button>
             <button
-              onClick={goToday}
-              className="ml-2 px-3 py-1.5 text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg"
+              type="button"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-[13px] font-medium text-white"
+              style={{ background: '#1f3a8a' }}
             >
-              Hoy
+              <Plus className="w-3.5 h-3.5" />
+              Nueva cita
             </button>
           </div>
-          <select
+        </div>
+
+        {/* KPI strip — 4 cards estilo Stripe */}
+        <div className="grid grid-cols-4 border-b border-zinc-200">
+          <KpiCard
+            label="Citas del mes"
+            value={mesData?.totalCitas ?? 0}
+            prev={prevMesData?.totalCitas ?? null}
+            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            loading={loadingMes}
+            isFirst
+          />
+          <KpiCard
+            label="Atendidas"
+            value={mesData?.totalAtendidos ?? 0}
+            prev={prevMesData?.totalAtendidos ?? null}
+            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            loading={loadingMes}
+          />
+          <KpiCard
+            label="Pendientes"
+            value={mesData?.totalPendientes ?? 0}
+            prev={prevMesData?.totalPendientes ?? null}
+            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            loading={loadingMes}
+          />
+          <KpiCard
+            label="Profesionales activos"
+            value={mesData?.medicosActivos ?? 0}
+            prev={prevMesData?.medicosActivos ?? null}
+            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            loading={loadingMes}
+            isLast
+          />
+        </div>
+
+        {/* Filter strip */}
+        <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
+          <span className={SECTION_LABEL}>Filtros</span>
+          <FilterSelect
+            label="Médico"
             value={filterMedico}
-            onChange={(e) => setFilterMedico(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Todos los profesionales</option>
-            {profesionales.map((p) => (
-              <option key={p.id} value={p.codigo}>
-                {p.alias || `${p.primerNombre} ${p.primerApellido}`} · {p.codigo}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => {
+              setFilterMedico(v);
+              setSelectedDay(null);
+            }}
+            options={[
+              { value: '', label: 'Todos los profesionales' },
+              ...profesionales.map((p) => ({
+                value: p.codigo,
+                label: `${p.alias || `${p.primerNombre} ${p.primerApellido}`} · ${p.codigo}`,
+              })),
+            ]}
+            active={!!filterMedico}
+            onClear={() => setFilterMedico('')}
+          />
+          <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
+            <LegendDot color="bg-green-500" label="Atendido" />
+            <LegendDot color="bg-amber-500" label="Pendiente" />
+            <LegendDot color="bg-blue-500" label="En curso" />
+            <LegendDot color="bg-zinc-400" label="No asistió" />
+          </div>
         </div>
-      </div>
 
-      {/* Calendario */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        {/* Cabecera de días */}
-        <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
-          {DIAS_CORTO.map((d) => (
-            <div
-              key={d}
-              className="px-2 py-2 text-center text-xs font-medium text-gray-500"
-            >
-              {d}
-            </div>
-          ))}
-        </div>
-        {/* Celdas */}
-        <div className="grid grid-cols-7">
-          {loadingMes ? (
-            <div className="col-span-7 py-16 text-center text-sm text-gray-500">
-              Cargando calendario...
-            </div>
-          ) : (
-            calendarCells.map((cell, i) => {
-              if (!cell.iso) {
-                return (
-                  <div
-                    key={`empty-${i}`}
-                    className="h-24 border-b border-r border-gray-100 bg-gray-50/30"
-                  />
-                );
-              }
-              const dia = mesData?.porDia[cell.iso];
-              const isToday = cell.iso === today.iso;
-              const medicosEnDia = dia ? Object.entries(dia.porMedico) : [];
-              const top2 = medicosEnDia.slice(0, 2);
-              const more = medicosEnDia.length - top2.length;
-              return (
-                <button
-                  key={cell.iso}
-                  onClick={() => setSelectedDay(cell.iso!)}
-                  className={`h-24 border-b border-r border-gray-100 p-1.5 text-left hover:bg-blue-50/40 transition-colors ${
-                    isToday ? 'bg-blue-50/20' : ''
-                  }`}
+        {/* Grid + panel lateral */}
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: '1fr 360px' }}
+        >
+          {/* Izquierda — grid mensual */}
+          <div>
+            {/* Header de días */}
+            <div className="grid grid-cols-7 bg-[#fcfcfb] border-b border-zinc-200">
+              {DIAS_CORTO_LU.map((d) => (
+                <div
+                  key={d}
+                  className={`px-3 py-2 ${SECTION_LABEL}`}
                 >
-                  <div className="flex items-start justify-between">
-                    <span
-                      className={`text-xs font-semibold ${
-                        isToday
-                          ? 'inline-flex w-5 h-5 items-center justify-center rounded-full bg-blue-600 text-white'
-                          : 'text-gray-700'
-                      }`}
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {loadingMes ? (
+                <div className="col-span-7 py-16 text-center text-[13px] text-zinc-500">
+                  Cargando calendario…
+                </div>
+              ) : (
+                calendarCells.map((cell, i) => {
+                  if (!cell.iso) {
+                    return (
+                      <div
+                        key={`empty-${i}`}
+                        className="h-[118px] border-r border-b border-zinc-200 bg-zinc-50"
+                      />
+                    );
+                  }
+                  const dia = mesData?.porDia[cell.iso];
+                  const total = dia?.total ?? 0;
+                  const isToday = cell.iso === today.iso;
+                  const isSelected = selectedDay === cell.iso;
+                  const level = densityLevel(total);
+
+                  const bgCell = isSelected
+                    ? 'bg-[#eef2ff]'
+                    : isToday
+                      ? 'bg-[#f8fafc]'
+                      : 'bg-white';
+
+                  const ringStyle: React.CSSProperties = {};
+                  if (isSelected || isToday) {
+                    ringStyle.boxShadow = 'inset 0 0 0 1.5px #1f3a8a';
+                  }
+
+                  return (
+                    <button
+                      key={cell.iso}
+                      onClick={() => setSelectedDay(cell.iso)}
+                      className={`h-[118px] border-r border-b border-zinc-200 p-2.5 text-left relative cursor-pointer hover:bg-zinc-50 transition-colors ${bgCell}`}
+                      style={ringStyle}
                     >
-                      {cell.day}
-                    </span>
-                    {dia && dia.total > 0 && (
-                      <span className="text-[10px] font-medium text-gray-400">
-                        {dia.total}
-                      </span>
-                    )}
-                  </div>
-                  {dia && (
-                    <div className="mt-1 space-y-0.5">
-                      {top2.map(([codigo, info]) => (
-                        <div
-                          key={codigo}
-                          className={`text-[10px] truncate px-1 py-0.5 border rounded ${colorFor(
-                            codigo,
-                            codigosVistos
-                          )}`}
-                          title={`${profesionalNombre(codigo)} · ${info.atendidos}/${info.total}`}
+                      <div className="flex items-start justify-between">
+                        <span
+                          className={`text-[12.5px] tabular-nums font-medium ${
+                            isToday ? 'text-[#1e3a8a]' : 'text-zinc-700'
+                          }`}
                         >
-                          {profesionalNombre(codigo).slice(0, 14)} {info.atendidos}/{info.total}
-                        </div>
-                      ))}
-                      {more > 0 && (
-                        <div className="text-[10px] text-gray-400">+{more} más</div>
+                          {cell.day}
+                        </span>
+                        {total > 0 && (
+                          <span
+                            className="text-[10px] text-zinc-400 tabular-nums"
+                            style={{ fontFamily: FONT_MONO }}
+                          >
+                            {total}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Badge HOY (sólo si no está seleccionado, para evitar amontonar) */}
+                      {isToday && !isSelected && (
+                        <span
+                          className="absolute top-1 right-8 text-[8.5px] uppercase tracking-[0.12em] font-bold"
+                          style={{ color: '#1f3a8a', fontFamily: FONT_INTER }}
+                        >
+                          HOY
+                        </span>
                       )}
-                    </div>
-                  )}
-                </button>
-              );
-            })
-          )}
+
+                      {/* Heatmap:
+                          - Día seleccionado: 24 barras horarias (1 por hora) basadas en
+                            `diaDetalle.citas[].horaAtencion`. Esto da la lectura
+                            horaria real sin requerir endpoint nuevo.
+                          - Resto: una única barra de densidad (4 niveles) basada en
+                            `total`. Mantiene la estética sin 24 fetches.
+                          Doc en spec sección 6.4. */}
+                      <div className="absolute left-2.5 right-2.5 bottom-2 flex items-end gap-[2px] h-[18px]">
+                        {isSelected && diaDetalle ? (
+                          horasDistrib.map((count, h) => {
+                            const heightPct = count === 0 ? 12 : Math.max(18, (count / maxHora) * 100);
+                            const color =
+                              count === 0
+                                ? 'bg-zinc-200'
+                                : count <= 2
+                                  ? 'bg-zinc-400'
+                                  : count <= 4
+                                    ? 'bg-zinc-600'
+                                    : 'bg-[#1f3a8a]';
+                            return (
+                              <span
+                                key={h}
+                                className={`flex-1 rounded-[1px] ${color}`}
+                                style={{ height: `${heightPct}%`, minHeight: 2 }}
+                                title={`${h}:00 — ${count} citas`}
+                              />
+                            );
+                          })
+                        ) : (
+                          <span
+                            className={`w-full rounded-sm ${densityBg(level)}`}
+                            style={{ height: total === 0 ? 4 : 6 }}
+                          />
+                        )}
+                      </div>
+
+                      {/* NOTA: el desglose atendidos · pendientes vive en el panel
+                          lateral (spec sec. 6.4 — "el desglose vive en el panel
+                          lateral"). NO renderizarlo dentro de la celda — duplicaba
+                          el ruido visual que el eval iter-2 pidió limpiar para
+                          la celda HOY, generalizado al resto. */}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Derecha — Panel del día seleccionado */}
+          <div className="border-l border-zinc-200 bg-white px-5 pt-6 pb-4 min-h-[400px]">
+            {!selectedDay ? (
+              <div className="text-zinc-400 text-[13px] pt-4">
+                Selecciona un día para ver las citas.
+              </div>
+            ) : loadingDia || !diaDetalle ? (
+              <div className="text-zinc-500 text-[13px] pt-4">Cargando citas…</div>
+            ) : (
+              <DiaPanel
+                fecha={selectedDay}
+                detalle={diaDetalle}
+                profesionales={profesionales}
+                onAmpliar={() => setShowFullDayModal(true)}
+              />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Gráficas */}
-      {mesData && mesData.totalCitas > 0 && (
-        <CalendarioStats mes={mesData} profesionales={profesionales} />
+      {/* Modal "Ver día completo" (drawer/modal con DiaView legacy) */}
+      {showFullDayModal && selectedDay && (
+        <DiaFullModal
+          fecha={selectedDay}
+          medico={filterMedico || undefined}
+          profesionales={profesionales}
+          onClose={() => {
+            setShowFullDayModal(false);
+            // Si hubo cambios (reasignar), refrescar mes
+            reloadMes();
+          }}
+          showToast={showToast}
+        />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Stat card
+// KPI card
 // ---------------------------------------------------------------------------
 
-function StatCard({
+function KpiCard({
   label,
   value,
-  icon,
-  color,
+  prev,
+  prevMonthLabel,
+  loading,
+  isFirst = false,
+  isLast = false,
 }: {
   label: string;
   value: number;
-  icon: React.ReactNode;
-  color: string;
+  prev: number | null;
+  prevMonthLabel: string;
+  loading: boolean;
+  isFirst?: boolean;
+  isLast?: boolean;
 }) {
+  void isFirst;
+  const delta = formatDelta(value, prev);
+  const toneCls =
+    delta.tone === 'up'
+      ? 'text-green-700'
+      : delta.tone === 'down'
+        ? 'text-red-700'
+        : 'text-zinc-500';
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center gap-3">
-      <div className={`p-2 rounded-lg ${color}`}>{icon}</div>
-      <div>
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-xl font-bold text-gray-800">{value}</p>
+    <div
+      className={`py-3 px-6 ${isLast ? '' : 'border-r border-zinc-200'}`}
+      style={{ fontFamily: FONT_INTER }}
+    >
+      <div className={SECTION_LABEL}>{label}</div>
+      <div
+        className="mt-1.5 text-[28px] font-semibold tabular-nums text-zinc-900 leading-none"
+        style={{ fontFamily: FONT_INTER, fontVariantNumeric: 'tabular-nums' }}
+      >
+        {loading ? '—' : value.toLocaleString('es-CO')}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <span className={`text-[12px] tabular-nums ${toneCls}`} style={{ fontFamily: FONT_MONO }}>
+          {delta.text}
+        </span>
+        <span className="text-[11px] text-zinc-400">
+          vs. {prevMonthLabel}{' '}
+          {prev !== null ? (
+            <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+              ({prev})
+            </span>
+          ) : (
+            '(—)'
+          )}
+        </span>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Vista día (timeline por hora)
+// LegendDot
 // ---------------------------------------------------------------------------
 
-interface DiaProps {
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+      {label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FilterSelect — re-uso local de chip estilizado
+// ---------------------------------------------------------------------------
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  active = false,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  active?: boolean;
+  onClear?: () => void;
+}) {
+  const stateCls = active ? 'bg-[#eef2ff] text-[#1e3a8a]' : 'bg-white text-zinc-800';
+  const borderColor = active ? '#1f3a8a' : '#d4d4d8';
+  return (
+    <div
+      className={`relative inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium ${stateCls}`}
+      style={{ fontFamily: FONT_INTER, borderColor }}
+    >
+      <span
+        className={`pl-[11px] pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}
+      >
+        {label}:
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none bg-transparent pl-0 pr-7 h-[30px] outline-none text-[12.5px] font-medium cursor-pointer max-w-[200px]"
+        style={{ fontFamily: FONT_INTER }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {active && onClear ? (
+        <button
+          onClick={onClear}
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/60"
+          aria-label="Quitar filtro"
+        >
+          <X className="w-3 h-3 text-[#1e3a8a]" />
+        </button>
+      ) : (
+        <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Panel del día (lista por bloque horario)
+// ---------------------------------------------------------------------------
+
+function DiaPanel({
+  fecha,
+  detalle,
+  profesionales,
+  onAmpliar,
+}: {
+  fecha: string;
+  detalle: DiaDetalle;
+  profesionales: Profesional[];
+  onAmpliar: () => void;
+}) {
+  const fechaFormateada = useMemo(() => {
+    const [y, m, d] = fecha.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return date.toLocaleDateString('es-CO', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      timeZone: 'UTC',
+    });
+  }, [fecha]);
+
+  function profesionalNombre(codigo: string | null): string {
+    if (!codigo) return '—';
+    if (codigo === '__SIN_ASIGNAR__') return 'Sin asignar';
+    const p = profesionales.find((x) => x.codigo === codigo);
+    if (!p) return codigo;
+    return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
+  }
+
+  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' {
+    const s = (atendido || 'PENDIENTE').toUpperCase();
+    if (s === 'ATENDIDO') return 'ok';
+    if (s === 'NO CONTESTA') return 'bad';
+    return 'warn';
+  }
+
+  // Agrupar por bloque horario
+  const bloques = useMemo(() => {
+    const m: Record<'manana' | 'tarde' | 'noche', CitaListItem[]> = {
+      manana: [],
+      tarde: [],
+      noche: [],
+    };
+    for (const c of detalle.citas) {
+      const hora = c.horaAtencion ? parseInt(c.horaAtencion.slice(0, 2), 10) : 12;
+      if (hora < 12) m.manana.push(c);
+      else if (hora < 17) m.tarde.push(c);
+      else m.noche.push(c);
+    }
+    const sort = (arr: CitaListItem[]) =>
+      arr.slice().sort((a, b) => (a.horaAtencion || '').localeCompare(b.horaAtencion || ''));
+    return {
+      manana: sort(m.manana),
+      tarde: sort(m.tarde),
+      noche: sort(m.noche),
+    };
+  }, [detalle]);
+
+  return (
+    <div style={{ fontFamily: FONT_INTER }}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[15px] font-semibold text-zinc-900 capitalize">
+            {fechaFormateada}
+          </div>
+          <div className="text-[12px] text-zinc-500 mt-0.5">
+            <span className="tabular-nums">{detalle.total}</span> citas ·{' '}
+            <span className="tabular-nums">{detalle.atendidos}</span> atendidas ·{' '}
+            <span className="tabular-nums">{detalle.pendientes}</span> pendientes
+          </div>
+        </div>
+        <button
+          onClick={onAmpliar}
+          title="Ver día completo"
+          className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {detalle.total === 0 ? (
+        <p className="text-[13px] text-zinc-400 mt-6">Sin citas para este día.</p>
+      ) : (
+        <div className="mt-2">
+          <Bloque label="MAÑANA · 7:00–12:00" citas={bloques.manana} renderItem={(c) => (
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+          )} />
+          <Bloque label="TARDE · 12:00–17:00" citas={bloques.tarde} renderItem={(c) => (
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+          )} />
+          <Bloque label="NOCHE · 17:00–21:00" citas={bloques.noche} renderItem={(c) => (
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+          )} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Bloque({
+  label,
+  citas,
+  renderItem,
+}: {
+  label: string;
+  citas: CitaListItem[];
+  renderItem: (c: CitaListItem) => React.ReactNode;
+}) {
+  if (citas.length === 0) return null;
+  return (
+    <div>
+      <div className={`${SECTION_LABEL} pt-4 pb-2`}>{label}</div>
+      <ul>
+        {citas.map((c) => (
+          <li key={c.id} className="py-2 border-b border-zinc-100 last:border-0">
+            {renderItem(c)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CitaRow({
+  c,
+  prof,
+  variant,
+}: {
+  c: CitaListItem;
+  prof: string;
+  variant: 'ok' | 'warn' | 'bad' | 'mute';
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className="text-[12px] text-zinc-700 tabular-nums w-12 shrink-0"
+        style={{ fontFamily: FONT_MONO }}
+      >
+        {c.horaAtencion?.slice(0, 5) || '—'}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-[13px] font-medium text-zinc-900 truncate"
+          style={{ fontFamily: FONT_INTER }}
+        >
+          {c.nombre}
+        </div>
+        <div
+          className="text-[11px] text-zinc-500 truncate"
+          style={{ fontFamily: FONT_INTER }}
+        >
+          <span style={{ fontFamily: FONT_MONO }}>CC {c.numeroId}</span> · {prof}
+        </div>
+      </div>
+      <div className="shrink-0">
+        <Pill variant={variant}>{(c.atendido || 'PENDIENTE').toUpperCase()}</Pill>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modal "Ver día completo" (drawer con DiaView legacy: selección + reasignar)
+// ---------------------------------------------------------------------------
+
+interface DiaFullProps {
   fecha: string;
   medico?: string;
   profesionales: Profesional[];
-  onBack: () => void;
+  onClose: () => void;
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }
 
-function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) {
+function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaFullProps) {
   const [data, setData] = useState<DiaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filtroMedico, setFiltroMedico] = useState<string | undefined>(medico);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reasignarOpen, setReasignarOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await calendarioService.getDia(fecha, filtroMedico);
+      const result = await calendarioService.getDia(fecha, medico);
       setData(result);
-      // Limpia selección sobre IDs que ya no existen tras un reload
       setSelectedIds((prev) => {
         const visibles = new Set(result.citas.map((c) => c.id));
         const next = new Set<string>();
@@ -402,13 +870,13 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
         return next;
       });
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msg = (err as any)?.response?.data?.error?.message || 'Error cargando el día.';
+      const e = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = e?.response?.data?.error?.message || 'Error cargando el día.';
       showToast({ type: 'error', message: msg });
     } finally {
       setLoading(false);
     }
-  }, [fecha, filtroMedico, showToast]);
+  }, [fecha, medico, showToast]);
 
   useEffect(() => {
     reload();
@@ -423,39 +891,10 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
     });
   }
 
-  function selectAllVisible() {
-    if (!data) return;
-    setSelectedIds(new Set(data.citas.map((c) => c.id)));
-  }
-
-  function clearSelection() {
-    setSelectedIds(new Set());
-  }
-
   const selectedCitas = useMemo(() => {
     if (!data) return [];
     return data.citas.filter((c) => selectedIds.has(c.id));
   }, [data, selectedIds]);
-
-  const todasSeleccionadas =
-    data !== null && data.citas.length > 0 && selectedIds.size === data.citas.length;
-
-  // Agrupar citas por hora (HH)
-  const porHora = useMemo(() => {
-    const map = new Map<string, CitaListItem[]>();
-    if (!data) return map;
-    for (const c of data.citas) {
-      const hora = c.horaAtencion?.slice(0, 2) || 'Sin hora';
-      const list = map.get(hora) ?? [];
-      list.push(c);
-      map.set(hora, list);
-    }
-    return map;
-  }, [data]);
-
-  const horasOrdenadas = useMemo(() => {
-    return Array.from(porHora.keys()).sort();
-  }, [porHora]);
 
   const fechaFormateada = useMemo(() => {
     const [y, m, d] = fecha.split('-').map(Number);
@@ -469,198 +908,126 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
     });
   }, [fecha]);
 
-  function profesionalNombre(codigo: string): string {
+  function profesionalNombre(codigo: string | null): string {
+    if (!codigo) return '—';
     if (codigo === '__SIN_ASIGNAR__') return 'Sin asignar';
     const p = profesionales.find((x) => x.codigo === codigo);
     if (!p) return codigo;
     return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
   }
 
-  function statusBadge(atendido: string | null): string {
+  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' {
     const s = (atendido || 'PENDIENTE').toUpperCase();
-    if (s === 'ATENDIDO') return 'bg-green-100 text-green-700 border-green-200';
-    if (s === 'NO CONTESTA') return 'bg-red-100 text-red-700 border-red-200';
-    return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (s === 'ATENDIDO') return 'ok';
+    if (s === 'NO CONTESTA') return 'bad';
+    return 'warn';
   }
 
   return (
-    <div>
-      {/* Header del día */}
-      <div className="flex items-center gap-3 mb-4">
-        <button
-          onClick={onBack}
-          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-          aria-label="Volver al calendario"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1">
-          <h2 className="text-base font-semibold text-gray-800 capitalize">{fechaFormateada}</h2>
-          {data && (
-            <p className="text-xs text-gray-500">
-              {data.total} citas · {data.atendidos} atendidas · {data.pendientes} pendientes
-            </p>
-          )}
-        </div>
-        {filtroMedico && (
-          <button
-            onClick={() => setFiltroMedico(undefined)}
-            className="px-3 py-1.5 text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg"
-          >
-            Quitar filtro
-          </button>
-        )}
-        {data && data.total > 0 && (
-          <button
-            onClick={() => exportDiaCSV(data, profesionales, fecha)}
-            className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-lg flex items-center gap-1.5"
-            title="Exportar día a CSV"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Exportar CSV
-          </button>
-        )}
-      </div>
-
-      {/* Cards de médicos */}
-      {data && data.medicosResumen.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-          {data.medicosResumen.map((m) => (
-            <button
-              key={m.medicoCodigo}
-              onClick={() => setFiltroMedico(filtroMedico === m.medicoCodigo ? undefined : m.medicoCodigo)}
-              className={`p-3 border rounded-2xl text-left transition-colors ${
-                filtroMedico === m.medicoCodigo
-                  ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
-                  : 'bg-white border-gray-200 hover:bg-gray-50'
-              }`}
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        style={{ fontFamily: FONT_INTER }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 bg-white">
+          <div>
+            <div
+              className="text-[11px] text-zinc-400"
+              style={{ fontFamily: FONT_MONO }}
             >
-              <p className="text-sm font-semibold text-gray-800 truncate">{m.nombre}</p>
-              <div className="flex items-center justify-between mt-1.5">
-                <p className="text-xs text-gray-500">
-                  {m.atendidos}/{m.total} atend.
-                </p>
-                <span className="text-[10px] uppercase font-medium text-gray-400">
-                  {m.rol === 'coach' ? 'Coach' : m.rol === 'medico' ? 'Médico' : ''}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Toolbar de selección masiva */}
-      {data && data.total > 0 && (
-        <div className="flex items-center justify-between mb-2 px-1">
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={todasSeleccionadas}
-              onChange={(e) => (e.target.checked ? selectAllVisible() : clearSelection())}
-              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-            />
-            Seleccionar todas las visibles
-          </label>
-          {selectedIds.size > 0 && (
-            <button
-              onClick={clearSelection}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Limpiar selección ({selectedIds.size})
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Timeline */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-20">
-        {loading ? (
-          <div className="p-12 text-center text-sm text-gray-500">Cargando citas...</div>
-        ) : !data || data.total === 0 ? (
-          <div className="p-12 text-center text-sm text-gray-500">
-            No hay citas programadas para este día{filtroMedico ? ' con este médico' : ''}.
+              / calendario / día completo
+            </div>
+            <h3 className="text-[18px] font-semibold text-zinc-900 capitalize">
+              {fechaFormateada}
+            </h3>
+            {data && (
+              <p className="text-[12px] text-zinc-500">
+                <span className="tabular-nums">{data.total}</span> citas ·{' '}
+                <span className="tabular-nums">{data.atendidos}</span> atendidas
+              </p>
+            )}
           </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {horasOrdenadas.map((hora) => (
-              <div key={hora} className="flex">
-                <div className="w-16 flex-shrink-0 bg-gray-50 px-3 py-3 text-xs font-medium text-gray-500 border-r border-gray-100">
-                  {hora === 'Sin hora' ? '--' : `${hora}:00`}
-                </div>
-                <div className="flex-1 py-2 divide-y divide-gray-50">
-                  {porHora.get(hora)!.map((c) => {
-                    const isSelected = selectedIds.has(c.id);
-                    return (
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => setReasignarOpen(true)}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium text-white"
+                style={{ background: '#1f3a8a' }}
+              >
+                <UserCog className="w-3.5 h-3.5" />
+                Reasignar ({selectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <p className="text-[13px] text-zinc-500">Cargando…</p>
+          ) : !data || data.total === 0 ? (
+            <p className="text-[13px] text-zinc-500">No hay citas para este día.</p>
+          ) : (
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}></th>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Hora</th>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Paciente</th>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Médico</th>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.citas.map((c) => (
+                  <tr key={c.id} className="border-t border-zinc-100">
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleId(c.id)}
+                      />
+                    </td>
+                    <td
+                      className="px-2 py-2 tabular-nums text-zinc-700"
+                      style={{ fontFamily: FONT_MONO }}
+                    >
+                      {c.horaAtencion?.slice(0, 5) || '—'}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="font-medium text-zinc-900">{c.nombre}</div>
                       <div
-                        key={c.id}
-                        className={`px-3 py-2 grid grid-cols-12 gap-2 items-center transition-colors ${
-                          isSelected ? 'bg-blue-50/40' : ''
-                        }`}
+                        className="text-[11px] text-zinc-500"
+                        style={{ fontFamily: FONT_MONO }}
                       >
-                        <div className="col-span-1 flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleId(c.id)}
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div className="col-span-1 text-xs font-medium text-gray-600">
-                          {c.horaAtencion?.slice(0, 5) ?? '—'}
-                        </div>
-                        <div className="col-span-4 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{c.nombre}</p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {c.numeroId} {c.celular ? `· ${c.celular}` : ''}
-                          </p>
-                        </div>
-                        <div className="col-span-4 text-xs text-gray-600 truncate">
-                          {c.medicoCodigo ? profesionalNombre(c.medicoCodigo) : '—'}
-                        </div>
-                        <div className="col-span-2 text-right">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium border rounded-full ${statusBadge(
-                              c.atendido
-                            )}`}
-                          >
-                            {(c.atendido || 'PENDIENTE').toUpperCase()}
-                          </span>
-                        </div>
+                        CC {c.numeroId}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                    </td>
+                    <td className="px-2 py-2 text-zinc-700">
+                      {profesionalNombre(c.medicoCodigo)}
+                    </td>
+                    <td className="px-2 py-2">
+                      <Pill variant={statusVariant(c.atendido)}>
+                        {(c.atendido || 'PENDIENTE').toUpperCase()}
+                      </Pill>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Bulk action bar — flotante en bottom cuando hay selección */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-800 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-4">
-          <span className="text-sm font-medium">
-            {selectedIds.size} cita{selectedIds.size !== 1 ? 's' : ''} seleccionada
-            {selectedIds.size !== 1 ? 's' : ''}
-          </span>
-          <button
-            onClick={clearSelection}
-            className="px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg flex items-center gap-1.5"
-          >
-            <X className="w-3.5 h-3.5" />
-            Cancelar
-          </button>
-          <button
-            onClick={() => setReasignarOpen(true)}
-            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center gap-1.5 font-medium"
-          >
-            <UserCog className="w-3.5 h-3.5" />
-            Reasignar médico
-          </button>
-        </div>
-      )}
-
-      {/* Modal Reasignar */}
       <ReasignarModal
         isOpen={reasignarOpen}
         onClose={() => setReasignarOpen(false)}
@@ -672,78 +1039,11 @@ function DiaView({ fecha, medico, profesionales, onBack, showToast }: DiaProps) 
             type: 'success',
             message: `${afectadas} cita${afectadas !== 1 ? 's' : ''} reasignada${afectadas !== 1 ? 's' : ''}.`,
           });
-          clearSelection();
+          setSelectedIds(new Set());
           reload();
         }}
         onError={(message) => showToast({ type: 'error', message })}
       />
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Export CSV
-// ---------------------------------------------------------------------------
-
-function exportDiaCSV(data: DiaDetalle, profesionales: Profesional[], fecha: string): void {
-  function nombreMedico(codigo: string | null): string {
-    if (!codigo) return '';
-    if (codigo === '__SIN_ASIGNAR__') return 'Sin asignar';
-    const p = profesionales.find((x) => x.codigo === codigo);
-    if (!p) return codigo;
-    return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
-  }
-  function escapeCsv(value: string | null | undefined): string {
-    if (value === null || value === undefined) return '';
-    const s = String(value);
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  }
-
-  const headers = [
-    'Hora',
-    'Documento',
-    'Nombre',
-    'Celular',
-    'Email',
-    'Médico (código)',
-    'Médico (nombre)',
-    'Estado',
-    'Tipo consulta',
-    'Empresa',
-    'Motivo consulta',
-  ];
-  const lines: string[] = [headers.map(escapeCsv).join(',')];
-  for (const c of data.citas) {
-    lines.push(
-      [
-        c.horaAtencion ?? '',
-        c.numeroId,
-        c.nombre,
-        c.celular ?? '',
-        c.email ?? '',
-        c.medicoCodigo ?? '',
-        nombreMedico(c.medicoCodigo),
-        c.atendido ?? 'PENDIENTE',
-        c.tipoConsulta ?? '',
-        c.empresa ?? '',
-        c.motivoConsulta ?? '',
-      ]
-        .map(escapeCsv)
-        .join(',')
-    );
-  }
-  // BOM para que Excel abra UTF-8 correctamente
-  const csv = '﻿' + lines.join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `citas-${fecha}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }

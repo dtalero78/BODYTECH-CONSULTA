@@ -3,11 +3,13 @@ import axios from 'axios';
 import {
   Plus,
   Search,
-  Edit2,
+  Pencil,
   Trash2,
-  BarChart3,
-  FileText,
+  MoreHorizontal,
   AlertTriangle,
+  ChevronDown,
+  Download,
+  X,
 } from 'lucide-react';
 import authService from '../../services/auth.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
@@ -15,6 +17,14 @@ import calendarioService, {
   Modalidad,
   HorariosDisponibles,
 } from '../../services/calendario.service';
+import {
+  FONT_INTER,
+  FONT_MONO,
+  MonoAvatar,
+  Pill,
+  SECTION_LABEL,
+  initialsOf,
+} from './_tokens';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -40,6 +50,7 @@ interface OrdenItem {
   horaAtencion?: string;
   atendido?: string;
   ciudad?: string;
+  createdAt?: string;
 }
 
 type ModalState = null | 'new' | OrdenItem;
@@ -78,33 +89,43 @@ const EMPTY_FORM: FormData = {
   atendido: 'PENDIENTE',
 };
 
-function fmtFecha(fechaStr?: string, horaStr?: string) {
+function fmtFechaCorta(fechaStr?: string) {
   if (!fechaStr) return '—';
   try {
     const [y, m, d] = fechaStr.slice(0, 10).split('-').map(Number);
     const date = new Date(y, m - 1, d);
-    const datePart = date.toLocaleDateString('es-CO', {
-      weekday: 'short',
+    return date.toLocaleDateString('es-CO', {
       day: 'numeric',
       month: 'short',
+      year: 'numeric',
     });
-    if (!horaStr) return datePart;
-    const [hh, mm] = horaStr.split(':');
-    const h = parseInt(hh, 10);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${datePart} · ${h12}:${mm} ${ampm}`;
   } catch {
     return fechaStr;
   }
 }
 
-function statusBadge(status?: string) {
+function fmtFechaHora(fechaStr?: string, horaStr?: string) {
+  if (!fechaStr) return '—';
+  try {
+    const [y, m, d] = fechaStr.slice(0, 10).split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    const datePart = date.toLocaleDateString('es-CO', {
+      day: 'numeric',
+      month: 'short',
+    });
+    if (!horaStr) return datePart;
+    return `${datePart} · ${horaStr.slice(0, 5)}`;
+  } catch {
+    return fechaStr;
+  }
+}
+
+function statusVariant(status?: string): 'ok' | 'warn' | 'bad' | 'mute' {
   const s = (status || 'PENDIENTE').toUpperCase();
-  if (s === 'ATENDIDO') return 'bg-green-100 text-green-800';
-  if (s === 'NO CONTESTA') return 'bg-red-100 text-red-800';
-  if (s === 'PENDIENTE') return 'bg-yellow-100 text-yellow-800';
-  return 'bg-gray-100 text-gray-600';
+  if (s === 'ATENDIDO') return 'ok';
+  if (s === 'NO CONTESTA') return 'bad';
+  if (s === 'PENDIENTE') return 'warn';
+  return 'mute';
 }
 
 function nombreCompleto(o: OrdenItem) {
@@ -113,12 +134,22 @@ function nombreCompleto(o: OrdenItem) {
     .join(' ');
 }
 
+// "ORD-YYYY-XXXX" derivado del _id + createdAt (estética; el ID real es _id).
+function ordenCodigo(o: OrdenItem): string {
+  const year = o.createdAt
+    ? new Date(o.createdAt).getUTCFullYear()
+    : new Date().getUTCFullYear();
+  const suffix = (o._id || '').slice(-4).toUpperCase().padStart(4, '0');
+  return `ORD-${year}-${suffix}`;
+}
+
 interface Props {
   reloadKey?: number;
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
+  reportCount?: (count: number | null) => void;
 }
 
-export function OrdenesView({ reloadKey = 0, showToast }: Props) {
+export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
   const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '' });
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(0);
@@ -140,7 +171,6 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
   const [horarios, setHorarios] = useState<HorariosDisponibles | null>(null);
   const [loadingHorarios, setLoadingHorarios] = useState(false);
 
-  // Carga profesionales (médicos + coaches activos) una sola vez
   useEffect(() => {
     profesionalesService
       .list({ activo: true })
@@ -153,7 +183,7 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
     [profesionales, formData.medico]
   );
 
-  // Cargar slots cuando hay médico + fecha + modalidad (sólo si el modal está abierto)
+  // Cargar slots cuando hay médico + fecha + modalidad
   useEffect(() => {
     if (modalOrden === null) {
       setHorarios(null);
@@ -212,6 +242,12 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
   useEffect(() => {
     fetchOrdenes(filters, page);
   }, [filters, page, fetchOrdenes, reloadKey]);
+
+  // Reportar conteo al sidebar
+  useEffect(() => {
+    if (!reportCount) return;
+    reportCount(total);
+  }, [total, reportCount]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -348,369 +384,324 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
     }
   }
 
-  const STATUS_TABS = [
-    { key: 'all', label: 'Todos' },
-    { key: 'PENDIENTE', label: 'Pendiente' },
-    { key: 'ATENDIDO', label: 'Atendido' },
-    { key: 'NO CONTESTA', label: 'No Contesta' },
+  const STATUS_OPTIONS = [
+    { value: 'all', label: 'Todos' },
+    { value: 'PENDIENTE', label: 'Pendiente' },
+    { value: 'ATENDIDO', label: 'Atendido' },
+    { value: 'NO CONTESTA', label: 'No contesta' },
   ];
 
   const isEditMode = modalOrden !== null && modalOrden !== 'new';
 
+  // Subtítulo: total · pendientes
+  const pendientesCount = ordenes.filter((o) => (o.atendido || 'PENDIENTE').toUpperCase() === 'PENDIENTE').length;
+
   return (
-    <div>
-      {/* Toolbar superior */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-base font-semibold text-gray-800">Órdenes</h2>
-          <p className="text-xs text-gray-500">
-            {total} {total === 1 ? 'orden encontrada' : 'órdenes encontradas'}
-          </p>
-        </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Orden
-        </button>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3 mb-4">
-        <div className="flex gap-1 flex-wrap">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => handleFilterStatus(tab.key)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                filters.status === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+    <div className="space-y-4" style={{ fontFamily: FONT_INTER }}>
+      <div
+        className="bg-white rounded-xl overflow-hidden"
+        style={{ boxShadow: 'inset 0 0 0 1px #e4e4e7' }}
+      >
+        {/* Header */}
+        <div className="px-8 pt-6 pb-5 flex items-start justify-between gap-6">
+          <div>
+            <div
+              className="text-[11px] text-zinc-400 mb-1"
+              style={{ fontFamily: FONT_MONO }}
             >
-              {tab.label}
+              / órdenes
+            </div>
+            <h2 className="text-[26px] font-semibold tracking-tight text-zinc-900 leading-tight">
+              Órdenes
+            </h2>
+            <p className="text-[13px] text-zinc-500 mt-0.5">
+              <span className="tabular-nums">{total}</span> emitidas ·{' '}
+              <span className="tabular-nums">{pendientesCount}</span> pendientes en página
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Buscar paciente, documento…"
+                className="h-9 w-[280px] pl-9 pr-12 border border-zinc-200 rounded-md text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-400"
+              />
+              <kbd
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center h-5 px-1.5 rounded border border-zinc-200 bg-zinc-50 text-[10.5px] text-zinc-500"
+                style={{ fontFamily: FONT_MONO }}
+              >
+                ⌘K
+              </kbd>
+            </div>
+            <button
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar
             </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="flex-1 min-w-[200px] relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Buscar por nombre, documento..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 whitespace-nowrap">Desde</label>
-            <input
-              type="date"
-              value={filters.from}
-              onChange={(e) => handleDateFilter('from', e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 whitespace-nowrap">Hasta</label>
-            <input
-              type="date"
-              value={filters.to}
-              onChange={(e) => handleDateFilter('to', e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <button
+              onClick={openNew}
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-[13px] font-medium text-white"
+              style={{ background: '#1f3a8a' }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nueva orden
+            </button>
           </div>
         </div>
-      </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
-          {error}
+        {/* Filter strip */}
+        <div className="px-8 py-3 border-y border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
+          <span className={SECTION_LABEL}>Filtros</span>
+          <ChipSelect
+            label="Estado"
+            value={filters.status}
+            onChange={(v) => handleFilterStatus(v)}
+            options={STATUS_OPTIONS}
+            active={filters.status !== 'all'}
+            onClear={filters.status !== 'all' ? () => handleFilterStatus('all') : undefined}
+          />
+          <ChipDate
+            label="Desde"
+            value={filters.from}
+            onChange={(v) => handleDateFilter('from', v)}
+            onClear={filters.from ? () => handleDateFilter('from', '') : undefined}
+          />
+          <ChipDate
+            label="Hasta"
+            value={filters.to}
+            onChange={(v) => handleDateFilter('to', v)}
+            onClear={filters.to ? () => handleDateFilter('to', '') : undefined}
+          />
+          <div className="ml-auto text-[12px] text-zinc-500">
+            <span
+              className="tabular-nums font-medium text-zinc-700"
+              style={{ fontFamily: FONT_MONO }}
+            >
+              {total}
+            </span>{' '}
+            resultados
+          </div>
         </div>
-      )}
 
-      {loading && (
-        <div className="flex justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        </div>
-      )}
+        {error && (
+          <div className="bg-red-50 border-b border-red-200 text-red-700 px-8 py-3 text-[13px]">
+            {error}
+          </div>
+        )}
 
-      {/* Tabla — desktop */}
-      {!loading && ordenes.length > 0 && (
-        <>
-          <div className="hidden md:block bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Paciente</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Documento</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Empresa / Tipo</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Exámenes</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Médico</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha cita</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
-                    <th className="text-center px-4 py-3 font-medium text-gray-600">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {ordenes.map((o) => (
-                    <tr key={o._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold shrink-0">
-                            {o.primerNombre?.[0]}
-                            {o.primerApellido?.[0]}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-800">
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2" style={{ borderColor: '#1f3a8a' }} />
+          </div>
+        ) : ordenes.length === 0 && !error ? (
+          <div className="py-16 text-center text-[13px] text-zinc-500">
+            No hay órdenes con estos filtros.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#fcfcfb] border-b border-zinc-200">
+                <tr>
+                  <Th>ID / fecha</Th>
+                  <Th width="28%">Paciente</Th>
+                  <Th>Médico</Th>
+                  <Th>Tipo</Th>
+                  <Th>Atención</Th>
+                  <Th>Estado</Th>
+                  <Th align="right">Acciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {ordenes.map((o) => {
+                  const variant = statusVariant(o.atendido);
+                  return (
+                    <tr
+                      key={o._id}
+                      className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors"
+                      style={{ height: 58 }}
+                    >
+                      <td className="px-[14px] py-2.5">
+                        <div
+                          className="text-[12px] text-zinc-900 font-medium"
+                          style={{ fontFamily: FONT_MONO }}
+                        >
+                          {ordenCodigo(o)}
+                        </div>
+                        <div
+                          className="text-[10.5px] text-zinc-400"
+                          style={{ fontFamily: FONT_MONO }}
+                        >
+                          {fmtFechaCorta(o.createdAt) || '—'}
+                        </div>
+                      </td>
+                      <td className="px-[14px] py-2.5">
+                        <div className="flex items-center gap-3">
+                          <MonoAvatar
+                            initials={initialsOf(o.primerNombre, o.primerApellido)}
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-medium text-zinc-900 truncate">
                               {o.primerNombre} {o.primerApellido}
                             </div>
-                            <div className="text-xs text-gray-400">{o.celular}</div>
+                            <div
+                              className="text-[11px] text-zinc-500 truncate"
+                              style={{ fontFamily: FONT_MONO }}
+                            >
+                              CC {o.numeroId}
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{o.numeroId}</td>
-                      <td className="px-4 py-3">
-                        <div className="text-gray-800">{o.empresa || '—'}</div>
-                        <div className="text-xs text-gray-400">{o.tipoExamen || ''}</div>
+                      <td className="px-[14px] py-2.5 text-zinc-700">
+                        {o.medico || '—'}
                       </td>
-                      <td
-                        className="px-4 py-3 text-gray-600 truncate max-w-[180px]"
-                        title={o.examenes || ''}
-                      >
-                        {o.examenes || '—'}
+                      <td className="px-[14px] py-2.5 text-zinc-700">
+                        {o.tipoExamen || '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{o.medico || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                        {fmtFecha(o.fechaAtencion, o.horaAtencion)}
+                      <td className="px-[14px] py-2.5 tabular-nums text-zinc-700">
+                        {fmtFechaHora(o.fechaAtencion, o.horaAtencion)}
                       </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusBadge(
-                            o.atendido
-                          )}`}
-                        >
-                          {o.atendido || 'PENDIENTE'}
-                        </span>
+                      <td className="px-[14px] py-2.5">
+                        <Pill variant={variant}>
+                          {(o.atendido || 'PENDIENTE').toUpperCase()}
+                        </Pill>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <a
-                            href={`/calidad?historiaId=${o._id}`}
-                            title="Evaluar calidad de consulta"
-                            className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                          >
-                            <BarChart3 className="w-4 h-4" />
-                          </a>
+                      <td className="px-[14px] py-2.5 text-right">
+                        <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => openEdit(o)}
                             title="Editar"
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Pencil className="w-[14px] h-[14px]" />
                           </button>
                           <button
                             onClick={() => setDeleteTarget(o)}
                             title="Eliminar"
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-[14px] h-[14px]" />
+                          </button>
+                          <button
+                            title="Más"
+                            className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
+                          >
+                            <MoreHorizontal className="w-[14px] h-[14px]" />
                           </button>
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Footer paginación */}
+        {!loading && ordenes.length > 0 && (
+          <div className="px-8 py-3.5 bg-[#fcfcfb] text-[12px] text-zinc-500 flex items-center justify-between border-t border-zinc-200">
+            <div>
+              Mostrando{' '}
+              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                {page * 20 + 1}–{Math.min((page + 1) * 20, total)}
+              </span>{' '}
+              de{' '}
+              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                {total}
+              </span>
             </div>
-
             {totalPages > 1 && (
-              <div className="border-t border-gray-200 px-4 py-3 flex items-center justify-between bg-gray-50">
-                <span className="text-sm text-gray-500">
-                  Página {page + 1} de {totalPages}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
+                  aria-label="Anterior"
+                >
+                  ‹
+                </button>
+                <span
+                  className="h-7 px-2 inline-flex items-center justify-center rounded border border-zinc-300 text-zinc-900 tabular-nums"
+                  style={{ fontFamily: FONT_MONO }}
+                >
+                  {page + 1}
                 </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-white transition-colors"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={page >= totalPages - 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 hover:bg-white transition-colors"
-                  >
-                    Siguiente
-                  </button>
-                </div>
+                <span className="text-zinc-400 text-[11px] px-1">de</span>
+                <span
+                  className="text-zinc-500 tabular-nums px-1"
+                  style={{ fontFamily: FONT_MONO }}
+                >
+                  {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
+                  aria-label="Siguiente"
+                >
+                  ›
+                </button>
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* Cards — mobile */}
-          <div className="md:hidden space-y-3">
-            {ordenes.map((o) => (
-              <div
-                key={o._id}
-                className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-semibold text-gray-800">{nombreCompleto(o)}</div>
-                    <div className="text-xs text-gray-400">CC {o.numeroId}</div>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${statusBadge(
-                      o.atendido
-                    )}`}
-                  >
-                    {o.atendido || 'PENDIENTE'}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600 space-y-0.5">
-                  {o.empresa && <div>{o.empresa}</div>}
-                  <div className="text-xs text-gray-400">
-                    {fmtFecha(o.fechaAtencion, o.horaAtencion)}
-                  </div>
-                  {o.medico && <div className="text-xs text-gray-500">Médico: {o.medico}</div>}
-                </div>
-                <div className="flex gap-2 mt-1">
-                  <button
-                    onClick={() => openEdit(o)}
-                    className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
-                  >
-                    Ver / Editar
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(o)}
-                    className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 text-sm font-medium transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-gray-500">
-                  Página {page + 1} de {totalPages}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={page >= totalPages - 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Empty state */}
-      {!loading && ordenes.length === 0 && !error && (
-        <div className="text-center py-16 text-gray-400">
-          <FileText className="mx-auto mb-4 w-12 h-12 text-gray-300" />
-          <p className="text-base font-medium text-gray-500">No hay órdenes con estos filtros</p>
-          <p className="text-sm mt-1">Prueba ajustando los filtros o crea una nueva orden</p>
-        </div>
-      )}
-
-      {/* Modal crear / editar */}
+      {/* Modal crear / editar — restyle leve, contrato funcional intacto */}
       {modalOrden !== null && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
           onClick={() => setModalOrden(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto"
+            style={{ fontFamily: FONT_INTER }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <h2 className="text-lg font-bold text-gray-800">
-                {isEditMode ? 'Editar Orden' : 'Nueva Orden'}
+            <div className="sticky top-0 bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
+              <h2 className="text-[16px] font-semibold text-zinc-900">
+                {isEditMode ? 'Editar orden' : 'Nueva orden'}
               </h2>
               <button
                 onClick={() => setModalOrden(null)}
-                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
               >
-                &times;
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Datos del paciente */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                  Datos del paciente
-                </h3>
+                <h3 className={`${SECTION_LABEL} mb-3`}>Datos del paciente</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField
-                    label="Primer Nombre *"
-                    value={formData.primerNombre}
-                    onChange={(v) => handleField('primerNombre', v)}
-                  />
-                  <FormField
-                    label="Segundo Nombre"
-                    value={formData.segundoNombre}
-                    onChange={(v) => handleField('segundoNombre', v)}
-                  />
-                  <FormField
-                    label="Primer Apellido *"
-                    value={formData.primerApellido}
-                    onChange={(v) => handleField('primerApellido', v)}
-                  />
-                  <FormField
-                    label="Segundo Apellido"
-                    value={formData.segundoApellido}
-                    onChange={(v) => handleField('segundoApellido', v)}
-                  />
-                  <FormField
-                    label="Número de Cédula *"
-                    value={formData.numeroId}
-                    onChange={(v) => handleField('numeroId', v)}
-                  />
-                  <FormField
-                    label="Celular *"
-                    value={formData.celular}
-                    onChange={(v) => handleField('celular', v)}
-                  />
+                  <FormField label="Primer Nombre *" value={formData.primerNombre} onChange={(v) => handleField('primerNombre', v)} />
+                  <FormField label="Segundo Nombre" value={formData.segundoNombre} onChange={(v) => handleField('segundoNombre', v)} />
+                  <FormField label="Primer Apellido *" value={formData.primerApellido} onChange={(v) => handleField('primerApellido', v)} />
+                  <FormField label="Segundo Apellido" value={formData.segundoApellido} onChange={(v) => handleField('segundoApellido', v)} />
+                  <FormField label="Número de Cédula *" value={formData.numeroId} onChange={(v) => handleField('numeroId', v)} />
+                  <FormField label="Celular *" value={formData.celular} onChange={(v) => handleField('celular', v)} />
                 </div>
               </div>
 
-              {/* Datos de la cita */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                  Datos de la cita
-                </h3>
+                <h3 className={`${SECTION_LABEL} mb-3`}>Datos de la cita</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Médico *</label>
+                    <label className="block text-[11px] text-zinc-500 mb-1">Médico *</label>
                     <select
                       value={formData.medico}
                       onChange={(e) => {
                         handleField('medico', e.target.value);
-                        // Al cambiar médico, la hora previa puede no estar disponible
                         handleField('horaAtencion', '');
                       }}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full bg-white focus:outline-none focus:border-zinc-400"
                     >
-                      <option value="">Seleccionar profesional...</option>
+                      <option value="">Seleccionar profesional…</option>
                       {profesionales.map((p) => (
                         <option key={p.id} value={p.codigo}>
                           {p.alias || `${p.primerNombre} ${p.primerApellido}`} · {p.codigo} ·{' '}
@@ -720,53 +711,40 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Modalidad</label>
+                    <label className="block text-[11px] text-zinc-500 mb-1">Modalidad</label>
                     <select
                       value={modalidad}
                       onChange={(e) => {
                         setModalidad(e.target.value as Modalidad);
                         handleField('horaAtencion', '');
                       }}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full bg-white focus:outline-none focus:border-zinc-400"
                     >
                       <option value="virtual">Virtual</option>
                       <option value="presencial">Presencial</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Tipo de Examen</label>
+                    <label className="block text-[11px] text-zinc-500 mb-1">Tipo de Examen</label>
                     <select
                       value={formData.tipoExamen}
                       onChange={(e) => handleField('tipoExamen', e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full bg-white focus:outline-none focus:border-zinc-400"
                     >
-                      <option value="">Seleccionar...</option>
+                      <option value="">Seleccionar…</option>
                       <option value="Ingreso">Ingreso</option>
                       <option value="Periódico">Periódico</option>
                       <option value="Egreso">Egreso</option>
                       <option value="Otro">Otro</option>
                     </select>
                   </div>
-                  <FormField
-                    label="Empresa"
-                    value={formData.empresa}
-                    onChange={(v) => handleField('empresa', v)}
-                  />
+                  <FormField label="Empresa" value={formData.empresa} onChange={(v) => handleField('empresa', v)} />
                   <div className="sm:col-span-2">
-                    <FormField
-                      label="Exámenes"
-                      value={formData.examenes}
-                      onChange={(v) => handleField('examenes', v)}
-                      placeholder="Ej: EXAMEN MÉDICO OCUPACIONAL, AUDIOMETRÍA"
-                    />
+                    <FormField label="Exámenes" value={formData.examenes} onChange={(v) => handleField('examenes', v)} placeholder="Ej: EXAMEN MÉDICO OCUPACIONAL, AUDIOMETRÍA" />
                   </div>
-                  <FormField
-                    label="Ciudad"
-                    value={formData.ciudad}
-                    onChange={(v) => handleField('ciudad', v)}
-                  />
+                  <FormField label="Ciudad" value={formData.ciudad} onChange={(v) => handleField('ciudad', v)} />
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Fecha de Atención *</label>
+                    <label className="block text-[11px] text-zinc-500 mb-1">Fecha de Atención *</label>
                     <input
                       type="date"
                       value={formData.fechaAtencion}
@@ -774,68 +752,70 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
                         handleField('fechaAtencion', e.target.value);
                         handleField('horaAtencion', '');
                       }}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full focus:outline-none focus:border-zinc-400"
                     />
                   </div>
 
-                  {/* Slots de hora según disponibilidad del médico */}
                   <div className="sm:col-span-2">
-                    <label className="block text-xs text-gray-500 mb-1">
+                    <label className="block text-[11px] text-zinc-500 mb-1">
                       Hora de Atención *{' '}
-                      <span className="text-gray-400">(según disponibilidad del médico)</span>
+                      <span className="text-zinc-400">(según disponibilidad del médico)</span>
                     </label>
                     {!medicoSeleccionado || !formData.fechaAtencion ? (
-                      <div className="border border-gray-200 rounded-lg p-3 text-xs text-gray-400">
+                      <div className="border border-zinc-200 rounded-md p-3 text-[12px] text-zinc-400">
                         Selecciona médico y fecha para ver los horarios disponibles.
                       </div>
                     ) : loadingHorarios ? (
-                      <div className="border border-gray-200 rounded-lg p-3 text-xs text-gray-400">
-                        Cargando horarios...
+                      <div className="border border-zinc-200 rounded-md p-3 text-[12px] text-zinc-400">
+                        Cargando horarios…
                       </div>
                     ) : !horarios || horarios.horarios.length === 0 ? (
-                      <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex items-start gap-2">
+                      <div className="border border-amber-200 bg-amber-50 rounded-md p-3 flex items-start gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-800 flex-1">
+                        <div className="text-[12px] text-amber-800 flex-1">
                           <p className="font-medium">Sin disponibilidad configurada</p>
                           <p>
                             {medicoSeleccionado.alias ||
                               `${medicoSeleccionado.primerNombre} ${medicoSeleccionado.primerApellido}`}{' '}
-                            no tiene horarios en modalidad <strong>{modalidad}</strong> para este
-                            día. Puedes ingresar una hora manual:
+                            no tiene horarios en modalidad <strong>{modalidad}</strong> para este día. Puedes
+                            ingresar una hora manual:
                           </p>
                           <input
                             type="time"
                             value={formData.horaAtencion}
                             onChange={(e) => handleField('horaAtencion', e.target.value)}
                             step="600"
-                            className="mt-2 px-2 py-1 border border-amber-300 rounded-md text-xs"
+                            className="mt-2 px-2 py-1 border border-amber-300 rounded-md text-[12px]"
                           />
                         </div>
                       </div>
                     ) : (
                       <>
-                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-48 overflow-y-auto border border-zinc-200 rounded-md p-2">
                           {horarios.horarios.map((slot) => (
                             <button
                               key={slot.hora}
                               type="button"
-                              onClick={() =>
-                                slot.disponible && handleField('horaAtencion', slot.hora)
-                              }
+                              onClick={() => slot.disponible && handleField('horaAtencion', slot.hora)}
                               disabled={!slot.disponible}
-                              className={`px-2 py-1.5 text-xs rounded-md border transition-colors ${
+                              className={`px-2 py-1.5 text-[12px] rounded-md border tabular-nums ${
                                 formData.horaAtencion === slot.hora
-                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  ? 'text-white border-transparent'
                                   : slot.disponible
-                                    ? 'bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300'
-                                    : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed line-through'
+                                    ? 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50'
+                                    : 'bg-zinc-50 text-zinc-300 border-zinc-200 cursor-not-allowed line-through'
                               }`}
+                              style={
+                                formData.horaAtencion === slot.hora
+                                  ? { background: '#1f3a8a' }
+                                  : undefined
+                              }
                             >
                               {slot.hora}
                             </button>
                           ))}
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1">
+                        <p className="text-[10.5px] text-zinc-400 mt-1">
                           {horarios.horarios.filter((s) => s.disponible).length} libres de{' '}
                           {horarios.horarios.length} · bloques de {horarios.tiempoConsulta} min
                         </p>
@@ -845,11 +825,11 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
 
                   {isEditMode && (
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Estado</label>
+                      <label className="block text-[11px] text-zinc-500 mb-1">Estado</label>
                       <select
                         value={formData.atendido}
                         onChange={(e) => handleField('atendido', e.target.value)}
-                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full bg-white focus:outline-none focus:border-zinc-400"
                       >
                         <option value="PENDIENTE">PENDIENTE</option>
                         <option value="ATENDIDO">ATENDIDO</option>
@@ -861,65 +841,92 @@ export function OrdenesView({ reloadKey = 0, showToast }: Props) {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
+            <div className="border-t border-zinc-200 px-6 py-4 flex justify-end gap-3 bg-zinc-50 rounded-b-xl">
               <button
                 onClick={() => setModalOrden(null)}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                className="px-4 py-2 text-[13px] text-zinc-700 border border-zinc-200 rounded-md hover:bg-white"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-[13px] font-medium text-white rounded-md disabled:opacity-50"
+                style={{ background: '#1f3a8a' }}
               >
-                {saving ? 'Guardando...' : 'Guardar'}
+                {saving ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de confirmación de borrado */}
+      {/* Modal eliminar */}
       {deleteTarget !== null && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
           onClick={() => setDeleteTarget(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6"
+            style={{ fontFamily: FONT_INTER }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Eliminar orden</h3>
-                <p className="text-sm text-gray-500">
-                  {nombreCompleto(deleteTarget)} · Esta acción no se puede deshacer.
+                <h3 className="font-semibold text-zinc-900 text-[14px]">Eliminar orden</h3>
+                <p className="text-[12.5px] text-zinc-500">
+                  {nombreCompleto(deleteTarget)} · esta acción no se puede deshacer.
                 </p>
               </div>
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                className="px-4 py-2 text-[13px] text-zinc-700 border border-zinc-200 rounded-md hover:bg-zinc-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-[13px] font-medium bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? 'Eliminando...' : 'Eliminar'}
+                {deleting ? 'Eliminando…' : 'Eliminar'}
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Helpers locales: Th, FormField, ChipSelect, ChipDate
+// ----------------------------------------------------------------------------
+
+function Th({
+  children,
+  align = 'left',
+  width,
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+  width?: string;
+}) {
+  return (
+    <th
+      className={`px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
+      style={width ? { width } : undefined}
+    >
+      {children}
+    </th>
   );
 }
 
@@ -934,14 +941,112 @@ interface FormFieldProps {
 function FormField({ label, value, onChange, type = 'text', placeholder }: FormFieldProps) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <label className="block text-[11px] text-zinc-500 mb-1">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="border border-zinc-200 rounded-md px-3 py-2 text-[13px] w-full focus:outline-none focus:border-zinc-400"
       />
+    </div>
+  );
+}
+
+function ChipSelect({
+  label,
+  value,
+  onChange,
+  options,
+  active = false,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  active?: boolean;
+  onClear?: () => void;
+}) {
+  const stateCls = active ? 'bg-[#eef2ff] text-[#1e3a8a]' : 'bg-white text-zinc-800';
+  const borderColor = active ? '#1f3a8a' : '#d4d4d8';
+  return (
+    <div
+      className={`relative inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium ${stateCls}`}
+      style={{ fontFamily: FONT_INTER, borderColor }}
+    >
+      <span
+        className={`pl-[11px] pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}
+      >
+        {label}:
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none bg-transparent pl-0 pr-7 h-[30px] outline-none text-[12.5px] font-medium cursor-pointer"
+        style={{ fontFamily: FONT_INTER }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {active && onClear ? (
+        <button
+          onClick={onClear}
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/60"
+          aria-label="Quitar"
+        >
+          <X className="w-3 h-3 text-[#1e3a8a]" />
+        </button>
+      ) : (
+        <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+      )}
+    </div>
+  );
+}
+
+function ChipDate({
+  label,
+  value,
+  onChange,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onClear?: () => void;
+}) {
+  const active = !!value;
+  const stateCls = active ? 'bg-[#eef2ff] text-[#1e3a8a]' : 'bg-white text-zinc-800';
+  const borderColor = active ? '#1f3a8a' : '#d4d4d8';
+  return (
+    <div
+      className={`relative inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium ${stateCls}`}
+      style={{ fontFamily: FONT_INTER, borderColor }}
+    >
+      <span
+        className={`pl-[11px] pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}
+      >
+        {label}:
+      </span>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent h-[30px] outline-none text-[12.5px] font-medium pr-7"
+        style={{ fontFamily: FONT_INTER }}
+      />
+      {active && onClear && (
+        <button
+          onClick={onClear}
+          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/60"
+          aria-label="Quitar"
+        >
+          <X className="w-3 h-3 text-[#1e3a8a]" />
+        </button>
+      )}
     </div>
   );
 }

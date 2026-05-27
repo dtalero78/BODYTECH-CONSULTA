@@ -800,6 +800,100 @@ class VideoController {
   }
 
   /**
+   * Phase 4 — Webhook de Twilio cuando una Composition cambia de estado
+   * (enqueued → processing → completed | failed | deleted).
+   *
+   * POST /api/video/webhooks/composition-status
+   * Content-Type: application/x-www-form-urlencoded (Twilio)
+   *
+   * Twilio envía: CompositionSid, RoomSid, StatusCallbackEvent, Timestamp y
+   * en completed/failed adicionalmente: MediaUri, Duration, Size.
+   *
+   * Mismo contrato que los otros webhooks: validamos firma, respondemos 200
+   * inmediato y procesamos en background.
+   */
+  async compositionStatusWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+      const signature = (req.headers['x-twilio-signature'] as string) || '';
+
+      const baseUrl =
+        process.env.PUBLIC_BASE_URL ||
+        `${(req.headers['x-forwarded-proto'] as string) || req.protocol}://${req.get('host')}`;
+      const url = `${baseUrl.replace(/\/+$/, '')}${req.originalUrl}`;
+
+      if (authToken && signature) {
+        const valid = twilio.validateRequest(
+          authToken,
+          signature,
+          url,
+          (req.body ?? {}) as Record<string, string>
+        );
+        if (!valid) {
+          console.warn(`[Webhook composition-status] Firma Twilio inválida. url=${url}`);
+          res.status(403).json({ error: 'Invalid Twilio signature' });
+          return;
+        }
+      }
+
+      const params = (req.body ?? {}) as Record<string, string>;
+      const compositionSid = params.CompositionSid || params.compositionSid || '';
+      const event = params.StatusCallbackEvent || '';
+
+      // Twilio manda el estado en distintos lugares según el evento. Lo derivamos.
+      // composition-enqueued | composition-progress | composition-completed |
+      // composition-failed   | composition-deleted
+      const status = event.replace(/^composition-/, '') || 'unknown';
+
+      res.sendStatus(200);
+
+      if (!compositionSid) {
+        console.warn(`[Webhook composition-status] Sin CompositionSid. event=${event}`);
+        return;
+      }
+
+      console.log(
+        `[Webhook composition-status] ${compositionSid} event=${event} status=${status}`
+      );
+
+      (async () => {
+        try {
+          const completedAt =
+            status === 'completed' || status === 'failed' ? new Date() : null;
+
+          const result = await postgresService.query(
+            `UPDATE "HistoriaClinica"
+               SET "composition_status" = $1,
+                   "composition_completed_at" = COALESCE($2, "composition_completed_at")
+             WHERE "composition_sid" = $3
+             RETURNING "_id"`,
+            [status, completedAt, compositionSid]
+          );
+
+          if (!result || result.length === 0) {
+            console.log(
+              `[Webhook composition-status] Composition ${compositionSid} sin HistoriaClinica vinculada — ignorando`
+            );
+            return;
+          }
+
+          console.log(
+            `[Webhook composition-status] HistoriaClinica ${result[0]._id} actualizada → ${status}`
+          );
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[Webhook composition-status] Error en background:`, msg);
+        }
+      })();
+    } catch (error) {
+      console.error('[Webhook composition-status] Error inesperado:', error);
+      if (!res.headersSent) {
+        res.status(500).send();
+      }
+    }
+  }
+
+  /**
    * Phase 3 — Webhook de Twilio cuando un recording termina (status=completed).
    * Validamos firma con TWILIO_AUTH_TOKEN y disparamos el pipeline en background.
    *

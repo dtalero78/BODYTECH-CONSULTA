@@ -351,6 +351,8 @@ class PostgresService {
 
           -- ===== Phase 4 — Twilio Compositions =====
           ADD COLUMN IF NOT EXISTS "composition_sid" TEXT,
+          ADD COLUMN IF NOT EXISTS "composition_status" TEXT,
+          ADD COLUMN IF NOT EXISTS "composition_completed_at" TIMESTAMPTZ,
 
           -- ===== Phase 5 — Mejoras clínicas historia =====
           -- Antecedente osteomuscular (campos adicionales)

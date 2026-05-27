@@ -30,6 +30,7 @@ router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
 
 // Phase 4 — Twilio Compositions (se dispara cuando la sala pasa a completed)
 router.post('/webhooks/room-completed', videoController.roomCompletedWebhook);
+router.post('/webhooks/composition-status', videoController.compositionStatusWebhook);
 
 // WhatsApp
 router.post('/whatsapp/send', videoController.sendWhatsApp);

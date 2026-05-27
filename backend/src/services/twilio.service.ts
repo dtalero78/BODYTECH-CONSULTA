@@ -217,12 +217,18 @@ class TwilioService {
   async createComposition(
     roomSid: string
   ): Promise<{ sid: string; status: string; roomSid: string }> {
+    const baseUrl = process.env.BASE_URL || '';
+    const statusCallback = baseUrl
+      ? `${baseUrl}/api/video/webhooks/composition-status`
+      : undefined;
+
     const composition = await this.client.video.v1.compositions.create({
       roomSid,
       audioSources: ['*'],
       videoLayout: { grid: { video_sources: ['*'] } },
       format: 'mp4',
       resolution: '640x480',
+      ...(statusCallback && { statusCallback, statusCallbackMethod: 'POST' }),
     });
 
     return {

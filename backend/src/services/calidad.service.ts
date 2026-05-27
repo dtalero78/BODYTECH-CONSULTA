@@ -21,6 +21,7 @@ import { join } from 'path';
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
+import { evaluarConsultaOpenAI } from './openai-calidad.service';
 import { openai } from './openai.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,11 +328,19 @@ async function procesarEvaluacion(
       console.log(`${tag} Formulario pre-consulta encontrado para historia ${historiaId}`);
     }
 
-    // 7. Managed Agents
-    console.log(`${tag} Llamando a Anthropic Managed Agents...`);
-    await agregarPaso(evaluacionId, 'Sesión de agente iniciada. Esperando respuesta...');
+    // 7. Evaluador: Anthropic Managed Agents (default) u OpenAI (fallback).
+    // Toggleable con CALIDAD_EVALUATOR=openai mientras el cap de Anthropic
+    // esté bloqueado. Mismo contrato y schema de resultado en ambos.
+    const evaluator = (process.env.CALIDAD_EVALUATOR ?? 'anthropic').toLowerCase();
+    const usarOpenAI = evaluator === 'openai';
+    console.log(`${tag} Llamando a ${usarOpenAI ? 'OpenAI (gpt-4o-mini)' : 'Anthropic Managed Agents'}...`);
+    await agregarPaso(
+      evaluacionId,
+      `Sesión iniciada con ${usarOpenAI ? 'OpenAI' : 'Anthropic'}. Esperando respuesta...`,
+    );
 
-    const { sessionId, evaluacion } = await evaluarConsulta(transcript, formulario, medico, {
+    const runEvaluator = usarOpenAI ? evaluarConsultaOpenAI : evaluarConsulta;
+    const { sessionId, evaluacion } = await runEvaluator(transcript, formulario, medico, {
       onProgreso: (texto) => agregarPaso(evaluacionId, texto),
     });
     await agregarPaso(evaluacionId, 'Evaluación completada. Guardando resultados...');

@@ -66,11 +66,18 @@ export function CoordinadorPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Panel Coordinador</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Gestión de profesionales, disponibilidad y calendario
-            </p>
+          <div className="flex items-center gap-4">
+            <img
+              src="/logoNegro.png"
+              alt="Bodytech"
+              className="h-9 object-contain"
+            />
+            <div className="border-l border-gray-200 pl-4">
+              <h1 className="text-xl font-bold text-gray-800">Panel Coordinador</h1>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Gestión de profesionales, disponibilidad y calendario
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button

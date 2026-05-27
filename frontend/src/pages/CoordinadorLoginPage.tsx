@@ -40,6 +40,11 @@ export function CoordinadorLoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-8">
         <div className="mb-8 text-center">
+          <img
+            src="/logoNegro.png"
+            alt="Bodytech"
+            className="h-12 mx-auto mb-4 object-contain"
+          />
           <h1 className="text-2xl font-bold text-gray-800">Panel Coordinador</h1>
           <p className="text-sm text-gray-500 mt-1">Gestión de profesionales y horarios</p>
         </div>

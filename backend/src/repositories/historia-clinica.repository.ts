@@ -110,7 +110,14 @@ export class HistoriaClinicaRepository extends BaseRepository {
     // TODO Run 5: filter by medico (opts.medicoCode) once auth-by-sede is enforced.
     const offset = (page - 1) * limit;
 
-    let whereClause = `WHERE h."atendido" = 'ATENDIDO' AND h."fechaConsulta" IS NOT NULL`;
+    // Aflojado: incluye también las historias con transcripción auto-llenada
+    // aunque el médico no haya marcado formalmente la consulta como atendida.
+    // Eso permite que el panel `/historias` muestre consultas ya transcritas
+    // mientras el médico todavía no cierra el caso desde la UI.
+    let whereClause = `WHERE (
+      (h."atendido" = 'ATENDIDO' AND h."fechaConsulta" IS NOT NULL)
+      OR h."transcription_status" = 'done'
+    )`;
     const params: unknown[] = [];
     let paramIndex = 1;
 

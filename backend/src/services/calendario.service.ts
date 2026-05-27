@@ -205,6 +205,7 @@ class CalendarioService {
       FROM "HistoriaClinica"
       WHERE sede_id = $1
         AND "fechaAtencion" IS NOT NULL
+        AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
         ${medicoFilter}
@@ -303,6 +304,8 @@ class CalendarioService {
         "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta"
       FROM "HistoriaClinica"
       WHERE sede_id = $1
+        AND "fechaAtencion" IS NOT NULL
+        AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
         ${medicoFilter}
@@ -325,6 +328,8 @@ class CalendarioService {
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
       WHERE sede_id = $1
+        AND "fechaAtencion" IS NOT NULL
+        AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
       GROUP BY codigo, estado
@@ -478,6 +483,8 @@ class CalendarioService {
       `SELECT "horaAtencion"
          FROM "HistoriaClinica"
          WHERE sede_id = $1
+           AND "fechaAtencion" IS NOT NULL
+           AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
            AND "fechaAtencion"::timestamptz >= $2::timestamptz
            AND "fechaAtencion"::timestamptz < $3::timestamptz
            AND "medico" = $4

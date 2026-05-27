@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
   Download,
   X,
   Sparkles,
+  Stethoscope,
 } from 'lucide-react';
 import authService from '../../services/auth.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
@@ -174,6 +176,7 @@ interface Props {
 }
 
 export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '' });
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(0);
@@ -645,6 +648,13 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                       </td>
                       <td className="px-[14px] py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => navigate(`/historia/${o._id}`)}
+                            title="Abrir historia clínica"
+                            className="p-1.5 rounded text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Stethoscope className="w-[14px] h-[14px]" />
+                          </button>
                           <button
                             onClick={() => dispatchCalidad(o)}
                             disabled={

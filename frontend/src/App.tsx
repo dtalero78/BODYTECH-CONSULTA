@@ -6,6 +6,7 @@ import { DoctorRoomPage } from './pages/DoctorRoomPage';
 import { PatientPage } from './pages/PatientPage';
 import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
+import { HistoriaDetallePage } from './pages/HistoriaDetallePage';
 import { OrdenesPage } from './pages/OrdenesPage';
 import { OrdenesLoginPage } from './pages/OrdenesLoginPage';
 import { CalidadPage } from './pages/CalidadPage';
@@ -37,6 +38,7 @@ function App() {
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico" element={<MedicalPanelPage />} />
           <Route path="/historias" element={<HistoriasClinicasPage />} />
+          <Route path="/historia/:historiaId" element={<HistoriaDetallePage />} />
           <Route path="/ordenes-login" element={<OrdenesLoginPage />} />
           <Route path="/ordenes" element={<OrdenesPage />} />
           <Route path="/calidad" element={<CalidadPage />} />

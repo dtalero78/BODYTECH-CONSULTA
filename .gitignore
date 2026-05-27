@@ -28,6 +28,10 @@ build/
 # Playwright MCP cache
 .playwright-mcp/
 
+# Playwright / QA screenshots accidentalmente generados en frontend/
+frontend/coord-*.png
+frontend/verdict-*.png
+
 # Personal artifacts del autor (PDFs, scripts, drafts)
 *.pdf
 build_*.py

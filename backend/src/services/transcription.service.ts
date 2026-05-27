@@ -3,6 +3,11 @@ import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import medicalHistoryService, { EDITABLE_FIELDS } from './medical-history.service';
 import { openai } from './openai.service';
+import {
+  obtenerUrlMediaTwilio,
+  descargarMp4ComoBuffer,
+  extraerAudio,
+} from './twilio-media.service';
 
 /**
  * Phase 3 — Pipeline de transcripción post-llamada.
@@ -191,8 +196,107 @@ class TranscriptionService {
         return;
       }
 
-      // 3) Whisper
-      const audioFile = await toFile(audioBuf, 'recording.mp3', {
+      // 3-6) Pipeline común: Whisper → guardar transcript → GPT-4o-mini → PATCH.
+      await this.runWhisperPipeline(historiaId, audioBuf, 'recording.mp3', t0);
+      return;
+    } catch (err: any) {
+      console.error(
+        '[Transcription] Pipeline error:',
+        err?.message || err,
+        err?.stack
+      );
+      if (historiaId) {
+        await this.markStatus(historiaId, 'error').catch(() => {
+          /* swallow */
+        });
+      }
+    }
+  }
+
+  /**
+   * Pipeline trigger desde el webhook `composition-status` cuando el
+   * status='completed'. Esta es la entry point preferida: 1 trigger por
+   * llamada (no 4 por participante), audio ya mixeado y de mejor calidad.
+   *
+   * - Resuelve mediaUrl del composition via Twilio.
+   * - Descarga el MP4 (puede ser >25 MB).
+   * - Extrae audio MP3 mono 16 kHz con ffmpeg (~2-5 MB).
+   * - Reutiliza la misma pipeline Whisper → GPT-4o-mini → PATCH.
+   *
+   * Nunca lanza al caller (mismo contrato que processRecording).
+   */
+  async processComposition(historiaId: string, compositionSid: string): Promise<void> {
+    const t0 = Date.now();
+    if (!historiaId || !compositionSid) {
+      console.warn(
+        `[Transcription] processComposition: historiaId/compositionSid vacíos (h=${historiaId} c=${compositionSid})`
+      );
+      return;
+    }
+
+    try {
+      console.log(
+        `[Transcription] processComposition start historia=${historiaId} composition=${compositionSid}`
+      );
+
+      // 1) Marcar processing antes de cualquier I/O largo.
+      await this.markStatus(historiaId, 'processing');
+
+      // 2) Resolver URL pre-firmada del MP4
+      const mp4Url = await obtenerUrlMediaTwilio(compositionSid);
+      console.log(`[Transcription] Composition MP4 URL resuelta (TTL 1h)`);
+
+      // 3) Descargar MP4 a buffer
+      const mp4Buffer = await descargarMp4ComoBuffer(mp4Url);
+      console.log(
+        `[Transcription] MP4 descargado: ${(mp4Buffer.byteLength / 1024 / 1024).toFixed(1)} MB`
+      );
+      if (mp4Buffer.byteLength === 0) {
+        console.error('[Transcription] MP4 descargado tiene 0 bytes');
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+
+      // 4) Extraer audio MP3 mono 16 kHz con ffmpeg para encajar en Whisper (<25 MB)
+      const audioBuf = await extraerAudio(mp4Buffer);
+      console.log(
+        `[Transcription] Audio extraído: ${(audioBuf.byteLength / 1024 / 1024).toFixed(2)} MB`
+      );
+
+      // 5-7) Pipeline común
+      await this.runWhisperPipeline(historiaId, audioBuf, 'composition.mp3', t0);
+    } catch (err: any) {
+      console.error(
+        '[Transcription] processComposition error:',
+        err?.message || err,
+        err?.stack
+      );
+      await this.markStatus(historiaId, 'error').catch(() => {
+        /* swallow */
+      });
+    }
+  }
+
+  /**
+   * Pipeline interno compartido entre processRecording y processComposition.
+   * Recibe el audio ya descargado y se encarga de:
+   *   - Whisper
+   *   - Persistir transcript completo en transcription_text
+   *   - GPT-4o-mini → JSON estructurado
+   *   - PATCH a los 11 campos via medicalHistoryService.updateField
+   *   - Marcar status done|error
+   *
+   * Captura sus propios errores y los persiste en status='error'.
+   */
+  private async runWhisperPipeline(
+    historiaId: string,
+    audioBuf: Buffer,
+    audioFileName: string,
+    t0: number
+  ): Promise<void> {
+    try {
+      // 1) Whisper
+      const audioFile = await toFile(audioBuf, audioFileName, {
         type: 'audio/mpeg',
       });
 
@@ -202,9 +306,7 @@ class TranscriptionService {
         language: 'es',
       });
       const transcript = (whisperResp as any)?.text?.trim?.() ?? '';
-      console.log(
-        `[Transcription] Whisper OK, ${transcript.length} chars`
-      );
+      console.log(`[Transcription] Whisper OK, ${transcript.length} chars`);
 
       if (!transcript) {
         console.error('[Transcription] Whisper devolvió transcript vacío');
@@ -212,14 +314,10 @@ class TranscriptionService {
         return;
       }
 
-      // 3.5) Persistir transcript completo
-      await medicalHistoryService.updateField(
-        historiaId,
-        'transcription_text',
-        transcript
-      );
+      // 2) Persistir transcript completo
+      await medicalHistoryService.updateField(historiaId, 'transcription_text', transcript);
 
-      // 4) GPT-4o-mini → JSON estructurado
+      // 3) GPT-4o-mini → JSON estructurado
       const gptResp = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -249,18 +347,15 @@ class TranscriptionService {
         return;
       }
 
-      // 5) Aplicar PATCH por field reutilizando updateField
+      // 4) Aplicar PATCH por field reutilizando updateField
       const obj = parsed as Record<string, unknown>;
       const keys = Object.keys(obj);
-      console.log(
-        `[Transcription] GPT keys: [${keys.join(', ')}]`
-      );
+      console.log(`[Transcription] GPT keys: [${keys.join(', ')}]`);
 
       let applied = 0;
       let skipped = 0;
-      let attempted = 0; // claves que pasaron whitelist y se intentaron persistir
+      let attempted = 0;
       for (const key of keys) {
-        // Sólo aceptar claves del set permitido y que el whitelist global expone.
         if (!TARGET_FIELDS_SET.has(key)) {
           console.warn(`[Transcription] Clave ignorada (no permitida): ${key}`);
           skipped++;

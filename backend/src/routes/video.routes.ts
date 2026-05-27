@@ -27,6 +27,10 @@ router.get('/events/connected-patients', videoController.getConnectedPatients);
 // Phase 3 — Transcripción post-llamada
 router.post('/events/session-start', videoController.sessionStart);
 router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
+// Retry/backfill manual: usa el composition_sid ya cargado en HistoriaClinica
+// para volver a correr la transcripción si el webhook composition-status no
+// llegó o el pipeline falló.
+router.post('/transcribe-historia/:historiaId', videoController.retranscribeHistoria);
 
 // Phase 4 — Twilio Compositions (se dispara cuando la sala pasa a completed)
 router.post('/webhooks/room-completed', videoController.roomCompletedWebhook);

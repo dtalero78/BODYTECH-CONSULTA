@@ -877,9 +877,25 @@ class VideoController {
             return;
           }
 
+          const historiaId = result[0]._id as string;
           console.log(
-            `[Webhook composition-status] HistoriaClinica ${result[0]._id} actualizada → ${status}`
+            `[Webhook composition-status] HistoriaClinica ${historiaId} actualizada → ${status}`
           );
+
+          // Trigger automático de transcripción cuando el composition queda
+          // listo. Es la entrada CANÓNICA del pipeline: 1 trigger por llamada
+          // (no 4 por participante), audio ya mixeado. Fire-and-forget — el
+          // service nunca lanza al caller.
+          if (status === 'completed') {
+            transcriptionService
+              .processComposition(historiaId, compositionSid)
+              .catch((err) => {
+                console.error(
+                  '[Webhook composition-status] processComposition lanzó (no debería):',
+                  err
+                );
+              });
+          }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[Webhook composition-status] Error en background:`, msg);
@@ -975,6 +991,61 @@ class VideoController {
       // Si ya respondimos no podemos volver a responder; solo loguear.
       if (!res.headersSent) {
         res.status(500).send();
+      }
+    }
+  }
+
+  /**
+   * POST /api/video/transcribe-historia/:historiaId
+   *
+   * Endpoint de operación: dispara la transcripción de una historia clínica
+   * usando el `composition_sid` que ya tiene cargada en BD. Útil para:
+   *   - Backfill cuando el webhook `composition-status` no llegó.
+   *   - Retry manual después de un error de transcripción.
+   *
+   * Responde 202 Accepted inmediato y corre el pipeline en background
+   * (mismo contrato que los webhooks). Devuelve 404 si la historia no
+   * existe o no tiene composition_sid.
+   */
+  async retranscribeHistoria(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+      if (!historiaId) {
+        res.status(400).json({ error: 'historiaId requerido' });
+        return;
+      }
+
+      const rows = await postgresService.query(
+        `SELECT "_id", composition_sid FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
+      );
+      if (!rows || rows.length === 0) {
+        res.status(404).json({ error: 'Historia clínica no encontrada' });
+        return;
+      }
+      const compositionSid = rows[0].composition_sid as string | null;
+      if (!compositionSid) {
+        res.status(400).json({
+          error:
+            'La historia no tiene composition_sid (la sala no se cerró o no se creó composition).',
+        });
+        return;
+      }
+
+      res.status(202).json({
+        accepted: true,
+        historiaId,
+        compositionSid,
+        message: 'Transcripción disparada en background. Polleá transcription_status.',
+      });
+
+      transcriptionService.processComposition(historiaId, compositionSid).catch((err) => {
+        console.error('[retranscribeHistoria] processComposition lanzó:', err);
+      });
+    } catch (error) {
+      console.error('[retranscribeHistoria] Error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error interno' });
       }
     }
   }

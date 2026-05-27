@@ -69,6 +69,17 @@ export interface OrdenItem {
   horaAtencion?: string;
   atendido?: string;
   ciudad?: string;
+  // Calidad: última evaluación (cualquier estado) ligada a esta historia.
+  // Si no hay ninguna, los tres campos van null.
+  calidadEvalId?: number | null;
+  calidadPuntaje?: number | null; // 0..100 normalizado por el backend de calidad
+  calidadEstado?:
+    | 'procesando'
+    | 'transcribiendo'
+    | 'evaluando'
+    | 'completado'
+    | 'error'
+    | null;
 }
 
 export interface OrdenFilters {
@@ -449,13 +460,27 @@ class MedicalPanelService {
       const total = parseInt(countResult?.[0]?.count ?? '0', 10);
 
       const dataParams = [...params, limit, offset];
+      // LEFT JOIN LATERAL contra consulta_evaluaciones para traer la última
+      // evaluación de calidad (cualquier estado) por historia, sin abrir
+      // N+1 desde el frontend. ORDER BY priorizando 'completado' sobre los
+      // demás estados para que un retry fallido no oculte el último puntaje.
       const rows = await postgresService.query(
-        `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
-                "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
-                "fechaAtencion", "horaAtencion", "atendido", "ciudad"
-         FROM "HistoriaClinica"
+        `SELECT h."_id", h."numeroId", h."primerNombre", h."segundoNombre", h."primerApellido", h."segundoApellido",
+                h."celular", h."empresa", h."codEmpresa", h."tipoExamen", h."examenes", h."medico",
+                h."fechaAtencion", h."horaAtencion", h."atendido", h."ciudad",
+                ce.id           AS calidad_eval_id,
+                ce.puntaje_total AS calidad_puntaje,
+                ce.estado       AS calidad_estado
+         FROM "HistoriaClinica" h
+         LEFT JOIN LATERAL (
+           SELECT id, puntaje_total, estado
+           FROM consulta_evaluaciones
+           WHERE historia_id = h."_id"
+           ORDER BY (estado = 'completado') DESC, created_at DESC
+           LIMIT 1
+         ) ce ON TRUE
          WHERE ${whereClause}
-         ORDER BY "fechaAtencion" DESC NULLS LAST
+         ORDER BY h."fechaAtencion" DESC NULLS LAST
          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         dataParams
       );
@@ -477,6 +502,9 @@ class MedicalPanelService {
         horaAtencion: (row.horaAtencion as string) ?? undefined,
         atendido: (row.atendido as string) ?? undefined,
         ciudad: (row.ciudad as string) ?? undefined,
+        calidadEvalId: row.calidad_eval_id != null ? Number(row.calidad_eval_id) : null,
+        calidadPuntaje: row.calidad_puntaje != null ? Number(row.calidad_puntaje) : null,
+        calidadEstado: (row.calidad_estado as OrdenItem['calidadEstado']) ?? null,
       }));
 
       return {

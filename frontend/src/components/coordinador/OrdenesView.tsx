@@ -25,6 +25,7 @@ import {
   SECTION_LABEL,
   initialsOf,
 } from './_tokens';
+import { CalidadDetalleModal } from './CalidadDetalleModal';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -51,6 +52,28 @@ interface OrdenItem {
   atendido?: string;
   ciudad?: string;
   createdAt?: string;
+  // Calidad: viene del LEFT JOIN con consulta_evaluaciones (última eval por
+  // historia_id). Si la historia nunca fue evaluada, los 3 vienen null.
+  // `calidadEstado` admite estados intermedios (transcribiendo / evaluando)
+  // que el backend puede setear mientras corre el pipeline; en el row se
+  // muestran todos como "en curso".
+  calidadEvalId?: number | null;
+  calidadPuntaje?: number | null; // 0..100 normalizado
+  calidadEstado?:
+    | 'procesando'
+    | 'transcribiendo'
+    | 'evaluando'
+    | 'completado'
+    | 'error'
+    | null;
+}
+
+// Mapea puntaje (0-100) a la combinación verde / ámbar / rojo del pill.
+// Mismos thresholds que CalidadPage (75/55) para consistencia.
+function calidadColor(puntaje: number): 'green' | 'amber' | 'red' {
+  if (puntaje >= 75) return 'green';
+  if (puntaje >= 55) return 'amber';
+  return 'red';
 }
 
 type ModalState = null | 'new' | OrdenItem;
@@ -160,6 +183,10 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [modalOrden, setModalOrden] = useState<ModalState>(null);
   const [deleteTarget, setDeleteTarget] = useState<OrdenItem | null>(null);
+  // Detalle de calidad: se abre al clickear el pill de la columna Calidad.
+  // Guardo historia + numeroId + nombre para que el modal pueda re-evaluar
+  // sin tener que volver a fetchar la orden.
+  const [calidadTarget, setCalidadTarget] = useState<OrdenItem | null>(null);
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -507,11 +534,12 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
               <thead className="bg-[#fcfcfb] border-b border-zinc-200">
                 <tr>
                   <Th>ID / fecha</Th>
-                  <Th width="28%">Paciente</Th>
+                  <Th width="26%">Paciente</Th>
                   <Th>Médico</Th>
                   <Th>Tipo</Th>
                   <Th>Atención</Th>
                   <Th>Estado</Th>
+                  <Th>Calidad</Th>
                   <Th align="right">Acciones</Th>
                 </tr>
               </thead>
@@ -569,6 +597,9 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                         <Pill variant={variant}>
                           {(o.atendido || 'PENDIENTE').toUpperCase()}
                         </Pill>
+                      </td>
+                      <td className="px-[14px] py-2.5">
+                        <CalidadCell orden={o} onClick={() => setCalidadTarget(o)} />
                       </td>
                       <td className="px-[14px] py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">
@@ -883,13 +914,102 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
           </div>
         </div>
       )}
+
+      {/* Modal detalle de calidad */}
+      {calidadTarget && (
+        <CalidadDetalleModal
+          historiaId={calidadTarget._id}
+          numeroId={calidadTarget.numeroId}
+          paciente={nombreCompleto(calidadTarget)}
+          initialEvalId={calidadTarget.calidadEvalId ?? null}
+          onClose={() => setCalidadTarget(null)}
+          onUpdated={(puntaje, estado) => {
+            // Refrescar el row de la tabla sin re-fetchar todo el listado.
+            setOrdenes((prev) =>
+              prev.map((o) =>
+                o._id === calidadTarget._id
+                  ? { ...o, calidadPuntaje: puntaje, calidadEstado: estado ?? undefined }
+                  : o,
+              ),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // ----------------------------------------------------------------------------
-// Helpers locales: Th, FormField, ChipSelect, ChipDate
+// Helpers locales: Th, FormField, ChipSelect, ChipDate, CalidadCell
 // ----------------------------------------------------------------------------
+
+// CalidadCell — renderiza el pill de la columna Calidad. Tres estados:
+//   - sin eval     → "—" gris, click abre modal con CTA "Evaluar ahora"
+//   - procesando   → pill ámbar pulsante
+//   - completado   → pill verde/ámbar/rojo según puntaje (umbrales 75/55)
+//   - error        → pill rojo "ERR"
+// Siempre clickeable: el modal decide qué mostrar a partir del estado real.
+function CalidadCell({ orden, onClick }: { orden: OrdenItem; onClick: () => void }) {
+  const puntaje = orden.calidadPuntaje;
+  const estado = orden.calidadEstado;
+
+  // Sin evaluación previa
+  if (!estado) {
+    return (
+      <button
+        onClick={onClick}
+        className="text-[12px] text-zinc-400 hover:text-zinc-700 underline-offset-2 hover:underline"
+        title="Evaluar calidad"
+      >
+        —
+      </button>
+    );
+  }
+
+  if (estado === 'procesando' || estado === 'transcribiendo' || estado === 'evaluando') {
+    return (
+      <button
+        onClick={onClick}
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px]"
+        title="Evaluación en curso"
+      >
+        <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-amber-500" />
+        En curso
+      </button>
+    );
+  }
+
+  if (estado === 'error' || puntaje == null) {
+    return (
+      <button
+        onClick={onClick}
+        className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[11px]"
+        title="Error en la evaluación"
+      >
+        ERR
+      </button>
+    );
+  }
+
+  // estado === 'completado' y puntaje numérico
+  const variant = calidadColor(puntaje);
+  const cls =
+    variant === 'green'
+      ? 'bg-green-50 text-green-700'
+      : variant === 'amber'
+      ? 'bg-amber-50 text-amber-700'
+      : 'bg-red-50 text-red-700';
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full ${cls} text-[11.5px] font-semibold tabular-nums hover:opacity-80`}
+      title="Ver detalle de calidad"
+      style={{ fontFamily: FONT_MONO }}
+    >
+      {puntaje}
+    </button>
+  );
+}
 
 function Th({
   children,

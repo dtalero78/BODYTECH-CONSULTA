@@ -62,6 +62,18 @@ function getDayRange(fechaIso: string): { startUtc: string; endUtc: string } {
   return { startUtc, endUtc };
 }
 
+/**
+ * Momento actual en Colombia (UTC-5): fecha YYYY-MM-DD y minutos desde
+ * medianoche. Se usa para descartar franjas que ya pasaron en el día de hoy.
+ */
+function nowColombia(): { fecha: string; minutos: number } {
+  const c = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  const y = c.getUTCFullYear();
+  const m = String(c.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(c.getUTCDate()).padStart(2, '0');
+  return { fecha: `${y}-${m}-${d}`, minutos: c.getUTCHours() * 60 + c.getUTCMinutes() };
+}
+
 // ---------------------------------------------------------------------------
 // Tipos de salida
 // ---------------------------------------------------------------------------
@@ -511,11 +523,16 @@ class CalendarioService {
       const mm = m % 60;
       return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     }
+    // Si la fecha es hoy (Colombia), descartar las franjas que ya pasaron.
+    const ahora = nowColombia();
+    const minVisible = fecha === ahora.fecha ? ahora.minutos : -1;
+
     const horarios: SlotHora[] = [];
     for (const r of disponRows) {
       const inicio = hhmmToMin(String(r.hora_inicio));
       const fin = hhmmToMin(String(r.hora_fin));
       for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
+        if (t <= minVisible) continue; // franja ya pasada hoy
         const hora = minToHHMM(t);
         horarios.push({ hora, disponible: !ocupadas.has(hora) });
       }
@@ -557,6 +574,19 @@ class CalendarioService {
     }
 
     const horaHHMM = hora.slice(0, 5);
+
+    // 0) No permitir agendar una hora que ya pasó hoy (Colombia).
+    const ahora = nowColombia();
+    if (fecha === ahora.fecha) {
+      const [hh, mm] = horaHHMM.split(':').map(Number);
+      if (hh * 60 + mm <= ahora.minutos) {
+        return {
+          ok: false,
+          status: 422,
+          error: { code: 'SLOT_PAST', message: 'La hora seleccionada ya pasó.' },
+        };
+      }
+    }
 
     // 1) Citas pendientes del mismo médico ese día → ocupan slots.
     const ocupRows = await postgresService.query(

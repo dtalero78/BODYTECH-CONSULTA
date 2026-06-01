@@ -13,6 +13,7 @@ import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorLoginPage } from './pages/CoordinadorLoginPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
 import { BotTrepsiPage } from './pages/BotTrepsiPage';
+import { ReprogramarPage } from './pages/ReprogramarPage';
 import { queryClient } from './lib/queryClient';
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
@@ -45,6 +46,7 @@ function App() {
           <Route path="/coordinador-login" element={<CoordinadorLoginPage />} />
           <Route path="/coordinador" element={<CoordinadorPage />} />
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
+          <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
         </Routes>
       </BrowserRouter>
       {ReactQueryDevtools && (

@@ -166,14 +166,37 @@ class ApiService {
     phone: string,
     roomNameWithParams: string,
     patientName: string,
-    appointmentTime: string
+    appointmentTime: string,
+    historiaId?: string
   ): Promise<void> {
     await this.client.post('/api/video/whatsapp/send', {
       phone,
       roomNameWithParams,
       patientName,
       appointmentTime,
+      historiaId,
     });
+  }
+
+  /**
+   * Reprogramación pública (abierta desde el botón de WhatsApp).
+   */
+  async getReprogramarInfo(id: string): Promise<{
+    success: boolean;
+    primerNombre: string | null;
+    fechaAtencion: string | null;
+    horaAtencion: string | null;
+  }> {
+    const res = await this.client.get(`/api/video/reprogramar/${id}`);
+    return res.data;
+  }
+
+  async reprogramarCita(
+    id: string,
+    franja: 'manana' | 'tarde'
+  ): Promise<{ success: boolean; fecha: string; hora: string }> {
+    const res = await this.client.post(`/api/video/reprogramar/${id}`, { franja });
+    return res.data;
   }
 
   /**

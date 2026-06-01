@@ -49,13 +49,18 @@ class WhatsAppService {
 
   /**
    * Envía la plantilla aprobada de Bodytech al paciente.
-   * Variables: {{1}} nombre, {{2}} hora, {{3}} roomNameWithParams
+   * Variables: {{1}} nombre, {{2}} hora, {{3}} roomNameWithParams,
+   *            {{4}} id de la cita (para el botón "Reprogramar" → /reprogramar/{{4}}).
+   *
+   * `rescheduleId` es opcional para compatibilidad con la plantilla anterior
+   * (que sólo usa {{1}}-{{3}}); la nueva plantilla con 2 botones lo requiere.
    */
   async sendTemplateMessage(
     phone: string,
     roomNameWithParams: string,
     patientName: string,
     appointmentTime: string,
+    rescheduleId?: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
     const toNumber = this.formatPhoneNumber(phone);
@@ -63,15 +68,18 @@ class WhatsAppService {
     try {
       console.log(`📱 [Twilio WA] Enviando template a ${toNumber} (intento ${attempt}/${this.maxRetries})`);
 
+      const variables: Record<string, string> = {
+        '1': patientName,
+        '2': appointmentTime,
+        '3': roomNameWithParams,
+      };
+      if (rescheduleId) variables['4'] = rescheduleId;
+
       const msg = await this.client.messages.create({
         from: this.fromNumber,
         to: toNumber,
         contentSid: this.templateSid,
-        contentVariables: JSON.stringify({
-          '1': patientName,
-          '2': appointmentTime,
-          '3': roomNameWithParams,
-        }),
+        contentVariables: JSON.stringify(variables),
       });
 
       console.log(`✅ [Twilio WA] Enviado — SID: ${msg.sid}`);
@@ -81,7 +89,7 @@ class WhatsAppService {
         const wait = Math.pow(2, attempt) * 1000;
         console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
         await this.sleep(wait);
-        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, attempt + 1);
+        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, rescheduleId, attempt + 1);
       }
       const msg = this.getErrorMessage(error);
       console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);

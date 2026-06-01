@@ -593,6 +593,35 @@ class MedicalPanelService {
   }
 
   /**
+   * Datos mínimos de una cita (HistoriaClinica) para el flujo de reprogramación.
+   */
+  async getCitaBasics(id: string): Promise<{
+    medico: string | null;
+    sedeId: string;
+    primerNombre: string | null;
+    celular: string | null;
+    fechaAtencion: string | null;
+    horaAtencion: string | null;
+  } | null> {
+    const rows = await postgresService.query(
+      `SELECT "medico", COALESCE("sede_id", 'bsl') AS sede_id, "primerNombre",
+              "celular", "fechaAtencion", "horaAtencion"
+         FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0] as Record<string, unknown>;
+    return {
+      medico: r.medico ? String(r.medico) : null,
+      sedeId: String(r.sede_id ?? 'bsl'),
+      primerNombre: r.primerNombre ? String(r.primerNombre) : null,
+      celular: r.celular ? String(r.celular) : null,
+      fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
+      horaAtencion: r.horaAtencion ? String(r.horaAtencion) : null,
+    };
+  }
+
+  /**
    * Actualiza campos arbitrarios de una orden existente.
    */
   async updateOrden(id: string, fields: OrdenUpdateInput): Promise<boolean> {

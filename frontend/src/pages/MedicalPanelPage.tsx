@@ -376,7 +376,8 @@ export function MedicalPanelPage() {
         phoneWithoutPlus,
         roomNameWithParams,
         patient.primerNombre,
-        appointmentTime
+        appointmentTime,
+        patient._id
       );
       console.log('WhatsApp con template enviado exitosamente');
 

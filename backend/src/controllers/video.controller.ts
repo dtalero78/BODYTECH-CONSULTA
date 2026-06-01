@@ -9,6 +9,8 @@ import openaiService from '../services/openai.service';
 import postgresService from '../services/postgres.service';
 import transcriptionService from '../services/transcription.service';
 import pdfService from '../services/pdf.service';
+import medicalPanelService from '../services/medical-panel.service';
+import calendarioService from '../services/calendario.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -49,6 +51,12 @@ const sendWhatsAppSchema = z.object({
   roomNameWithParams: z.string().min(1),
   patientName: z.string().min(1),
   appointmentTime: z.string().min(1),
+  // Id de la cita (HistoriaClinica._id) para el botón "Reprogramar".
+  historiaId: z.string().optional(),
+});
+
+const reprogramarSchema = z.object({
+  franja: z.enum(['manana', 'tarde']),
 });
 
 const getAtendidosQuerySchema = z.object({
@@ -340,7 +348,7 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { phone, roomNameWithParams, patientName, appointmentTime } = parsed.data;
+    const { phone, roomNameWithParams, patientName, appointmentTime, historiaId } = parsed.data;
 
     try {
       // Usar template aprobado con variables para pacientes
@@ -348,7 +356,8 @@ class VideoController {
         phone,
         roomNameWithParams,
         patientName,
-        appointmentTime
+        appointmentTime,
+        historiaId
       );
 
       if (result.success) {
@@ -385,6 +394,86 @@ class VideoController {
           error: result.error || 'Failed to send WhatsApp template',
         });
       }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /reprogramar/:id — datos mínimos de la cita para la página pública de
+   * reprogramación (nombre + fecha/hora actuales). Público (sin JWT).
+   */
+  async getReprogramarInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { id } = req.params;
+    try {
+      const cita = await medicalPanelService.getCitaBasics(id);
+      if (!cita) {
+        res.status(404).json({ success: false, error: 'Cita no encontrada' });
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        primerNombre: cita.primerNombre,
+        fechaAtencion: cita.fechaAtencion,
+        horaAtencion: cita.horaAtencion,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /reprogramar/:id — reprograma la cita al próximo día hábil con cupo en
+   * la franja elegida (mañana/tarde), mismo médico. Público (lo abre el afiliado
+   * desde el botón de WhatsApp).
+   */
+  async reprogramarCita(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { id } = req.params;
+    const parsed = reprogramarSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return validationResponse(res, parsed.error);
+    }
+    const { franja } = parsed.data;
+
+    try {
+      const cita = await medicalPanelService.getCitaBasics(id);
+      if (!cita) {
+        res.status(404).json({ success: false, error: 'Cita no encontrada' });
+        return;
+      }
+      if (!cita.medico) {
+        res.status(409).json({ success: false, error: 'La cita no tiene médico asignado.' });
+        return;
+      }
+
+      const slot = await calendarioService.findRescheduleSlot(cita.sedeId, cita.medico, franja, 'virtual');
+      if (!slot.ok || !slot.data) {
+        res.status(slot.status).json({ success: false, error: slot.error?.message ?? 'Sin cupos disponibles' });
+        return;
+      }
+
+      const ok = await medicalPanelService.updateOrden(id, {
+        fechaAtencion: slot.data.fecha,
+        horaAtencion: slot.data.hora,
+      });
+      if (!ok) {
+        res.status(500).json({ success: false, error: 'No se pudo reprogramar la cita.' });
+        return;
+      }
+
+      // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h).
+      if (cita.celular) {
+        const [y, m, d] = slot.data.fecha.split('-');
+        const fechaLegible = `${d}/${m}/${y}`;
+        whatsappService
+          .sendTextMessage(
+            cita.celular,
+            `Hola ${cita.primerNombre ?? ''} 👋\n\nTu cita fue reprogramada para el ${fechaLegible} a las ${slot.data.hora}.\n\n¡Te esperamos!`
+          )
+          .catch(() => {});
+      }
+
+      res.status(200).json({ success: true, fecha: slot.data.fecha, hora: slot.data.hora });
     } catch (error) {
       next(error);
     }

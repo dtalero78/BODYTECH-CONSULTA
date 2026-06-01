@@ -74,6 +74,21 @@ function nowColombia(): { fecha: string; minutos: number } {
   return { fecha: `${y}-${m}-${d}`, minutos: c.getUTCHours() * 60 + c.getUTCMinutes() };
 }
 
+/**
+ * Suma `n` días a una fecha YYYY-MM-DD y devuelve la nueva fecha + día de la
+ * semana (0=Dom .. 6=Sáb). Usa mediodía UTC para evitar bordes de DST.
+ */
+function addDaysIso(fechaIso: string, n: number): { fecha: string; dow: number } {
+  const m = fechaIso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) throw new Error(`Fecha inválida: ${fechaIso}`);
+  const [, y, mo, d] = m;
+  const dt = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d) + n, 12, 0, 0));
+  const fecha = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    dt.getUTCDate()
+  ).padStart(2, '0')}`;
+  return { fecha, dow: dt.getUTCDay() };
+}
+
 // ---------------------------------------------------------------------------
 // Tipos de salida
 // ---------------------------------------------------------------------------
@@ -680,6 +695,61 @@ class CalendarioService {
     }
 
     return { ok: true, status: 200, data: { disponible: true } };
+  }
+
+  /**
+   * Busca el primer cupo libre para reprogramar una cita: próximo DÍA HÁBIL
+   * (lun-vie) con un slot disponible en la franja pedida (mañana < 12:00,
+   * tarde ≥ 12:00), para el mismo médico. Reutiliza la generación de slots de
+   * `getHorariosDisponibles` (respeta disponibilidad + ocupados + horas pasadas).
+   * Escanea hasta 30 días hacia adelante por si el día hábil siguiente está lleno.
+   */
+  async findRescheduleSlot(
+    sedeId: string,
+    medicoCodigo: string,
+    franja: 'manana' | 'tarde',
+    modalidad: Modalidad = 'virtual'
+  ): Promise<ServiceResult<{ fecha: string; hora: string }>> {
+    const profRows = await postgresService.query(
+      `SELECT id FROM profesionales WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
+      [medicoCodigo, sedeId]
+    );
+    if (profRows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
+    }
+    if (profRows.length === 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: { code: 'NO_PROFESIONAL', message: 'El profesional no tiene agenda configurada para reprogramar.' },
+      };
+    }
+    const profesionalId = Number(profRows[0].id);
+
+    const base = nowColombia().fecha;
+    const MAX_SCAN = 30; // días calendario hacia adelante
+    for (let offset = 1; offset <= MAX_SCAN; offset++) {
+      const { fecha, dow } = addDaysIso(base, offset);
+      if (dow === 0 || dow === 6) continue; // sólo lun-vie
+      const res = await this.getHorariosDisponibles(fecha, profesionalId, sedeId, modalidad);
+      if (!res.ok || !res.data) continue;
+      const libres = res.data.horarios.filter((s) => {
+        if (!s.disponible) return false;
+        const hh = Number(s.hora.slice(0, 2));
+        return franja === 'manana' ? hh < 12 : hh >= 12;
+      });
+      if (libres.length > 0) {
+        return { ok: true, status: 200, data: { fecha, hora: libres[0].hora } };
+      }
+    }
+    return {
+      ok: false,
+      status: 409,
+      error: {
+        code: 'NO_SLOT',
+        message: 'No hay cupos disponibles en esa franja en los próximos días hábiles.',
+      },
+    };
   }
 
   /**

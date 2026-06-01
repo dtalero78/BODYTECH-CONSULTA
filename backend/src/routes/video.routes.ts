@@ -39,6 +39,10 @@ router.post('/webhooks/composition-status', videoController.compositionStatusWeb
 // WhatsApp
 router.post('/whatsapp/send', videoController.sendWhatsApp);
 
+// Reprogramación de cita (público — abierto desde el botón de WhatsApp)
+router.get('/reprogramar/:id', videoController.getReprogramarInfo);
+router.post('/reprogramar/:id', videoController.reprogramarCita);
+
 // Medical History
 // IMPORTANTE: Las rutas específicas deben ir ANTES de '/:historiaId' para evitar conflictos
 router.get('/medical-history/atendidos', videoController.getAtendidos);

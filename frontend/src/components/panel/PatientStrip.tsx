@@ -30,7 +30,7 @@ function formatGenero(g?: string): string {
  */
 export function PatientStrip({ data }: PatientStripProps) {
   const initials = getInitials(data);
-  const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Paciente';
+  const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Afiliado';
   const subtitleParts = [
     formatAge(data?.edad),
     formatGenero(data?.genero),

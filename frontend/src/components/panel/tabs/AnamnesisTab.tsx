@@ -664,7 +664,7 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
         open={openModal === 'antecedentes'}
         onClose={() => setOpenModal(null)}
         crumb="Anamnesis · Antecedentes"
-        title="Antecedentes del paciente"
+        title="Antecedentes del afiliado"
         icon={<HeartPulse size={18} />}
         isMaxed={isMaxed}
       >

@@ -144,7 +144,7 @@ export function OrdenesPage() {
       setTotal(res.data.total ?? 0);
       setTotalPages(res.data.totalPages ?? 0);
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Error al cargar órdenes');
+      setError(err.response?.data?.message || err.message || 'Error al cargar afiliados');
     } finally {
       setLoading(false);
     }
@@ -285,9 +285,9 @@ export function OrdenesPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Órdenes</h1>
+              <h1 className="text-2xl font-bold text-gray-800">Afiliados</h1>
               <p className="text-sm text-gray-500">
-                {total} {total === 1 ? 'orden encontrada' : 'órdenes encontradas'}
+                {total} {total === 1 ? 'afiliado encontrado' : 'afiliados encontrados'}
               </p>
             </div>
             {total > 0 && (
@@ -307,7 +307,7 @@ export function OrdenesPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Nueva Orden
+              Nuevo Afiliado
             </button>
           </div>
         </div>
@@ -399,7 +399,7 @@ export function OrdenesPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Paciente</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Afiliado</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600">Documento</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600">Empresa / Tipo</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-600">Exámenes</th>
@@ -570,8 +570,8 @@ export function OrdenesPage() {
             <svg className="mx-auto mb-4 w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-3-3v6M4 6h16M4 10h16M4 14h10M4 18h6" />
             </svg>
-            <p className="text-base font-medium text-gray-500">No hay órdenes con estos filtros</p>
-            <p className="text-sm mt-1">Prueba ajustando los filtros o crea una nueva orden</p>
+            <p className="text-base font-medium text-gray-500">No hay afiliados con estos filtros</p>
+            <p className="text-sm mt-1">Prueba ajustando los filtros o crea un nuevo afiliado</p>
           </div>
         )}
       </div>
@@ -588,7 +588,7 @@ export function OrdenesPage() {
           >
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-xl">
               <h2 className="text-lg font-bold text-gray-800">
-                {isEditMode ? 'Editar Orden' : 'Nueva Orden'}
+                {isEditMode ? 'Editar Afiliado' : 'Nuevo Afiliado'}
               </h2>
               <button
                 onClick={() => setModalOrden(null)}
@@ -599,10 +599,10 @@ export function OrdenesPage() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Datos del paciente */}
+              {/* Datos del afiliado */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                  Datos del paciente
+                  Datos del afiliado
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -760,7 +760,7 @@ export function OrdenesPage() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">Eliminar orden</h3>
+                <h3 className="font-semibold text-gray-800">Eliminar afiliado</h3>
                 <p className="text-sm text-gray-500">Esta acción no se puede deshacer.</p>
               </div>
             </div>

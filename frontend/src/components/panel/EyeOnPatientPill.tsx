@@ -17,7 +17,7 @@ export function EyeOnPatientPill({ isMaxed }: Props) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-bold uppercase tracking-wider border flex-shrink-0 ${cls}`}
-      title={isMaxed ? 'Paciente en miniatura' : 'Paciente visible'}
+      title={isMaxed ? 'Afiliado en miniatura' : 'Afiliado visible'}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${dotCls} animate-pulse`} />
       <Eye size={11} />

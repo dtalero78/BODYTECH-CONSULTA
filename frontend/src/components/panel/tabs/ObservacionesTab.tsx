@@ -76,7 +76,7 @@ export function ObservacionesTab({ historiaId, data, isMaxed, onPatchLocal }: Ob
             onSaved={onPatchLocal}
             label="Recomendaciones médicas adicionales"
             rows={4}
-            placeholder="Indicaciones específicas para el paciente..."
+            placeholder="Indicaciones específicas para el afiliado..."
           />
           <TextareaField
             historiaId={historiaId}

@@ -100,7 +100,7 @@ export const DoctorPage = () => {
           // Paso 2: Mostrar link y permitir iniciar
           <div className="space-y-5">
             <div className="bg-[#2a3942] rounded-xl p-4 border border-gray-600">
-              <p className="text-xs text-gray-400 mb-2">Link para el Paciente</p>
+              <p className="text-xs text-gray-400 mb-2">Link para el Afiliado</p>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -116,7 +116,7 @@ export const DoctorPage = () => {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-3">
-                Comparte este link con tu paciente por WhatsApp, email o mensaje de texto
+                Comparte este link con tu afiliado por WhatsApp, email o mensaje de texto
               </p>
             </div>
 

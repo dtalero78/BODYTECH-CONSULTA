@@ -310,7 +310,7 @@ export function HistoriasClinicasPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Historias Clinicas</h1>
-            <p className="text-sm text-gray-500">Pacientes atendidos ({total} registros)</p>
+            <p className="text-sm text-gray-500">Afiliados atendidos ({total} registros)</p>
           </div>
           <a href="/panel-medico" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
             Volver al panel
@@ -366,7 +366,7 @@ export function HistoriasClinicasPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Paciente</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Afiliado</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Documento</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Empresa</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Medico</th>

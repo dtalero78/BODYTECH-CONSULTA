@@ -63,7 +63,7 @@ export const PatientHistoryModal = ({
           <div>
             <h2 className="text-lg font-bold text-[#00a884]">Historial de Consultas</h2>
             <p className="text-sm text-gray-400 mt-1">
-              Paciente: {patientName} | Doc: {numeroId}
+              Afiliado: {patientName} | Doc: {numeroId}
             </p>
           </div>
           <button
@@ -106,7 +106,7 @@ export const PatientHistoryModal = ({
                 </svg>
               </div>
               <p className="text-gray-400">No se encontraron consultas anteriores</p>
-              <p className="text-gray-500 text-sm mt-2">Este paciente no tiene historial de consultas completadas</p>
+              <p className="text-gray-500 text-sm mt-2">Este afiliado no tiene historial de consultas completadas</p>
             </div>
           ) : (
             <div className="space-y-3">

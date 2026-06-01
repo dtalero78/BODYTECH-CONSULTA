@@ -400,7 +400,7 @@ export function MedicalPanelPage() {
       alert(`✅ Mensaje de WhatsApp enviado y llamada iniciada a ${patient.primerNombre}`);
     } catch (error) {
       console.error('Error al contactar paciente:', error);
-      alert('Error al contactar paciente. Inténtalo nuevamente.');
+      alert('Error al contactar afiliado. Inténtalo nuevamente.');
     } finally {
       setContactingPatient(null);
     }
@@ -483,9 +483,9 @@ export function MedicalPanelPage() {
     if (!searchSubmitted) return;
     if (patientSearchQuery.isFetching) return;
     if (patientSearchQuery.error) {
-      setSearchError('Error al buscar paciente');
+      setSearchError('Error al buscar afiliado');
     } else if (patientSearchQuery.data === null) {
-      setSearchError('No se encontró paciente con ese documento o celular');
+      setSearchError('No se encontró afiliado con ese documento o celular');
     }
   }, [searchSubmitted, patientSearchQuery.isFetching, patientSearchQuery.error, patientSearchQuery.data]);
 
@@ -523,7 +523,7 @@ export function MedicalPanelPage() {
               Panel Médico
             </h1>
             <p className="text-gray-400 text-sm">
-              Gestión de consultas y pacientes
+              Gestión de consultas y afiliados
             </p>
           </div>
 
@@ -687,7 +687,7 @@ export function MedicalPanelPage() {
         <>
         {/* Búsqueda */}
         <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
-          <h2 className="text-xl font-bold text-white mb-4">Buscar Paciente</h2>
+          <h2 className="text-xl font-bold text-white mb-4">Buscar Afiliado</h2>
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="flex gap-2">
               <input
@@ -724,7 +724,7 @@ export function MedicalPanelPage() {
             {searchResult && (
               <div className="bg-[#2a3942] rounded-xl p-4 mt-4">
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                  ✅ Paciente encontrado
+                  ✅ Afiliado encontrado
                 </h3>
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -891,15 +891,15 @@ export function MedicalPanelPage() {
 
         {/* Lista de Pacientes */}
         <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Pacientes Pendientes</h2>
+          <h2 className="text-xl font-bold text-white mb-4">Afiliados Pendientes</h2>
 
           {isLoading ? (
             <div className="text-center py-8 text-gray-400">
-              Cargando pacientes...
+              Cargando afiliados...
             </div>
           ) : patients.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
-              No hay pacientes pendientes
+              No hay afiliados pendientes
             </div>
           ) : (
             <div className="space-y-4">

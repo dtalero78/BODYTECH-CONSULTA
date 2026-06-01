@@ -982,7 +982,7 @@ function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaF
                 <tr>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}></th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Hora</th>
-                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Paciente</th>
+                  <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Afiliado</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Médico</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Estado</th>
                 </tr>

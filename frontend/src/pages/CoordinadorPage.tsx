@@ -170,7 +170,7 @@ export function CoordinadorPage() {
             />
             <NavItem
               icon={<FileText className="w-[15px] h-[15px]" />}
-              label="Órdenes"
+              label="Afiliados"
               active={view === 'ordenes'}
               onClick={() => setView('ordenes')}
               badge={badges.ordenes}

@@ -169,7 +169,7 @@ function EditModal({ orden, medicoCode, onClose }: EditModalProps) {
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-4">
             <div className="text-sm text-gray-400">
-              Paciente:{' '}
+              Afiliado:{' '}
               <span className="text-white font-medium">{fullName(orden)}</span>
               <span className="text-gray-600 mx-2">·</span>
               Doc: <span className="text-white">{orden.numeroId}</span>
@@ -456,7 +456,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar paciente, cédula..."
+              placeholder="Buscar afiliado, cédula..."
               className="w-full bg-[#2a3942] border border-gray-600 rounded-lg pl-9 pr-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-[#00a884]"
             />
           </div>
@@ -482,7 +482,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
             <tr>
               <th className="text-left px-3 py-2 font-semibold">Fecha</th>
               <th className="text-left px-3 py-2 font-semibold">Hora</th>
-              <th className="text-left px-3 py-2 font-semibold">Paciente</th>
+              <th className="text-left px-3 py-2 font-semibold">Afiliado</th>
               <th className="text-left px-3 py-2 font-semibold">Cédula</th>
               <th className="text-left px-3 py-2 font-semibold">Teléfono</th>
               <th className="text-left px-3 py-2 font-semibold">Tipo Examen</th>

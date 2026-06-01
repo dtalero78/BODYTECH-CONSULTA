@@ -258,7 +258,7 @@ export const PosturalAnalysisModal: React.FC<PosturalAnalysisModalProps> = ({
                   }`}
                 />
                 <span className="text-sm text-gray-300">
-                  {patientConnected ? 'Paciente Conectado' : 'Esperando Paciente...'}
+                  {patientConnected ? 'Afiliado Conectado' : 'Esperando Afiliado...'}
                 </span>
               </div>
             )}
@@ -328,9 +328,9 @@ export const PosturalAnalysisModal: React.FC<PosturalAnalysisModalProps> = ({
                   <div className="mb-6">
                     <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   </div>
-                  <h3 className="text-xl text-gray-400 mb-2">Esperando Paciente...</h3>
+                  <h3 className="text-xl text-gray-400 mb-2">Esperando Afiliado...</h3>
                   <p className="text-sm text-gray-500">
-                    El paciente debe estar en la videollamada para continuar
+                    El afiliado debe estar en la videollamada para continuar
                   </p>
                 </div>
               </div>
@@ -343,10 +343,10 @@ export const PosturalAnalysisModal: React.FC<PosturalAnalysisModalProps> = ({
                   </div>
                   <h3 className="text-xl text-gray-400 mb-2">Cargando Análisis...</h3>
                   <p className="text-sm text-gray-500 mb-2">
-                    Esperando datos del paciente
+                    Esperando datos del afiliado
                   </p>
                   <p className="text-xs text-gray-600">
-                    El paciente está activando su cámara y cargando el modelo de IA
+                    El afiliado está activando su cámara y cargando el modelo de IA
                   </p>
                 </div>
               </div>

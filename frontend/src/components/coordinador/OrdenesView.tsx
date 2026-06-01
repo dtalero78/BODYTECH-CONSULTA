@@ -264,7 +264,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
       setTotalPages(res.data.totalPages ?? 0);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
-      setError(e.response?.data?.message || e.message || 'Error al cargar órdenes');
+      setError(e.response?.data?.message || e.message || 'Error al cargar afiliados');
     } finally {
       setLoading(false);
     }
@@ -369,13 +369,13 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
 
       if (isNew) {
         await axios.post(`${API}/api/medical-panel/ordenes`, body, { headers: authHeaders() });
-        showToast({ type: 'success', message: 'Orden creada correctamente.' });
+        showToast({ type: 'success', message: 'Afiliado creado correctamente.' });
       } else {
         const id = (modalOrden as OrdenItem)._id;
         await axios.patch(`${API}/api/medical-panel/ordenes/${id}`, body, {
           headers: authHeaders(),
         });
-        showToast({ type: 'success', message: 'Orden actualizada.' });
+        showToast({ type: 'success', message: 'Afiliado actualizado.' });
       }
       setModalOrden(null);
       fetchOrdenes(filters, page);
@@ -401,7 +401,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
       await axios.delete(`${API}/api/medical-panel/ordenes/${deleteTarget._id}`, {
         headers: authHeaders(),
       });
-      showToast({ type: 'success', message: 'Orden eliminada.' });
+      showToast({ type: 'success', message: 'Afiliado eliminado.' });
       setDeleteTarget(null);
       fetchOrdenes(filters, page);
     } catch (err: unknown) {
@@ -440,10 +440,10 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
               className="text-[11px] text-zinc-400 mb-1"
               style={{ fontFamily: FONT_MONO }}
             >
-              / órdenes
+              / afiliados
             </div>
             <h2 className="text-[26px] font-semibold tracking-tight text-zinc-900 leading-tight">
-              Órdenes
+              Afiliados
             </h2>
             <p className="text-[13px] text-zinc-500 mt-0.5">
               <span className="tabular-nums">{total}</span> emitidas ·{' '}
@@ -457,7 +457,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar paciente, documento…"
+                placeholder="Buscar afiliado, documento…"
                 className="h-9 w-[280px] pl-9 pr-12 border border-zinc-200 rounded-md text-[13px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-400"
               />
               <kbd
@@ -479,7 +479,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
               style={{ background: '#1f3a8a' }}
             >
               <Plus className="w-3.5 h-3.5" />
-              Nueva orden
+              Nuevo afiliado
             </button>
           </div>
         </div>
@@ -530,7 +530,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
           </div>
         ) : ordenes.length === 0 && !error ? (
           <div className="py-16 text-center text-[13px] text-zinc-500">
-            No hay órdenes con estos filtros.
+            No hay afiliados con estos filtros.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -538,7 +538,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
               <thead className="bg-[#fcfcfb] border-b border-zinc-200">
                 <tr>
                   <Th>ID / fecha</Th>
-                  <Th width="26%">Paciente</Th>
+                  <Th width="26%">Afiliado</Th>
                   <Th>Médico</Th>
                   <Th>Tipo</Th>
                   <Th>Atención</Th>
@@ -716,7 +716,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
           >
             <div className="sticky top-0 bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <h2 className="text-[16px] font-semibold text-zinc-900">
-                {isEditMode ? 'Editar orden' : 'Nueva orden'}
+                {isEditMode ? 'Editar afiliado' : 'Nuevo afiliado'}
               </h2>
               <button
                 onClick={() => setModalOrden(null)}
@@ -728,7 +728,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
 
             <div className="p-6 space-y-6">
               <div>
-                <h3 className={`${SECTION_LABEL} mb-3`}>Datos del paciente</h3>
+                <h3 className={`${SECTION_LABEL} mb-3`}>Datos del afiliado</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormField label="Primer Nombre *" value={formData.primerNombre} onChange={(v) => handleField('primerNombre', v)} />
                   <FormField label="Segundo Nombre" value={formData.segundoNombre} onChange={(v) => handleField('segundoNombre', v)} />
@@ -910,7 +910,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                 <Trash2 className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-zinc-900 text-[14px]">Eliminar orden</h3>
+                <h3 className="font-semibold text-zinc-900 text-[14px]">Eliminar afiliado</h3>
                 <p className="text-[12.5px] text-zinc-500">
                   {nombreCompleto(deleteTarget)} · esta acción no se puede deshacer.
                 </p>

@@ -40,7 +40,7 @@ export function OrdenesLoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-sm p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-800">Órdenes</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Afiliados</h1>
           <p className="text-sm text-gray-500 mt-1">Ingresa tus credenciales para continuar</p>
         </div>
 

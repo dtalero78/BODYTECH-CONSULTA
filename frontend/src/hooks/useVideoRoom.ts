@@ -201,7 +201,7 @@ export const useVideoRoom = ({
         // Anunciar con voz cuando un paciente se conecta (solo para doctores)
         if (role === 'doctor') {
           const participantName = participant.identity;
-          speakText(`Paciente ${participantName} conectado`);
+          speakText(`Afiliado ${participantName} conectado`);
         }
       });
 

@@ -223,7 +223,7 @@ export const PosturalAnalysisPatient: React.FC<PosturalAnalysisPatientProps> = (
       <div className="bg-[#1a2730] rounded-lg shadow-2xl p-6 max-w-4xl w-full mx-4">
         {/* Header */}
         <div className="mb-4">
-          <h3 className="text-xl font-semibold text-white mb-2">Análisis Postural del Paciente</h3>
+          <h3 className="text-xl font-semibold text-white mb-2">Análisis Postural del Afiliado</h3>
           <div className="flex items-center gap-2">
             {isProcessing ? (
               <>

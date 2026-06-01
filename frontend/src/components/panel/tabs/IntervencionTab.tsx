@@ -109,7 +109,7 @@ export function IntervencionTab({ historiaId, data, isMaxed, onPatchLocal }: Int
             field="intervencion_educacion_si"
             initialValue={data?.intervencionEducacionSi}
             onSaved={onPatchLocal}
-            label="Incluye educación al paciente"
+            label="Incluye educación al afiliado"
           />
           {data?.intervencionEducacionSi && (
             <div className="md:col-span-2">

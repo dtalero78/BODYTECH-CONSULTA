@@ -262,7 +262,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
           <div className="absolute inset-0 flex items-center justify-center bg-[#0b141a]">
             <div className="text-center">
               <img src="/bodyLogo.jpg" alt="BSL" className="h-16 w-auto mx-auto mb-4 opacity-50" />
-              <p className="text-gray-500">Esperando paciente...</p>
+              <p className="text-gray-500">Esperando afiliado...</p>
             </div>
           </div>
         )}
@@ -367,7 +367,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             <Participant participant={remoteParticipantArray[0]} />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
-              Esperando paciente...
+              Esperando afiliado...
             </div>
           )}
         </div>

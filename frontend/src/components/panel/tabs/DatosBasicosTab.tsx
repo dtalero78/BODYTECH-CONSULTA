@@ -207,7 +207,7 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
   const fechaError = useMemo(() => {
     if (!fechaNac) return undefined;
     if (age === null) return 'Fecha inválida';
-    if (age < 18) return 'El paciente debe tener al menos 18 años';
+    if (age < 18) return 'El afiliado debe tener al menos 18 años';
     return undefined;
   }, [fechaNac, age]);
 
@@ -277,7 +277,7 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
         open={openModal === 'identidad'}
         onClose={() => setOpenModal(null)}
         crumb="Datos Básicos · Identidad"
-        title="Identidad del paciente"
+        title="Identidad del afiliado"
         icon={<User size={18} />}
         isMaxed={isMaxed}
       >

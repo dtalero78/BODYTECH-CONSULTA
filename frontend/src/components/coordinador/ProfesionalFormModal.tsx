@@ -219,7 +219,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Alias <span className="text-gray-400">(se muestra a pacientes)</span>
+                Alias <span className="text-gray-400">(se muestra a afiliados)</span>
               </label>
               <input
                 type="text"

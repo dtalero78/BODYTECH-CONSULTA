@@ -68,7 +68,7 @@ export const DoctorRoomPage = () => {
           </div>
           {pacienteParam && (
             <div className="pt-3 border-t border-gray-600">
-              <p className="text-xs text-gray-400 mb-2">Paciente</p>
+              <p className="text-xs text-gray-400 mb-2">Afiliado</p>
               <p className="text-white font-semibold text-base">{pacienteParam}</p>
             </div>
           )}
@@ -110,7 +110,7 @@ export const DoctorRoomPage = () => {
               <div>
                 <p className="text-sm text-gray-300 font-medium mb-1">Información</p>
                 <p className="text-xs text-gray-400">
-                  Tu paciente se conectará automáticamente a esta sala cuando abra el link que le enviaste por WhatsApp.
+                  Tu afiliado se conectará automáticamente a esta sala cuando abra el link que le enviaste por WhatsApp.
                 </p>
               </div>
             </div>

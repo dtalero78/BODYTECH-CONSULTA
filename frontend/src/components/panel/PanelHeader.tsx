@@ -57,7 +57,7 @@ export function PanelHeader({
   onDismissTranscriptionBadge,
 }: PanelHeaderProps) {
   const initials = getInitials(data);
-  const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Paciente';
+  const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Afiliado';
 
   // Run 6 — Descarga del PDF. `historiaId` viene del response del backend
   // (`MedicalHistoryFull.historiaId` es alias de `_id`). El botón sólo se

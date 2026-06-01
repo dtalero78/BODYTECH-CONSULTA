@@ -16,6 +16,7 @@ import calendarioService, {
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import { ReasignarModal } from './ReasignarModal';
+import { AgendarCitaModal } from '../AgendarCitaModal';
 import {
   FONT_INTER,
   FONT_MONO,
@@ -101,6 +102,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [diaDetalle, setDiaDetalle] = useState<DiaDetalle | null>(null);
   const [loadingDia, setLoadingDia] = useState(false);
   const [showFullDayModal, setShowFullDayModal] = useState(false);
+  const [showAgendar, setShowAgendar] = useState(false);
+  const [diaReloadTick, setDiaReloadTick] = useState(0);
 
   // Cargar lista de profesionales para filtros y nombres
   useEffect(() => {
@@ -165,7 +168,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [selectedDay, filterMedico]);
+  }, [selectedDay, filterMedico, diaReloadTick]);
 
   function prevMonth() {
     setSelectedDay(null);
@@ -301,6 +304,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             </button>
             <button
               type="button"
+              onClick={() => setShowAgendar(true)}
               className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-[13px] font-medium text-white"
               style={{ background: '#1f3a8a' }}
             >
@@ -539,6 +543,21 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           showToast={showToast}
         />
       )}
+
+      {/* Modal "Nueva cita" — agendamiento con selección de profesional y
+          horarios disponibles (mismas reglas que el panel del médico). */}
+      <AgendarCitaModal
+        open={showAgendar}
+        allowMedicoSelect
+        medicoCode={filterMedico || undefined}
+        onClose={() => setShowAgendar(false)}
+        onSuccess={() => {
+          setShowAgendar(false);
+          reloadMes();
+          setDiaReloadTick((t) => t + 1);
+          showToast({ type: 'success', message: 'Cita agendada correctamente.' });
+        }}
+      />
     </div>
   );
 }

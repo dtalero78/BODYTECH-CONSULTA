@@ -61,6 +61,7 @@ export interface OrdenCreatePayload {
   fechaAtencion: string; // YYYY-MM-DD
   horaAtencion: string;  // HH:MM
   ciudad?: string;
+  modalidad?: 'presencial' | 'virtual'; // para validar el cupo contra disponibilidad
 }
 
 /**

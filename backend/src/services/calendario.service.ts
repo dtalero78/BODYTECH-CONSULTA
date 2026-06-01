@@ -529,6 +529,130 @@ class CalendarioService {
   }
 
   /**
+   * Valida que (medicoCodigo, fecha, hora, modalidad) sea un cupo agendable.
+   *
+   * Reglas (mismas que generan los slots en `getHorariosDisponibles`):
+   *  1. Anti doble-reserva POR MÉDICO: no puede existir otra cita pendiente del
+   *     mismo médico ese día a la misma hora.
+   *  2. Si el profesional tiene disponibilidad configurada para ese día y
+   *     modalidad, la hora debe coincidir EXACTO con un slot generado (alineado
+   *     a `tiempo_consulta`).
+   *  3. Degradación: si el médico no existe como profesional configurado, o no
+   *     tiene disponibilidad ese día, sólo se aplica la regla 1 (no se bloquea
+   *     por horario, para no romper códigos de médico legacy).
+   */
+  async validarSlotDisponible(
+    sedeId: string,
+    medicoCodigo: string,
+    fecha: string,
+    hora: string,
+    modalidad: Modalidad
+  ): Promise<ServiceResult<{ disponible: true }>> {
+    let range;
+    try {
+      range = getDayRange(fecha);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, status: 400, error: { code: 'INVALID_DATE', message: msg } };
+    }
+
+    const horaHHMM = hora.slice(0, 5);
+
+    // 1) Citas pendientes del mismo médico ese día → ocupan slots.
+    const ocupRows = await postgresService.query(
+      `SELECT "horaAtencion"
+         FROM "HistoriaClinica"
+         WHERE sede_id = $1
+           AND "fechaAtencion" IS NOT NULL
+           AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           AND "fechaAtencion"::timestamptz >= $2::timestamptz
+           AND "fechaAtencion"::timestamptz < $3::timestamptz
+           AND "medico" = $4
+           AND "horaAtencion" IS NOT NULL
+           AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
+      [sedeId, range.startUtc, range.endUtc, medicoCodigo]
+    );
+    if (ocupRows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };
+    }
+    const ocupadas = new Set<string>();
+    for (const r of ocupRows) {
+      ocupadas.add(String(r.horaAtencion).slice(0, 5));
+    }
+    if (ocupadas.has(horaHHMM)) {
+      return {
+        ok: false,
+        status: 409,
+        error: { code: 'SLOT_TAKEN', message: 'Ese horario ya está ocupado para este profesional.' },
+      };
+    }
+
+    // 2) Profesional + tiempo_consulta (para validar contra slots de disponibilidad).
+    const profRows = await postgresService.query(
+      `SELECT id, tiempo_consulta FROM profesionales
+         WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
+      [medicoCodigo, sedeId]
+    );
+    if (profRows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
+    }
+    if (profRows.length === 0) {
+      // Médico legacy sin ficha de profesional → sólo anti doble-reserva.
+      return { ok: true, status: 200, data: { disponible: true } };
+    }
+    const profesionalId = Number(profRows[0].id);
+    const tiempoConsulta = Number(profRows[0].tiempo_consulta) || 30;
+
+    // Día de la semana (0-6) en Colombia — mismo cálculo que getHorariosDisponibles.
+    const diaSemana = new Date(new Date(range.startUtc).getTime() + 1000).getUTCDay();
+
+    const disponRows = await postgresService.query(
+      `SELECT TO_CHAR(hora_inicio, 'HH24:MI') AS hora_inicio,
+              TO_CHAR(hora_fin,    'HH24:MI') AS hora_fin
+         FROM profesionales_disponibilidad
+         WHERE profesional_id = $1 AND sede_id = $2 AND modalidad = $3
+           AND dia_semana = $4 AND activo = TRUE
+         ORDER BY hora_inicio`,
+      [profesionalId, sedeId, modalidad, diaSemana]
+    );
+    if (disponRows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando disponibilidad.' } };
+    }
+    if (disponRows.length === 0) {
+      // Sin disponibilidad ese día → no bloquear por horario (sólo regla 1, ya validada).
+      return { ok: true, status: 200, data: { disponible: true } };
+    }
+
+    // 3) Generar slots válidos y verificar que la hora caiga exacto en uno.
+    const hhmmToMin = (s: string): number => {
+      const [hh, mm] = s.split(':').map(Number);
+      return hh * 60 + mm;
+    };
+    const minToHHMM = (m: number): string =>
+      `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const slots = new Set<string>();
+    for (const r of disponRows) {
+      const inicio = hhmmToMin(String(r.hora_inicio));
+      const fin = hhmmToMin(String(r.hora_fin));
+      for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
+        slots.add(minToHHMM(t));
+      }
+    }
+    if (!slots.has(horaHHMM)) {
+      return {
+        ok: false,
+        status: 422,
+        error: {
+          code: 'SLOT_INVALID',
+          message: 'La hora seleccionada no corresponde a un horario disponible del profesional.',
+        },
+      };
+    }
+
+    return { ok: true, status: 200, data: { disponible: true } };
+  }
+
+  /**
    * Reasigna en lote N citas a un nuevo médico, opcionalmente cambiando la
    * fecha y hora de todas a un mismo valor. Útil cuando un médico no puede
    * atender un día y hay que redistribuir sus citas.

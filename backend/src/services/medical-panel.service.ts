@@ -522,7 +522,7 @@ class MedicalPanelService {
   /**
    * Crea una nueva orden (fila) en HistoriaClinica.
    */
-  async createOrden(data: OrdenCreateInput): Promise<OrdenItem> {
+  async createOrden(data: OrdenCreateInput, sedeId = 'bsl'): Promise<OrdenItem> {
     try {
       const id = randomUUID();
 
@@ -536,9 +536,9 @@ class MedicalPanelService {
         `INSERT INTO "HistoriaClinica" (
            "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
            "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
-           "fechaAtencion", "horaAtencion", "atendido", "ciudad"
+           "fechaAtencion", "horaAtencion", "atendido", "ciudad", "sede_id"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          RETURNING "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                    "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
                    "fechaAtencion", "horaAtencion", "atendido", "ciudad"`,
@@ -559,6 +559,7 @@ class MedicalPanelService {
           data.horaAtencion,
           'PENDIENTE',
           data.ciudad ?? null,
+          sedeId,
         ]
       );
 

@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
 import medicalPanelService from '../services/medical-panel.service';
+import calendarioService, { Modalidad, SlotHora } from '../services/calendario.service';
+import profesionalesService, { Profesional } from '../services/profesionales.service';
 
 interface AgendarCitaModalProps {
   open: boolean;
-  medicoCode: string;
+  /** Código del médico fijo (panel del profesional). Si se omite junto con
+   *  `allowMedicoSelect`, no se podrá agendar hasta elegir uno. */
+  medicoCode?: string;
+  /** Cuando es true (dashboard admin) se muestra un selector de profesional. */
+  allowMedicoSelect?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -26,9 +32,7 @@ interface FormState {
 /**
  * Devuelve la fecha actual en zona horaria Colombia (UTC-5) como YYYY-MM-DD.
  * Hace la resta de 5h sobre `Date.now()` y luego lee `getUTC*` para no
- * depender de la zona horaria local del navegador / servidor (en producción
- * el server corre UTC y `toLocaleDateString` con TZ específica es frágil
- * entre engines). Mismo patrón que `colombiaDay()` del backend.
+ * depender de la zona horaria local del navegador / servidor.
  */
 function todayInColombiaYYYYMMDD(): string {
   const t = new Date(Date.now() - 5 * 60 * 60 * 1000);
@@ -49,7 +53,7 @@ function initialForm(): FormState {
     empresa: '',
     tipoExamen: '',
     fechaAtencion: todayInColombiaYYYYMMDD(),
-    horaAtencion: '08:00',
+    horaAtencion: '',
     ciudad: '',
   };
 }
@@ -64,9 +68,18 @@ const TIPO_EXAMEN_OPTIONS: string[] = [
   'Otro',
 ];
 
+function nombreProfesional(p: Profesional): string {
+  return (
+    p.alias?.trim() ||
+    [p.primerNombre, p.primerApellido].filter(Boolean).join(' ') ||
+    p.codigo
+  );
+}
+
 export function AgendarCitaModal({
   open,
   medicoCode,
+  allowMedicoSelect = false,
   onClose,
   onSuccess,
 }: AgendarCitaModalProps) {
@@ -76,9 +89,15 @@ export function AgendarCitaModal({
   const [error, setError] = useState<string | null>(null);
   const [lastLookedUp, setLastLookedUp] = useState<string>('');
 
-  // Reset al abrir (false → true). Limpia campos, error y el cache del
-  // último lookup. No resetear cuando `open` está estable evita perder
-  // datos en re-renders del padre.
+  // Agendamiento por cupos
+  const [modalidad, setModalidad] = useState<Modalidad>('virtual');
+  const [selectedMedico, setSelectedMedico] = useState<string>('');
+  const [medicos, setMedicos] = useState<Profesional[]>([]);
+  const [slots, setSlots] = useState<SlotHora[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotsLoaded, setSlotsLoaded] = useState(false);
+
+  // Reset al abrir (false → true).
   useEffect(() => {
     if (open) {
       setForm(initialForm());
@@ -86,8 +105,73 @@ export function AgendarCitaModal({
       setSearching(false);
       setSubmitting(false);
       setLastLookedUp('');
+      setModalidad('virtual');
+      setSelectedMedico(medicoCode ?? '');
+      setSlots([]);
+      setSlotsLoaded(false);
     }
+  }, [open, medicoCode]);
+
+  // Cargar profesionales activos (para resolver profesionalId y el selector admin).
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    profesionalesService
+      .list({ activo: true })
+      .then((list) => {
+        if (!cancelled) setMedicos(list);
+      })
+      .catch(() => {
+        if (!cancelled) setMedicos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
+
+  const profesional = useMemo(
+    () => medicos.find((m) => m.codigo === selectedMedico) ?? null,
+    [medicos, selectedMedico]
+  );
+  const profesionalId = profesional?.id ?? null;
+
+  // Cargar horarios disponibles cuando hay fecha + profesional + modalidad.
+  useEffect(() => {
+    if (!open) return;
+    if (!profesionalId || !form.fechaAtencion) {
+      setSlots([]);
+      setSlotsLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingSlots(true);
+    setSlotsLoaded(false);
+    calendarioService
+      .getHorariosDisponibles(form.fechaAtencion, profesionalId, modalidad)
+      .then((res) => {
+        if (cancelled) return;
+        setSlots(res?.horarios ?? []);
+        setSlotsLoaded(true);
+        // Si la hora elegida ya no está disponible, límpiala.
+        setForm((prev) => {
+          const stillOk = (res?.horarios ?? []).some(
+            (s) => s.hora === prev.horaAtencion && s.disponible
+          );
+          return stillOk ? prev : { ...prev, horaAtencion: '' };
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSlots([]);
+        setSlotsLoaded(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, profesionalId, form.fechaAtencion, modalidad]);
 
   if (!open) return null;
 
@@ -122,8 +206,6 @@ export function AgendarCitaModal({
           celular: result.celular || prev.celular,
         }));
       }
-      // Si no hay resultado, no mostramos error — el usuario completará
-      // los campos manualmente.
     } finally {
       setSearching(false);
     }
@@ -132,6 +214,11 @@ export function AgendarCitaModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!selectedMedico) {
+      setError('Selecciona el profesional para la cita');
+      return;
+    }
 
     const required: Array<keyof FormState> = [
       'primerNombre',
@@ -143,7 +230,7 @@ export function AgendarCitaModal({
     ];
     const missing = required.some((k) => !String(form[k] ?? '').trim());
     if (missing) {
-      setError('Completa los campos obligatorios');
+      setError('Completa los campos obligatorios (incluida la hora)');
       return;
     }
 
@@ -158,10 +245,11 @@ export function AgendarCitaModal({
         celular: form.celular.trim(),
         empresa: form.empresa.trim() || undefined,
         tipoExamen: form.tipoExamen.trim() || undefined,
-        medico: medicoCode,
+        medico: selectedMedico,
         fechaAtencion: form.fechaAtencion,
         horaAtencion: form.horaAtencion,
         ciudad: form.ciudad.trim() || undefined,
+        modalidad,
       };
       await medicalPanelService.createOrden(payload);
       onSuccess();
@@ -179,6 +267,10 @@ export function AgendarCitaModal({
 
   const inputClass =
     'w-full px-3 py-2 bg-[#2a3942] border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-[#00a884]';
+
+  // ¿Mostramos grilla de slots o input manual de hora?
+  const hasSlots = slots.length > 0;
+  const showManualHora = !profesionalId || (slotsLoaded && !hasSlots && !loadingSlots);
 
   return (
     <div
@@ -205,6 +297,30 @@ export function AgendarCitaModal({
         {/* Body */}
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+            {/* Selector de profesional (sólo admin) */}
+            {allowMedicoSelect && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Profesional <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={selectedMedico}
+                  onChange={(e) => {
+                    setSelectedMedico(e.target.value);
+                    setForm((prev) => ({ ...prev, horaAtencion: '' }));
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">-- Seleccionar profesional --</option>
+                  {medicos.map((m) => (
+                    <option key={m.id} value={m.codigo}>
+                      {nombreProfesional(m)} ({m.codigo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Documento (numeroId) */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -356,6 +472,32 @@ export function AgendarCitaModal({
               />
             </div>
 
+            {/* Modalidad */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Modalidad
+              </label>
+              <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                {(['virtual', 'presencial'] as Modalidad[]).map((mod) => (
+                  <button
+                    key={mod}
+                    type="button"
+                    onClick={() => {
+                      setModalidad(mod);
+                      setForm((prev) => ({ ...prev, horaAtencion: '' }));
+                    }}
+                    className={`flex-1 px-3 py-2 text-sm font-medium transition-colors capitalize ${
+                      modalidad === mod
+                        ? 'bg-[#00a884] text-white'
+                        : 'bg-[#2a3942] text-gray-300 hover:bg-gray-700'
+                    }`}
+                  >
+                    {mod}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Fecha de atención */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -365,23 +507,74 @@ export function AgendarCitaModal({
                 type="date"
                 name="fechaAtencion"
                 value={form.fechaAtencion}
+                min={todayInColombiaYYYYMMDD()}
                 onChange={handleChange}
                 className={inputClass}
               />
             </div>
 
-            {/* Hora de atención */}
-            <div>
+            {/* Horarios disponibles */}
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 Hora de atención <span className="text-red-400">*</span>
+                {profesional && (
+                  <span className="text-gray-500 font-normal ml-2">
+                    · turnos de {profesional.tiempoConsulta} min
+                  </span>
+                )}
               </label>
-              <input
-                type="time"
-                name="horaAtencion"
-                value={form.horaAtencion}
-                onChange={handleChange}
-                className={inputClass}
-              />
+
+              {!selectedMedico ? (
+                <p className="text-sm text-gray-500">
+                  Selecciona un profesional para ver los horarios disponibles.
+                </p>
+              ) : loadingSlots ? (
+                <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+                  <Loader2 size={16} className="animate-spin" /> Cargando horarios…
+                </div>
+              ) : hasSlots ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                  {slots.map((s) => {
+                    const selected = form.horaAtencion === s.hora;
+                    return (
+                      <button
+                        key={s.hora}
+                        type="button"
+                        disabled={!s.disponible}
+                        onClick={() =>
+                          setForm((prev) => ({ ...prev, horaAtencion: s.hora }))
+                        }
+                        className={`px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          selected
+                            ? 'bg-[#00a884] text-white'
+                            : s.disponible
+                              ? 'bg-[#2a3942] text-gray-200 hover:bg-gray-700 border border-gray-600'
+                              : 'bg-[#2a3942]/40 text-gray-600 line-through cursor-not-allowed'
+                        }`}
+                        title={s.disponible ? 'Disponible' : 'Ocupado'}
+                      >
+                        {s.hora}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : showManualHora ? (
+                <>
+                  <input
+                    type="time"
+                    name="horaAtencion"
+                    value={form.horaAtencion}
+                    onChange={handleChange}
+                    step={600}
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Este profesional no tiene horarios configurados para este día.
+                    Puedes ingresar la hora manualmente (se valida que no choque con
+                    otra cita).
+                  </p>
+                </>
+              ) : null}
             </div>
           </div>
 

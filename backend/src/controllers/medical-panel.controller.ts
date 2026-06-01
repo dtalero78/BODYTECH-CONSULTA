@@ -4,6 +4,7 @@ import medicalPanelService, {
   OrdenCreateInput,
   OrdenUpdateInput,
 } from '../services/medical-panel.service';
+import calendarioService from '../services/calendario.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -56,6 +57,9 @@ const createOrdenSchema = z.object({
   tipoExamen: z.string().optional(),
   examenes: z.string().optional(),
   ciudad: z.string().optional(),
+  // Modalidad de la cita — usada para validar el cupo contra la disponibilidad
+  // del profesional. No se persiste como columna; default 'virtual'.
+  modalidad: z.enum(['presencial', 'virtual']).optional(),
 });
 
 const updateOrdenBodySchema = z.object({
@@ -257,8 +261,30 @@ class MedicalPanelController {
     }
     const data = parsed.data;
 
+    // Sede del request (JWT > header > default 'bsl').
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sedeId = ((req as any).sedeId as string | undefined) || 'bsl';
+    const modalidad = data.modalidad ?? 'virtual';
+
     try {
-      const orden = await medicalPanelService.createOrden(data as OrdenCreateInput);
+      // Reglas de agendamiento: anti doble-reserva por médico + respeto de la
+      // disponibilidad configurada del profesional (mismas reglas que generan
+      // los slots en /calendario/horarios-disponibles).
+      const validacion = await calendarioService.validarSlotDisponible(
+        sedeId,
+        data.medico,
+        data.fechaAtencion,
+        data.horaAtencion,
+        modalidad
+      );
+      if (!validacion.ok) {
+        res
+          .status(validacion.status)
+          .json({ success: false, error: validacion.error?.message ?? 'Cupo no disponible' });
+        return;
+      }
+
+      const orden = await medicalPanelService.createOrden(data as OrdenCreateInput, sedeId);
       res.status(201).json({ success: true, orden });
     } catch (error) {
       next(error);

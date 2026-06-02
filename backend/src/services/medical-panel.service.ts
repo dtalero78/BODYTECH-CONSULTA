@@ -430,16 +430,27 @@ class MedicalPanelService {
         params.push(filters.medico);
       }
 
+      // `fechaAtencion` es TEXT con formatos mezclados (ISO con 'T' y offset
+      // +00:00, offset -05:00, e incluso fecha sola "YYYY-MM-DD"). Comparar como
+      // texto era frágil/incorrecto; casteamos a timestamptz con una guarda
+      // regex (mismo patrón que calendario.service) para tolerar todos los
+      // formatos y comparar en tiempo absoluto contra los límites del día Colombia.
       if (filters.from) {
         const { start } = colombiaDay(filters.from);
-        conditions.push(`"fechaAtencion" >= $${paramIndex++}`);
+        conditions.push(
+          `("fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND "fechaAtencion"::timestamptz >= $${paramIndex}::timestamptz)`
+        );
         params.push(start);
+        paramIndex++;
       }
 
       if (filters.to) {
         const { end } = colombiaDay(filters.to);
-        conditions.push(`"fechaAtencion" <= $${paramIndex++}`);
+        conditions.push(
+          `("fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND "fechaAtencion"::timestamptz <= $${paramIndex}::timestamptz)`
+        );
         params.push(end);
+        paramIndex++;
       }
 
       if (filters.q) {

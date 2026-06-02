@@ -302,9 +302,12 @@ class MedicalPanelService {
   async listOrdenes(filters: OrdenListFilters): Promise<OrdenListResponse> {
     const params = new URLSearchParams();
     params.set('medico', filters.medico);
-    if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
-    if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
-    if (filters.busqueda) params.set('busqueda', filters.busqueda);
+    // El backend (listOrdenesQuerySchema) espera `from`/`to`/`q` — NO
+    // `fechaDesde`/`fechaHasta`/`busqueda`. Enviarlos con el nombre equivocado
+    // hacía que el filtro de fecha y la búsqueda se ignoraran por completo.
+    if (filters.fechaDesde) params.set('from', filters.fechaDesde);
+    if (filters.fechaHasta) params.set('to', filters.fechaHasta);
+    if (filters.busqueda) params.set('q', filters.busqueda);
     if (filters.page !== undefined) params.set('page', String(filters.page));
     if (filters.limit !== undefined) params.set('limit', String(filters.limit));
     const res = await this.client.get<OrdenListResponse>(

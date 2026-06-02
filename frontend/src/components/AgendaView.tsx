@@ -60,16 +60,20 @@ function sevenDaysFromColombiaYYYYMMDD(): string {
 }
 
 /**
- * Formatea `YYYY-MM-DD` → `DD/MM/YYYY` parseando manualmente.
- * NO usar `new Date(s).toLocaleDateString()` — `'2026-05-14'` se parsea
- * como UTC y en TZ Colombia mostraría el día anterior.
+ * Formatea una fecha → `DD/MM/YYYY` tomando sólo la parte `YYYY-MM-DD` inicial.
+ * `fechaAtencion` viene como TEXT con formatos mezclados: fecha sola
+ * (`2026-05-14`), ISO con hora/offset (`2026-06-03T17:00:00.000+00:00`) o con
+ * espacio (`2026-03-14 23:40:00+00`). Antes hacíamos `split('-')` y los valores
+ * con hora se renderizaban como `03T17:00:00.000+00:00/06/2026`.
+ * NO usar `new Date(s).toLocaleDateString()` — `'2026-05-14'` se parsea como UTC
+ * y en TZ Colombia mostraría el día anterior.
  */
 function fmtFecha(s: string): string {
   if (!s) return '';
-  const parts = s.split('-');
-  if (parts.length !== 3) return s;
-  const [y, m, d] = parts;
-  return `${d}/${m}/${y}`;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return s;
+  const [, y, mo, d] = m;
+  return `${d}/${mo}/${y}`;
 }
 
 function fullName(row: OrdenRow): string {

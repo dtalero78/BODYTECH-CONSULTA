@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Sun, Sunset, Loader2 } from 'lucide-react';
 import apiService from '../services/api.service';
 
 type Franja = 'manana' | 'tarde';
@@ -102,20 +103,40 @@ export function ReprogramarPage() {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <button
                 onClick={() => reprogramar('manana')}
                 disabled={submitting !== null}
-                className="w-full flex items-center justify-center gap-2 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold disabled:opacity-50 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-md text-[14px] font-medium text-white transition-colors disabled:opacity-60"
+                style={{ background: '#1f3a8a' }}
+                onMouseDown={(e) => e.currentTarget.style.setProperty('background', '#1e3a8a')}
+                onMouseUp={(e) => e.currentTarget.style.setProperty('background', '#1f3a8a')}
+                onMouseLeave={(e) => e.currentTarget.style.setProperty('background', '#1f3a8a')}
               >
-                {submitting === 'manana' ? 'Buscando cupo…' : '☀️  En la mañana'}
+                {submitting === 'manana' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Buscando cupo…
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-4 h-4" /> En la mañana
+                  </>
+                )}
               </button>
               <button
                 onClick={() => reprogramar('tarde')}
                 disabled={submitting !== null}
-                className="w-full flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold disabled:opacity-50 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 h-12 rounded-md text-[14px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors disabled:opacity-60"
               >
-                {submitting === 'tarde' ? 'Buscando cupo…' : '🌆  En la tarde'}
+                {submitting === 'tarde' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-500" /> Buscando cupo…
+                  </>
+                ) : (
+                  <>
+                    <Sunset className="w-4 h-4 text-zinc-500" /> En la tarde
+                  </>
+                )}
               </button>
             </div>
 

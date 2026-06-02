@@ -51,8 +51,10 @@ const sendWhatsAppSchema = z.object({
   roomNameWithParams: z.string().min(1),
   patientName: z.string().min(1),
   appointmentTime: z.string().min(1),
-  // Id de la cita (HistoriaClinica._id) para el botón "Reprogramar".
-  historiaId: z.string().optional(),
+  // Id de la cita (HistoriaClinica._id) — variable {{4}} del template, requerida
+  // por la plantilla con 2 botones (bodytech_cita_v2) para armar /reprogramar/{{4}}.
+  // Obligatorio: sin él Twilio rechaza el envío por variable faltante.
+  historiaId: z.string().min(1),
 });
 
 const reprogramarSchema = z.object({

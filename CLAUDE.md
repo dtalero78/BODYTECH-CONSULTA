@@ -395,6 +395,11 @@ These docs go deeper than this file — read them when working on a specific are
 - **Calidad con Anthropic Managed Agents**: `/calidad` — pipeline Whisper + ffmpeg + Managed Agent.
 - **Multi-sede login**: auth via JWT con `tenant_id`, `sedeMiddleware` en todas las rutas protegidas.
 - **Citas**: lista y gestión de citas desde el panel médico.
+- **Disponibilidad de profesionales (panel coordinador)**: `CoordinadorPage` → `CalendarioView` maneja disponibilidad en dos niveles:
+  - **Recurrente por día de la semana** (`DisponibilidadModal` → tabla `profesionales_disponibilidad`, `dia_semana` 0-6, por modalidad). Patrón base ("Fijar disponibilidad").
+  - **Override por fecha específica** (`DisponibilidadDiaModal` → tabla `profesionales_disponibilidad_fecha`). El toggle "Disponibilidad" del calendario permite elegir un día y ajustar las franjas de uno o más profesionales SOLO para esa fecha (o bloquear el día), sin tocar el patrón semanal. El override existe ⟺ hay ≥1 fila para `(profesional, sede, fecha, modalidad)`: con horas (`bloqueado=false`), bloqueo total (1 fila centinela `bloqueado=true` + horas NULL), o sin override (cae al patrón semanal).
+  - El helper `disponibilidad-fecha.service.getRangosEfectivos()` resuelve override > semanal y es la fuente única que usan `calendario.service.getHorariosDisponibles()` y `validarSlotDisponible()`, de modo que agendamiento y reprogramación respetan el override. Un día bloqueado por override impide agendar (`SLOT_BLOCKED`); la ausencia de patrón semanal mantiene la degradación legacy (no bloquea).
+  - Endpoints: `GET/PUT/DELETE /api/profesionales/:id/disponibilidad-fecha`, `GET /api/calendario/disponibilidad-dia`, `GET /api/calendario/disponibilidad-mes`.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.
 - **Twilio Voice**: TwiML webhook con audio Bodytech, número unificado `+576016284820`.

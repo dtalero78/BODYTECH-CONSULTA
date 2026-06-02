@@ -499,6 +499,40 @@ class PostgresService {
           ON profesionales_disponibilidad (sede_id, modalidad, dia_semana, activo)
       `);
 
+      // Disponibilidad por FECHA específica (override puntual del patrón semanal).
+      // El override existe ⟺ hay ≥1 fila para (profesional_id, sede_id, fecha, modalidad):
+      //   - override con horas: N filas con hora_inicio/hora_fin y bloqueado=false.
+      //   - override de bloqueo (día libre): 1 fila centinela con bloqueado=true y horas NULL.
+      //   - sin override (ninguna fila) → se usa el patrón semanal de profesionales_disponibilidad.
+      // El coordinador lo usa para ajustar un día puntual (ej. "este miércoles 3")
+      // sin tocar el resto de miércoles.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS profesionales_disponibilidad_fecha (
+          id              SERIAL PRIMARY KEY,
+          profesional_id  INTEGER NOT NULL REFERENCES profesionales(id) ON DELETE CASCADE,
+          sede_id         VARCHAR(50) NOT NULL DEFAULT 'bsl',
+          fecha           DATE NOT NULL,
+          hora_inicio     TIME,
+          hora_fin        TIME,
+          modalidad       VARCHAR(20) NOT NULL DEFAULT 'virtual',
+          bloqueado       BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT prof_disp_fecha_modalidad_chk CHECK (modalidad IN ('presencial', 'virtual')),
+          CONSTRAINT prof_disp_fecha_rango_chk CHECK (
+            (bloqueado = TRUE  AND hora_inicio IS NULL AND hora_fin IS NULL) OR
+            (bloqueado = FALSE AND hora_inicio IS NOT NULL AND hora_fin IS NOT NULL AND hora_inicio < hora_fin)
+          )
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_prof_disp_fecha_profesional
+          ON profesionales_disponibilidad_fecha (profesional_id, modalidad, fecha)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_prof_disp_fecha_sede
+          ON profesionales_disponibilidad_fecha (sede_id, modalidad, fecha)
+      `);
+
       // ===== Integración Trepsi <-> Bodytech (spec v2.1) =====
       // Tabla principal del ciclo de vida de citas creadas por Trepsi.
       // - cita_id (PK) es el id que envía Trepsi → llave de idempotencia.

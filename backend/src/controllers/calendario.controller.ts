@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import calendarioService from '../services/calendario.service';
+import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -139,6 +140,61 @@ class CalendarioController {
         sedeId,
         parsedMod.data
       );
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getDisponibilidadDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedeId = getSedeId(req);
+      const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
+      const modalidadRaw = req.query.modalidad;
+      const modalidad =
+        modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
+
+      if (!fecha) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'fecha es requerida (YYYY-MM-DD).' },
+        });
+        return;
+      }
+
+      const result = await disponibilidadFechaService.getDiaResumen(sedeId, fecha, modalidad);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getDisponibilidadMes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedeId = getSedeId(req);
+      const year = parseIntOrNull(req.query.year);
+      const month = parseIntOrNull(req.query.month);
+      const modalidadRaw = req.query.modalidad;
+      const modalidad =
+        modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
+
+      if (year === null || month === null) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'year y month son requeridos (números).' },
+        });
+        return;
+      }
+
+      const result = await calendarioService.getDisponibilidadMes(year, month, sedeId, modalidad);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;

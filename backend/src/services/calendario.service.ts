@@ -13,6 +13,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
+import disponibilidadFechaService from './disponibilidad-fecha.service';
 
 const TZ = 'America/Bogota';
 
@@ -442,6 +443,48 @@ class CalendarioService {
   }
 
   /**
+   * Resumen mensual de OVERRIDES de disponibilidad por fecha (para marcar las
+   * celdas del calendario en modo "Disponibilidad"). Devuelve, por día, cuántos
+   * profesionales tienen un override y cuántos están bloqueados.
+   */
+  async getDisponibilidadMes(
+    year: number,
+    month: number,
+    sedeId: string,
+    modalidad: Modalidad
+  ): Promise<ServiceResult<{ year: number; month: number; modalidad: Modalidad; porDia: Record<string, { overrides: number; bloqueados: number }> }>> {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+      return { ok: false, status: 400, error: { code: 'INVALID_YEAR', message: 'Año inválido.' } };
+    }
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      return { ok: false, status: 400, error: { code: 'INVALID_MONTH', message: 'Mes inválido (1-12).' } };
+    }
+
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+    const rows = await postgresService.query(
+      `SELECT TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha,
+              COUNT(DISTINCT profesional_id)::int AS overrides,
+              COUNT(DISTINCT profesional_id) FILTER (WHERE bloqueado)::int AS bloqueados
+         FROM profesionales_disponibilidad_fecha
+         WHERE sede_id = $1 AND modalidad = $2 AND fecha >= $3::date AND fecha < $4::date
+         GROUP BY fecha`,
+      [sedeId, modalidad, start, end]
+    );
+    if (rows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando overrides del mes.' } };
+    }
+    const porDia: Record<string, { overrides: number; bloqueados: number }> = {};
+    for (const r of rows) {
+      porDia[String(r.fecha)] = { overrides: Number(r.overrides), bloqueados: Number(r.bloqueados) };
+    }
+    return { ok: true, status: 200, data: { year, month, modalidad, porDia } };
+  }
+
+  /**
    * Horarios disponibles de UN profesional en una fecha, según su disponibilidad
    * teórica MENOS los slots ya ocupados por citas pendientes en HistoriaClinica.
    *
@@ -483,21 +526,21 @@ class CalendarioService {
     // del momento un instante DESPUÉS coincide con el día Colombia.
     const diaSemana = new Date(diaSemanaUtc.getTime() + 1000).getUTCDay();
 
-    // 3) Rangos de disponibilidad
-    const disponRows = await postgresService.query(
-      `SELECT TO_CHAR(hora_inicio, 'HH24:MI') AS hora_inicio,
-              TO_CHAR(hora_fin,    'HH24:MI') AS hora_fin
-         FROM profesionales_disponibilidad
-         WHERE profesional_id = $1 AND sede_id = $2 AND modalidad = $3
-           AND dia_semana = $4 AND activo = TRUE
-         ORDER BY hora_inicio`,
-      [profesionalId, sedeId, modalidad, diaSemana]
+    // 3) Rangos EFECTIVOS de disponibilidad (override por fecha > patrón semanal).
+    const efectivos = await disponibilidadFechaService.getRangosEfectivos(
+      profesionalId,
+      sedeId,
+      fecha,
+      diaSemana,
+      modalidad
     );
-    if (disponRows === null) {
+    if (!efectivos.ok || !efectivos.data) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando disponibilidad.' } };
     }
+    const rangosDisponibles = efectivos.data.rangos;
 
-    if (disponRows.length === 0) {
+    // Sin rangos efectivos (día bloqueado por override, o sin patrón semanal) → no hay cupos.
+    if (rangosDisponibles.length === 0) {
       return {
         ok: true,
         status: 200,
@@ -543,9 +586,9 @@ class CalendarioService {
     const minVisible = fecha === ahora.fecha ? ahora.minutos : -1;
 
     const horarios: SlotHora[] = [];
-    for (const r of disponRows) {
-      const inicio = hhmmToMin(String(r.hora_inicio));
-      const fin = hhmmToMin(String(r.hora_fin));
+    for (const r of rangosDisponibles) {
+      const inicio = hhmmToMin(r.horaInicio);
+      const fin = hhmmToMin(r.horaFin);
       for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
         if (t <= minVisible) continue; // franja ya pasada hoy
         const hora = minToHHMM(t);
@@ -651,20 +694,30 @@ class CalendarioService {
     // Día de la semana (0-6) en Colombia — mismo cálculo que getHorariosDisponibles.
     const diaSemana = new Date(new Date(range.startUtc).getTime() + 1000).getUTCDay();
 
-    const disponRows = await postgresService.query(
-      `SELECT TO_CHAR(hora_inicio, 'HH24:MI') AS hora_inicio,
-              TO_CHAR(hora_fin,    'HH24:MI') AS hora_fin
-         FROM profesionales_disponibilidad
-         WHERE profesional_id = $1 AND sede_id = $2 AND modalidad = $3
-           AND dia_semana = $4 AND activo = TRUE
-         ORDER BY hora_inicio`,
-      [profesionalId, sedeId, modalidad, diaSemana]
+    // Rangos EFECTIVOS del día (override por fecha > patrón semanal).
+    const efectivos = await disponibilidadFechaService.getRangosEfectivos(
+      profesionalId,
+      sedeId,
+      fecha,
+      diaSemana,
+      modalidad
     );
-    if (disponRows === null) {
+    if (!efectivos.ok || !efectivos.data) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando disponibilidad.' } };
     }
-    if (disponRows.length === 0) {
-      // Sin disponibilidad ese día → no bloquear por horario (sólo regla 1, ya validada).
+
+    // Override explícito del día sin rangos (bloqueado) → no se puede agendar.
+    if (efectivos.data.source === 'override' && efectivos.data.rangos.length === 0) {
+      return {
+        ok: false,
+        status: 422,
+        error: { code: 'SLOT_BLOCKED', message: 'El profesional no está disponible ese día.' },
+      };
+    }
+
+    // Patrón semanal sin disponibilidad ese día → no bloquear por horario (degradación
+    // legacy, sólo aplica la regla 1 ya validada). El override SÍ bloquea (caso arriba).
+    if (efectivos.data.rangos.length === 0) {
       return { ok: true, status: 200, data: { disponible: true } };
     }
 
@@ -676,9 +729,9 @@ class CalendarioService {
     const minToHHMM = (m: number): string =>
       `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
     const slots = new Set<string>();
-    for (const r of disponRows) {
-      const inicio = hhmmToMin(String(r.hora_inicio));
-      const fin = hhmmToMin(String(r.hora_fin));
+    for (const r of efectivos.data.rangos) {
+      const inicio = hhmmToMin(r.horaInicio);
+      const fin = hhmmToMin(r.horaFin);
       for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
         slots.add(minToHHMM(t));
       }

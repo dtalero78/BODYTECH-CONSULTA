@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import profesionalesService from '../services/profesionales.service';
 import disponibilidadService from '../services/disponibilidad.service';
+import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -57,6 +58,13 @@ const diaRangosSchema = z.object({
 const disponibilidadReplaceSchema = z.object({
   modalidad: modalidadEnum,
   dias: z.array(diaRangosSchema),
+});
+
+const disponibilidadFechaReplaceSchema = z.object({
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha debe ser YYYY-MM-DD.'),
+  modalidad: modalidadEnum,
+  bloqueado: z.boolean(),
+  rangos: z.array(rangoSchema),
 });
 
 // ---------------------------------------------------------------------------
@@ -287,6 +295,101 @@ class ProfesionalesController {
       const modalidad =
         modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
       const result = await disponibilidadService.deleteDia(id, sedeId, dia, modalidad);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Disponibilidad por FECHA (override puntual del patrón semanal)
+  // -------------------------------------------------------------------------
+
+  getDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedeId = getSedeId(req);
+      const id = parseId(req.params.id);
+      if (id === null) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
+        return;
+      }
+      const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'fecha es requerida (YYYY-MM-DD).' } });
+        return;
+      }
+      const modalidadRaw = req.query.modalidad;
+      const modalidad =
+        modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
+      const result = await disponibilidadFechaService.getByFecha(id, sedeId, fecha, modalidad);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  replaceDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedeId = getSedeId(req);
+      const id = parseId(req.params.id);
+      if (id === null) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
+        return;
+      }
+      const parsed = disponibilidadFechaReplaceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Uno o más campos son inválidos.',
+            details: zodErrorToDetails(parsed.error),
+          },
+        });
+        return;
+      }
+      const result = await disponibilidadFechaService.replaceByFecha(
+        id,
+        sedeId,
+        parsed.data.fecha,
+        parsed.data.modalidad,
+        { bloqueado: parsed.data.bloqueado, rangos: parsed.data.rangos }
+      );
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedeId = getSedeId(req);
+      const id = parseId(req.params.id);
+      if (id === null) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
+        return;
+      }
+      const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'fecha es requerida (YYYY-MM-DD).' } });
+        return;
+      }
+      const modalidadRaw = req.query.modalidad;
+      const modalidad =
+        modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
+      const result = await disponibilidadFechaService.clearByFecha(id, sedeId, fecha, modalidad);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;

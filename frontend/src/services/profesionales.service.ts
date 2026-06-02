@@ -75,6 +75,15 @@ export interface DisponibilidadAgrupada {
   dias: DiaRangos[];
 }
 
+export interface DisponibilidadFecha {
+  profesionalId: number;
+  fecha: string; // YYYY-MM-DD
+  modalidad: Modalidad;
+  overridden: boolean;
+  bloqueado: boolean;
+  rangos: Rango[];
+}
+
 interface ListFilters {
   rol?: Rol;
   activo?: boolean;
@@ -140,6 +149,43 @@ class ProfesionalesService {
       { headers: authHeaders() }
     );
     return res.data?.data;
+  }
+
+  // --- Disponibilidad por FECHA (override puntual) ---
+
+  async getDisponibilidadFecha(
+    id: number,
+    fecha: string,
+    modalidad: Modalidad
+  ): Promise<DisponibilidadFecha> {
+    const res = await axios.get(
+      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  async replaceDisponibilidadFecha(
+    id: number,
+    payload: { fecha: string; modalidad: Modalidad; bloqueado: boolean; rangos: Rango[] }
+  ): Promise<DisponibilidadFecha> {
+    const res = await axios.put(
+      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha`,
+      payload,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  async deleteDisponibilidadFecha(
+    id: number,
+    fecha: string,
+    modalidad: Modalidad
+  ): Promise<void> {
+    await axios.delete(
+      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}`,
+      { headers: authHeaders() }
+    );
   }
 }
 

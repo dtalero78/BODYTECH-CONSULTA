@@ -8,14 +8,19 @@ import {
   Plus,
   UserCog,
   Maximize2,
+  CalendarDays,
+  Clock,
 } from 'lucide-react';
 import calendarioService, {
   MesResumen,
   DiaDetalle,
   CitaListItem,
+  DisponibilidadMes,
+  Modalidad,
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import { ReasignarModal } from './ReasignarModal';
+import { DisponibilidadDiaModal } from './DisponibilidadDiaModal';
 import { AgendarCitaModal } from '../AgendarCitaModal';
 import {
   FONT_INTER,
@@ -104,6 +109,12 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [showFullDayModal, setShowFullDayModal] = useState(false);
   const [showAgendar, setShowAgendar] = useState(false);
   const [diaReloadTick, setDiaReloadTick] = useState(0);
+  // Modo de la vista: 'citas' (agenda, default) o 'disponibilidad' (override por día).
+  const [modo, setModo] = useState<'citas' | 'disponibilidad'>('citas');
+  const [modalidadDispo, setModalidadDispo] = useState<Modalidad>('virtual');
+  const [dispoMes, setDispoMes] = useState<DisponibilidadMes | null>(null);
+  const [dispoDia, setDispoDia] = useState<string | null>(null); // fecha abierta en modo disponibilidad
+  const [dispoReloadTick, setDispoReloadTick] = useState(0);
 
   // Cargar lista de profesionales para filtros y nombres
   useEffect(() => {
@@ -139,6 +150,23 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   useEffect(() => {
     reloadMes();
   }, [reloadMes]);
+
+  // Cargar overrides del mes (modo disponibilidad) para marcar las celdas.
+  useEffect(() => {
+    if (modo !== 'disponibilidad') return;
+    let cancelled = false;
+    calendarioService
+      .getDisponibilidadMes(year, month, modalidadDispo)
+      .then((d) => {
+        if (!cancelled) setDispoMes(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDispoMes(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modo, year, month, modalidadDispo, dispoReloadTick]);
 
   // Reportar conteo de mes al sidebar
   useEffect(() => {
@@ -275,42 +303,53 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
-            {/* Segmented control (visual; solo Mes funciona) */}
+            {/* Toggle modo: Citas (agenda) / Disponibilidad (override por día) */}
             <div className="inline-flex items-center bg-zinc-100 rounded-md p-0.5 text-[12px] font-medium">
               <button
-                className="h-7 px-2.5 rounded text-zinc-500 cursor-not-allowed"
-                title="Próximamente"
+                onClick={() => {
+                  setModo('citas');
+                  setDispoDia(null);
+                }}
+                className={`h-7 px-2.5 rounded inline-flex items-center gap-1 ${
+                  modo === 'citas' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                }`}
               >
-                Día
+                <CalendarDays className="w-3.5 h-3.5" />
+                Citas
               </button>
               <button
-                className="h-7 px-2.5 rounded text-zinc-500 cursor-not-allowed"
-                title="Próximamente"
+                onClick={() => {
+                  setModo('disponibilidad');
+                  setSelectedDay(null);
+                }}
+                className={`h-7 px-2.5 rounded inline-flex items-center gap-1 ${
+                  modo === 'disponibilidad' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                }`}
               >
-                Semana
-              </button>
-              <button
-                className="h-7 px-2.5 rounded bg-white text-zinc-900 shadow-sm"
-              >
-                Mes
+                <Clock className="w-3.5 h-3.5" />
+                Disponibilidad
               </button>
             </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Exportar
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAgendar(true)}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-[13px] font-medium text-white"
-              style={{ background: '#1f3a8a' }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Nueva cita
-            </button>
+            {modo === 'citas' && (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Exportar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAgendar(true)}
+                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-[13px] font-medium text-white"
+                  style={{ background: '#1f3a8a' }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Nueva cita
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -349,32 +388,58 @@ export function CalendarioView({ showToast, reportCount }: Props) {
         </div>
 
         {/* Filter strip */}
-        <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
-          <span className={SECTION_LABEL}>Filtros</span>
-          <FilterSelect
-            label="Médico"
-            value={filterMedico}
-            onChange={(v) => {
-              setFilterMedico(v);
-              setSelectedDay(null);
-            }}
-            options={[
-              { value: '', label: 'Todos los profesionales' },
-              ...profesionales.map((p) => ({
-                value: p.codigo,
-                label: `${p.alias || `${p.primerNombre} ${p.primerApellido}`} · ${p.codigo}`,
-              })),
-            ]}
-            active={!!filterMedico}
-            onClear={() => setFilterMedico('')}
-          />
-          <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
-            <LegendDot color="bg-green-500" label="Atendido" />
-            <LegendDot color="bg-amber-500" label="Pendiente" />
-            <LegendDot color="bg-blue-500" label="En curso" />
-            <LegendDot color="bg-zinc-400" label="No asistió" />
+        {modo === 'citas' ? (
+          <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
+            <span className={SECTION_LABEL}>Filtros</span>
+            <FilterSelect
+              label="Médico"
+              value={filterMedico}
+              onChange={(v) => {
+                setFilterMedico(v);
+                setSelectedDay(null);
+              }}
+              options={[
+                { value: '', label: 'Todos los profesionales' },
+                ...profesionales.map((p) => ({
+                  value: p.codigo,
+                  label: `${p.alias || `${p.primerNombre} ${p.primerApellido}`} · ${p.codigo}`,
+                })),
+              ]}
+              active={!!filterMedico}
+              onClear={() => setFilterMedico('')}
+            />
+            <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
+              <LegendDot color="bg-green-500" label="Atendido" />
+              <LegendDot color="bg-amber-500" label="Pendiente" />
+              <LegendDot color="bg-blue-500" label="En curso" />
+              <LegendDot color="bg-zinc-400" label="No asistió" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
+            <span className={SECTION_LABEL}>Modalidad</span>
+            <div className="inline-flex items-center bg-white border border-zinc-200 rounded-md p-0.5 text-[12px] font-medium">
+              {(['virtual', 'presencial'] as Modalidad[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setModalidadDispo(m)}
+                  className={`h-7 px-3 rounded ${
+                    modalidadDispo === m ? 'bg-[#eef2ff] text-[#1e3a8a]' : 'text-zinc-500 hover:text-zinc-700'
+                  }`}
+                >
+                  {m === 'virtual' ? 'Virtual' : 'Presencial'}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11.5px] text-zinc-500">
+              Selecciona un día para editar la disponibilidad de los profesionales sin afectar el patrón semanal.
+            </span>
+            <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
+              <LegendDot color="bg-[#1f3a8a]" label="Día con horario personalizado" />
+              <LegendDot color="bg-red-500" label="Profesional bloqueado" />
+            </div>
+          </div>
+        )}
 
         {/* Grid + panel lateral */}
         <div
@@ -409,10 +474,14 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                       />
                     );
                   }
+                  const isDispo = modo === 'disponibilidad';
                   const dia = mesData?.porDia[cell.iso];
                   const total = dia?.total ?? 0;
+                  const dispoInfo = dispoMes?.porDia[cell.iso];
+                  const overrides = dispoInfo?.overrides ?? 0;
+                  const bloqueados = dispoInfo?.bloqueados ?? 0;
                   const isToday = cell.iso === today.iso;
-                  const isSelected = selectedDay === cell.iso;
+                  const isSelected = isDispo ? dispoDia === cell.iso : selectedDay === cell.iso;
                   const level = densityLevel(total);
 
                   const bgCell = isSelected
@@ -429,7 +498,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                   return (
                     <button
                       key={cell.iso}
-                      onClick={() => setSelectedDay(cell.iso)}
+                      onClick={() => (isDispo ? setDispoDia(cell.iso) : setSelectedDay(cell.iso))}
                       className={`h-[118px] border-r border-b border-zinc-200 p-2.5 text-left relative cursor-pointer hover:bg-zinc-50 transition-colors ${bgCell}`}
                       style={ringStyle}
                     >
@@ -441,14 +510,24 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                         >
                           {cell.day}
                         </span>
-                        {total > 0 && (
-                          <span
-                            className="text-[10px] text-zinc-400 tabular-nums"
-                            style={{ fontFamily: FONT_MONO }}
-                          >
-                            {total}
-                          </span>
-                        )}
+                        {isDispo
+                          ? overrides > 0 && (
+                              <span
+                                className="text-[10px] tabular-nums text-blue-600"
+                                style={{ fontFamily: FONT_MONO }}
+                                title={`${overrides} con horario personalizado${bloqueados ? ` · ${bloqueados} bloqueado(s)` : ''}`}
+                              >
+                                {overrides}✎
+                              </span>
+                            )
+                          : total > 0 && (
+                              <span
+                                className="text-[10px] text-zinc-400 tabular-nums"
+                                style={{ fontFamily: FONT_MONO }}
+                              >
+                                {total}
+                              </span>
+                            )}
                       </div>
 
                       {/* Badge HOY (sólo si no está seleccionado, para evitar amontonar) */}
@@ -461,15 +540,22 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                         </span>
                       )}
 
-                      {/* Heatmap:
-                          - Día seleccionado: 24 barras horarias (1 por hora) basadas en
-                            `diaDetalle.citas[].horaAtencion`. Esto da la lectura
-                            horaria real sin requerir endpoint nuevo.
-                          - Resto: una única barra de densidad (4 niveles) basada en
-                            `total`. Mantiene la estética sin 24 fetches.
-                          Doc en spec sección 6.4. */}
+                      {/* Indicador inferior:
+                          - Modo disponibilidad: barra que resalta si hay overrides ese día
+                            (azul) y un punto rojo si hay bloqueos.
+                          - Modo citas: heatmap horario (día seleccionado) o densidad. */}
                       <div className="absolute left-2.5 right-2.5 bottom-2 flex items-end gap-[2px] h-[18px]">
-                        {isSelected && diaDetalle ? (
+                        {isDispo ? (
+                          <span className="w-full flex items-center gap-1">
+                            <span
+                              className={`flex-1 rounded-sm ${overrides > 0 ? 'bg-[#1f3a8a]' : 'bg-zinc-200'}`}
+                              style={{ height: overrides > 0 ? 6 : 4 }}
+                            />
+                            {bloqueados > 0 && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title={`${bloqueados} profesional(es) sin atención`} />
+                            )}
+                          </span>
+                        ) : isSelected && diaDetalle ? (
                           horasDistrib.map((count, h) => {
                             const heightPct = count === 0 ? 12 : Math.max(18, (count / maxHora) * 100);
                             const color =
@@ -511,7 +597,21 @@ export function CalendarioView({ showToast, reportCount }: Props) {
 
           {/* Derecha — Panel del día seleccionado */}
           <div className="border-l border-zinc-200 bg-white px-5 pt-6 pb-4 min-h-[400px]">
-            {!selectedDay ? (
+            {modo === 'disponibilidad' ? (
+              <div className="text-[13px] pt-4 space-y-3">
+                <div className="text-zinc-700 font-medium" style={{ fontFamily: FONT_INTER }}>
+                  Disponibilidad por día
+                </div>
+                <p className="text-zinc-500 leading-relaxed">
+                  Haz clic en un día del calendario para abrir el editor y ajustar el horario de uno o
+                  más profesionales <span className="font-medium text-zinc-700">solo para esa fecha</span>.
+                </p>
+                <p className="text-zinc-400 text-[12px] leading-relaxed">
+                  Los cambios no afectan el patrón semanal (lo que se fija en "Fijar disponibilidad").
+                  Un punto azul marca los días con horario personalizado; uno rojo, profesionales sin atención.
+                </p>
+              </div>
+            ) : !selectedDay ? (
               <div className="text-zinc-400 text-[13px] pt-4">
                 Selecciona un día para ver las citas.
               </div>
@@ -540,6 +640,16 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             // Si hubo cambios (reasignar), refrescar mes
             reloadMes();
           }}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Modal "Disponibilidad del día" — override por fecha (modo disponibilidad). */}
+      {dispoDia && (
+        <DisponibilidadDiaModal
+          fecha={dispoDia}
+          onClose={() => setDispoDia(null)}
+          onSaved={() => setDispoReloadTick((t) => t + 1)}
           showToast={showToast}
         />
       )}

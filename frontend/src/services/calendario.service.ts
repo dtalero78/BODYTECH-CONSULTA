@@ -82,6 +82,36 @@ export interface HorariosDisponibles {
   horarios: SlotHora[];
 }
 
+export interface Rango {
+  horaInicio: string;
+  horaFin: string;
+}
+
+export interface DiaResumenProfesional {
+  profesionalId: number;
+  codigo: string;
+  nombre: string;
+  rol: 'medico' | 'coach' | null;
+  tiempoConsulta: number;
+  overridden: boolean;
+  bloqueado: boolean;
+  rangos: Rango[];
+  source: 'override' | 'weekly';
+}
+
+export interface DisponibilidadDia {
+  fecha: string;
+  modalidad: Modalidad;
+  profesionales: DiaResumenProfesional[];
+}
+
+export interface DisponibilidadMes {
+  year: number;
+  month: number;
+  modalidad: Modalidad;
+  porDia: Record<string, { overrides: number; bloqueados: number }>;
+}
+
 class CalendarioService {
   async getMes(year: number, month: number, medico?: string): Promise<MesResumen> {
     const params = new URLSearchParams({ year: String(year), month: String(month) });
@@ -113,6 +143,24 @@ class CalendarioService {
     });
     const res = await axios.get(
       `${API_BASE_URL}/api/calendario/horarios-disponibles?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  async getDisponibilidadDia(fecha: string, modalidad: Modalidad): Promise<DisponibilidadDia> {
+    const params = new URLSearchParams({ fecha, modalidad });
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/disponibilidad-dia?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  async getDisponibilidadMes(year: number, month: number, modalidad: Modalidad): Promise<DisponibilidadMes> {
+    const params = new URLSearchParams({ year: String(year), month: String(month), modalidad });
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/disponibilidad-mes?${params.toString()}`,
       { headers: authHeaders() }
     );
     return res.data?.data;

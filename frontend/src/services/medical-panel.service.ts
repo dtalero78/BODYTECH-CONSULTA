@@ -104,8 +104,10 @@ export interface OrdenRow {
  * Respuesta paginada del endpoint `GET /api/medical-panel/ordenes`.
  */
 export interface OrdenListResponse {
-  success: boolean;
-  data: OrdenRow[];
+  // El backend (`listOrdenes`) devuelve el array en `ordenes` (mismo contrato
+  // que consumen OrdenesPage / OrdenesView). NO `data` — leerlo como `data`
+  // dejaba la tabla de la Agenda siempre vacía aunque `total` fuera correcto.
+  ordenes: OrdenRow[];
   total: number;
   page: number;
   totalPages: number;

@@ -415,7 +415,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
 
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 0;
-  const rows: OrdenRow[] = data?.data ?? [];
+  const rows: OrdenRow[] = data?.ordenes ?? [];
 
   const deletingOrden =
     deletingId !== null ? rows.find((r) => r.id === deletingId) ?? null : null;

@@ -270,7 +270,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
               className="text-[11px] text-zinc-400 mb-1"
               style={{ fontFamily: FONT_MONO }}
             >
-              / calendario / {MESES[month - 1].toLowerCase()} {year}
+              / calendario / {modo === 'citas' ? 'citas-agendadas' : 'agenda-de-turnos'} /{' '}
+              {MESES[month - 1].toLowerCase()} {year}
             </div>
             <h2
               className="text-[26px] font-semibold tracking-tight leading-tight"
@@ -279,6 +280,24 @@ export function CalendarioView({ showToast, reportCount }: Props) {
               <span className="text-zinc-900">{MESES[month - 1]}</span>{' '}
               <span className="text-zinc-400 tabular-nums">{year}</span>
             </h2>
+            <p
+              className="text-[13px] mt-1 flex items-center gap-1.5"
+              style={{ fontFamily: FONT_INTER }}
+            >
+              {modo === 'citas' ? (
+                <>
+                  <CalendarDays className="w-3.5 h-3.5 text-[#1f3a8a]" />
+                  <span className="font-medium text-zinc-700">Citas Agendadas</span>
+                  <span className="text-zinc-400">· citas programadas por día</span>
+                </>
+              ) : (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-[#1f3a8a]" />
+                  <span className="font-medium text-zinc-700">Agenda de Turnos</span>
+                  <span className="text-zinc-400">· disponibilidad horaria de los profesionales</span>
+                </>
+              )}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-1">
@@ -315,7 +334,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 }`}
               >
                 <CalendarDays className="w-3.5 h-3.5" />
-                Citas
+                Citas Agendadas
               </button>
               <button
                 onClick={() => {
@@ -327,7 +346,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" />
-                Disponibilidad
+                Agenda de Turnos
               </button>
             </div>
             {modo === 'citas' && (

@@ -9,7 +9,7 @@ import {
   MoreHorizontal,
   ChevronDown,
 } from 'lucide-react';
-import authService from '../../services/auth.service';
+import authService, { Sede } from '../../services/auth.service';
 import profesionalesService, { Profesional, Rol } from '../../services/profesionales.service';
 import { ProfesionalFormModal } from './ProfesionalFormModal';
 import { DisponibilidadModal } from './DisponibilidadModal';
@@ -38,6 +38,7 @@ function nombreCompleto(p: Profesional): string {
 export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) {
   const navigate = useNavigate();
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
+  const [sedes, setSedes] = useState<Sede[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterRol, setFilterRol] = useState<'todos' | Rol>('todos');
@@ -50,6 +51,15 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
   const [dispoTarget, setDispoTarget] = useState<Profesional | null>(null);
 
   const [confirmDelete, setConfirmDelete] = useState<Profesional | null>(null);
+
+  // Sedes para mostrar el nombre legible en la columna "Sede".
+  useEffect(() => {
+    authService.getSedes().then(setSedes).catch(() => {});
+  }, []);
+  const sedeNombre = useMemo(() => {
+    const map = new Map(sedes.map((s) => [s.sedeId, s.nombre]));
+    return (id: string | null | undefined) => (id ? map.get(id) ?? id : '—');
+  }, [sedes]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -278,7 +288,7 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                     Consulta
                   </th>
                   <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Licencia
+                    Sede
                   </th>
                   <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
                     Estado
@@ -342,10 +352,9 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                         {p.tiempoConsulta} min
                       </td>
                       <td
-                        className={`px-[14px] py-2.5 ${inactivo ? 'text-zinc-400' : 'text-zinc-600'}`}
-                        style={{ fontFamily: p.numeroLicencia ? FONT_MONO : FONT_INTER }}
+                        className={`px-[14px] py-2.5 ${inactivo ? 'text-zinc-400' : 'text-zinc-700'}`}
                       >
-                        {p.numeroLicencia || '—'}
+                        {sedeNombre(p.sedeId)}
                       </td>
                       <td className="px-[14px] py-2.5">
                         {p.activo ? (

@@ -351,10 +351,20 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                       >
                         {p.tiempoConsulta} min
                       </td>
-                      <td
-                        className={`px-[14px] py-2.5 ${inactivo ? 'text-zinc-400' : 'text-zinc-700'}`}
-                      >
-                        {sedeNombre(p.sedeId)}
+                      <td className="px-[14px] py-2.5">
+                        {p.sedeId ? (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border whitespace-nowrap ${
+                              inactivo
+                                ? 'bg-zinc-100 text-zinc-400 border-zinc-200'
+                                : 'bg-[#eef2ff] text-[#1e3a8a] border-[#dbe3ff]'
+                            }`}
+                          >
+                            {sedeNombre(p.sedeId)}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
                       </td>
                       <td className="px-[14px] py-2.5">
                         {p.activo ? (

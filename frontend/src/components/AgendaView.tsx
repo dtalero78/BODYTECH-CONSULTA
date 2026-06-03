@@ -407,7 +407,11 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
         fechaDesde,
         fechaHasta,
         busqueda: debouncedBusqueda || undefined,
-        page,
+        // `page` es 1-based para la UI ("Página X de N"), pero el backend
+        // pagina en base 0 (offset = page * limit). Sin restar 1, page=1
+        // generaba offset=20 y se saltaba la única página de resultados
+        // (la tabla salía vacía aunque el contador `total` fuera correcto).
+        page: page - 1,
         limit: 20,
       }),
     staleTime: 30_000,

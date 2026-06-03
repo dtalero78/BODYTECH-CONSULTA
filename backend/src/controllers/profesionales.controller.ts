@@ -65,6 +65,9 @@ const disponibilidadFechaReplaceSchema = z.object({
   modalidad: modalidadEnum,
   bloqueado: z.boolean(),
   rangos: z.array(rangoSchema),
+  // `sede` opcional: permite editar la disponibilidad de un profesional de otra
+  // sede desde el modal del día (filtro por sede). Sin él, usa la del JWT.
+  sede: z.string().min(1).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -311,7 +314,8 @@ class ProfesionalesController {
 
   getDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      const sedeQuery = typeof req.query.sede === 'string' && req.query.sede ? req.query.sede : '';
+      const sedeId = sedeQuery || getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
@@ -338,7 +342,6 @@ class ProfesionalesController {
 
   replaceDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
@@ -356,6 +359,7 @@ class ProfesionalesController {
         });
         return;
       }
+      const sedeId = parsed.data.sede || getSedeId(req);
       const result = await disponibilidadFechaService.replaceByFecha(
         id,
         sedeId,
@@ -375,7 +379,8 @@ class ProfesionalesController {
 
   deleteDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      const sedeQuery = typeof req.query.sede === 'string' && req.query.sede ? req.query.sede : '';
+      const sedeId = sedeQuery || getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });

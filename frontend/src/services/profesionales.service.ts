@@ -156,10 +156,12 @@ class ProfesionalesService {
   async getDisponibilidadFecha(
     id: number,
     fecha: string,
-    modalidad: Modalidad
+    modalidad: Modalidad,
+    sede?: string
   ): Promise<DisponibilidadFecha> {
+    const sedeQs = sede ? `&sede=${encodeURIComponent(sede)}` : '';
     const res = await axios.get(
-      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}`,
+      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}${sedeQs}`,
       { headers: authHeaders() }
     );
     return res.data?.data;
@@ -167,7 +169,7 @@ class ProfesionalesService {
 
   async replaceDisponibilidadFecha(
     id: number,
-    payload: { fecha: string; modalidad: Modalidad; bloqueado: boolean; rangos: Rango[] }
+    payload: { fecha: string; modalidad: Modalidad; bloqueado: boolean; rangos: Rango[]; sede?: string }
   ): Promise<DisponibilidadFecha> {
     const res = await axios.put(
       `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha`,
@@ -180,10 +182,12 @@ class ProfesionalesService {
   async deleteDisponibilidadFecha(
     id: number,
     fecha: string,
-    modalidad: Modalidad
+    modalidad: Modalidad,
+    sede?: string
   ): Promise<void> {
+    const sedeQs = sede ? `&sede=${encodeURIComponent(sede)}` : '';
     await axios.delete(
-      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}`,
+      `${API_BASE_URL}/api/profesionales/${id}/disponibilidad-fecha?fecha=${fecha}&modalidad=${modalidad}${sedeQs}`,
       { headers: authHeaders() }
     );
   }

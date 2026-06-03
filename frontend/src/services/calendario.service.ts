@@ -148,8 +148,9 @@ class CalendarioService {
     return res.data?.data;
   }
 
-  async getDisponibilidadDia(fecha: string, modalidad: Modalidad): Promise<DisponibilidadDia> {
+  async getDisponibilidadDia(fecha: string, modalidad: Modalidad, sede?: string): Promise<DisponibilidadDia> {
     const params = new URLSearchParams({ fecha, modalidad });
+    if (sede) params.set('sede', sede);
     const res = await axios.get(
       `${API_BASE_URL}/api/calendario/disponibilidad-dia?${params.toString()}`,
       { headers: authHeaders() }

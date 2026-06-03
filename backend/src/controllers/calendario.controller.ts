@@ -152,7 +152,10 @@ class CalendarioController {
 
   getDisponibilidadDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      // `sede` opcional permite al coordinador editar la disponibilidad de otra
+      // sede desde el modal del día (filtro por sede). Sin él, usa la del JWT.
+      const sedeQuery = typeof req.query.sede === 'string' && req.query.sede ? req.query.sede : '';
+      const sedeId = sedeQuery || getSedeId(req);
       const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
       const modalidadRaw = req.query.modalidad;
       const modalidad =

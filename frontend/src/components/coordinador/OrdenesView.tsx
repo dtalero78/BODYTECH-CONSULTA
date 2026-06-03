@@ -479,7 +479,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
               style={{ background: '#1f3a8a' }}
             >
               <Plus className="w-3.5 h-3.5" />
-              Nuevo afiliado
+              Crear consulta
             </button>
           </div>
         </div>
@@ -716,7 +716,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
           >
             <div className="sticky top-0 bg-white border-b border-zinc-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <h2 className="text-[16px] font-semibold text-zinc-900">
-                {isEditMode ? 'Editar afiliado' : 'Nuevo afiliado'}
+                {isEditMode ? 'Editar consulta' : 'Crear consulta'}
               </h2>
               <button
                 onClick={() => setModalOrden(null)}

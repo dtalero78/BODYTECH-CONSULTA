@@ -88,6 +88,7 @@ interface ListFilters {
   rol?: Rol;
   activo?: boolean;
   search?: string;
+  sedes?: string[]; // varias sedes (calendario multi-sede del coordinador)
 }
 
 class ProfesionalesService {
@@ -96,6 +97,7 @@ class ProfesionalesService {
     if (filters.rol) params.set('rol', filters.rol);
     if (filters.activo !== undefined) params.set('activo', String(filters.activo));
     if (filters.search) params.set('search', filters.search);
+    if (filters.sedes && filters.sedes.length > 0) params.set('sedes', filters.sedes.join(','));
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await axios.get(`${API_BASE_URL}/api/profesionales${query}`, {
       headers: authHeaders(),

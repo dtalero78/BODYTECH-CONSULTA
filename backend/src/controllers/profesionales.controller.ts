@@ -112,8 +112,18 @@ class ProfesionalesController {
       if (activoRaw === 'true') activo = true;
       else if (activoRaw === 'false') activo = false;
 
+      // `sedes` (CSV) opcional: lista profesionales de varias sedes (calendario
+      // multi-sede del coordinador). Sin él, scopea a la sede del JWT.
+      const sedesRaw = req.query.sedes;
+      let sedeIds: string[] | undefined;
+      if (typeof sedesRaw === 'string' && sedesRaw.trim().length > 0) {
+        const list = sedesRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+        if (list.length > 0) sedeIds = list;
+      }
+
       const result = await profesionalesService.list({
         sedeId,
+        sedeIds,
         rol,
         activo,
         search,

@@ -51,6 +51,7 @@ export interface CitaListItem {
   tipoConsulta: string | null;
   empresa: string | null;
   motivoConsulta: string | null;
+  sedeId: string | null;
 }
 
 export interface DiaDetalle {
@@ -113,18 +114,20 @@ export interface DisponibilidadMes {
 }
 
 class CalendarioService {
-  async getMes(year: number, month: number, medico?: string): Promise<MesResumen> {
+  async getMes(year: number, month: number, medico?: string, sedes?: string[]): Promise<MesResumen> {
     const params = new URLSearchParams({ year: String(year), month: String(month) });
     if (medico) params.set('medico', medico);
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
     const res = await axios.get(`${API_BASE_URL}/api/calendario/mes?${params.toString()}`, {
       headers: authHeaders(),
     });
     return res.data?.data;
   }
 
-  async getDia(fecha: string, medico?: string): Promise<DiaDetalle> {
+  async getDia(fecha: string, medico?: string, sedes?: string[]): Promise<DiaDetalle> {
     const params = new URLSearchParams({ fecha });
     if (medico) params.set('medico', medico);
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
     const res = await axios.get(`${API_BASE_URL}/api/calendario/dia?${params.toString()}`, {
       headers: authHeaders(),
     });
@@ -158,8 +161,9 @@ class CalendarioService {
     return res.data?.data;
   }
 
-  async getDisponibilidadMes(year: number, month: number, modalidad: Modalidad): Promise<DisponibilidadMes> {
+  async getDisponibilidadMes(year: number, month: number, modalidad: Modalidad, sedes?: string[]): Promise<DisponibilidadMes> {
     const params = new URLSearchParams({ year: String(year), month: String(month), modalidad });
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
     const res = await axios.get(
       `${API_BASE_URL}/api/calendario/disponibilidad-mes?${params.toString()}`,
       { headers: authHeaders() }

@@ -128,6 +128,7 @@ export interface CitaListItem {
   tipoConsulta: string | null;
   empresa: string | null;
   motivoConsulta: string | null;
+  sedeId: string | null;
 }
 
 export interface DiaDetalle {
@@ -188,6 +189,7 @@ function rowToCitaListItem(row: Record<string, unknown>): CitaListItem {
     tipoConsulta: row.tipo_consulta ? String(row.tipo_consulta) : null,
     empresa: row.empresa ? String(row.empresa) : null,
     motivoConsulta: row.motivo_consulta_texto ? String(row.motivo_consulta_texto) : null,
+    sedeId: row.sede_id ? String(row.sede_id) : null,
   };
 }
 
@@ -204,7 +206,7 @@ class CalendarioService {
   async getMes(
     year: number,
     month: number,
-    sedeId: string,
+    sedeIds: string[],
     medicoCodigo?: string
   ): Promise<ServiceResult<MesResumen>> {
     if (!Number.isInteger(year) || year < 2020 || year > 2100) {
@@ -216,7 +218,7 @@ class CalendarioService {
 
     const { startUtc, endUtc } = getMonthRange(year, month);
 
-    const params: unknown[] = [sedeId, startUtc, endUtc];
+    const params: unknown[] = [sedeIds, startUtc, endUtc];
     let medicoFilter = '';
     if (medicoCodigo) {
       params.push(medicoCodigo);
@@ -231,7 +233,7 @@ class CalendarioService {
         UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
-      WHERE sede_id = $1
+      WHERE sede_id = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
@@ -306,7 +308,7 @@ class CalendarioService {
    */
   async getDia(
     fecha: string,
-    sedeId: string,
+    sedeIds: string[],
     medicoCodigo?: string
   ): Promise<ServiceResult<DiaDetalle>> {
     let range;
@@ -317,7 +319,7 @@ class CalendarioService {
       return { ok: false, status: 400, error: { code: 'INVALID_DATE', message: msg } };
     }
 
-    const params: unknown[] = [sedeId, range.startUtc, range.endUtc];
+    const params: unknown[] = [sedeIds, range.startUtc, range.endUtc];
     let medicoFilter = '';
     if (medicoCodigo) {
       params.push(medicoCodigo);
@@ -329,9 +331,9 @@ class CalendarioService {
         "_id", "numeroId", "primerNombre", "segundoNombre",
         "primerApellido", "segundoApellido",
         "celular", "email", "medico", "horaAtencion", "fechaAtencion",
-        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta"
+        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id"
       FROM "HistoriaClinica"
-      WHERE sede_id = $1
+      WHERE sede_id = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
@@ -355,14 +357,14 @@ class CalendarioService {
         UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
-      WHERE sede_id = $1
+      WHERE sede_id = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
       GROUP BY codigo, estado
     `;
-    const resumenRows = await postgresService.query(resumenSql, [sedeId, range.startUtc, range.endUtc]);
+    const resumenRows = await postgresService.query(resumenSql, [sedeIds, range.startUtc, range.endUtc]);
 
     const resumenMap = new Map<
       string,
@@ -394,8 +396,8 @@ class CalendarioService {
       const profRows = await postgresService.query(
         `SELECT codigo, alias, primer_nombre, primer_apellido, rol
            FROM profesionales
-           WHERE sede_id = $1 AND codigo = ANY($2::text[])`,
-        [sedeId, codigos]
+           WHERE sede_id = ANY($1::text[]) AND codigo = ANY($2::text[])`,
+        [sedeIds, codigos]
       );
       if (profRows) {
         for (const p of profRows) {
@@ -450,7 +452,7 @@ class CalendarioService {
   async getDisponibilidadMes(
     year: number,
     month: number,
-    sedeId: string,
+    sedeIds: string[],
     modalidad: Modalidad
   ): Promise<ServiceResult<{ year: number; month: number; modalidad: Modalidad; porDia: Record<string, { overrides: number; bloqueados: number }> }>> {
     if (!Number.isInteger(year) || year < 2020 || year > 2100) {
@@ -470,9 +472,9 @@ class CalendarioService {
               COUNT(DISTINCT profesional_id)::int AS overrides,
               COUNT(DISTINCT profesional_id) FILTER (WHERE bloqueado)::int AS bloqueados
          FROM profesionales_disponibilidad_fecha
-         WHERE sede_id = $1 AND modalidad = $2 AND fecha >= $3::date AND fecha < $4::date
+         WHERE sede_id = ANY($1::text[]) AND modalidad = $2 AND fecha >= $3::date AND fecha < $4::date
          GROUP BY fecha`,
-      [sedeId, modalidad, start, end]
+      [sedeIds, modalidad, start, end]
     );
     if (rows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando overrides del mes.' } };

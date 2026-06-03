@@ -43,6 +43,22 @@ function getSedeId(req: Request): string {
   return typeof sedeId === 'string' && sedeId.length > 0 ? sedeId : 'bsl';
 }
 
+/**
+ * Sedes a consultar: query `sedes` (CSV) si viene; si no, la del JWT.
+ * Permite ver el calendario por una sede, por varias agrupadas, o todas.
+ */
+function parseSedes(req: Request): string[] {
+  const raw = req.query.sedes;
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const list = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (list.length > 0) return list;
+  }
+  return [getSedeId(req)];
+}
+
 function parseIntOrNull(raw: unknown): number | null {
   const n = Number(raw);
   return Number.isInteger(n) ? n : null;
@@ -55,7 +71,7 @@ function parseIntOrNull(raw: unknown): number | null {
 class CalendarioController {
   getMes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      const sedes = parseSedes(req);
       const year = parseIntOrNull(req.query.year);
       const month = parseIntOrNull(req.query.month);
       const medico = typeof req.query.medico === 'string' && req.query.medico ? req.query.medico : undefined;
@@ -68,7 +84,7 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getMes(year, month, sedeId, medico);
+      const result = await calendarioService.getMes(year, month, sedes, medico);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
@@ -81,7 +97,7 @@ class CalendarioController {
 
   getDia = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      const sedes = parseSedes(req);
       const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
       const medico = typeof req.query.medico === 'string' && req.query.medico ? req.query.medico : undefined;
 
@@ -93,7 +109,7 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getDia(fecha, sedeId, medico);
+      const result = await calendarioService.getDia(fecha, sedes, medico);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
@@ -182,7 +198,7 @@ class CalendarioController {
 
   getDisponibilidadMes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
+      const sedes = parseSedes(req);
       const year = parseIntOrNull(req.query.year);
       const month = parseIntOrNull(req.query.month);
       const modalidadRaw = req.query.modalidad;
@@ -197,7 +213,7 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getDisponibilidadMes(year, month, sedeId, modalidad);
+      const result = await calendarioService.getDisponibilidadMes(year, month, sedes, modalidad);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;

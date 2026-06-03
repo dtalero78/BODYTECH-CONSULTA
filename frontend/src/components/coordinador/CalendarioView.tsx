@@ -19,6 +19,7 @@ import calendarioService, {
   Modalidad,
 } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
+import authService, { Sede } from '../../services/auth.service';
 import { ReasignarModal } from './ReasignarModal';
 import { DisponibilidadDiaModal } from './DisponibilidadDiaModal';
 import { AgendarCitaModal } from '../AgendarCitaModal';
@@ -103,6 +104,12 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [loadingMes, setLoadingMes] = useState(true);
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [filterMedico, setFilterMedico] = useState<string>(''); // codigo o ''
+  // Filtro de sedes: por sede, varias sedes agrupadas, o todas. Default = la del coordinador.
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [sedesSel, setSedesSel] = useState<string[]>(() => {
+    const s = authService.getSedeId();
+    return s ? [s] : [];
+  });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [diaDetalle, setDiaDetalle] = useState<DiaDetalle | null>(null);
   const [loadingDia, setLoadingDia] = useState(false);
@@ -116,13 +123,29 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [dispoDia, setDispoDia] = useState<string | null>(null); // fecha abierta en modo disponibilidad
   const [dispoReloadTick, setDispoReloadTick] = useState(0);
 
-  // Cargar lista de profesionales para filtros y nombres
+  // Cargar lista de sedes (una vez). Si el coordinador no tenía sede, default a todas.
   useEffect(() => {
-    profesionalesService
-      .list({ activo: true })
-      .then(setProfesionales)
+    authService
+      .getSedes()
+      .then((s) => {
+        setSedes(s);
+        setSedesSel((cur) => (cur.length > 0 ? cur : s.map((x) => x.sedeId)));
+      })
       .catch(() => {});
   }, []);
+
+  // Cargar profesionales de las sedes seleccionadas (para el filtro de médico y
+  // los nombres). Si el médico filtrado deja de existir en el nuevo conjunto, se limpia.
+  useEffect(() => {
+    if (sedesSel.length === 0) return;
+    profesionalesService
+      .list({ activo: true, sedes: sedesSel })
+      .then((list) => {
+        setProfesionales(list);
+        setFilterMedico((cur) => (cur && !list.some((p) => p.codigo === cur) ? '' : cur));
+      })
+      .catch(() => {});
+  }, [sedesSel]);
 
   const reloadMes = useCallback(async () => {
     setLoadingMes(true);
@@ -131,9 +154,9 @@ export function CalendarioView({ showToast, reportCount }: Props) {
       // Pedimos en paralelo el mes actual y el anterior (para el delta).
       // Si el anterior falla, mostramos delta neutro.
       const [data, prevData] = await Promise.all([
-        calendarioService.getMes(year, month, filterMedico || undefined),
+        calendarioService.getMes(year, month, filterMedico || undefined, sedesSel),
         calendarioService
-          .getMes(prev.year, prev.month, filterMedico || undefined)
+          .getMes(prev.year, prev.month, filterMedico || undefined, sedesSel)
           .catch(() => null),
       ]);
       setMesData(data);
@@ -145,7 +168,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     } finally {
       setLoadingMes(false);
     }
-  }, [year, month, filterMedico, showToast]);
+  }, [year, month, filterMedico, sedesSel, showToast]);
 
   useEffect(() => {
     reloadMes();
@@ -156,7 +179,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     if (modo !== 'disponibilidad') return;
     let cancelled = false;
     calendarioService
-      .getDisponibilidadMes(year, month, modalidadDispo)
+      .getDisponibilidadMes(year, month, modalidadDispo, sedesSel)
       .then((d) => {
         if (!cancelled) setDispoMes(d);
       })
@@ -166,7 +189,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [modo, year, month, modalidadDispo, dispoReloadTick]);
+  }, [modo, year, month, modalidadDispo, sedesSel, dispoReloadTick]);
 
   // Reportar conteo de mes al sidebar
   useEffect(() => {
@@ -183,7 +206,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     let cancelled = false;
     setLoadingDia(true);
     calendarioService
-      .getDia(selectedDay, filterMedico || undefined)
+      .getDia(selectedDay, filterMedico || undefined, sedesSel)
       .then((d) => {
         if (!cancelled) setDiaDetalle(d);
       })
@@ -196,7 +219,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [selectedDay, filterMedico, diaReloadTick]);
+  }, [selectedDay, filterMedico, sedesSel, diaReloadTick]);
 
   function prevMonth() {
     setSelectedDay(null);
@@ -410,6 +433,14 @@ export function CalendarioView({ showToast, reportCount }: Props) {
         {modo === 'citas' ? (
           <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
             <span className={SECTION_LABEL}>Filtros</span>
+            <SedeMultiSelect
+              sedes={sedes}
+              value={sedesSel}
+              onChange={(v) => {
+                setSedesSel(v);
+                setSelectedDay(null);
+              }}
+            />
             <FilterSelect
               label="Médico"
               value={filterMedico}
@@ -436,6 +467,15 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           </div>
         ) : (
           <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
+            <span className={SECTION_LABEL}>Sedes</span>
+            <SedeMultiSelect
+              sedes={sedes}
+              value={sedesSel}
+              onChange={(v) => {
+                setSedesSel(v);
+                setDispoDia(null);
+              }}
+            />
             <span className={SECTION_LABEL}>Modalidad</span>
             <div className="inline-flex items-center bg-white border border-zinc-200 rounded-md p-0.5 text-[12px] font-medium">
               {(['virtual', 'presencial'] as Modalidad[]).map((m) => (
@@ -641,6 +681,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 fecha={selectedDay}
                 detalle={diaDetalle}
                 profesionales={profesionales}
+                multiSede={sedesSel.length > 1}
+                sedeNombre={(id) => sedes.find((s) => s.sedeId === id)?.nombre ?? id ?? ''}
                 onAmpliar={() => setShowFullDayModal(true)}
               />
             )}
@@ -654,6 +696,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           fecha={selectedDay}
           medico={filterMedico || undefined}
           profesionales={profesionales}
+          sedesSel={sedesSel}
+          sedesList={sedes}
           onClose={() => {
             setShowFullDayModal(false);
             // Si hubo cambios (reasignar), refrescar mes
@@ -823,6 +867,105 @@ function FilterSelect({
 }
 
 // ---------------------------------------------------------------------------
+// SedeMultiSelect — filtro de sedes (una, varias agrupadas, o todas).
+// Dropdown con checkboxes + opción "Todas las sedes". El botón resume la
+// selección. Cierra al hacer clic fuera (backdrop transparente).
+// ---------------------------------------------------------------------------
+
+function SedeMultiSelect({
+  sedes,
+  value,
+  onChange,
+}: {
+  sedes: Sede[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const allIds = sedes.map((s) => s.sedeId);
+  const allSelected = sedes.length > 0 && allIds.every((id) => value.includes(id));
+
+  const resumen = (() => {
+    if (sedes.length > 0 && allSelected) return 'Todas las sedes';
+    if (value.length === 0) return 'Sin sede';
+    if (value.length === 1) {
+      const s = sedes.find((x) => x.sedeId === value[0]);
+      return s ? s.nombre : value[0];
+    }
+    return `${value.length} sedes`;
+  })();
+
+  function toggle(id: string) {
+    if (value.includes(id)) {
+      const next = value.filter((x) => x !== id);
+      onChange(next.length > 0 ? next : value); // no permitir vacío
+    } else {
+      onChange([...value, id]);
+    }
+  }
+
+  function toggleTodas() {
+    onChange(allSelected ? (allIds.length > 0 ? [allIds[0]] : value) : allIds);
+  }
+
+  const active = !(sedes.length > 0 && allSelected);
+  const stateCls = active ? 'bg-[#eef2ff] text-[#1e3a8a]' : 'bg-white text-zinc-800';
+  const borderColor = active ? '#1f3a8a' : '#d4d4d8';
+
+  return (
+    <div className="relative inline-block" style={{ fontFamily: FONT_INTER }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium pl-[11px] pr-2 ${stateCls}`}
+        style={{ borderColor }}
+      >
+        <span className={`pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}>Sede:</span>
+        {resumen}
+        <ChevronDown className="w-3 h-3 text-zinc-400 ml-1.5" />
+      </button>
+      {open && (
+        <>
+          <button
+            className="fixed inset-0 z-40 cursor-default"
+            aria-label="Cerrar"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute left-0 mt-1 z-50 w-64 max-h-72 overflow-y-auto bg-white border border-zinc-200 rounded-lg shadow-lg py-1">
+            <label className="flex items-center gap-2 px-3 py-2 text-[13px] text-zinc-800 hover:bg-zinc-50 cursor-pointer border-b border-zinc-100">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleTodas}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <span className="font-medium">Todas las sedes</span>
+            </label>
+            {sedes.map((s) => (
+              <label
+                key={s.sedeId}
+                className="flex items-center gap-2 px-3 py-2 text-[13px] text-zinc-700 hover:bg-zinc-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(s.sedeId)}
+                  onChange={() => toggle(s.sedeId)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span className="truncate">
+                  {s.nombre}
+                  {s.ciudad ? <span className="text-zinc-400"> · {s.ciudad}</span> : null}
+                </span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel del día (lista por bloque horario)
 // ---------------------------------------------------------------------------
 
@@ -830,11 +973,15 @@ function DiaPanel({
   fecha,
   detalle,
   profesionales,
+  multiSede,
+  sedeNombre,
   onAmpliar,
 }: {
   fecha: string;
   detalle: DiaDetalle;
   profesionales: Profesional[];
+  multiSede: boolean;
+  sedeNombre: (id: string | null) => string;
   onAmpliar: () => void;
 }) {
   const fechaFormateada = useMemo(() => {
@@ -912,13 +1059,13 @@ function DiaPanel({
       ) : (
         <div className="mt-2">
           <Bloque label="MAÑANA · 7:00–12:00" citas={bloques.manana} renderItem={(c) => (
-            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} sede={multiSede ? sedeNombre(c.sedeId) : null} />
           )} />
           <Bloque label="TARDE · 12:00–17:00" citas={bloques.tarde} renderItem={(c) => (
-            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} sede={multiSede ? sedeNombre(c.sedeId) : null} />
           )} />
           <Bloque label="NOCHE · 17:00–21:00" citas={bloques.noche} renderItem={(c) => (
-            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} />
+            <CitaRow c={c} prof={profesionalNombre(c.medicoCodigo)} variant={statusVariant(c.atendido)} sede={multiSede ? sedeNombre(c.sedeId) : null} />
           )} />
         </div>
       )}
@@ -954,10 +1101,12 @@ function CitaRow({
   c,
   prof,
   variant,
+  sede,
 }: {
   c: CitaListItem;
   prof: string;
   variant: 'ok' | 'warn' | 'bad' | 'mute';
+  sede?: string | null;
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -979,6 +1128,7 @@ function CitaRow({
           style={{ fontFamily: FONT_INTER }}
         >
           <span style={{ fontFamily: FONT_MONO }}>CC {c.numeroId}</span> · {prof}
+          {sede ? <span className="text-[#1e3a8a]"> · {sede}</span> : null}
         </div>
       </div>
       <div className="shrink-0">
@@ -996,20 +1146,25 @@ interface DiaFullProps {
   fecha: string;
   medico?: string;
   profesionales: Profesional[];
+  sedesSel: string[];
+  sedesList: Sede[];
   onClose: () => void;
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }
 
-function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaFullProps) {
+function DiaFullModal({ fecha, medico, profesionales, sedesSel, sedesList, onClose, showToast }: DiaFullProps) {
   const [data, setData] = useState<DiaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reasignarOpen, setReasignarOpen] = useState(false);
+  const multiSede = sedesSel.length > 1;
+  const sedeNombre = (id: string | null): string =>
+    id ? sedesList.find((s) => s.sedeId === id)?.nombre ?? id : '—';
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await calendarioService.getDia(fecha, medico);
+      const result = await calendarioService.getDia(fecha, medico, sedesSel);
       setData(result);
       setSelectedIds((prev) => {
         const visibles = new Set(result.citas.map((c) => c.id));
@@ -1024,7 +1179,7 @@ function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaF
     } finally {
       setLoading(false);
     }
-  }, [fecha, medico, showToast]);
+  }, [fecha, medico, sedesSel, showToast]);
 
   useEffect(() => {
     reload();
@@ -1132,6 +1287,7 @@ function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaF
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Hora</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Afiliado</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Médico</th>
+                  {multiSede && <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Sede</th>}
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Estado</th>
                 </tr>
               </thead>
@@ -1163,6 +1319,9 @@ function DiaFullModal({ fecha, medico, profesionales, onClose, showToast }: DiaF
                     <td className="px-2 py-2 text-zinc-700">
                       {profesionalNombre(c.medicoCodigo)}
                     </td>
+                    {multiSede && (
+                      <td className="px-2 py-2 text-[#1e3a8a] text-[12px]">{sedeNombre(c.sedeId)}</td>
+                    )}
                     <td className="px-2 py-2">
                       <Pill variant={statusVariant(c.atendido)}>
                         {(c.atendido || 'PENDIENTE').toUpperCase()}

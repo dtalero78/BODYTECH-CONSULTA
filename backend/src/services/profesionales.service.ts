@@ -60,6 +60,12 @@ export interface ListFilters {
    * sistema completo).
    */
   sedeId: string | null;
+  /**
+   * Varias sedes (override de `sedeId`): lista los profesionales de TODAS las
+   * sedes indicadas (`sede_id = ANY`). Lo usa el calendario del coordinador
+   * para poblar el filtro de profesional cuando se ven varias sedes agrupadas.
+   */
+  sedeIds?: string[];
   rol?: Rol;
   activo?: boolean;
   search?: string;
@@ -150,7 +156,10 @@ class ProfesionalesService {
     const where: string[] = [];
     const params: unknown[] = [];
     let i = 1;
-    if (filters.sedeId !== null) {
+    if (filters.sedeIds && filters.sedeIds.length > 0) {
+      where.push(`sede_id = ANY($${i++}::text[])`);
+      params.push(filters.sedeIds);
+    } else if (filters.sedeId !== null) {
       where.push(`sede_id = $${i++}`);
       params.push(filters.sedeId);
     }

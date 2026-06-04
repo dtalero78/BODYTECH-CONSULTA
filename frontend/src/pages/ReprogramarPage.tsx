@@ -5,28 +5,13 @@ import apiService from '../services/api.service';
 
 type Franja = 'manana' | 'tarde';
 
-const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
-
-function fechaLegible(iso: string): string {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return iso;
-  const [, y, mo, d] = m;
-  // Mediodía UTC para obtener el día de la semana correcto sin TZ.
-  const dt = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), 12, 0, 0));
-  return `${DIAS[dt.getUTCDay()]} ${Number(d)} de ${MESES[Number(mo) - 1]}`;
-}
-
 export function ReprogramarPage() {
   const { id } = useParams<{ id: string }>();
   const [nombre, setNombre] = useState<string | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
   const [submitting, setSubmitting] = useState<Franja | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ fecha: string; hora: string } | null>(null);
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -52,8 +37,8 @@ export function ReprogramarPage() {
     setError(null);
     setSubmitting(franja);
     try {
-      const res = await apiService.reprogramarCita(id, franja);
-      setDone({ fecha: res.fecha, hora: res.hora });
+      await apiService.reprogramarCita(id, franja);
+      setDone(true);
     } catch (err: any) {
       setError(
         err?.response?.data?.error ||
@@ -83,12 +68,10 @@ export function ReprogramarPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-gray-800">¡Cita reprogramada!</h2>
+            <h2 className="text-lg font-semibold text-gray-800">¡Listo!</h2>
             <p className="text-gray-600">
-              Tu nueva cita quedó para el <strong>{fechaLegible(done.fecha)}</strong> a las{' '}
-              <strong>{done.hora}</strong>.
+              Espera nuestra llamada de confirmación. ¡Gracias!
             </p>
-            <p className="text-sm text-gray-400">Recibirás la confirmación por WhatsApp.</p>
           </div>
         ) : (
           <>

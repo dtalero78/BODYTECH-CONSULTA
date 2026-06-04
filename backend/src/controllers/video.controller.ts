@@ -467,13 +467,12 @@ class VideoController {
       }
 
       // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h).
+      // No se revela la fecha/hora autoasignada: el equipo confirma por llamada.
       if (cita.celular) {
-        const [y, m, d] = slot.data.fecha.split('-');
-        const fechaLegible = `${d}/${m}/${y}`;
         whatsappService
           .sendTextMessage(
             cita.celular,
-            `Hola ${cita.primerNombre ?? ''} 👋\n\nTu cita fue reprogramada para el ${fechaLegible} a las ${slot.data.hora}.\n\n¡Te esperamos!`
+            'Listo! Espera nuestra llamada de confirmación. Gracias!'
           )
           .catch(() => {});
       }

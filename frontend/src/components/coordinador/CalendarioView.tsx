@@ -693,6 +693,11 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 multiSede={sedesSel.length > 1}
                 sedeNombre={(id) => sedes.find((s) => s.sedeId === id)?.nombre ?? id ?? ''}
                 onAmpliar={() => setShowFullDayModal(true)}
+                onReasignado={() => {
+                  setDiaReloadTick((t) => t + 1);
+                  reloadMes();
+                }}
+                showToast={showToast}
               />
             )}
             </div>
@@ -986,6 +991,8 @@ function DiaPanel({
   multiSede,
   sedeNombre,
   onAmpliar,
+  onReasignado,
+  showToast,
 }: {
   fecha: string;
   detalle: DiaDetalle;
@@ -993,6 +1000,8 @@ function DiaPanel({
   multiSede: boolean;
   sedeNombre: (id: string | null) => string;
   onAmpliar: () => void;
+  onReasignado: () => void;
+  showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }) {
   const [showTeam, setShowTeam] = useState(false);
 
@@ -1084,6 +1093,8 @@ function DiaPanel({
           citas={detalle.citas}
           profesionales={profesionales}
           onClose={() => setShowTeam(false)}
+          onReasignado={onReasignado}
+          showToast={showToast}
         />
       )}
 
@@ -1108,48 +1119,108 @@ function DiaPanel({
 
 // ---------------------------------------------------------------------------
 // TeamDiaModal — equipo del día: una columna por profesional agendado, con
-// sus horas de consulta apiladas encima de su avatar (círculo con iniciales).
+// sus horas de consulta apiladas encima de su avatar. Las horas se pueden
+// arrastrar a otra columna para reasignar esa cita al nuevo profesional.
 // ---------------------------------------------------------------------------
+
+const SIN_ASIGNAR = '__SIN_ASIGNAR__';
 
 function TeamDiaModal({
   fechaFormateada,
   citas,
   profesionales,
   onClose,
+  onReasignado,
+  showToast,
 }: {
   fechaFormateada: string;
   citas: CitaListItem[];
   profesionales: Profesional[];
   onClose: () => void;
+  onReasignado?: () => void;
+  showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }) {
-  // Agrupar citas por profesional → { codigo, nombre, horas[] }
+  // Copia local para mover citas de columna de forma optimista. Se re-siembra
+  // si cambia el prop (p.ej. tras la recarga del día disparada por onReasignado).
+  const [localCitas, setLocalCitas] = useState<CitaListItem[]>(citas);
+  useEffect(() => setLocalCitas(citas), [citas]);
+
+  const [dragCitaId, setDragCitaId] = useState<string | null>(null);
+  const [dragFrom, setDragFrom] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const nombreDe = useCallback(
+    (codigo: string): string => {
+      if (codigo === SIN_ASIGNAR) return 'Sin asignar';
+      const p = profesionales.find((x) => x.codigo === codigo);
+      return p ? p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ') : codigo;
+    },
+    [profesionales]
+  );
+
+  // Agrupar citas por profesional → { codigo, nombre, citas[] (orden desc por hora) }
   const equipo = useMemo(() => {
-    const map = new Map<string, { codigo: string; nombre: string; horas: string[] }>();
-    for (const c of citas) {
-      const codigo = c.medicoCodigo || '__SIN_ASIGNAR__';
-      const p = profesionales.find((x) => x.codigo === c.medicoCodigo);
-      const nombre =
-        codigo === '__SIN_ASIGNAR__'
-          ? 'Sin asignar'
-          : p
-            ? p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ')
-            : codigo;
-      if (!map.has(codigo)) map.set(codigo, { codigo, nombre, horas: [] });
-      if (c.horaAtencion) map.get(codigo)!.horas.push(c.horaAtencion.slice(0, 5));
+    const map = new Map<string, { codigo: string; nombre: string; citas: CitaListItem[] }>();
+    for (const c of localCitas) {
+      const codigo = c.medicoCodigo || SIN_ASIGNAR;
+      if (!map.has(codigo)) map.set(codigo, { codigo, nombre: nombreDe(codigo), citas: [] });
+      map.get(codigo)!.citas.push(c);
     }
     return Array.from(map.values())
       // Más citas primero; los "Sin asignar" al final.
       .sort((a, b) => {
-        if (a.codigo === '__SIN_ASIGNAR__') return 1;
-        if (b.codigo === '__SIN_ASIGNAR__') return -1;
-        return b.horas.length - a.horas.length;
+        if (a.codigo === SIN_ASIGNAR) return 1;
+        if (b.codigo === SIN_ASIGNAR) return -1;
+        return b.citas.length - a.citas.length;
       })
       .map((e) => ({
         ...e,
         // Descendente: la hora más tardía arriba, la más temprana junto al círculo.
-        horas: e.horas.slice().sort((x, y) => y.localeCompare(x)),
+        citas: e.citas
+          .slice()
+          .sort((x, y) => (y.horaAtencion || '').localeCompare(x.horaAtencion || '')),
       }));
-  }, [citas, profesionales]);
+  }, [localCitas, nombreDe]);
+
+  async function reasignar(citaId: string, fromCodigo: string, toCodigo: string) {
+    if (toCodigo === SIN_ASIGNAR || toCodigo === fromCodigo) return;
+    const cita = localCitas.find((c) => c.id === citaId);
+    if (!cita) return;
+    const hora = (cita.horaAtencion || '').slice(0, 5);
+    // Optimista: mover en la copia local.
+    setLocalCitas((prev) =>
+      prev.map((c) => (c.id === citaId ? { ...c, medicoCodigo: toCodigo } : c))
+    );
+    const revertir = () =>
+      setLocalCitas((prev) =>
+        prev.map((c) =>
+          c.id === citaId ? { ...c, medicoCodigo: fromCodigo === SIN_ASIGNAR ? null : fromCodigo } : c
+        )
+      );
+    setSavingId(citaId);
+    try {
+      const res = await calendarioService.reasignarBulk({
+        citaIds: [citaId],
+        nuevoMedicoCodigo: toCodigo,
+      });
+      if (!res || res.afectadas < 1) {
+        revertir();
+        showToast({ type: 'error', message: 'No se pudo reasignar la cita.' });
+        return;
+      }
+      showToast({
+        type: 'success',
+        message: `Cita${hora ? ` de ${hora}` : ''} reasignada a ${nombreDe(toCodigo)}.`,
+      });
+      onReasignado?.();
+    } catch {
+      revertir();
+      showToast({ type: 'error', message: 'No se pudo reasignar la cita.' });
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   return (
     <div
@@ -1157,7 +1228,7 @@ function TeamDiaModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
         style={{ fontFamily: FONT_INTER }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1172,6 +1243,7 @@ function TeamDiaModal({
             <p className="text-[12px] text-zinc-500">
               <span className="tabular-nums">{equipo.length}</span>{' '}
               {equipo.length === 1 ? 'profesional agendado' : 'profesionales agendados'}
+              <span className="text-zinc-400"> · arrastra una hora a otro profesional para reasignarla</span>
             </p>
           </div>
           <button
@@ -1186,43 +1258,97 @@ function TeamDiaModal({
           {equipo.length === 0 ? (
             <p className="text-[13px] text-zinc-500">No hay profesionales agendados este día.</p>
           ) : (
-            <div className="flex items-end gap-6 overflow-x-auto pb-2">
-              {equipo.map((e) => (
-                <div key={e.codigo} className="flex flex-col items-center shrink-0 w-[88px]">
-                  {/* Horas apiladas encima del círculo */}
-                  <div className="flex flex-col items-center gap-0.5 mb-3">
-                    {e.horas.length === 0 ? (
-                      <span className="text-[12px] text-zinc-300">—</span>
-                    ) : (
-                      e.horas.map((h, i) => (
-                        <span
-                          key={`${h}-${i}`}
-                          className="text-[13px] text-zinc-700 tabular-nums leading-tight"
-                          style={{ fontFamily: FONT_MONO }}
-                        >
-                          {h}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                  <MonoAvatar
-                    initials={
-                      e.codigo === '__SIN_ASIGNAR__' ? '··' : initialsOf(e.nombre)
-                    }
-                    variant={e.codigo === '__SIN_ASIGNAR__' ? 'muted' : 'default'}
-                    size={56}
-                    src={e.codigo === '__SIN_ASIGNAR__' ? null : avatarFotoFor(e.codigo)}
-                  />
-                  <div className="mt-2 text-center">
-                    <div className="text-[12px] font-medium text-zinc-800 leading-tight line-clamp-2">
-                      {e.nombre}
+            // Fila de altura fija: la zona de horas (flex-1) hace scroll interno
+            // anclada abajo; el círculo + nombre quedan FIJOS al fondo, alineados
+            // en una sola línea entre todas las columnas.
+            <div
+              className="flex items-stretch gap-7 overflow-x-auto pb-2"
+              style={{ height: 460 }}
+            >
+              {equipo.map((e) => {
+                const esDestino = !!dragFrom && e.codigo !== SIN_ASIGNAR && e.codigo !== dragFrom;
+                const activo = dropTarget === e.codigo && esDestino;
+                return (
+                  <div
+                    key={e.codigo}
+                    onDragOver={(ev) => {
+                      if (esDestino) {
+                        ev.preventDefault();
+                        setDropTarget(e.codigo);
+                      }
+                    }}
+                    onDragLeave={() => setDropTarget((t) => (t === e.codigo ? null : t))}
+                    onDrop={(ev) => {
+                      ev.preventDefault();
+                      const citaId = ev.dataTransfer.getData('text/cita-id') || dragCitaId;
+                      const from = ev.dataTransfer.getData('text/from') || dragFrom;
+                      if (citaId && from && esDestino) reasignar(citaId, from, e.codigo);
+                      setDropTarget(null);
+                    }}
+                    className={`flex flex-col items-center shrink-0 w-[112px] h-full rounded-lg transition-colors ${
+                      activo
+                        ? 'bg-[#eef2ff] ring-1 ring-[#1f3a8a]/40'
+                        : esDestino
+                          ? 'bg-zinc-50'
+                          : ''
+                    }`}
+                  >
+                    {/* Horas: ocupan el espacio restante y scrollean (ancladas abajo,
+                        la hora más temprana junto al círculo siempre visible). */}
+                    <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-end gap-1 overflow-y-auto mb-3 pt-1">
+                      {e.citas.length === 0 ? (
+                        <span className="text-[13px] text-zinc-300">—</span>
+                      ) : (
+                        e.citas.map((c) => {
+                          const h = (c.horaAtencion || '').slice(0, 5) || '··:··';
+                          const moviendo = savingId === c.id;
+                          return (
+                            <span
+                              key={c.id}
+                              draggable={!moviendo}
+                              onDragStart={(ev) => {
+                                ev.dataTransfer.effectAllowed = 'move';
+                                ev.dataTransfer.setData('text/cita-id', c.id);
+                                ev.dataTransfer.setData('text/from', e.codigo);
+                                setDragCitaId(c.id);
+                                setDragFrom(e.codigo);
+                              }}
+                              onDragEnd={() => {
+                                setDragCitaId(null);
+                                setDragFrom(null);
+                                setDropTarget(null);
+                              }}
+                              title="Arrastra a otro profesional para reasignar"
+                              className={`text-[14px] tabular-nums leading-tight shrink-0 px-2 py-0.5 rounded cursor-grab active:cursor-grabbing hover:bg-zinc-100 transition-opacity ${
+                                moviendo ? 'opacity-40' : 'opacity-100'
+                              } ${dragCitaId === c.id ? 'opacity-30' : ''} text-zinc-700`}
+                              style={{ fontFamily: FONT_MONO }}
+                            >
+                              {h}
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                    {/* Bloque fijo al fondo: círculo + nombre (altura constante para
+                        que todos los círculos queden alineados). */}
+                    <MonoAvatar
+                      initials={e.codigo === SIN_ASIGNAR ? '··' : initialsOf(e.nombre)}
+                      variant={e.codigo === SIN_ASIGNAR ? 'muted' : 'default'}
+                      size={68}
+                      src={e.codigo === SIN_ASIGNAR ? null : avatarFotoFor(e.codigo)}
+                    />
+                    <div className="mt-2 h-8 flex items-start justify-center">
+                      <div className="text-[12px] font-medium text-zinc-800 leading-tight line-clamp-2 text-center">
+                        {e.nombre}
+                      </div>
                     </div>
                     <div className="text-[11px] text-zinc-400 tabular-nums">
-                      {e.horas.length} {e.horas.length === 1 ? 'cita' : 'citas'}
+                      {e.citas.length} {e.citas.length === 1 ? 'cita' : 'citas'}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

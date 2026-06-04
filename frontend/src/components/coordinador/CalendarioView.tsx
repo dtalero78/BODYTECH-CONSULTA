@@ -655,8 +655,12 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             </div>
           </div>
 
-          {/* Derecha — Panel del día seleccionado */}
-          <div className="border-l border-zinc-200 bg-white px-5 pt-6 pb-4 min-h-[400px]">
+          {/* Derecha — Panel del día seleccionado.
+              `overflow-hidden` + contenedor absoluto interno: la celda se estira
+              a la altura del calendario (grid stretch) y la lista de citas hace
+              scroll dentro, en vez de alargar toda la tarjeta. */}
+          <div className="border-l border-zinc-200 bg-white relative overflow-hidden min-h-[400px]">
+            <div className="absolute inset-0 overflow-y-auto px-5 pt-6 pb-4">
             {modo === 'disponibilidad' ? (
               <div className="text-[13px] pt-4 space-y-3">
                 <div className="text-zinc-700 font-medium" style={{ fontFamily: FONT_INTER }}>
@@ -687,6 +691,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 onAmpliar={() => setShowFullDayModal(true)}
               />
             )}
+            </div>
           </div>
         </div>
       </div>

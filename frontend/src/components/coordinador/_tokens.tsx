@@ -5,7 +5,7 @@
 // scan (el class scanner soporta valores estáticos en archivos .tsx).
 // ============================================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 
 export const TOKENS = {
   accent: '#1f3a8a',
@@ -57,20 +57,25 @@ export function MonoAvatar({
   initials,
   variant = 'default',
   size = 32,
+  src,
 }: {
   initials: string;
   variant?: 'default' | 'accent' | 'muted';
   size?: number;
+  /** Si se provee y carga bien, muestra la foto; si falla, cae a iniciales. */
+  src?: string | null;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const bgClass =
     variant === 'accent'
       ? 'bg-[#eef2ff] text-[#1e3a8a]'
       : variant === 'muted'
         ? 'bg-zinc-100 text-zinc-400'
         : 'bg-zinc-100 text-zinc-700';
+  const showImg = !!src && !imgFailed;
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full font-medium tracking-tight shrink-0 ${bgClass}`}
+      className={`inline-flex items-center justify-center rounded-full font-medium tracking-tight shrink-0 overflow-hidden ${showImg ? 'bg-zinc-100' : bgClass}`}
       style={{
         width: size,
         height: size,
@@ -79,9 +84,50 @@ export function MonoAvatar({
         boxShadow: 'inset 0 0 0 1px rgba(24,24,27,0.06)',
       }}
     >
-      {initials}
+      {showImg ? (
+        <img
+          src={src!}
+          alt={initials}
+          loading="lazy"
+          onError={() => setImgFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        initials
+      )}
     </span>
   );
+}
+
+// ----------------------------------------------------------------------------
+// Pool de fotos placeholder (Spaces lgs-bucket, públicas). Provisional: hasta
+// que `profesionales` tenga su propio campo de foto, se asigna una de estas de
+// forma estable por código de profesional (mismo código → misma foto).
+// ----------------------------------------------------------------------------
+
+const AVATAR_FOTO_POOL = [
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/05e29a1f-2400-4299-82a2-85abafa81ffa/foto-1773764710640.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/0661b06f-466c-4bc3-98b5-f18eb18247a6/foto-1774478122754.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/07a9a7de-4075-48cb-977b-6b7aee7d495d/foto-1775155047586.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/0c235cfc-51a5-4fff-858f-dc5f26ede4f4/foto-1773676338287.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/10673e28-c96b-47f3-9154-38f8c4c7ea4f/foto-1774537784310.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/1fd95802-08f2-49c2-947c-77ba74b4f75f/foto-1773243715258.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/22d5660e-1141-405c-88fb-18238cec3971/foto-1773181317550.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/2332abec-22bb-404a-80ba-e48ef1281a5b/foto-1774463711751.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/2c0791c9-efb6-46cf-a57f-bcf43e0b04d3/foto-1773175081525.jpeg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/3816359e-802c-4ef9-82b1-228d1153c9c6/foto-1773345618709.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/3e60d7b9-4ce5-40ad-91e4-59e829a02e29/foto-1773254155749.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/42ab4118-18c0-4e44-9cba-8668823bb8d6/foto-1773513346283.jpg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/9f803ce7-80e1-49d2-92f8-36c529060930/foto-1773177048045.jpeg',
+  'https://lgs-bucket.sfo3.digitaloceanspaces.com/fotos/0157417f-3c48-4f0e-b1a5-664f8c0d2f6b/foto-1773257629204.png',
+];
+
+/** Devuelve una foto del pool de forma estable a partir de una clave (código). */
+export function avatarFotoFor(key: string | null | undefined): string | null {
+  if (!key) return null;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return AVATAR_FOTO_POOL[Math.abs(h) % AVATAR_FOTO_POOL.length];
 }
 
 // ----------------------------------------------------------------------------

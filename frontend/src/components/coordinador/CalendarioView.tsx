@@ -10,6 +10,7 @@ import {
   Maximize2,
   CalendarDays,
   Clock,
+  Users,
 } from 'lucide-react';
 import calendarioService, {
   MesResumen,
@@ -28,6 +29,9 @@ import {
   FONT_MONO,
   Pill,
   SECTION_LABEL,
+  MonoAvatar,
+  initialsOf,
+  avatarFotoFor,
 } from './_tokens';
 
 interface Props {
@@ -990,6 +994,8 @@ function DiaPanel({
   sedeNombre: (id: string | null) => string;
   onAmpliar: () => void;
 }) {
+  const [showTeam, setShowTeam] = useState(false);
+
   const fechaFormateada = useMemo(() => {
     const [y, m, d] = fecha.split('-').map(Number);
     const date = new Date(Date.UTC(y, m - 1, d));
@@ -1052,14 +1058,34 @@ function DiaPanel({
             <span className="tabular-nums">{detalle.pendientes}</span> pendientes
           </div>
         </div>
-        <button
-          onClick={onAmpliar}
-          title="Ver día completo"
-          className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setShowTeam(true)}
+            disabled={detalle.total === 0}
+            title="Ver equipo del día"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Team
+          </button>
+          <button
+            onClick={onAmpliar}
+            title="Ver día completo"
+            className="p-1.5 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+
+      {showTeam && (
+        <TeamDiaModal
+          fechaFormateada={fechaFormateada}
+          citas={detalle.citas}
+          profesionales={profesionales}
+          onClose={() => setShowTeam(false)}
+        />
+      )}
 
       {detalle.total === 0 ? (
         <p className="text-[13px] text-zinc-400 mt-6">Sin citas para este día.</p>
@@ -1076,6 +1102,131 @@ function DiaPanel({
           )} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TeamDiaModal — equipo del día: una columna por profesional agendado, con
+// sus horas de consulta apiladas encima de su avatar (círculo con iniciales).
+// ---------------------------------------------------------------------------
+
+function TeamDiaModal({
+  fechaFormateada,
+  citas,
+  profesionales,
+  onClose,
+}: {
+  fechaFormateada: string;
+  citas: CitaListItem[];
+  profesionales: Profesional[];
+  onClose: () => void;
+}) {
+  // Agrupar citas por profesional → { codigo, nombre, horas[] }
+  const equipo = useMemo(() => {
+    const map = new Map<string, { codigo: string; nombre: string; horas: string[] }>();
+    for (const c of citas) {
+      const codigo = c.medicoCodigo || '__SIN_ASIGNAR__';
+      const p = profesionales.find((x) => x.codigo === c.medicoCodigo);
+      const nombre =
+        codigo === '__SIN_ASIGNAR__'
+          ? 'Sin asignar'
+          : p
+            ? p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ')
+            : codigo;
+      if (!map.has(codigo)) map.set(codigo, { codigo, nombre, horas: [] });
+      if (c.horaAtencion) map.get(codigo)!.horas.push(c.horaAtencion.slice(0, 5));
+    }
+    return Array.from(map.values())
+      // Más citas primero; los "Sin asignar" al final.
+      .sort((a, b) => {
+        if (a.codigo === '__SIN_ASIGNAR__') return 1;
+        if (b.codigo === '__SIN_ASIGNAR__') return -1;
+        return b.horas.length - a.horas.length;
+      })
+      .map((e) => ({
+        ...e,
+        // Descendente: la hora más tardía arriba, la más temprana junto al círculo.
+        horas: e.horas.slice().sort((x, y) => y.localeCompare(x)),
+      }));
+  }, [citas, profesionales]);
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        style={{ fontFamily: FONT_INTER }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-zinc-400" style={{ fontFamily: FONT_MONO }}>
+              / calendario / equipo del día
+            </div>
+            <h3 className="text-[18px] font-semibold text-zinc-900 capitalize">
+              {fechaFormateada}
+            </h3>
+            <p className="text-[12px] text-zinc-500">
+              <span className="tabular-nums">{equipo.length}</span>{' '}
+              {equipo.length === 1 ? 'profesional agendado' : 'profesionales agendados'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-auto">
+          {equipo.length === 0 ? (
+            <p className="text-[13px] text-zinc-500">No hay profesionales agendados este día.</p>
+          ) : (
+            <div className="flex items-end gap-6 overflow-x-auto pb-2">
+              {equipo.map((e) => (
+                <div key={e.codigo} className="flex flex-col items-center shrink-0 w-[88px]">
+                  {/* Horas apiladas encima del círculo */}
+                  <div className="flex flex-col items-center gap-0.5 mb-3">
+                    {e.horas.length === 0 ? (
+                      <span className="text-[12px] text-zinc-300">—</span>
+                    ) : (
+                      e.horas.map((h, i) => (
+                        <span
+                          key={`${h}-${i}`}
+                          className="text-[13px] text-zinc-700 tabular-nums leading-tight"
+                          style={{ fontFamily: FONT_MONO }}
+                        >
+                          {h}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <MonoAvatar
+                    initials={
+                      e.codigo === '__SIN_ASIGNAR__' ? '··' : initialsOf(e.nombre)
+                    }
+                    variant={e.codigo === '__SIN_ASIGNAR__' ? 'muted' : 'default'}
+                    size={56}
+                    src={e.codigo === '__SIN_ASIGNAR__' ? null : avatarFotoFor(e.codigo)}
+                  />
+                  <div className="mt-2 text-center">
+                    <div className="text-[12px] font-medium text-zinc-800 leading-tight line-clamp-2">
+                      {e.nombre}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 tabular-nums">
+                      {e.horas.length} {e.horas.length === 1 ? 'cita' : 'citas'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

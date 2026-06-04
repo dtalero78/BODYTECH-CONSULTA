@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { User, MapPin, FileText } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
-import { TextField, SelectField } from '../fields';
+import { TextField, SelectField, PhoneField } from '../fields';
+import { usePersistField } from '../hooks/usePersistField';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 
@@ -119,6 +120,65 @@ const ZONA_TERRITORIAL_OPTS: ReadonlyArray<DropdownOption> = [
   { value: 'Dispersa', label: 'Dispersa' },
 ];
 
+const ZONA_TERRITORIAL_DEFAULT = 'Urbana';
+const CATEGORIA_DISCAPACIDAD_DEFAULT = 'Sin discapacidad';
+
+/** Código de marcación telefónica por país (PAIS_OPTS). "Otro" → sin prefijo. */
+const DIAL_CODES: Record<string, string> = {
+  Colombia: '+57',
+  Argentina: '+54',
+  Brasil: '+55',
+  Chile: '+56',
+  Ecuador: '+593',
+  España: '+34',
+  'Estados Unidos': '+1',
+  México: '+52',
+  Panamá: '+507',
+  Perú: '+51',
+  Venezuela: '+58',
+  Otro: '',
+};
+
+/**
+ * Entidad territorial (departamento / distrito) correspondiente a cada municipio
+ * de MUNICIPIO_OPTS. Se usa para autollenar "Entidad Territorial" al elegir el
+ * municipio. Bogotá D.C. y San Andrés son entidades territoriales en sí mismas.
+ */
+const MUNICIPIO_ENTIDAD_TERRITORIAL: Record<string, string> = {
+  'Bogotá D.C.': 'Bogotá D.C.',
+  Medellín: 'Antioquia',
+  Cali: 'Valle del Cauca',
+  Barranquilla: 'Atlántico',
+  Cartagena: 'Bolívar',
+  Bucaramanga: 'Santander',
+  Cúcuta: 'Norte de Santander',
+  Pereira: 'Risaralda',
+  Manizales: 'Caldas',
+  Ibagué: 'Tolima',
+  'Santa Marta': 'Magdalena',
+  Villavicencio: 'Meta',
+  Pasto: 'Nariño',
+  Armenia: 'Quindío',
+  Neiva: 'Huila',
+  Popayán: 'Cauca',
+  Tunja: 'Boyacá',
+  Florencia: 'Caquetá',
+  Riohacha: 'La Guajira',
+  Sincelejo: 'Sucre',
+  Yopal: 'Casanare',
+  Quibdó: 'Chocó',
+  Mocoa: 'Putumayo',
+  'San José del Guaviare': 'Guaviare',
+  'San Andrés': 'Archipiélago de San Andrés, Providencia y Santa Catalina',
+  Inírida: 'Guainía',
+  Mitú: 'Vaupés',
+  'Puerto Carreño': 'Vichada',
+  Leticia: 'Amazonas',
+  Arauca: 'Arauca',
+  Soledad: 'Atlántico',
+  Soacha: 'Cundinamarca',
+};
+
 const PARENTESCO_OPTS: ReadonlyArray<DropdownOption> = [
   'Padre',
   'Madre',
@@ -175,6 +235,32 @@ function countFilled(values: ReadonlyArray<unknown>): number {
 
 export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: DatosBasicosTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const persistField = usePersistField(historiaId, onPatchLocal);
+
+  // Valores por defecto que deben quedar guardados aunque el médico no toque el
+  // campo: Zona Territorial → "Urbana", Categoría de Discapacidad → "Sin
+  // discapacidad". Se persisten una sola vez por historia cuando el campo está
+  // vacío. Tras patchLocal el valor deja de estar vacío y no se reintenta.
+  const defaultsApplied = useRef<{ zona: boolean; disc: boolean }>({ zona: false, disc: false });
+  useEffect(() => {
+    defaultsApplied.current = { zona: false, disc: false };
+  }, [historiaId]);
+  useEffect(() => {
+    if (!data) return;
+    const z = data.zonaTerritorial;
+    if (!defaultsApplied.current.zona && (z == null || z === '')) {
+      defaultsApplied.current.zona = true;
+      persistField('zona_territorial', ZONA_TERRITORIAL_DEFAULT);
+    }
+    const c = data.categoriaDiscapacidad;
+    if (!defaultsApplied.current.disc && (c == null || c === '')) {
+      defaultsApplied.current.disc = true;
+      persistField('categoria_discapacidad', CATEGORIA_DISCAPACIDAD_DEFAULT);
+    }
+  }, [data, persistField]);
+
+  // Prefijo telefónico derivado del país de residencia (default Colombia +57).
+  const dialCode = data?.paisResidencia ? (DIAL_CODES[data.paisResidencia] ?? '') : '+57';
 
   const identidadVals = [
     data?.generoBiologico,
@@ -188,6 +274,7 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
   const residenciaVals = [
     data?.paisResidencia,
     data?.municipio,
+    data?.entidadTerritorial,
     data?.zonaTerritorial,
     data?.telefonoResidencia,
     data?.contactoEmergenciaNombre,
@@ -198,7 +285,6 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
     data?.ocupacion,
     data?.eps,
     data?.tipoVinculacion,
-    data?.entidadTerritorial,
     data?.categoriaDiscapacidad,
   ];
 
@@ -376,6 +462,9 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             label="País"
             options={PAIS_OPTS}
             searchable
+            // Actualiza el cache local de inmediato para que el prefijo del
+            // teléfono cambie sin esperar al debounce del auto-save.
+            onChange={(val) => onPatchLocal('pais_residencia', val)}
           />
           <SelectField
             historiaId={historiaId}
@@ -386,7 +475,20 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             options={MUNICIPIO_OPTS}
             searchable
             placeholder="Buscar municipio..."
+            // Autollena la Entidad Territorial a partir del municipio elegido.
+            onChange={(val) => {
+              const entidad = MUNICIPIO_ENTIDAD_TERRITORIAL[val];
+              if (entidad) persistField('entidad_territorial', entidad);
+            }}
           />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              Entidad Territorial
+            </label>
+            <div className="w-full bg-[#1a2530] border border-[#324049] text-[#a4b1b9] px-3.5 py-2.5 rounded-xl text-[13.5px]">
+              {data?.entidadTerritorial || 'Se autocompleta con el municipio'}
+            </div>
+          </div>
           <SelectField
             historiaId={historiaId}
             field="zona_territorial"
@@ -395,14 +497,14 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             label="Zona Territorial"
             options={ZONA_TERRITORIAL_OPTS}
           />
-          <TextField
+          <PhoneField
             historiaId={historiaId}
             field="telefono_residencia"
             initialValue={data?.telefonoResidencia}
             onSaved={onPatchLocal}
             label="Teléfono Residencia"
-            type="tel"
-            placeholder="+57 ..."
+            dialCode={dialCode}
+            placeholder="300 123 4567"
           />
         </div>
 
@@ -473,14 +575,6 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             onSaved={onPatchLocal}
             label="Tipo de Vinculación"
             options={TIPO_VINCULACION_OPTS}
-          />
-          <TextField
-            historiaId={historiaId}
-            field="entidad_territorial"
-            initialValue={data?.entidadTerritorial}
-            onSaved={onPatchLocal}
-            label="Entidad Territorial"
-            placeholder="Bogotá D.C., Antioquia, ..."
           />
           <SelectField
             historiaId={historiaId}

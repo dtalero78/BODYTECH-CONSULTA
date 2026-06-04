@@ -178,6 +178,8 @@ export function SelectField(
     options: ReadonlyArray<DropdownOption>;
     placeholder?: string;
     searchable?: boolean;
+    /** Callback al cambiar el valor localmente (además del auto-save). */
+    onChange?: (value: string) => void;
   }
 ) {
   const initial = props.initialValue == null ? '' : String(props.initialValue);
@@ -204,10 +206,77 @@ export function SelectField(
       <Dropdown
         value={v}
         options={props.options}
-        onChange={setV}
+        onChange={(val) => {
+          setV(val);
+          props.onChange?.(val);
+        }}
         placeholder={props.placeholder}
         searchable={props.searchable ?? false}
       />
+    </div>
+  );
+}
+
+/**
+ * Campo de teléfono con prefijo de país fijo (no editable) a la izquierda.
+ *
+ * El valor almacenado combina `dialCode` + número local (ej. "+57 3001234567").
+ * `dialCode` se deriva del país seleccionado por el componente padre; al cambiar,
+ * el valor se re-guarda con el nuevo prefijo. Si `dialCode` está vacío (país
+ * "Otro" o sin país), se guarda solo el número local.
+ */
+export function PhoneField(
+  props: CommonProps & {
+    placeholder?: string;
+    /** Código de marcación del país, ej. "+57". Vacío = sin prefijo. */
+    dialCode?: string;
+  }
+) {
+  // Quita cualquier prefijo de marcación inicial (+<dígitos>) del valor guardado
+  // para mostrar solo la parte local en el input.
+  const stripDial = (raw: unknown): string => {
+    if (raw == null) return '';
+    return String(raw).replace(/^\s*\+\d{1,4}\s*/, '').trim();
+  };
+
+  const [local, setLocal] = useState<string>(stripDial(props.initialValue));
+
+  useEffect(() => {
+    setLocal(stripDial(props.initialValue));
+  }, [props.initialValue]);
+
+  const dial = props.dialCode ?? '';
+  const trimmed = local.trim();
+  const combined = trimmed === '' ? null : dial ? `${dial} ${trimmed}` : trimmed;
+
+  useFieldAutoSave({
+    historiaId: props.historiaId,
+    field: props.field,
+    value: combined,
+    onSaved: props.onSaved,
+  });
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {props.label && (
+        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        </label>
+      )}
+      <div className="flex items-stretch gap-2">
+        {dial && (
+          <span className="inline-flex items-center px-3 rounded-xl bg-[#1a2530] border border-[#324049] text-[#a4b1b9] text-[13.5px] font-semibold select-none whitespace-nowrap">
+            {dial}
+          </span>
+        )}
+        <input
+          type="tel"
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          placeholder={props.placeholder}
+          className="flex-1 min-w-0 bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] focus:border-[#00a884]"
+        />
+      </div>
     </div>
   );
 }

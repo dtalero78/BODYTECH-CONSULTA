@@ -35,6 +35,7 @@ export const PILLS = {
   bad: 'bg-red-50 text-red-800 border-red-100',
   mute: 'bg-zinc-100 text-zinc-600 border-zinc-200',
   now: 'bg-blue-50 text-blue-800 border-blue-100',
+  resched: 'bg-orange-50 text-orange-800 border-orange-100',
 };
 
 // Botón primario (CTA azul ink) y secundario outline
@@ -102,6 +103,7 @@ export function Pill({
     bad: 'bg-red-500',
     mute: 'bg-zinc-400',
     now: 'bg-blue-500',
+    resched: 'bg-orange-500',
   };
   return (
     <span className={`${PILL_BASE} ${PILLS[variant]}`}>

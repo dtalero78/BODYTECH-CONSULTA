@@ -457,6 +457,9 @@ class VideoController {
       const ok = await medicalPanelService.updateOrden(id, {
         fechaAtencion: slot.data.fecha,
         horaAtencion: slot.data.hora,
+        // Marca la cita como reprogramada → el panel coordinador la pinta en naranja.
+        // Sigue contando como pendiente de atención (no toca fechaConsulta).
+        atendido: 'REPROGRAMADA',
       });
       if (!ok) {
         res.status(500).json({ success: false, error: 'No se pudo reprogramar la cita.' });

@@ -461,6 +461,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
               <LegendDot color="bg-green-500" label="Atendido" />
               <LegendDot color="bg-amber-500" label="Pendiente" />
+              <LegendDot color="bg-orange-500" label="Reprogramada" />
               <LegendDot color="bg-blue-500" label="En curso" />
               <LegendDot color="bg-zinc-400" label="No asistió" />
             </div>
@@ -1003,10 +1004,11 @@ function DiaPanel({
     return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
   }
 
-  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' {
+  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' | 'resched' {
     const s = (atendido || 'PENDIENTE').toUpperCase();
     if (s === 'ATENDIDO') return 'ok';
     if (s === 'NO CONTESTA') return 'bad';
+    if (s === 'REPROGRAMADA') return 'resched';
     return 'warn';
   }
 
@@ -1105,7 +1107,7 @@ function CitaRow({
 }: {
   c: CitaListItem;
   prof: string;
-  variant: 'ok' | 'warn' | 'bad' | 'mute';
+  variant: 'ok' | 'warn' | 'bad' | 'mute' | 'resched';
   sede?: string | null;
 }) {
   return (
@@ -1219,10 +1221,11 @@ function DiaFullModal({ fecha, medico, profesionales, sedesSel, sedesList, onClo
     return p.alias || [p.primerNombre, p.primerApellido].filter(Boolean).join(' ');
   }
 
-  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' {
+  function statusVariant(atendido: string | null): 'ok' | 'warn' | 'bad' | 'mute' | 'resched' {
     const s = (atendido || 'PENDIENTE').toUpperCase();
     if (s === 'ATENDIDO') return 'ok';
     if (s === 'NO CONTESTA') return 'bad';
+    if (s === 'REPROGRAMADA') return 'resched';
     return 'warn';
   }
 

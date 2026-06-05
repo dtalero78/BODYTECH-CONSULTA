@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -116,7 +116,6 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [diaDetalle, setDiaDetalle] = useState<DiaDetalle | null>(null);
-  const [loadingDia, setLoadingDia] = useState(false);
   const [showFullDayModal, setShowFullDayModal] = useState(false);
   const [showAgendar, setShowAgendar] = useState(false);
   const [diaReloadTick, setDiaReloadTick] = useState(0);
@@ -201,14 +200,23 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     if (mesData) reportCount(mesData.totalCitas);
   }, [mesData, reportCount]);
 
-  // Cargar detalle del día seleccionado
+  // Cargar detalle del día seleccionado.
+  // diaKeyRef distingue un cambio real de día/filtro (limpia el detalle para
+  // mostrar "Cargando") de una simple recarga vía diaReloadTick (conserva el
+  // detalle, para no desmontar DiaPanel ni el modal Team abierto encima).
+  const diaKeyRef = useRef<string>('');
   useEffect(() => {
     if (!selectedDay) {
       setDiaDetalle(null);
+      diaKeyRef.current = '';
       return;
     }
+    const key = `${selectedDay}|${filterMedico}|${sedesSel.join(',')}`;
+    if (key !== diaKeyRef.current) {
+      setDiaDetalle(null); // cambio real → estado de carga
+      diaKeyRef.current = key;
+    }
     let cancelled = false;
-    setLoadingDia(true);
     calendarioService
       .getDia(selectedDay, filterMedico || undefined, sedesSel)
       .then((d) => {
@@ -216,9 +224,6 @@ export function CalendarioView({ showToast, reportCount }: Props) {
       })
       .catch(() => {
         if (!cancelled) setDiaDetalle(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDia(false);
       });
     return () => {
       cancelled = true;
@@ -683,7 +688,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
               <div className="text-zinc-400 text-[13px] pt-4">
                 Selecciona un día para ver las citas.
               </div>
-            ) : loadingDia || !diaDetalle ? (
+            ) : !diaDetalle ? (
               <div className="text-zinc-500 text-[13px] pt-4">Cargando citas…</div>
             ) : (
               <DiaPanel

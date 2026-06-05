@@ -438,8 +438,12 @@ export function MedicalPanelPage() {
         setPatientRooms(prev => ({ ...prev, [patient._id]: roomName }));
       }
 
-      // Construir URL del doctor con _id de la historia clínica (URL completa)
-      const doctorUrl = `${window.location.origin}/doctor/${roomName}?doctor=${medicoCode}&documento=${patient._id}&paciente=${encodeURIComponent(patient.nombres)}`;
+      // El panel a abrir depende de la especialidad del profesional logueado:
+      // Nutrición Deportiva → panel nutricional (/nutricion); resto → consulta (/doctor).
+      // La sala (roomName) es la MISMA que se envió al paciente por WhatsApp, así que
+      // ambos entran a la misma sala de Twilio independientemente del panel.
+      const basePath = authService.isNutricionDeportiva() ? 'nutricion' : 'doctor';
+      const doctorUrl = `${window.location.origin}/${basePath}/${roomName}?doctor=${medicoCode}&documento=${patient._id}&paciente=${encodeURIComponent(patient.nombres)}`;
 
       // Abrir ventana del doctor en una nueva pestaña
       window.open(doctorUrl, '_blank');

@@ -50,6 +50,7 @@ class AuthController {
         medicoCode,
         sedeId,
         rol: result.rol,
+        especialidad: result.especialidad ?? null,
       });
     } catch (err) {
       next(err);

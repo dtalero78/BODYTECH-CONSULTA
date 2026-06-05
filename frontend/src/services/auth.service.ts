@@ -20,6 +20,16 @@ const TOKEN_KEY = 'bsl_auth_token';
 const MEDICO_KEY = 'bsl_medico_code';
 const SEDE_KEY = 'bsl_sede_id';
 const ROL_KEY = 'bsl_rol';
+const ESP_KEY = 'bsl_especialidad';
+
+/** Normaliza una especialidad: minúsculas, sin acentos, trim. */
+function normalizeEsp(s: string | null | undefined): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
 
 /**
  * Convierte un error de axios del endpoint /api/auth/login en un mensaje
@@ -73,6 +83,7 @@ class AuthService {
       medicoCode: returnedCode,
       sedeId: returnedSede,
       rol,
+      especialidad,
     } = res.data || {};
     if (!token) {
       throw new Error('Login response missing token');
@@ -81,6 +92,8 @@ class AuthService {
     localStorage.setItem(MEDICO_KEY, returnedCode ?? medicoCode);
     localStorage.setItem(SEDE_KEY, returnedSede ?? sedeId);
     if (rol) localStorage.setItem(ROL_KEY, rol);
+    if (especialidad) localStorage.setItem(ESP_KEY, especialidad);
+    else localStorage.removeItem(ESP_KEY);
   }
 
   /**
@@ -92,12 +105,22 @@ class AuthService {
     localStorage.removeItem(MEDICO_KEY);
     localStorage.removeItem(SEDE_KEY);
     localStorage.removeItem(ROL_KEY);
+    localStorage.removeItem(ESP_KEY);
   }
 
   getRol(): 'medico' | 'coach' | null {
     const v = localStorage.getItem(ROL_KEY);
     if (v === 'medico' || v === 'coach') return v;
     return null;
+  }
+
+  getEspecialidad(): string | null {
+    return localStorage.getItem(ESP_KEY);
+  }
+
+  /** True si el profesional logueado es de Nutrición Deportiva → abre panel nutricional. */
+  isNutricionDeportiva(): boolean {
+    return normalizeEsp(localStorage.getItem(ESP_KEY)) === 'nutricion deportiva';
   }
 
   getToken(): string | null {

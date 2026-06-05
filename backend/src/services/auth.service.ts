@@ -29,6 +29,8 @@ export interface LoginResult {
   ok: boolean;
   token?: string;
   rol?: 'medico' | 'coach';
+  /** Especialidad del profesional (ej. "Nutricion Deportiva") — define qué panel abre. */
+  especialidad?: string | null;
   error?: LoginErrorCode;
 }
 
@@ -58,7 +60,7 @@ class AuthService {
 
     // 2) Profesional activo con ese código en esa sede
     const profResult = await postgresService.query(
-      `SELECT rol FROM profesionales
+      `SELECT rol, especialidad FROM profesionales
         WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE
         LIMIT 1`,
       [medicoCode, sedeId]
@@ -70,10 +72,11 @@ class AuthService {
       return { ok: false, error: 'CODIGO_NOT_FOUND' };
     }
     const rol = profResult[0].rol === 'coach' ? 'coach' : 'medico';
+    const especialidad = profResult[0].especialidad ? String(profResult[0].especialidad) : null;
 
     const payload: AuthPayload = { medicoCode, sedeId, rol };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_TTL });
-    return { ok: true, token, rol };
+    return { ok: true, token, rol, especialidad };
   }
 
   /**

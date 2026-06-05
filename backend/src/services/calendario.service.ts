@@ -17,6 +17,26 @@ import disponibilidadFechaService from './disponibilidad-fecha.service';
 
 const TZ = 'America/Bogota';
 
+// Sede por defecto para citas Trepsi cuyo médico no está registrado en
+// `profesionales` (no resuelve a una sede real). Evita que queden ocultas
+// en el calendario del coordinador. `bsl` = sede principal.
+const TREPSI_FALLBACK_SEDE = 'bsl';
+
+// Sede "efectiva" de una cita para el filtro multi-sede del coordinador.
+// Las citas Trepsi se persisten con sede_id='trepsi' (placeholder, no es una
+// sede real), así que se atribuyen a la sede del médico asignado; si el médico
+// no está registrado, caen a TREPSI_FALLBACK_SEDE. El resto conserva su sede_id.
+// Asume que la tabla en la query se llama "HistoriaClinica" (sin alias).
+const EFFECTIVE_SEDE_SQL = `
+  CASE WHEN "HistoriaClinica"."sede_id" = 'trepsi'
+       THEN COALESCE(
+              (SELECT p.sede_id FROM profesionales p
+                WHERE p.codigo = "HistoriaClinica"."medico" AND p.activo = TRUE
+                LIMIT 1),
+              '${TREPSI_FALLBACK_SEDE}')
+       ELSE "HistoriaClinica"."sede_id"
+  END`;
+
 export type Modalidad = 'presencial' | 'virtual';
 
 export interface ServiceResult<T> {
@@ -233,7 +253,7 @@ class CalendarioService {
         UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
-      WHERE sede_id = ANY($1::text[])
+      WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
@@ -333,7 +353,7 @@ class CalendarioService {
         "celular", "email", "medico", "horaAtencion", "fechaAtencion",
         "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id"
       FROM "HistoriaClinica"
-      WHERE sede_id = ANY($1::text[])
+      WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
@@ -357,7 +377,7 @@ class CalendarioService {
         UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
-      WHERE sede_id = ANY($1::text[])
+      WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz

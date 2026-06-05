@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { DoctorPage } from './pages/DoctorPage';
 import { DoctorRoomPage } from './pages/DoctorRoomPage';
+import { NutricionRoomPage } from './pages/NutricionRoomPage';
 import { PatientPage } from './pages/PatientPage';
 import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
@@ -35,6 +36,7 @@ function App() {
           <Route path="/" element={<Navigate to="/panel-medico" replace />} />
           <Route path="/doctor" element={<DoctorPage />} />
           <Route path="/doctor/:roomName" element={<DoctorRoomPage />} />
+          <Route path="/nutricion/:roomName" element={<NutricionRoomPage />} />
           <Route path="/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico" element={<MedicalPanelPage />} />

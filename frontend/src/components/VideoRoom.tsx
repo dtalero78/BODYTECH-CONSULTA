@@ -7,6 +7,7 @@ import { VideoControls } from './VideoControls';
 import { PosturalAnalysisModal } from './PosturalAnalysisModal';
 import { PosturalAnalysisPatient } from './PosturalAnalysisPatient';
 import { MedicalConsultationPanel } from './panel/MedicalConsultationPanel';
+import { MedicalHistoryPanel } from './MedicalHistoryPanel';
 import apiService from '../services/api.service';
 
 interface VideoRoomProps {
@@ -16,10 +17,14 @@ interface VideoRoomProps {
   historiaId?: string; // ID de la historia clínica
   documento?: string; // Documento del paciente (para notificaciones en tiempo real)
   medicoCode?: string; // Código del médico (para Socket.io Rooms)
+  // Panel que se renderiza junto al video para el médico.
+  // 'consulta' (default) → MedicalConsultationPanel de 7 tabs (comportamiento actual).
+  // 'nutricional' → MedicalHistoryPanel nutricional (somatocarta, ISAK, Heath-Carter).
+  panelVariant?: 'consulta' | 'nutricional';
   onLeave?: () => void;
 }
 
-export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, onLeave }: VideoRoomProps) => {
+export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, panelVariant = 'consulta', onLeave }: VideoRoomProps) => {
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
   const [isPanelMaxed, setIsPanelMaxed] = useState(false);
 
@@ -351,11 +356,17 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
 
       {/* Panel principal */}
       <main className="flex-1 min-w-0 relative">
-        <MedicalConsultationPanel
-          historiaId={historiaId!}
-          isMaxed={isPanelMaxed}
-          onToggleMaxed={() => setIsPanelMaxed((p) => !p)}
-        />
+        {panelVariant === 'nutricional' ? (
+          <div className="h-full overflow-y-auto">
+            <MedicalHistoryPanel historiaId={historiaId!} />
+          </div>
+        ) : (
+          <MedicalConsultationPanel
+            historiaId={historiaId!}
+            isMaxed={isPanelMaxed}
+            onToggleMaxed={() => setIsPanelMaxed((p) => !p)}
+          />
+        )}
       </main>
 
       {/* Float thumbnail del video remoto cuando el panel está maximizado */}

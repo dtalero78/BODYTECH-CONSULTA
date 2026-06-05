@@ -202,12 +202,32 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
   const [horarios, setHorarios] = useState<HorariosDisponibles | null>(null);
   const [loadingHorarios, setLoadingHorarios] = useState(false);
 
+  // Sedes (para mostrar el nombre de la sede del médico en la tabla)
+  const [sedes, setSedes] = useState<{ sedeId: string; nombre: string }[]>([]);
+
   useEffect(() => {
     profesionalesService
       .list({ activo: true })
       .then(setProfesionales)
       .catch(() => setProfesionales([]));
+    authService
+      .getSedes()
+      .then(setSedes)
+      .catch(() => setSedes([]));
   }, []);
+
+  // Mapas para resolver el código de médico de cada orden → nombre + sede.
+  const medicoByCodigo = useMemo(() => {
+    const m = new Map<string, Profesional>();
+    profesionales.forEach((p) => m.set(p.codigo, p));
+    return m;
+  }, [profesionales]);
+
+  const sedeNombreById = useMemo(() => {
+    const m = new Map<string, string>();
+    sedes.forEach((s) => m.set(s.sedeId, s.nombre));
+    return m;
+  }, [sedes]);
 
   const medicoSeleccionado = useMemo(
     () => profesionales.find((p) => p.codigo === formData.medico) ?? null,
@@ -589,7 +609,22 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                         </div>
                       </td>
                       <td className="px-[14px] py-2.5 text-zinc-700">
-                        {o.medico || '—'}
+                        {(() => {
+                          const prof = o.medico ? medicoByCodigo.get(o.medico) : undefined;
+                          if (!prof) return o.medico || '—';
+                          const nombre =
+                            prof.alias ||
+                            `${prof.primerNombre} ${prof.primerApellido}`.trim();
+                          const sede = sedeNombreById.get(prof.sedeId) || prof.sedeId;
+                          return (
+                            <div className="leading-tight">
+                              <div className="font-medium text-zinc-800">{nombre}</div>
+                              {sede && (
+                                <div className="text-[11px] text-zinc-500">{sede}</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-[14px] py-2.5 text-zinc-700">
                         {o.tipoExamen || '—'}

@@ -566,6 +566,39 @@ class PostgresService {
           ON trepsi_appointments (estado, fecha_atencion)
       `);
 
+      // ===== Webhook BSL → Trepsi (outbox persistente) =====
+      // Cuando el médico guarda la HC de una cita Trepsi, se inserta una fila
+      // aquí con `estado='pending'`. El worker (setInterval en index.ts) toma
+      // las pending listas (`proximo_intento_at <= NOW()`), hace POST al
+      // webhook de Trepsi y actualiza la fila. Reintentos con backoff
+      // exponencial. Estados: pending | sent | failed | dead.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS trepsi_webhook_outbox (
+          id                 SERIAL PRIMARY KEY,
+          cita_id            VARCHAR(120) NOT NULL,
+          historia_id        TEXT NOT NULL,
+          payload            JSONB NOT NULL,
+          estado             VARCHAR(20) NOT NULL DEFAULT 'pending',
+          intentos           INTEGER NOT NULL DEFAULT 0,
+          proximo_intento_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_error         TEXT,
+          last_status_code   INTEGER,
+          response_body      TEXT,
+          created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          sent_at            TIMESTAMPTZ,
+          updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_webhook_outbox_pending
+          ON trepsi_webhook_outbox (estado, proximo_intento_at)
+          WHERE estado = 'pending'
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_webhook_outbox_cita
+          ON trepsi_webhook_outbox (cita_id)
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

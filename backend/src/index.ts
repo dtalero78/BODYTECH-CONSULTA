@@ -16,6 +16,8 @@ import trepsiRoutes from './routes/trepsi.routes';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
+import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
+import trepsiWebhookService from './services/trepsi-webhook.service';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
@@ -124,6 +126,8 @@ app.use('/api/calendario', requireAuthMiddleware, calendarioRoutes);
 app.use('/api/bot-trepsi', botTrepsiRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
 app.use('/api/calidad', calidadRoutes);
+// Admin del outbox del webhook BSL → Trepsi (JWT requerido).
+app.use('/api/admin/trepsi-webhook', requireAuthMiddleware, trepsiWebhookAdminRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
 // la API Key se rota por ambiente (TREPSI_API_KEY).
 app.use(
@@ -148,6 +152,19 @@ app.use(errorHandler);
 // Run database migrations
 import postgresService from './services/postgres.service';
 postgresService.runMigrations();
+
+// Worker del outbox del webhook Trepsi: cada 30 s recorre la cola y reenvía
+// las filas pending listas (con backoff exponencial). Si TREPSI_WEBHOOK_URL
+// no está configurada, el dispatch retorna sin hacer nada (no rompe nada).
+const TREPSI_WEBHOOK_INTERVAL_MS = 30_000;
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    trepsiWebhookService.dispatchPending().catch((e) => {
+      console.error('[trepsi-webhook] worker error:', e?.message ?? e);
+    });
+  }, TREPSI_WEBHOOK_INTERVAL_MS);
+  console.log(`📨 [Trepsi-Webhook] Worker iniciado (cada ${TREPSI_WEBHOOK_INTERVAL_MS / 1000}s)`);
+}
 
 // Start server
 const PORT = appConfig.port;

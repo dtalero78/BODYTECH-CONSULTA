@@ -2,6 +2,7 @@ import historiaClinicaPostgresService from './historia-clinica-postgres.service'
 import { historiaClinicaRepository } from '../repositories';
 import whatsappService from './whatsapp.service';
 import historiaQueryService from './historia-query.service';
+import trepsiWebhookService from './trepsi-webhook.service';
 import {
   EDITABLE_FIELDS,
   EDITABLE_FIELD_TYPE_MAP,
@@ -235,6 +236,22 @@ class HistoriaMutationService {
       } else {
         console.log(`ℹ️  [Certificado] No se envía certificado para ${historiaBase.codEmpresa || 'N/A'}`);
       }
+
+      // PASO 2: Si la cita es de Trepsi, encolar los resultados en el outbox
+      // del webhook. Fire-and-forget: si falla, el médico ya guardó la HC.
+      // El worker se encarga de reintentar.
+      trepsiWebhookService
+        .enqueue(payload.historiaId)
+        .then((res) => {
+          if (res.enqueued) {
+            console.log(`📨 [Trepsi-Webhook] Encolado para historia ${payload.historiaId}`);
+          } else if (res.reason && res.reason !== 'NOT_TREPSI') {
+            console.log(`ℹ️  [Trepsi-Webhook] No encolado: ${res.reason}`);
+          }
+        })
+        .catch((e) => {
+          console.error(`⚠️  [Trepsi-Webhook] Error encolando: ${e?.message ?? e}`);
+        });
 
       return { success: true };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

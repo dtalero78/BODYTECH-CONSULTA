@@ -949,6 +949,8 @@ class VideoController {
         `[Webhook composition-status] ${compositionSid} event=${event} status=${status}`
       );
 
+      const roomSid = params.RoomSid || params.roomSid || '';
+
       (async () => {
         try {
           const completedAt =
@@ -963,14 +965,49 @@ class VideoController {
             [status, completedAt, compositionSid]
           );
 
-          if (!result || result.length === 0) {
+          let historiaId: string | undefined = result?.[0]?._id as string | undefined;
+
+          // Fallback: el match por composition_sid falló (0 filas). Esto pasa
+          // cuando el guardado asíncrono del composition_sid en endRoom/room-completed
+          // se demoró, falló (corte de BD) o perdió la carrera contra este callback
+          // (la composición se completa en ~1 min). Resolvemos la historia por el
+          // RoomSid del payload → uniqueName → room_historia_map, y hacemos backfill
+          // del composition_sid para no volver a depender de esa escritura asíncrona.
+          if (!historiaId && roomSid) {
+            try {
+              const room = await twilioService.getRoom(roomSid);
+              const roomName = room?.uniqueName;
+              const hid = roomName
+                ? await transcriptionService.getHistoriaIdForRoom(roomName)
+                : null;
+              if (hid) {
+                await postgresService.query(
+                  `UPDATE "HistoriaClinica"
+                     SET "composition_sid" = $1,
+                         "composition_status" = $2,
+                         "composition_completed_at" = COALESCE($3, "composition_completed_at")
+                   WHERE "_id" = $4`,
+                  [compositionSid, status, completedAt, hid]
+                );
+                historiaId = hid;
+                console.log(
+                  `[Webhook composition-status] Fallback por RoomSid: historia ${hid} backfilled con composition ${compositionSid}`
+                );
+              }
+            } catch (fallbackErr: unknown) {
+              const m =
+                fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+              console.error(`[Webhook composition-status] Fallback por RoomSid falló:`, m);
+            }
+          }
+
+          if (!historiaId) {
             console.log(
-              `[Webhook composition-status] Composition ${compositionSid} sin HistoriaClinica vinculada — ignorando`
+              `[Webhook composition-status] Composition ${compositionSid} sin HistoriaClinica vinculada (ni por composition_sid ni por RoomSid) — ignorando`
             );
             return;
           }
 
-          const historiaId = result[0]._id as string;
           console.log(
             `[Webhook composition-status] HistoriaClinica ${historiaId} actualizada → ${status}`
           );
@@ -1116,11 +1153,46 @@ class VideoController {
         res.status(404).json({ error: 'Historia clínica no encontrada' });
         return;
       }
-      const compositionSid = rows[0].composition_sid as string | null;
+      let compositionSid = rows[0].composition_sid as string | null;
+
+      // Auto-reparación: si falta composition_sid (el guardado asíncrono falló o
+      // perdió la carrera), lo resolvemos vía room_historia_map → Twilio y hacemos
+      // backfill, en vez de fallar. Así esta historia y cualquier otra atascada
+      // se puede re-transcribir sin tocar la BD a mano.
+      if (!compositionSid) {
+        try {
+          const roomRows = await postgresService.query(
+            `SELECT room_name FROM room_historia_map
+              WHERE historia_id = $1 ORDER BY created_at DESC NULLS LAST LIMIT 1`,
+            [historiaId]
+          );
+          const roomName: string | undefined = roomRows?.[0]?.room_name;
+          if (roomName) {
+            const room = await twilioService.getRoom(roomName);
+            const sid = room?.sid
+              ? await twilioService.getLatestCompositionSid(room.sid)
+              : null;
+            if (sid) {
+              await postgresService.query(
+                `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+                [sid, historiaId]
+              );
+              compositionSid = sid;
+              console.log(
+                `[retranscribeHistoria] Backfill composition_sid=${sid} para historia ${historiaId} (room ${roomName})`
+              );
+            }
+          }
+        } catch (backfillErr) {
+          const m = backfillErr instanceof Error ? backfillErr.message : String(backfillErr);
+          console.error('[retranscribeHistoria] Backfill composition_sid falló:', m);
+        }
+      }
+
       if (!compositionSid) {
         res.status(400).json({
           error:
-            'La historia no tiene composition_sid (la sala no se cerró o no se creó composition).',
+            'La historia no tiene composition_sid y no se pudo resolver desde Twilio (la sala no se cerró o no se creó composition).',
         });
         return;
       }

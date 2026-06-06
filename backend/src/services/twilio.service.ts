@@ -246,6 +246,18 @@ class TwilioService {
     const list = await this.client.video.v1.compositions.list({ roomSid, limit: 1 });
     return list.length > 0;
   }
+
+  /**
+   * Devuelve el SID de la composición más reciente de un room, priorizando una
+   * 'completed'. Útil para backfill cuando el composition_sid no quedó guardado
+   * en la HistoriaClinica. Retorna null si el room no tiene composiciones.
+   */
+  async getLatestCompositionSid(roomSid: string): Promise<string | null> {
+    const list = await this.client.video.v1.compositions.list({ roomSid, limit: 20 });
+    if (list.length === 0) return null;
+    const completed = list.find((c) => c.status === 'completed');
+    return (completed ?? list[0]).sid;
+  }
 }
 
 export default new TwilioService();

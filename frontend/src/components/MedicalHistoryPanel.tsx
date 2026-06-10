@@ -128,6 +128,28 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     setDatosNutricionales((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  // Abrir la vista imprimible de la HC. La ruta /preview ahora exige JWT, así
+  // que no se puede usar un <a href> (la navegación del browser no envía el
+  // header Authorization). Hacemos fetch autenticado → blob → nueva pestaña.
+  const handleOpenPreview = async () => {
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || '';
+      const token = localStorage.getItem('bsl_auth_token');
+      const res = await fetch(`${base}/api/video/medical-history/${historiaId}/preview`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`Preview failed: ${res.status}`);
+      const html = await res.text();
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      // Liberar el object URL tras un breve margen para que la pestaña cargue.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      console.error('Preview error:', e);
+    }
+  };
+
   useEffect(() => {
     loadMedicalHistory();
   }, [historiaId]);
@@ -703,10 +725,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               Historial
             </button>
           )}
-          <a
-            href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/video/medical-history/${historiaId}/preview`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={handleOpenPreview}
             className="flex items-center gap-2 px-3 py-2 bg-[#2a3942] text-[#00a884] text-base rounded-lg hover:bg-[#344950] border border-[#00a884]/30 transition"
             title="Ver e imprimir historia clínica completa"
           >
@@ -714,7 +735,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
             Imprimir HC
-          </a>
+          </button>
         </div>
       </div>
 

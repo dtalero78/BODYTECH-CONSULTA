@@ -79,14 +79,56 @@ jest.mock('../../services/session-tracker.service', () => ({
 
 import express from 'express';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import videoRoutes from '../video.routes';
 
+// Las rutas de historia clínica ahora exigen JWT. Firmamos un token de prueba
+// con el mismo secreto que usa auth.service (fallback dev si no hay env).
+const TEST_TOKEN = jwt.sign(
+  { medicoCode: 'TEST', sedeId: 'bsl', rol: 'medico' },
+  process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod'
+);
+
 function makeApp() {
+  const app = express();
+  app.use(express.json());
+  // Inyecta un JWT válido en cada request. Estos tests ejercen el
+  // controller+service (validación de body, coerción, shape de respuesta),
+  // no el middleware de auth — ese se cubre aparte abajo.
+  app.use((req, _res, next) => {
+    req.headers.authorization = `Bearer ${TEST_TOKEN}`;
+    next();
+  });
+  app.use('/api/video', videoRoutes);
+  return app;
+}
+
+/** Mini-app SIN inyección de token — para verificar que la auth corta el paso. */
+function makeAppNoAuth() {
   const app = express();
   app.use(express.json());
   app.use('/api/video', videoRoutes);
   return app;
 }
+
+describe('Auth — rutas de historia clínica exigen JWT', () => {
+  test('GET /medical-history/:id sin token → 401', async () => {
+    const res = await request(makeAppNoAuth()).get('/api/video/medical-history/abc');
+    expect(res.status).toBe(401);
+  });
+
+  test('PATCH /medical-history/:id/field sin token → 401', async () => {
+    const res = await request(makeAppNoAuth())
+      .patch('/api/video/medical-history/abc/field')
+      .send({ field: 'cc_imc_nuevo', value: 23.4 });
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /medical-history/atendidos sin token → 401', async () => {
+    const res = await request(makeAppNoAuth()).get('/api/video/medical-history/atendidos');
+    expect(res.status).toBe(401);
+  });
+});
 
 describe('PATCH /api/video/medical-history/:id/field', () => {
   beforeEach(() => {
@@ -159,10 +201,13 @@ describe('PATCH /api/video/medical-history/:id/field', () => {
     expect(res.body.value).toBe(23.4);
     expect(res.body.updatedAt).toBe(now.toISOString());
 
-    // Sanidad de la query: se construye con el nombre de la columna del whitelist.
+    // Sanidad de la query: se construye con el nombre de la columna del whitelist
+    // y queda scopeada por la sede del JWT (`requireAuthMiddleware` setea
+    // req.sedeId='bsl' desde el token de prueba) → WHERE ... AND "sede_id" = $3.
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toMatch(/UPDATE\s+"HistoriaClinica"\s+SET\s+"cc_imc_nuevo"\s*=\s*\$1/);
-    expect(params).toEqual([23.4, 'abc']);
+    expect(sql).toMatch(/AND\s+"sede_id"\s*=\s*\$3/);
+    expect(params).toEqual([23.4, 'abc', 'bsl']);
   });
 });
 

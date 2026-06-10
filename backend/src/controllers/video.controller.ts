@@ -67,18 +67,29 @@ const getAtendidosQuerySchema = z.object({
   buscar: z.string().optional(),
 });
 
+// Los campos opcionales vienen del GET de la historia, que devuelve `null`
+// para columnas vacías. El panel reenvía esos valores tal cual al guardar, así
+// que `z.string().optional()` (que solo acepta string|undefined) rechazaba
+// `null` con 400 "Expected string, received null". Aceptamos string|null|undefined
+// y normalizamos null → undefined para no romper el tipo del payload aguas abajo.
+const optionalText = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((v) => v ?? undefined);
+
 const updateMedicalHistorySchema = z.object({
   historiaId: z.string().min(1),
-  mdAntecedentes: z.string().optional(),
-  mdObsParaMiDocYa: z.string().optional(),
-  mdObservacionesCertificado: z.string().optional(),
-  mdRecomendacionesMedicasAdicionales: z.string().optional(),
-  mdConceptoFinal: z.string().optional(),
-  mdDx1: z.string().optional(),
-  mdDx2: z.string().optional(),
-  talla: z.string().optional(),
-  peso: z.string().optional(),
-  cargo: z.string().optional(),
+  mdAntecedentes: optionalText,
+  mdObsParaMiDocYa: optionalText,
+  mdObservacionesCertificado: optionalText,
+  mdRecomendacionesMedicasAdicionales: optionalText,
+  mdConceptoFinal: optionalText,
+  mdDx1: optionalText,
+  mdDx2: optionalText,
+  talla: optionalText,
+  peso: optionalText,
+  cargo: optionalText,
   // datosNutricionales: el OpenAI service lo digiere; aceptamos shape libre.
   datosNutricionales: z.unknown().optional(),
 });

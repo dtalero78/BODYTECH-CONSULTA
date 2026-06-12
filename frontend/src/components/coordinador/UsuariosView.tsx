@@ -223,7 +223,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
             Cuentas, roles y acceso por sede{!isAdmin && ' (tus sedes)'}
           </p>
         </div>
-        <button onClick={openCreate} className={CTA_PRIMARY}>
+        <button onClick={openCreate} className={CTA_PRIMARY} style={{ background: '#1f3a8a' }}>
           <Plus className="w-4 h-4" /> Nuevo usuario
         </button>
       </div>
@@ -419,7 +419,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
             <button onClick={() => setForm(null)} className={CTA_OUTLINE} disabled={saving}>
               Cancelar
             </button>
-            <button onClick={submitForm} className={CTA_PRIMARY} disabled={saving}>
+            <button onClick={submitForm} className={CTA_PRIMARY} style={{ background: '#1f3a8a' }} disabled={saving}>
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
           </div>
@@ -442,7 +442,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
             <button onClick={() => setPwUser(null)} className={CTA_OUTLINE} disabled={saving}>
               Cancelar
             </button>
-            <button onClick={submitPassword} className={CTA_PRIMARY} disabled={saving}>
+            <button onClick={submitPassword} className={CTA_PRIMARY} style={{ background: '#1f3a8a' }} disabled={saving}>
               {saving ? 'Guardando…' : 'Cambiar contraseña'}
             </button>
           </div>

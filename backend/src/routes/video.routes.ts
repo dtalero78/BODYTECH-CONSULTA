@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import videoController from '../controllers/video.controller';
-import { requireAuthMiddleware } from '../middleware/auth.middleware';
+import { requireRole } from '../middleware/rbac.middleware';
 
 const router = Router();
+
+// RBAC: las rutas de historia clínica (PHI), sugerencias IA, WhatsApp y
+// transcripción son de personal clínico — medico, coordinador, admin. Los
+// pacientes acceden por link SOLO al video (token + eventos), nunca a estas.
+const clinico = requireRole('medico', 'coordinador', 'admin');
 
 // Generar token de acceso
 router.post('/token', videoController.generateToken);
@@ -33,7 +38,7 @@ router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
 // paciente) — sin JWT permitiría disparar Whisper/GPT sobre historias arbitrarias.
 router.post(
   '/transcribe-historia/:historiaId',
-  requireAuthMiddleware,
+  clinico,
   videoController.retranscribeHistoria
 );
 
@@ -43,7 +48,7 @@ router.post('/webhooks/composition-status', videoController.compositionStatusWeb
 
 // WhatsApp — protegido: solo personal autenticado envía links/plantillas
 // (evita abuso del template aprobado para phishing / spam con la marca).
-router.post('/whatsapp/send', requireAuthMiddleware, videoController.sendWhatsApp);
+router.post('/whatsapp/send', clinico, videoController.sendWhatsApp);
 
 // Reprogramación de cita (público — abierto desde el botón de WhatsApp)
 router.get('/reprogramar/:id', videoController.getReprogramarInfo);
@@ -54,30 +59,30 @@ router.post('/reprogramar/:id', videoController.reprogramarCita);
 // SOLO al video (token + eventos), nunca a la historia clínica, así que exigir
 // JWT aquí no afecta el flujo del paciente y cierra el acceso anónimo.
 // IMPORTANTE: Las rutas específicas deben ir ANTES de '/:historiaId' para evitar conflictos
-router.get('/medical-history/atendidos', requireAuthMiddleware, videoController.getAtendidos);
+router.get('/medical-history/atendidos', clinico, videoController.getAtendidos);
 router.get(
   '/medical-history/patient/:numeroId',
-  requireAuthMiddleware,
+  clinico,
   videoController.getPatientHistory
 );
 // Run 6 — PDF descarga. Va antes de la ruta genérica para que `:id/pdf` no
 // caiga en `:historiaId`. Protegida con JWT (solo médicos autenticados).
-router.get('/medical-history/:id/pdf', requireAuthMiddleware, videoController.getHistoriaPdf);
+router.get('/medical-history/:id/pdf', clinico, videoController.getHistoriaPdf);
 router.get(
   '/medical-history/:historiaId/preview',
-  requireAuthMiddleware,
+  clinico,
   videoController.getPreviewHTML
 );
-router.get('/medical-history/:historiaId', requireAuthMiddleware, videoController.getMedicalHistory);
-router.post('/medical-history', requireAuthMiddleware, videoController.updateMedicalHistory);
+router.get('/medical-history/:historiaId', clinico, videoController.getMedicalHistory);
+router.post('/medical-history', clinico, videoController.updateMedicalHistory);
 // Phase 1 — auto-save por field (PATCH)
 router.patch(
   '/medical-history/:historiaId/field',
-  requireAuthMiddleware,
+  clinico,
   videoController.updateMedicalHistoryField
 );
 
 // AI Suggestions — protegido: invoca OpenAI con datos del paciente.
-router.post('/ai-suggestions', requireAuthMiddleware, videoController.generateAISuggestions);
+router.post('/ai-suggestions', clinico, videoController.generateAISuggestions);
 
 export default router;

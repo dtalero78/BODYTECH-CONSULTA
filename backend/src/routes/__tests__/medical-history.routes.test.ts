@@ -79,31 +79,35 @@ jest.mock('../../services/session-tracker.service', () => ({
 
 import express from 'express';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import videoRoutes from '../video.routes';
 
-// Las rutas de historia clínica ahora exigen JWT. Firmamos un token de prueba
-// con el mismo secreto que usa auth.service (fallback dev si no hay env).
-const TEST_TOKEN = jwt.sign(
-  { medicoCode: 'TEST', sedeId: 'bsl', rol: 'medico' },
-  process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod'
-);
-
+// Las rutas de historia clínica ahora exigen sesión RBAC con rol clínico
+// (requireRole). Inyectamos directamente `req.session` (rol medico, una sede)
+// — equivale a lo que hace sessionContextMiddleware con un token válido — y
+// `req.sedeId` (el puente single-sede) para que el scoping por sede aplique.
 function makeApp() {
   const app = express();
   app.use(express.json());
-  // Inyecta un JWT válido en cada request. Estos tests ejercen el
-  // controller+service (validación de body, coerción, shape de respuesta),
-  // no el middleware de auth — ese se cubre aparte abajo.
   app.use((req, _res, next) => {
-    req.headers.authorization = `Bearer ${TEST_TOKEN}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any).session = {
+      kind: 'session',
+      userId: 1,
+      email: 'test@bsl.co',
+      nombre: 'Test',
+      role: 'medico',
+      sedes: ['bsl'],
+      esGlobal: false,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any).sedeId = 'bsl';
     next();
   });
   app.use('/api/video', videoRoutes);
   return app;
 }
 
-/** Mini-app SIN inyección de token — para verificar que la auth corta el paso. */
+/** Mini-app SIN sesión — para verificar que requireRole corta el paso. */
 function makeAppNoAuth() {
   const app = express();
   app.use(express.json());
@@ -111,20 +115,20 @@ function makeAppNoAuth() {
   return app;
 }
 
-describe('Auth — rutas de historia clínica exigen JWT', () => {
-  test('GET /medical-history/:id sin token → 401', async () => {
+describe('RBAC — rutas de historia clínica exigen sesión con rol clínico', () => {
+  test('GET /medical-history/:id sin sesión → 401', async () => {
     const res = await request(makeAppNoAuth()).get('/api/video/medical-history/abc');
     expect(res.status).toBe(401);
   });
 
-  test('PATCH /medical-history/:id/field sin token → 401', async () => {
+  test('PATCH /medical-history/:id/field sin sesión → 401', async () => {
     const res = await request(makeAppNoAuth())
       .patch('/api/video/medical-history/abc/field')
       .send({ field: 'cc_imc_nuevo', value: 23.4 });
     expect(res.status).toBe(401);
   });
 
-  test('GET /medical-history/atendidos sin token → 401', async () => {
+  test('GET /medical-history/atendidos sin sesión → 401', async () => {
     const res = await request(makeAppNoAuth()).get('/api/video/medical-history/atendidos');
     expect(res.status).toBe(401);
   });

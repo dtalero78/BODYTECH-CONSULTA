@@ -599,6 +599,52 @@ class PostgresService {
           ON trepsi_webhook_outbox (cita_id)
       `);
 
+      // ===== RBAC — Usuarios + roles + alcance por sede (Fase 1) =====
+      // `usuarios` = fuente única de identidad/login/rol para los 6 roles
+      // (admin, coordinador, medico, coach, auxiliar, torre). `profesional_id`
+      // enlaza (opcional) con la ficha clínica en `profesionales` para
+      // medico/coach. `es_global` (admin/torre) cubre TODAS las sedes,
+      // incluidas las futuras, sin enumerar. La autenticación es por
+      // email+contraseña (bcrypt); el código+sede legacy se retira en el cutover.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS usuarios (
+          id              SERIAL PRIMARY KEY,
+          email           VARCHAR(200) NOT NULL,
+          password_hash   TEXT NOT NULL,
+          nombre          VARCHAR(200) NOT NULL,
+          rol             VARCHAR(20) NOT NULL,
+          profesional_id  INTEGER REFERENCES profesionales(id) ON DELETE SET NULL,
+          es_global       BOOLEAN NOT NULL DEFAULT FALSE,
+          activo          BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT usuarios_rol_chk CHECK (
+            rol IN ('admin','coordinador','medico','coach','auxiliar','torre')
+          )
+        )
+      `);
+      // Unicidad de email case-insensitive (el service normaliza a minúsculas,
+      // pero el índice único lo garantiza a nivel de BD).
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email_lower
+          ON usuarios (LOWER(email))
+      `);
+
+      // Puente usuario↔sedes: 1..N sedes por usuario (coordinador regional).
+      // Para es_global=true la lista se ignora (cubre todas). Para clínicos y
+      // auxiliar, normalmente una sola fila.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS usuario_sedes (
+          usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          sede_id     VARCHAR(50) NOT NULL,
+          PRIMARY KEY (usuario_id, sede_id)
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_usuario_sedes_sede
+          ON usuario_sedes (sede_id)
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

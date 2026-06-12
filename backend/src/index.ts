@@ -15,6 +15,7 @@ import calidadRoutes from './routes/calidad.routes';
 import trepsiRoutes from './routes/trepsi.routes';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
+import usuariosRoutes from './routes/usuarios.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
@@ -27,6 +28,7 @@ import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
 } from './middleware/auth.middleware';
+import { sessionContextMiddleware, requireRole } from './middleware/rbac.middleware';
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -95,6 +97,12 @@ if (appConfig.nodeEnv === 'development') {
 // exista) gane sobre cualquier header `X-Sede-Id` que el cliente mande.
 app.use(optionalAuthMiddleware);
 
+// RBAC (nueva auth email+contraseña): si hay token de sesión válido, adjunta
+// `req.session` + `req.sedeScope`. NO bloquea — el gating lo hace requireRole
+// por grupo de rutas. Va después de optionalAuthMiddleware (tokens legacy) para
+// que ambos esquemas coexistan durante la transición.
+app.use(sessionContextMiddleware);
+
 // Run 4 — Multi-tenancy: extrae `sedeId` del header `X-Sede-Id` (o ?sede=)
 // y lo deja en `(req as any).sedeId` con default `'bsl'`. Debe ir DESPUÉS de
 // CORS / body parser y ANTES de cualquier `app.use('/api/...', ...)`.
@@ -116,16 +124,21 @@ app.use('/api/auth', authRoutes);
 // de WhatsApp sin cuenta y NO tienen JWT.
 app.use('/api/video', videoRoutes);
 app.use('/api/telemedicine', telemedicineRoutes);
-// `/api/medical-panel` exige JWT válido (médicos logueados).
-app.use('/api/medical-panel', requireAuthMiddleware, medicalPanelRoutes);
-// Panel Coordinador — gestión de médicos/coaches y disponibilidad horaria.
-app.use('/api/profesionales', requireAuthMiddleware, profesionalesRoutes);
-app.use('/api/calendario', requireAuthMiddleware, calendarioRoutes);
+// `/api/medical-panel` — RBAC por ruta (pacientes: clínico; órdenes: operativo).
+// El gating vive en medical-panel.routes.ts (roles distintos por sub-ruta).
+app.use('/api/medical-panel', medicalPanelRoutes);
+// Panel Coordinador — RBAC: solo coordinador/admin gestionan profesionales y
+// disponibilidad; el calendario lo ve además el auxiliar (agendar citas).
+app.use('/api/profesionales', requireRole('coordinador', 'admin'), profesionalesRoutes);
+app.use('/api/calendario', requireRole('coordinador', 'admin', 'auxiliar'), calendarioRoutes);
+// Gestión de usuarios — admin + coordinador (límites P7 en el controller).
+app.use('/api/usuarios', requireRole('admin', 'coordinador'), usuariosRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
-app.use('/api/calidad', calidadRoutes);
+// Calidad — antes público; ahora solo coordinador/admin (auditoría).
+app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // Admin del outbox del webhook BSL → Trepsi (JWT requerido).
 app.use('/api/admin/trepsi-webhook', requireAuthMiddleware, trepsiWebhookAdminRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
@@ -149,9 +162,13 @@ app.get('*', (_req: Request, res: Response) => {
 // rutas (Express identifica los handlers de error por su aridad de 4 args).
 app.use(errorHandler);
 
-// Run database migrations
+// Run database migrations, luego sembrar el admin inicial (idempotente).
 import postgresService from './services/postgres.service';
-postgresService.runMigrations();
+import usuariosService from './services/usuarios.service';
+postgresService
+  .runMigrations()
+  .then(() => usuariosService.seedBootstrapAdmin())
+  .catch((e) => console.error('❌ [bootstrap] Error en migraciones/siembra:', e?.message ?? e));
 
 // Worker del outbox del webhook Trepsi: cada 30 s recorre la cola y reenvía
 // las filas pending listas (con backoff exponencial). Si TREPSI_WEBHOOK_URL

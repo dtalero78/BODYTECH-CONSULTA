@@ -9,12 +9,13 @@ import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
 import { HistoriaDetallePage } from './pages/HistoriaDetallePage';
 import { OrdenesPage } from './pages/OrdenesPage';
-import { OrdenesLoginPage } from './pages/OrdenesLoginPage';
 import { CalidadPage } from './pages/CalidadPage';
-import { CoordinadorLoginPage } from './pages/CoordinadorLoginPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
 import { BotTrepsiPage } from './pages/BotTrepsiPage';
 import { ReprogramarPage } from './pages/ReprogramarPage';
+import { LoginPage } from './pages/LoginPage';
+import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
+import { RequireRole } from './components/RequireRole';
 import { queryClient } from './lib/queryClient';
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
@@ -28,27 +29,73 @@ const ReactQueryDevtools = import.meta.env.DEV
     )
   : null;
 
+/** Placeholder para el rol `torre` (aún sin alcances asignados). */
+function SinAcceso() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 text-center p-6">
+      <div>
+        <h1 className="text-xl font-semibold text-zinc-800">Sin acceso asignado</h1>
+        <p className="text-sm text-zinc-500 mt-2">
+          Tu usuario aún no tiene módulos habilitados. Contacta al administrador.
+        </p>
+        <a href="/login" className="text-sm text-blue-700 mt-4 inline-block">
+          Volver a iniciar sesión
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/panel-medico" replace />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* Login unificado (RBAC). Las páginas de login viejas redirigen aquí. */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/coordinador-login" element={<Navigate to="/login" replace />} />
+          <Route path="/ordenes-login" element={<Navigate to="/login" replace />} />
+          <Route path="/sin-acceso" element={<SinAcceso />} />
+          {/* Públicas: paciente / video / reprogramar / bot. */}
           <Route path="/doctor" element={<DoctorPage />} />
           <Route path="/doctor/:roomName" element={<DoctorRoomPage />} />
           <Route path="/nutricion/:roomName" element={<NutricionRoomPage />} />
           <Route path="/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
+          <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
+          <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
+          {/* Panel médico (migración del flujo clínico a sesión pendiente). */}
           <Route path="/panel-medico" element={<MedicalPanelPage />} />
           <Route path="/historias" element={<HistoriasClinicasPage />} />
           <Route path="/historia/:historiaId" element={<HistoriaDetallePage />} />
-          <Route path="/ordenes-login" element={<OrdenesLoginPage />} />
-          <Route path="/ordenes" element={<OrdenesPage />} />
-          <Route path="/calidad" element={<CalidadPage />} />
-          <Route path="/coordinador-login" element={<CoordinadorLoginPage />} />
-          <Route path="/coordinador" element={<CoordinadorPage />} />
-          <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
-          <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
+          {/* Protegidas por rol (RBAC). */}
+          <Route
+            path="/ordenes"
+            element={
+              <RequireRole roles={['admin', 'coordinador', 'auxiliar']}>
+                <OrdenesPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/calidad"
+            element={
+              <RequireRole roles={['admin', 'coordinador']}>
+                <CalidadPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/coordinador"
+            element={
+              <RequireRole roles={['admin', 'coordinador']}>
+                <CoordinadorPage />
+              </RequireRole>
+            }
+          />
         </Routes>
       </BrowserRouter>
       {ReactQueryDevtools && (

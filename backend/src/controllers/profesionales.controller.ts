@@ -10,6 +10,7 @@ import { z, ZodError } from 'zod';
 import profesionalesService from '../services/profesionales.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
+import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -81,7 +82,17 @@ function zodErrorToDetails(err: ZodError) {
   }));
 }
 
+// Sede para operaciones de UNA sede (getById/create/update/delete/disponibilidad).
+// Con sesión RBAC: un `?sede` explícito que esté en el alcance manda; si no, la
+// (primera) sede del usuario. Admin/global sin `?sede` cae a 'bsl' (el front lo
+// pasa explícito). Sin sesión, conserva el comportamiento legacy.
 function getSedeId(req: Request): string {
+  const session = getSession(req);
+  if (session) {
+    const q = typeof req.query.sede === 'string' ? req.query.sede : '';
+    if (q && canActOnSede(req, q)) return q;
+    return session.sedes[0] ?? 'bsl';
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sedeId = (req as any).sedeId;
   return typeof sedeId === 'string' && sedeId.length > 0 ? sedeId : 'bsl';
@@ -99,7 +110,6 @@ function parseId(raw: unknown): number | null {
 class ProfesionalesController {
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const rolRaw = req.query.rol;
       const activoRaw = req.query.activo;
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
@@ -112,17 +122,21 @@ class ProfesionalesController {
       if (activoRaw === 'true') activo = true;
       else if (activoRaw === 'false') activo = false;
 
-      // `sedes` (CSV) opcional: lista profesionales de varias sedes (calendario
-      // multi-sede del coordinador). Sin él, scopea a la sede del JWT.
+      // `sedes` (CSV) opcional. RBAC: la lista solicitada se CONSTRIÑE al alcance
+      // del usuario (effectiveSedes). Un coordinador no puede listar sedes ajenas
+      // aunque las pida. `undefined` → admin/global sin filtro (todas las sedes).
       const sedesRaw = req.query.sedes;
-      let sedeIds: string[] | undefined;
+      let requested: string[] | undefined;
       if (typeof sedesRaw === 'string' && sedesRaw.trim().length > 0) {
         const list = sedesRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
-        if (list.length > 0) sedeIds = list;
+        if (list.length > 0) requested = list;
       }
+      const sedeIds = effectiveSedes(req, requested);
 
       const result = await profesionalesService.list({
-        sedeId,
+        // sedeId=null → sin filtro single; si `sedeIds` viene, el servicio usa
+        // ANY(sedeIds); si ambos vacíos (admin/global) → todas las sedes.
+        sedeId: null,
         sedeIds,
         rol,
         activo,
@@ -324,8 +338,8 @@ class ProfesionalesController {
 
   getDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeQuery = typeof req.query.sede === 'string' && req.query.sede ? req.query.sede : '';
-      const sedeId = sedeQuery || getSedeId(req);
+      // RBAC: getSedeId valida que `?sede` esté en el alcance del usuario.
+      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
@@ -369,7 +383,12 @@ class ProfesionalesController {
         });
         return;
       }
-      const sedeId = parsed.data.sede || getSedeId(req);
+      // RBAC: una `sede` explícita en el body solo se honra si está en el
+      // alcance del usuario; si no, cae a su sede (no puede tocar sedes ajenas).
+      const sedeId =
+        parsed.data.sede && canActOnSede(req, parsed.data.sede)
+          ? parsed.data.sede
+          : getSedeId(req);
       const result = await disponibilidadFechaService.replaceByFecha(
         id,
         sedeId,
@@ -389,8 +408,8 @@ class ProfesionalesController {
 
   deleteDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeQuery = typeof req.query.sede === 'string' && req.query.sede ? req.query.sede : '';
-      const sedeId = sedeQuery || getSedeId(req);
+      // RBAC: getSedeId valida que `?sede` esté en el alcance del usuario.
+      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });

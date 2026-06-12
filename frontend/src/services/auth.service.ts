@@ -21,6 +21,47 @@ const MEDICO_KEY = 'bsl_medico_code';
 const SEDE_KEY = 'bsl_sede_id';
 const ROL_KEY = 'bsl_rol';
 const ESP_KEY = 'bsl_especialidad';
+// RBAC (nueva auth email+contraseña): el usuario de sesión completo.
+const USER_KEY = 'bsl_user';
+
+export type Role = 'admin' | 'coordinador' | 'medico' | 'coach' | 'auxiliar' | 'torre';
+
+export interface SessionUser {
+  userId: number;
+  email: string;
+  nombre: string;
+  role: Role;
+  sedes: string[];
+  esGlobal: boolean;
+}
+
+/** Mensaje legible para errores del login por email+contraseña. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function passwordLoginErrorMessage(err: any): string {
+  const code = err?.response?.data?.error;
+  if (code === 'INVALID_CREDENTIALS') return 'Email o contraseña incorrectos.';
+  if (code === 'VALIDATION_ERROR') return 'Email o contraseña inválidos.';
+  if (code === 'DB_ERROR') return 'Problema de conexión. Intenta de nuevo en unos segundos.';
+  return 'No se pudo iniciar sesión. Intenta de nuevo.';
+}
+
+/** Ruta de inicio por defecto según el rol (redirección post-login). */
+export function homePathForRole(role: Role | null | undefined): string {
+  switch (role) {
+    case 'admin':
+    case 'coordinador':
+      return '/coordinador';
+    case 'medico':
+    case 'coach':
+      return '/panel-medico';
+    case 'auxiliar':
+      return '/ordenes';
+    case 'torre':
+      return '/sin-acceso';
+    default:
+      return '/login';
+  }
+}
 
 /** Normaliza una especialidad: minúsculas, sin acentos, trim. */
 function normalizeEsp(s: string | null | undefined): string {
@@ -97,8 +138,54 @@ class AuthService {
   }
 
   /**
+   * RBAC — Login por email + contraseña. Persiste el token de sesión en la
+   * MISMA key `bsl_auth_token` (para que los interceptores lo inyecten) y el
+   * usuario completo en `bsl_user`. `remember` extiende la sesión a 30 días.
+   */
+  async passwordLogin(email: string, password: string, remember: boolean): Promise<SessionUser> {
+    const res = await axios.post(`${API_BASE_URL}/api/auth/password-login`, {
+      email,
+      password,
+      remember,
+    });
+    const { token, user } = res.data || {};
+    if (!token || !user) {
+      throw new Error('Login response inválido');
+    }
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    return user as SessionUser;
+  }
+
+  /** Solicita el enlace de reset de contraseña por email (Resend). */
+  async forgotPassword(email: string): Promise<void> {
+    await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, { email });
+  }
+
+  /** Fija una nueva contraseña a partir del token recibido por email. */
+  async resetPassword(token: string, password: string): Promise<void> {
+    await axios.post(`${API_BASE_URL}/api/auth/reset-password`, { token, password });
+  }
+
+  /** Usuario de sesión (nueva auth) o null. */
+  getUser(): SessionUser | null {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as SessionUser;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Rol de la sesión actual (nueva auth). */
+  getSessionRole(): Role | null {
+    return this.getUser()?.role ?? null;
+  }
+
+  /**
    * Cierra sesión local — sólo limpia localStorage. No hay endpoint server
-   * de logout (el JWT es stateless y vence en 24h).
+   * de logout (el JWT es stateless y vence por TTL).
    */
   logout(): void {
     localStorage.removeItem(TOKEN_KEY);
@@ -106,6 +193,7 @@ class AuthService {
     localStorage.removeItem(SEDE_KEY);
     localStorage.removeItem(ROL_KEY);
     localStorage.removeItem(ESP_KEY);
+    localStorage.removeItem(USER_KEY);
   }
 
   getRol(): 'medico' | 'coach' | null {

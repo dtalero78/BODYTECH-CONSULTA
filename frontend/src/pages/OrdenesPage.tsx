@@ -122,7 +122,7 @@ export function OrdenesPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/ordenes-login', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 

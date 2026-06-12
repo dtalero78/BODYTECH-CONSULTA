@@ -5,6 +5,7 @@ import medicalPanelService, {
   OrdenUpdateInput,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
+import { getSession, canActOnSede } from '../middleware/rbac.middleware';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -261,9 +262,18 @@ class MedicalPanelController {
     }
     const data = parsed.data;
 
-    // Sede del request (JWT > header > default 'bsl').
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sedeId = ((req as any).sedeId as string | undefined) || 'bsl';
+    // Sede de la orden, acotada al alcance del usuario (RBAC): un `?sede`
+    // explícito solo si está en su alcance; si no, su (primera) sede. Sin
+    // sesión, comportamiento legacy.
+    const session = getSession(req);
+    let sedeId: string;
+    if (session) {
+      const q = typeof req.query.sede === 'string' ? req.query.sede : '';
+      sedeId = q && canActOnSede(req, q) ? q : session.sedes[0] ?? 'bsl';
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sedeId = ((req as any).sedeId as string | undefined) || 'bsl';
+    }
     const modalidad = data.modalidad ?? 'virtual';
 
     try {

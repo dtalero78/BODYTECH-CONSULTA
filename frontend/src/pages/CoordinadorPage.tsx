@@ -11,15 +11,17 @@ import {
   Building2,
   Settings,
   LogOut,
+  UserCog,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
+import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
-type View = 'profesionales' | 'calendario' | 'ordenes';
+type View = 'profesionales' | 'calendario' | 'ordenes' | 'usuarios';
 
 interface NavBadge {
   text: string;
@@ -37,11 +39,12 @@ export function CoordinadorPage() {
     profesionales: undefined,
     calendario: undefined,
     ordenes: undefined,
+    usuarios: undefined,
   });
 
   useEffect(() => {
     if (!authService.isLoggedIn()) {
-      navigate('/coordinador-login', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [navigate]);
 
@@ -58,7 +61,7 @@ export function CoordinadorPage() {
 
   const handleLogout = useCallback(() => {
     authService.logout();
-    navigate('/coordinador-login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate]);
 
   // Tres callbacks especializados — uno por sección — para evitar pasar arrow
@@ -84,26 +87,20 @@ export function CoordinadorPage() {
     }));
   }, []);
 
-  // Info del usuario para el footer del sidebar
+  // Info del usuario para el footer del sidebar (nueva auth RBAC: getUser()).
   const userInfo = useMemo(() => {
-    const codigo = authService.getMedicoCode() || '';
-    const rol = authService.getRol();
-    const sedeId = authService.getSedeId() || '';
-    // Sede: como authService no expone el nombre, intentamos leer un cache opcional;
-    // si no, mostramos el sedeId mismo o "Bodytech".
-    let sedeName = '';
-    try {
-      const cached = localStorage.getItem('bsl_sede_name');
-      if (cached) sedeName = cached;
-    } catch {
-      // ignore
-    }
-    if (!sedeName) sedeName = sedeId || 'Bodytech';
-    const initials = initialsOf(codigo || 'DT');
-    const rolLabel = rol === 'coach' ? 'Coach' : 'Coordinador';
+    const user = authService.getUser();
+    const nombre = user?.nombre || user?.email || 'Usuario';
+    const role = user?.role ?? null;
+    const rolLabel = role === 'admin' ? 'Administrador' : 'Coordinador';
+    const sedeName = user?.esGlobal
+      ? 'Todas las sedes'
+      : user?.sedes?.length
+        ? `${user.sedes.length} sede${user.sedes.length === 1 ? '' : 's'}`
+        : 'Bodytech';
     return {
-      initials,
-      codigo: codigo || 'CODIGO',
+      initials: initialsOf(nombre),
+      codigo: nombre,
       sedeName,
       rolLine: `${rolLabel} · ${sedeName}`,
     };
@@ -196,6 +193,12 @@ export function CoordinadorPage() {
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
           <div className="space-y-0.5">
             <NavItem
+              icon={<UserCog className="w-[15px] h-[15px]" />}
+              label="Usuarios"
+              active={view === 'usuarios'}
+              onClick={() => setView('usuarios')}
+            />
+            <NavItem
               icon={<Building2 className="w-[15px] h-[15px]" />}
               label="Sedes"
               disabled
@@ -260,6 +263,9 @@ export function CoordinadorPage() {
               showToast={showToast}
               reportCount={reportOrdenesCount}
             />
+          )}
+          {view === 'usuarios' && (
+            <UsuariosView key={`usr-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

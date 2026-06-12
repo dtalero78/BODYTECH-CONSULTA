@@ -188,6 +188,20 @@ class ProfesionalesService {
     return { ok: true, status: 200, data: rows.map(rowToProfesional) };
   }
 
+  /**
+   * Sede a la que pertenece un profesional (su `sede_id` fijo), o null si no
+   * existe. La usan los endpoints de disponibilidad para no depender de la sede
+   * de la sesión (un admin/coordinador multi-sede gestiona profesionales de
+   * varias sedes; la disponibilidad pertenece a la sede del profesional).
+   */
+  async getSede(id: number): Promise<string | null> {
+    const rows = await postgresService.query(
+      `SELECT sede_id FROM profesionales WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return rows && rows.length > 0 ? (rows[0].sede_id as string) : null;
+  }
+
   async getById(id: number, sedeId: string): Promise<ServiceResult<ProfesionalRow>> {
     const rows = await postgresService.query(
       `SELECT ${COLS_DETAIL} FROM profesionales WHERE id = $1 AND sede_id = $2`,

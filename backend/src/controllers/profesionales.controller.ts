@@ -103,6 +103,25 @@ function parseId(raw: unknown): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/**
+ * Resuelve la sede del profesional (su sede fija) y valida que el actor pueda
+ * gestionarla. La disponibilidad pertenece a la sede del profesional, no a la
+ * de la sesión, así un admin/coordinador multi-sede la edita correctamente.
+ * Si no existe o está fuera de alcance, ya respondió y devuelve null.
+ */
+async function resolveSedeOf(req: Request, res: Response, id: number): Promise<string | null> {
+  const sede = await profesionalesService.getSede(id);
+  if (!sede) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Profesional no encontrado.' } });
+    return null;
+  }
+  if (!canActOnSede(req, sede)) {
+    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Este profesional está fuera de tu alcance.' } });
+    return null;
+  }
+  return sede;
+}
+
 // ---------------------------------------------------------------------------
 // Controller
 // ---------------------------------------------------------------------------
@@ -154,12 +173,13 @@ class ProfesionalesController {
 
   get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const result = await profesionalesService.getById(id, sedeId);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
@@ -199,12 +219,13 @@ class ProfesionalesController {
 
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const parsed = profesionalUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
@@ -230,12 +251,13 @@ class ProfesionalesController {
 
   remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const result = await profesionalesService.softDelete(id, sedeId);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
@@ -253,12 +275,13 @@ class ProfesionalesController {
 
   getDisponibilidad = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const modalidadRaw = req.query.modalidad;
       const modalidad =
         modalidadRaw === 'presencial' || modalidadRaw === 'virtual' ? modalidadRaw : 'virtual';
@@ -275,12 +298,13 @@ class ProfesionalesController {
 
   replaceDisponibilidad = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const parsed = disponibilidadReplaceSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
@@ -311,12 +335,13 @@ class ProfesionalesController {
 
   deleteDiaDisponibilidad = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const dia = Number(req.params.dia);
       const modalidadRaw = req.query.modalidad;
       const modalidad =
@@ -339,12 +364,13 @@ class ProfesionalesController {
   getDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // RBAC: getSedeId valida que `?sede` esté en el alcance del usuario.
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
         res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'fecha es requerida (YYYY-MM-DD).' } });
@@ -383,12 +409,9 @@ class ProfesionalesController {
         });
         return;
       }
-      // RBAC: una `sede` explícita en el body solo se honra si está en el
-      // alcance del usuario; si no, cae a su sede (no puede tocar sedes ajenas).
-      const sedeId =
-        parsed.data.sede && canActOnSede(req, parsed.data.sede)
-          ? parsed.data.sede
-          : getSedeId(req);
+      // La sede se deriva del profesional (su sede fija), con validación de alcance.
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const result = await disponibilidadFechaService.replaceByFecha(
         id,
         sedeId,
@@ -409,12 +432,13 @@ class ProfesionalesController {
   deleteDisponibilidadFecha = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // RBAC: getSedeId valida que `?sede` esté en el alcance del usuario.
-      const sedeId = getSedeId(req);
       const id = parseId(req.params.id);
       if (id === null) {
         res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
         return;
       }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
       const fecha = typeof req.query.fecha === 'string' ? req.query.fecha : '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
         res.status(400).json({ success: false, error: { code: 'INVALID_DATE', message: 'fecha es requerida (YYYY-MM-DD).' } });

@@ -67,10 +67,31 @@ function App() {
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
           <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
-          {/* Panel médico (migración del flujo clínico a sesión pendiente). */}
-          <Route path="/panel-medico" element={<MedicalPanelPage />} />
-          <Route path="/historias" element={<HistoriasClinicasPage />} />
-          <Route path="/historia/:historiaId" element={<HistoriaDetallePage />} />
+          {/* Panel clínico — sesión RBAC (médico/coach/coordinador/admin). */}
+          <Route
+            path="/panel-medico"
+            element={
+              <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                <MedicalPanelPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/historias"
+            element={
+              <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                <HistoriasClinicasPage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/historia/:historiaId"
+            element={
+              <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                <HistoriaDetallePage />
+              </RequireRole>
+            }
+          />
           {/* Protegidas por rol (RBAC). */}
           <Route
             path="/ordenes"

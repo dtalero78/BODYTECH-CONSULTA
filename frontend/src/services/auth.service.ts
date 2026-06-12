@@ -33,6 +33,10 @@ export interface SessionUser {
   role: Role;
   sedes: string[];
   esGlobal: boolean;
+  /** Código del profesional vinculado (médico/coach), si aplica. */
+  codigo?: string | null;
+  /** Especialidad del profesional vinculado — decide panel nutricional vs médico. */
+  especialidad?: string | null;
 }
 
 /** Mensaje legible para errores del login por email+contraseña. */
@@ -208,7 +212,9 @@ class AuthService {
 
   /** True si el profesional logueado es de Nutrición Deportiva → abre panel nutricional. */
   isNutricionDeportiva(): boolean {
-    return normalizeEsp(localStorage.getItem(ESP_KEY)) === 'nutricion deportiva';
+    // Nueva auth: la especialidad viene en la sesión. Fallback al legacy ESP_KEY.
+    const esp = this.getUser()?.especialidad ?? localStorage.getItem(ESP_KEY);
+    return normalizeEsp(esp) === 'nutricion deportiva';
   }
 
   getToken(): string | null {

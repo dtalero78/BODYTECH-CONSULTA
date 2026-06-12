@@ -47,6 +47,10 @@ export interface UsuarioSesion {
   profesionalId: number | null;
   esGlobal: boolean;
   sedes: string[];
+  /** Código (cédula) del profesional vinculado — lo usa el panel médico/coach. */
+  codigo: string | null;
+  /** Especialidad del profesional vinculado — decide qué panel abre (nutricional vs médico). */
+  especialidad: string | null;
 }
 
 /** Fila cruda del JOIN usuarios + array_agg(sedes). */
@@ -137,6 +141,20 @@ class UsuariosService {
   /** Construye el objeto de sesión (sin hash) a partir de una fila + sus sedes. */
   async toSesion(row: UsuarioRow): Promise<UsuarioSesion> {
     const sedes = row.es_global ? [] : await this.getSedes(row.id);
+    // Si está vinculado a un profesional (médico/coach), traemos su código y
+    // especialidad para que el panel sepa a quién representa y qué panel abrir.
+    let codigo: string | null = null;
+    let especialidad: string | null = null;
+    if (row.profesional_id) {
+      const p = await postgresService.query(
+        `SELECT codigo, especialidad FROM profesionales WHERE id = $1 LIMIT 1`,
+        [row.profesional_id]
+      );
+      if (p && p.length > 0) {
+        codigo = p[0].codigo ?? null;
+        especialidad = p[0].especialidad ?? null;
+      }
+    }
     return {
       id: row.id,
       email: row.email,
@@ -145,6 +163,8 @@ class UsuariosService {
       profesionalId: row.profesional_id,
       esGlobal: row.es_global,
       sedes,
+      codigo,
+      especialidad,
     };
   }
 

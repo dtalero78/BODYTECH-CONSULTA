@@ -3,6 +3,7 @@ import { Plus, KeyRound, Power, Pencil, X } from 'lucide-react';
 import authService, { Role } from '../../services/auth.service';
 import usuariosApi, {
   UsuarioItem,
+  ProfesionalLite,
   usuariosErrorMessage,
 } from '../../services/usuarios.service';
 import { FONT_INTER, CTA_PRIMARY, CTA_OUTLINE } from './_tokens';
@@ -36,6 +37,7 @@ interface FormState {
   esGlobal: boolean;
   sedes: string[];
   activo: boolean;
+  profesionalId: number | null;
 }
 
 const EMPTY_FORM: FormState = {
@@ -47,7 +49,10 @@ const EMPTY_FORM: FormState = {
   esGlobal: false,
   sedes: [],
   activo: true,
+  profesionalId: null,
 };
+
+const ROLES_CLINICOS: Role[] = ['medico', 'coach'];
 
 export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
   const actor = authService.getUser();
@@ -59,6 +64,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
 
   const [users, setUsers] = useState<UsuarioItem[]>([]);
   const [sedes, setSedes] = useState<Sede[]>([]);
+  const [profesionales, setProfesionales] = useState<ProfesionalLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null); // modal crear/editar
   const [pwUser, setPwUser] = useState<UsuarioItem | null>(null); // modal reset
@@ -80,9 +86,14 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [u, s] = await Promise.all([usuariosApi.list(), authService.getSedes()]);
+      const [u, s, p] = await Promise.all([
+        usuariosApi.list(),
+        authService.getSedes(),
+        usuariosApi.profesionales().catch(() => [] as ProfesionalLite[]),
+      ]);
       setUsers(u);
       setSedes(s);
+      setProfesionales(p);
       reportCount?.(u.length);
     } catch (err) {
       showToast({ type: 'error', message: usuariosErrorMessage(err) });
@@ -109,6 +120,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
       esGlobal: u.esGlobal,
       sedes: u.sedes,
       activo: u.activo,
+      profesionalId: u.profesionalId,
     });
   }
 
@@ -143,6 +155,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
           rol: form.rol,
           esGlobal: form.esGlobal,
           sedes: form.esGlobal ? [] : form.sedes,
+          profesionalId: ROLES_CLINICOS.includes(form.rol) ? form.profesionalId : null,
         });
         showToast({ type: 'success', message: 'Usuario creado.' });
       } else {
@@ -330,6 +343,37 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
                 ))}
               </select>
             </Field>
+            {form.id === null && ROLES_CLINICOS.includes(form.rol) && (
+              <Field label="Vincular a profesional (opcional)">
+                <select
+                  value={form.profesionalId ?? ''}
+                  onChange={(e) => {
+                    const pid = e.target.value ? Number(e.target.value) : null;
+                    const prof = profesionales.find((p) => p.id === pid);
+                    setForm({
+                      ...form,
+                      profesionalId: pid,
+                      nombre: prof && !form.nombre.trim() ? prof.nombre : form.nombre,
+                      sedes:
+                        prof?.sedeId && form.sedes.length === 0 ? [prof.sedeId] : form.sedes,
+                    });
+                  }}
+                  className={INPUT}
+                >
+                  <option value="">— Sin vincular —</option>
+                  {profesionales
+                    .filter((p) => p.rol === form.rol)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} · {p.codigo}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Conecta la cuenta con su ficha (código) para que el panel funcione.
+                </p>
+              </Field>
+            )}
             {isAdmin && (
               <label className="flex items-center gap-2 text-[13px] text-zinc-700">
                 <input

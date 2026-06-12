@@ -40,6 +40,10 @@ export interface SessionPayload {
   role: Rol;
   sedes: string[];
   esGlobal: boolean;
+  /** Código del profesional vinculado (médico/coach) — para el panel. */
+  codigo?: string | null;
+  /** Especialidad del profesional vinculado — decide panel nutricional vs médico. */
+  especialidad?: string | null;
 }
 
 export type PasswordLoginError = 'INVALID_CREDENTIALS' | 'DB_ERROR';
@@ -175,6 +179,8 @@ class AuthService {
       role: sesion.rol,
       sedes: sesion.sedes,
       esGlobal: sesion.esGlobal,
+      codigo: sesion.codigo,
+      especialidad: sesion.especialidad,
     };
     const token = jwt.sign(payload, JWT_SECRET, {
       expiresIn: remember ? SESSION_TTL_REMEMBER : SESSION_TTL,

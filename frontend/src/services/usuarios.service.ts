@@ -26,6 +26,17 @@ export interface CreateUsuarioInput {
   rol: Role;
   sedes: string[];
   esGlobal: boolean;
+  profesionalId?: number | null;
+}
+
+/** Profesional (tabla vieja) para el selector "vincular a profesional". */
+export interface ProfesionalLite {
+  id: number;
+  codigo: string;
+  nombre: string;
+  rol: Role;
+  sedeId?: string;
+  especialidad?: string | null;
 }
 
 export interface UpdateUsuarioInput {
@@ -52,6 +63,21 @@ class UsuariosApi {
 
   async resetPassword(id: number, password: string): Promise<void> {
     await axios.post(`${API}/api/usuarios/${id}/password`, { password });
+  }
+
+  /** Lista profesionales (tabla vieja) para vincular a una cuenta médico/coach. */
+  async profesionales(rol?: Role): Promise<ProfesionalLite[]> {
+    const res = await axios.get(`${API}/api/profesionales${rol ? `?rol=${rol}` : ''}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any[] = res.data?.data ?? [];
+    return data.map((p) => ({
+      id: p.id,
+      codigo: p.codigo,
+      nombre: `${p.primerNombre ?? ''} ${p.primerApellido ?? ''}`.trim() || p.codigo,
+      rol: p.rol,
+      sedeId: p.sedeId,
+      especialidad: p.especialidad ?? null,
+    }));
   }
 }
 

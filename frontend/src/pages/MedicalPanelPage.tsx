@@ -114,9 +114,13 @@ export function MedicalPanelPage() {
       }
     })();
 
-    if (authService.isLoggedIn()) {
-      setMedicoCode(authService.getMedicoCode() ?? '');
-      setSedeId(authService.getSedeId() ?? '');
+    // Nueva auth (RBAC): el código viene del profesional vinculado en la sesión.
+    // La ruta /panel-medico está protegida por RequireRole, así que aquí ya hay
+    // sesión; si por algo no la hay, dejamos isLoggedIn=false (RequireRole redirige).
+    const user = authService.getUser();
+    if (user) {
+      setMedicoCode(user.codigo ?? '');
+      setSedeId(user.sedes[0] ?? '');
       setIsLoggedIn(true);
     }
 
@@ -193,10 +197,10 @@ export function MedicalPanelPage() {
     }
   };
 
-  // Run 5: cierre de sesión — limpia localStorage y resetea el estado local
-  // para volver al form de login.
+  // Cierre de sesión — limpia localStorage y vuelve al login unificado.
   const handleLogout = () => {
     authService.logout();
+    window.location.href = '/login';
     setIsLoggedIn(false);
     setMedicoCode('');
     setSedeId('');

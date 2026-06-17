@@ -95,6 +95,7 @@ const listOrdenesQuerySchema = z.object({
   status: z.string().optional(),
   medico: z.string().optional(),
   q: z.string().optional(),
+  trepsi: z.string().optional(),
 });
 
 function validationResponse(res: Response, err: ZodError): void {
@@ -233,7 +234,7 @@ class MedicalPanelController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { page, limit, from, to, status, medico, q } = parsed.data;
+    const { page, limit, from, to, status, medico, q, trepsi } = parsed.data;
 
     try {
       const result = await medicalPanelService.listOrdenes({
@@ -244,6 +245,7 @@ class MedicalPanelController {
         status,
         medico,
         q,
+        trepsi: trepsi === '1' || trepsi === 'true',
       });
 
       res.json(result);

@@ -90,6 +90,8 @@ export interface OrdenFilters {
   status?: string;
   medico?: string;
   q?: string;
+  /** Solo órdenes originadas en Trepsi (su `_id` empieza con `trepsi_`). */
+  trepsi?: boolean;
 }
 
 export interface OrdenCreateInput {
@@ -460,6 +462,12 @@ class MedicalPanelService {
         );
         params.push(like);
         paramIndex++;
+      }
+
+      // Solo órdenes de Trepsi: las historias creadas por la integración usan un
+      // `_id` con prefijo `trepsi_` (las nativas usan UUID). Literal, sin input.
+      if (filters.trepsi) {
+        conditions.push(`"_id" LIKE 'trepsi\\_%'`);
       }
 
       const whereClause = conditions.join(' AND ');

@@ -160,6 +160,12 @@ function nombreCompleto(o: OrdenItem) {
     .join(' ');
 }
 
+// Una orden viene de Trepsi si su historia (`_id`) tiene el prefijo `trepsi_`
+// que asigna la integración (las nativas usan UUID).
+function isTrepsi(o: OrdenItem): boolean {
+  return typeof o._id === 'string' && o._id.startsWith('trepsi_');
+}
+
 // "ORD-YYYY-XXXX" derivado del _id + createdAt (estética; el ID real es _id).
 function ordenCodigo(o: OrdenItem): string {
   const year = o.createdAt
@@ -177,7 +183,7 @@ interface Props {
 
 export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
   const navigate = useNavigate();
-  const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '' });
+  const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '', trepsi: false });
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(0);
   const [ordenes, setOrdenes] = useState<OrdenItem[]>([]);
@@ -274,6 +280,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
       if (currentFilters.q) params.q = currentFilters.q;
       if (currentFilters.from) params.from = currentFilters.from;
       if (currentFilters.to) params.to = currentFilters.to;
+      if (currentFilters.trepsi) params.trepsi = '1';
 
       const res = await axios.get(`${API}/api/medical-panel/ordenes`, {
         params,
@@ -354,6 +361,11 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
 
   function handleDateFilter(key: 'from' | 'to', val: string) {
     setFilters((f) => ({ ...f, [key]: val }));
+    setPage(0);
+  }
+
+  function toggleTrepsi() {
+    setFilters((f) => ({ ...f, trepsi: !f.trepsi }));
     setPage(0);
   }
 
@@ -527,6 +539,17 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
             onChange={(v) => handleDateFilter('to', v)}
             onClear={filters.to ? () => handleDateFilter('to', '') : undefined}
           />
+          <button
+            onClick={toggleTrepsi}
+            className={`relative inline-flex items-center gap-1.5 h-[30px] pl-[11px] pr-3 rounded-md border text-[12.5px] font-medium ${
+              filters.trepsi ? 'bg-[#f5f3ff] text-[#6d28d9]' : 'bg-white text-zinc-800'
+            }`}
+            style={{ fontFamily: FONT_INTER, borderColor: filters.trepsi ? '#7c3aed' : '#d4d4d8' }}
+            title="Mostrar solo las órdenes originadas en Trepsi"
+          >
+            Solo Trepsi
+            {filters.trepsi && <X className="w-3 h-3" />}
+          </button>
           <div className="ml-auto text-[12px] text-zinc-500">
             <span
               className="tabular-nums font-medium text-zinc-700"
@@ -596,8 +619,17 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                             initials={initialsOf(o.primerNombre, o.primerApellido)}
                           />
                           <div className="min-w-0">
-                            <div className="text-[14px] font-medium text-zinc-900 truncate">
-                              {o.primerNombre} {o.primerApellido}
+                            <div className="text-[14px] font-medium text-zinc-900 truncate flex items-center gap-1.5">
+                              <span className="truncate">{o.primerNombre} {o.primerApellido}</span>
+                              {isTrepsi(o) && (
+                                <span
+                                  className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200"
+                                  style={{ fontFamily: FONT_MONO }}
+                                  title="Orden originada en Trepsi"
+                                >
+                                  Trepsi
+                                </span>
+                              )}
                             </div>
                             <div
                               className="text-[11px] text-zinc-500 truncate"

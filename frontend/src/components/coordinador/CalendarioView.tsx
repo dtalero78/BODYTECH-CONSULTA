@@ -108,9 +108,14 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [loadingMes, setLoadingMes] = useState(true);
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [filterMedico, setFilterMedico] = useState<string>(''); // codigo o ''
-  // Filtro de sedes: por sede, varias sedes agrupadas, o todas. Default = la del coordinador.
+  // Filtro de sedes: por sede, varias sedes agrupadas, o todas.
+  // Default según RBAC: usuario global (admin) → todas las sedes (arranca vacío y
+  // el efecto de carga lo expande); usuario acotado → sus sedes. Legacy (sin
+  // sesión RBAC) → la sede guardada en localStorage.
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [sedesSel, setSedesSel] = useState<string[]>(() => {
+    const user = authService.getUser();
+    if (user) return user.esGlobal ? [] : user.sedes;
     const s = authService.getSedeId();
     return s ? [s] : [];
   });
@@ -126,7 +131,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   const [dispoDia, setDispoDia] = useState<string | null>(null); // fecha abierta en modo disponibilidad
   const [dispoReloadTick, setDispoReloadTick] = useState(0);
 
-  // Cargar lista de sedes (una vez). Si el coordinador no tenía sede, default a todas.
+  // Cargar lista de sedes (una vez). Si aún no hay selección (usuario global o
+  // sin sede), default a todas.
   useEffect(() => {
     authService
       .getSedes()

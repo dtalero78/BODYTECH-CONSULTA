@@ -49,9 +49,20 @@ class MonitorIntegracionController {
   events = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!checkToken(req, res)) return;
     try {
-      const since = typeof req.query.since === 'string' ? req.query.since : null;
+      // Cursor por id (numérico, monótono). Acepta tanto `?sinceId=N` como
+      // `?since=N` por compatibilidad. Si llega un string ISO viejo, se ignora.
+      const raw =
+        typeof req.query.sinceId === 'string'
+          ? req.query.sinceId
+          : typeof req.query.since === 'string'
+            ? req.query.since
+            : null;
+      let sinceId: number | null = null;
+      if (raw !== null && /^\d+$/.test(raw)) {
+        sinceId = Number(raw);
+      }
       const limit = Math.min(Number(req.query.limit) || 200, 500);
-      const rows = await integrationLogService.listSince(since, limit);
+      const rows = await integrationLogService.listSince(sinceId, limit);
       res.status(200).json({
         ok: true,
         serverTime: new Date().toISOString(),

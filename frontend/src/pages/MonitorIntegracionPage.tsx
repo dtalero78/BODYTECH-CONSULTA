@@ -219,7 +219,9 @@ export function MonitorIntegracionPage() {
   const [filter, setFilter] = useState<'todos' | 'errores' | 'inbound' | 'outbound'>('todos');
   const [lastError, setLastError] = useState<string | null>(null);
   const [serverTime, setServerTime] = useState<string | null>(null);
-  const lastSinceRef = useRef<string | null>(null);
+  // Cursor por id (numérico, monótono y único). Evita el problema de los
+  // microsegundos que perdemos al serializar timestamptz como ISO en JS.
+  const lastIdRef = useRef<number | null>(null);
 
   const fetchEvents = useCallback(async () => {
     if (paused) return;
@@ -228,9 +230,10 @@ export function MonitorIntegracionPage() {
       return;
     }
     try {
-      const since = lastSinceRef.current;
       const params = new URLSearchParams({ token });
-      if (since) params.set('since', since);
+      if (lastIdRef.current !== null) {
+        params.set('sinceId', String(lastIdRef.current));
+      }
       const res = await fetch(`${API_BASE}/api/monitor-integracion/events?${params.toString()}`);
       if (!res.ok) {
         const j = await res.json().catch(() => null);
@@ -241,9 +244,14 @@ export function MonitorIntegracionPage() {
       setLastError(null);
       if (data.events.length === 0) return;
       const lastEv = data.events[data.events.length - 1];
-      lastSinceRef.current = lastEv.created_at;
+      lastIdRef.current = lastEv.id;
       setEvents((prev) => {
-        const merged = [...prev, ...data.events];
+        // Dedup defensivo por id (por si llegan eventos duplicados de varias
+        // peticiones en vuelo simultáneas, p.ej. tras una pausa/resume).
+        const seen = new Set(prev.map((e) => e.id));
+        const nuevos = data.events.filter((e) => !seen.has(e.id));
+        if (nuevos.length === 0) return prev;
+        const merged = [...prev, ...nuevos];
         if (merged.length > MAX_EVENTS) return merged.slice(-MAX_EVENTS);
         return merged;
       });
@@ -340,7 +348,7 @@ export function MonitorIntegracionPage() {
             </button>
             <button
               onClick={() => {
-                lastSinceRef.current = null;
+                lastIdRef.current = null;
                 setEvents([]);
                 setSelectedId(null);
                 fetchEvents();

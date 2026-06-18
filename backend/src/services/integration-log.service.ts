@@ -104,28 +104,32 @@ class IntegrationLogService {
   }
 
   /**
-   * Lista eventos creados después de `since` (ISO date). Si no se pasa, devuelve
-   * los últimos `limit` por defecto.
+   * Lista eventos con id > `sinceId`. Si `sinceId` es null, devuelve los
+   * últimos `limit` (ordenados ascendente para que el frontend los pinte
+   * en orden cronológico natural).
+   *
+   * Cursor por id en vez de created_at porque Postgres almacena
+   * timestamptz con precisión de microsegundos pero JS solo serializa
+   * con milisegundos (toISOString) → si se usara `created_at > $since`,
+   * el mismo evento volvería a aparecer indefinidamente.
    */
-  async listSince(sinceIso: string | null, limit = 200): Promise<LogRow[]> {
+  async listSince(sinceId: number | null, limit = 200): Promise<LogRow[]> {
     let rows;
-    if (sinceIso) {
+    if (sinceId !== null && sinceId >= 0) {
       rows = await postgresService.query(
         `SELECT * FROM trepsi_integration_log
-           WHERE created_at > $1::timestamptz
-           ORDER BY created_at ASC
+           WHERE id > $1
+           ORDER BY id ASC
            LIMIT $2`,
-        [sinceIso, limit]
+        [sinceId, limit]
       );
     } else {
       rows = await postgresService.query(
         `SELECT * FROM trepsi_integration_log
-           ORDER BY created_at DESC
+           ORDER BY id DESC
            LIMIT $1`,
         [limit]
       );
-      // Devolver en orden cronológico ascendente para que el frontend los
-      // pinte en orden natural.
       if (rows) rows.reverse();
     }
     return (rows ?? []) as LogRow[];

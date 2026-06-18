@@ -12,6 +12,7 @@ import { Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'crypto';
 import integrationLogService from '../services/integration-log.service';
 import postgresService from '../services/postgres.service';
+import trepsiWebhookService from '../services/trepsi-webhook.service';
 
 function constantTimeEquals(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
@@ -68,6 +69,64 @@ class MonitorIntegracionController {
         serverTime: new Date().toISOString(),
         count: rows.length,
         events: rows,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /test-webhook?token=...
+   * Inserta una fila sintética en trepsi_webhook_outbox y fuerza dispatch
+   * inmediato. Útil para verificar que el outbound se registra en el monitor
+   * sin tener que pasar por todo el flujo del médico.
+   *
+   * El payload va con `citaId` y `historiaClinicaId` prefijados con
+   * `TEST-MONITOR-...` para que Trepsi pueda ignorarlos (o los rechace con
+   * su validación). En cualquier caso, el monitor captura el outbound.
+   */
+  testWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const ts = Date.now();
+      const citaId = `TEST-MONITOR-${ts}`;
+      const historiaId = `hc_test_${ts}`;
+
+      const testPayload = {
+        eventType: 'test',
+        citaId,
+        historiaClinicaId: historiaId,
+        fechaConsulta: new Date().toISOString(),
+        estado: 'completed',
+        medico: { codigo: 'TEST-MED', nombre: 'Test Médico' },
+        resultados: {
+          motivoConsulta: 'Test de monitor — payload sintético generado desde /api/monitor-integracion/test-webhook',
+          diagnosticos: [],
+        },
+        adjuntos: [],
+        firma: null,
+        _testInfo: {
+          source: 'bodytech-monitor',
+          purpose: 'Smoke test del canal outbound. Pueden ignorar este evento.',
+        },
+        sourceVersion: '2.1',
+      };
+
+      // Encolamos directamente en el outbox.
+      await postgresService.query(
+        `INSERT INTO trepsi_webhook_outbox (cita_id, historia_id, payload)
+         VALUES ($1, $2, $3)`,
+        [citaId, historiaId, JSON.stringify(testPayload)]
+      );
+
+      // Forzamos dispatch inmediato (no esperamos al setInterval de 30s).
+      const result = await trepsiWebhookService.dispatchPending();
+
+      res.status(200).json({
+        ok: true,
+        message: 'Test webhook enviado. Revisa el monitor para ver el evento outbound.',
+        dispatchResult: result,
+        testPayload: { citaId, historiaClinicaId: historiaId },
       });
     } catch (err) {
       next(err);

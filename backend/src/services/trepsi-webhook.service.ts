@@ -22,6 +22,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
+import integrationLogService from './integration-log.service';
 
 const TIMEOUT_MS = 10_000;
 const MAX_INTENTOS = 6;
@@ -173,7 +174,36 @@ class TrepsiWebhookService {
       const payload =
         typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
 
+      const startedAt = Date.now();
       const result = await sendWebhook(url, apiKey, payload);
+      const latencyMs = Date.now() - startedAt;
+
+      // Registrar en el monitor (best-effort)
+      let parsedRes: unknown = result.body ?? null;
+      if (typeof parsedRes === 'string') {
+        try {
+          parsedRes = JSON.parse(parsedRes);
+        } catch {
+          /* keep as string */
+        }
+      }
+      integrationLogService
+        .log({
+          direccion: 'outbound',
+          tipo: 'webhook.consultationResults',
+          metodo: 'POST',
+          path: url,
+          citaId,
+          statusCode: result.status ?? null,
+          ok: result.ok,
+          latencyMs,
+          requestBody: payload,
+          responseBody: parsedRes,
+          errorCode: result.ok ? null : (result.status ? `HTTP_${result.status}` : 'NETWORK_ERROR'),
+          errorMessage: result.error ?? null,
+        })
+        .catch(() => {});
+
       if (result.ok) {
         await postgresService.query(
           `UPDATE trepsi_webhook_outbox

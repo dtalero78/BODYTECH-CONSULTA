@@ -12,6 +12,7 @@ import { OrdenesPage } from './pages/OrdenesPage';
 import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
 import { BotTrepsiPage } from './pages/BotTrepsiPage';
+import { MonitorIntegracionPage } from './pages/MonitorIntegracionPage';
 import { ReprogramarPage } from './pages/ReprogramarPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
@@ -66,6 +67,7 @@ function App() {
           <Route path="/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
+          <Route path="/monitor-integracion" element={<MonitorIntegracionPage />} />
           <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
           {/* Panel clínico — sesión RBAC (médico/coach/coordinador/admin). */}
           <Route

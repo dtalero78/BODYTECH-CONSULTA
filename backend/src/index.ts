@@ -19,6 +19,8 @@ import usuariosRoutes from './routes/usuarios.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
+import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
+import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
@@ -143,11 +145,18 @@ app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 app.use('/api/admin/trepsi-webhook', requireAuthMiddleware, trepsiWebhookAdminRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
 // la API Key se rota por ambiente (TREPSI_API_KEY).
+// El middleware `trepsiMonitorMiddleware` registra CADA request en
+// trepsi_integration_log para que aparezcan en /monitor-integracion.
 app.use(
   '/api/v1/integrations/trepsi',
   requireApiKey('TREPSI_API_KEY', 'trepsi'),
+  trepsiMonitorMiddleware,
   trepsiRoutes
 );
+
+// Monitor de integración (sin JWT, token simple). Pensado para uso del owner
+// durante pruebas — el dashboard en /monitor-integracion consume estos endpoints.
+app.use('/api/monitor-integracion', monitorIntegracionRoutes);
 
 // Servir archivos estaticos del frontend (despues de las rutas API)
 const frontendPath = path.join(__dirname, '..', 'frontend-dist');

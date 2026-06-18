@@ -645,6 +645,45 @@ class PostgresService {
           ON usuario_sedes (sede_id)
       `);
 
+      // ===== Monitor de integración Trepsi (observabilidad) =====
+      // Registro de TODOS los eventos de la integración para mostrarlos en
+      // /monitor-integracion en tiempo real. Incluye tanto inbound (Trepsi
+      // llamando a Bodytech) como outbound (Bodytech llamando a Trepsi).
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS trepsi_integration_log (
+          id              SERIAL PRIMARY KEY,
+          direccion       VARCHAR(10) NOT NULL,
+          tipo            VARCHAR(80) NOT NULL,
+          metodo          VARCHAR(10),
+          path            VARCHAR(300),
+          cita_id         VARCHAR(120),
+          status_code     INTEGER,
+          ok              BOOLEAN NOT NULL DEFAULT TRUE,
+          latency_ms      INTEGER,
+          request_body    JSONB,
+          response_body   JSONB,
+          error_code      VARCHAR(80),
+          error_message   TEXT,
+          ip              VARCHAR(45),
+          user_agent      TEXT,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT trepsi_log_direccion_chk CHECK (direccion IN ('inbound', 'outbound'))
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_integration_log_created
+          ON trepsi_integration_log (created_at DESC)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_integration_log_cita
+          ON trepsi_integration_log (cita_id)
+      `);
+      // Purga eventos viejos (>14 días) para no llenar la DB
+      await this.query(`
+        DELETE FROM trepsi_integration_log
+          WHERE created_at < NOW() - INTERVAL '14 days'
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

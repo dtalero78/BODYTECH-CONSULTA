@@ -10,5 +10,6 @@ router.get('/summary', monitorIntegracionController.summary);
 router.post('/test-webhook', monitorIntegracionController.testWebhook);
 router.post('/discard-outbox', monitorIntegracionController.discardOutbox);
 router.get('/debug-historia', monitorIntegracionController.debugHistoria);
+router.post('/revive-cita', monitorIntegracionController.reviveCita);
 
 export default router;

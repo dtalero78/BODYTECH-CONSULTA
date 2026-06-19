@@ -202,6 +202,91 @@ class MonitorIntegracionController {
   };
 
   /**
+   * POST /revive-cita?token=...
+   * Body: { citaId: string, resendReschedule?: boolean }
+   *
+   * Revive una cita Trepsi marcada como 'cancelled' (la pasa a 'scheduled').
+   * Si resendReschedule=true, además dispara un webhook `rescheduled` con la
+   * fecha/hora actual de la HC en Bodytech para que Trepsi se entere del
+   * cambio retroactivo.
+   *
+   * Usado para casos donde Trepsi nos canceló la cita por error o por una
+   * cascada de errores transitorios, y el paciente ya reprogramó del lado
+   * de Bodytech.
+   */
+  reviveCita = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const citaId = typeof req.body?.citaId === 'string' ? req.body.citaId : '';
+      const resendReschedule = req.body?.resendReschedule === true;
+      if (!citaId) {
+        res.status(400).json({ ok: false, error: { code: 'NO_CITA_ID', message: 'citaId requerido.' } });
+        return;
+      }
+
+      // 1) Revivir la cita en trepsi_appointments.
+      const updated = await postgresService.query(
+        `UPDATE trepsi_appointments
+            SET estado = 'scheduled', updated_at = NOW()
+          WHERE cita_id = $1 AND estado = 'cancelled'
+          RETURNING cita_id, historia_id, fecha_atencion`,
+        [citaId]
+      );
+      if (updated === null) {
+        res.status(500).json({ ok: false, error: { code: 'DB_ERROR' } });
+        return;
+      }
+      if (updated.length === 0) {
+        res.status(404).json({
+          ok: false,
+          error: { code: 'NOT_CANCELLED', message: 'La cita no está cancelled (o no existe).' },
+        });
+        return;
+      }
+
+      const row = updated[0];
+      const historiaId = String(row.historia_id);
+      const fechaAtencionAnterior = row.fecha_atencion
+        ? new Date(row.fecha_atencion).toISOString()
+        : null;
+
+      // 2) Opcionalmente, reenviar el reschedule con la fecha actual de la HC.
+      let enqueueResult: { enqueued: boolean; reason?: string } | null = null;
+      if (resendReschedule) {
+        const hcRows = await postgresService.query(
+          'SELECT "fechaAtencion", "horaAtencion" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1',
+          [historiaId]
+        );
+        if (hcRows && hcRows.length > 0) {
+          const hc = hcRows[0];
+          const fechaNueva = hc.fechaAtencion ? String(hc.fechaAtencion).slice(0, 10) : '';
+          const horaNueva = hc.horaAtencion ? String(hc.horaAtencion) : '';
+          if (fechaNueva && horaNueva) {
+            enqueueResult = await trepsiWebhookService.enqueueReschedule(
+              historiaId,
+              fechaAtencionAnterior,
+              null,
+              fechaNueva,
+              horaNueva,
+              'patient'
+            );
+          }
+        }
+      }
+
+      res.status(200).json({
+        ok: true,
+        citaId,
+        historiaId,
+        revived: true,
+        enqueueResult,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * GET /debug-historia?token=...&id=trepsi_xxx
    * Inspeccionar el estado de una historia: ¿está en HistoriaClinica? ¿está
    * vinculada en trepsi_appointments? Útil para debug del flujo reschedule.

@@ -326,9 +326,13 @@ export function MedicalPanelPage() {
       return cleaned;
     }
 
-    // Detectar si ya tiene código de país internacional (11+ dígitos)
-    // Códigos comunes: 1 (USA/Canada), 52 (Mexico), 57 (Colombia), 54 (Argentina), 55 (Brazil), 34 (Spain), 44 (UK), 49 (Germany), 33 (France)
-    const hasCountryCode = /^(1|52|57|54|55|34|44|49|33)\d{10,}/.test(cleaned);
+    // Detectar si ya tiene código de país internacional.
+    // Incluye LatAm (Chile 56, Perú 51, Venezuela 58, Cuba 53, e indicativos de
+    // 3 dígitos de Centro/Sudamérica) + EE.UU./Europa. Los de 3 dígitos van
+    // PRIMERO para que el regex no los corte con un prefijo de 2 dígitos.
+    // `\d{8,}` tolera longitudes nacionales variables (Chile=9, Colombia=10).
+    const hasCountryCode =
+      /^(502|503|504|505|506|507|591|593|595|598|1|33|34|44|49|51|52|53|54|55|56|57|58)\d{8,}/.test(cleaned);
 
     if (hasCountryCode) {
       // Ya tiene código de país, solo agregar +
@@ -358,8 +362,10 @@ export function MedicalPanelPage() {
       // Formatear teléfono con código de país internacional
       const phoneWithPlus = formatPhoneNumber(patient.celular);
 
-      // Formatear teléfono (sin + para WhatsApp API)
-      const phoneWithoutPlus = phoneWithPlus.substring(1);
+      // Quitar SOLO el "+" inicial (no recortar a ciegas: si el número quedó sin
+      // "+", substring(1) se comería el primer dígito del indicativo → Chile y
+      // cualquier país fuera de la lista blanca terminaban en un número inválido).
+      const phoneWithoutPlus = phoneWithPlus.replace(/^\+/, '');
 
       // Construir roomNameWithParams para el template (path completo con query params)
       // Ejemplo: "consulta-abc123?nombre=Juan&apellido=Perez&documento=123&doctor=JUAN"

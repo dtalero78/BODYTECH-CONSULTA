@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { BaseRepository } from './base.repository';
+import { sedeFilter } from '../helpers/sede-scope';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -21,7 +22,8 @@ export interface FindAtendidosOptions {
   page: number;
   limit: number;
   buscar?: string;
-  sedeId?: string;
+  /** Aislamiento por sede: undefined = sin filtro (admin/global); array = ANY(sedes). */
+  sedes?: string[];
 }
 
 export class HistoriaClinicaRepository extends BaseRepository {
@@ -33,13 +35,9 @@ export class HistoriaClinicaRepository extends BaseRepository {
    * El JOIN a `formularios` queda por `numeroId` — la sede en formularios se
    * valida en `findFormularioByNumeroId`.
    */
-  async findById(id: string, sedeId?: string): Promise<Row | null> {
+  async findById(id: string, sedes?: string[]): Promise<Row | null> {
     const params: unknown[] = [id];
-    let sedeClause = '';
-    if (sedeId !== undefined) {
-      params.push(sedeId);
-      sedeClause = ` AND h."sede_id" = $${params.length}`;
-    }
+    const sedeClause = sedeFilter(sedes, 'h."sede_id"', params);
 
     const sql = `SELECT
         h.*,
@@ -106,8 +104,7 @@ export class HistoriaClinicaRepository extends BaseRepository {
    * todavía** (el método actual tampoco lo filtra).
    */
   async findAtendidos(opts: FindAtendidosOptions): Promise<{ rows: Row[]; total: number }> {
-    const { page, limit, buscar, sedeId } = opts;
-    // TODO Run 5: filter by medico (opts.medicoCode) once auth-by-sede is enforced.
+    const { page, limit, buscar, sedes } = opts;
     const offset = (page - 1) * limit;
 
     // Aflojado: incluye también las historias con transcripción auto-llenada
@@ -132,9 +129,9 @@ export class HistoriaClinicaRepository extends BaseRepository {
       paramIndex++;
     }
 
-    if (sedeId !== undefined) {
-      whereClause += ` AND h."sede_id" = $${paramIndex}`;
-      params.push(sedeId);
+    const sedeClause = sedeFilter(sedes, 'h."sede_id"', params);
+    if (sedeClause) {
+      whereClause += sedeClause;
       paramIndex++;
     }
 

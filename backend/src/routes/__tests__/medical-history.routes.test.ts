@@ -101,6 +101,9 @@ function makeApp() {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req as any).sedeId = 'bsl';
+    // sedeScope es lo que lee effectiveSedes() para acotar las lecturas/escrituras.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any).sedeScope = { all: false, sedes: ['bsl'] };
     next();
   });
   app.use('/api/video', videoRoutes);
@@ -210,8 +213,10 @@ describe('PATCH /api/video/medical-history/:id/field', () => {
     // req.sedeId='bsl' desde el token de prueba) → WHERE ... AND "sede_id" = $3.
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toMatch(/UPDATE\s+"HistoriaClinica"\s+SET\s+"cc_imc_nuevo"\s*=\s*\$1/);
-    expect(sql).toMatch(/AND\s+"sede_id"\s*=\s*\$3/);
-    expect(params).toEqual([23.4, 'abc', 'bsl']);
+    // Aislamiento por sede: ahora se filtra con ANY($3::text[]) sobre las sedes
+    // del actor (effectiveSedes → ['bsl'] en el test).
+    expect(sql).toMatch(/COALESCE\("sede_id",\s*'bsl'\)\s*=\s*ANY\(\$3::text\[\]\)/);
+    expect(params).toEqual([23.4, 'abc', ['bsl']]);
   });
 });
 

@@ -2,6 +2,7 @@ import postgresService from './postgres.service';
 import { historiaClinicaRepository } from '../repositories';
 import { generarHTMLHistoriaClinica } from '../helpers/historia-clinica-html';
 import { SNAKE_KEYS, snakeToCamel } from './historia-field-coercion.service';
+import { sedeFilter } from '../helpers/sede-scope';
 
 export interface AntecedentesPersonales {
   cirugiaOcular?: boolean;
@@ -125,15 +126,14 @@ class HistoriaQueryService {
   /**
    * Obtiene la historia clínica de un paciente desde PostgreSQL
    */
-  async getMedicalHistory(historiaId: string, sedeId?: string): Promise<MedicalHistoryData | null> {
+  async getMedicalHistory(historiaId: string, sedes?: string[]): Promise<MedicalHistoryData | null> {
     try {
       console.log(`📋 Obteniendo historia clínica para ID: ${historiaId}`);
 
-      // Run 4 — Multi-tenancy: la lectura se delega al repositorio que aplica
-      // `AND h."sede_id" = $N` cuando `sedeId` está definido. El SQL del SELECT
-      // (incluyendo el JOIN a `formularios` y todos los alias) vive ahora en
-      // `HistoriaClinicaRepository.findById`.
-      const row = await historiaClinicaRepository.findById(historiaId, sedeId);
+      // Aislamiento por sede: el repositorio aplica `AND COALESCE(h."sede_id",'bsl')
+      // = ANY($N)` cuando `sedes` está definido. `undefined` = sin filtro (admin/
+      // global o callers internos como la mutación que carga datos base).
+      const row = await historiaClinicaRepository.findById(historiaId, sedes);
 
       if (row) {
         console.log(`✅ [PostgreSQL] Historia clínica encontrada para ${historiaId}`);
@@ -250,7 +250,7 @@ class HistoriaQueryService {
   /**
    * Lista historias clínicas de personas atendidas con paginación y búsqueda
    */
-  async getAtendidos(options: { page?: number; limit?: number; buscar?: string; sedeId?: string }): Promise<{
+  async getAtendidos(options: { page?: number; limit?: number; buscar?: string; sedes?: string[] }): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any[];
     total: number;
@@ -262,7 +262,7 @@ class HistoriaQueryService {
       const page = options.page || 1;
       const limit = options.limit || 20;
       const buscar = options.buscar?.trim();
-      const sedeId = options.sedeId;
+      const sedes = options.sedes;
 
       console.log(
         `📋 Listando atendidos (página ${page}, limit ${limit}${
@@ -277,7 +277,7 @@ class HistoriaQueryService {
         page,
         limit,
         buscar,
-        sedeId,
+        sedes,
       });
       const totalPaginas = Math.ceil(total / limit);
 
@@ -335,14 +335,16 @@ class HistoriaQueryService {
   /**
    * Genera el HTML completo de la historia clínica para preview/impresión
    */
-  async getPreviewHTML(historiaId: string): Promise<string | null> {
+  async getPreviewHTML(historiaId: string, sedes?: string[]): Promise<string | null> {
     try {
       console.log(`📄 Generando preview HTML para historia: ${historiaId}`);
 
-      // 1. Historia Clínica
+      // 1. Historia Clínica — acotada por sede (PHI completa en HTML/PDF).
+      const hcParams: unknown[] = [historiaId];
+      const hcSede = sedeFilter(sedes, '"sede_id"', hcParams);
       const hcResult = await postgresService.query(
-        'SELECT * FROM "HistoriaClinica" WHERE "_id" = $1',
-        [historiaId]
+        `SELECT * FROM "HistoriaClinica" WHERE "_id" = $1${hcSede}`,
+        hcParams
       );
       if (!hcResult || hcResult.length === 0) return null;
       const historia = hcResult[0];
@@ -369,10 +371,14 @@ class HistoriaQueryService {
    * Obtiene el historial de consultas anteriores de un paciente por su numeroId (documento de identidad)
    * Retorna todas las consultas completadas (atendido = 'ATENDIDO') ordenadas por fecha descendente
    */
-  async getPatientHistory(numeroId: string): Promise<PatientHistoryRecord[]> {
+  async getPatientHistory(numeroId: string, sedes?: string[]): Promise<PatientHistoryRecord[]> {
     try {
       console.log(`📋 Obteniendo historial de consultas para paciente: ${numeroId}`);
 
+      // Aislamiento por sede: el historial solo incluye consultas de las sedes
+      // del actor (un usuario clínico no ve el historial de otra sede).
+      const params: unknown[] = [numeroId];
+      const sf = sedeFilter(sedes, '"sede_id"', params);
       const pgResult = await postgresService.query(
         `SELECT
           "_id",
@@ -394,10 +400,10 @@ class HistoriaQueryService {
         FROM "HistoriaClinica"
         WHERE "numeroId" = $1
           AND "atendido" = 'ATENDIDO'
-          AND "fechaConsulta" IS NOT NULL
+          AND "fechaConsulta" IS NOT NULL${sf}
         ORDER BY "fechaConsulta" DESC
         LIMIT 20`,
-        [numeroId]
+        params
       );
 
       if (!pgResult || pgResult.length === 0) {

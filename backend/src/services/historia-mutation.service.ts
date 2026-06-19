@@ -48,7 +48,7 @@ class HistoriaMutationService {
     historiaId: string,
     field: string,
     rawValue: unknown,
-    sedeId?: string
+    sedes?: string[]
   ): Promise<UpdateFieldResult> {
     if (!historiaId) {
       return { success: false, error: 'MISSING_ID', code: 400 };
@@ -69,15 +69,15 @@ class HistoriaMutationService {
 
     const value = coerced.value;
 
-    // Run 4 — Multi-tenancy: si llega `sedeId`, agregamos `AND "sede_id" = $3`
-    // al WHERE. Si es `undefined` (caller interno sin middleware), el SQL no
-    // lleva la cláusula y los tests existentes (mini-app sin middleware) siguen
-    // pasando con `params = [value, historiaId]`.
+    // Aislamiento por sede: si llega `sedes` (array), acotamos el UPDATE con
+    // `AND COALESCE("sede_id",'bsl') = ANY($3::text[])` para que un usuario no
+    // pueda escribir historias fuera de su alcance. `undefined` (caller interno
+    // como transcripción) no lleva cláusula de sede.
     let sql: string;
     let params: unknown[];
-    if (sedeId !== undefined) {
-      sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 AND "sede_id" = $3 RETURNING "_updatedDate"`;
-      params = [value, historiaId, sedeId];
+    if (sedes !== undefined) {
+      sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 AND COALESCE("sede_id", 'bsl') = ANY($3::text[]) RETURNING "_updatedDate"`;
+      params = [value, historiaId, sedes];
     } else {
       sql = `UPDATE "HistoriaClinica" SET "${field}" = $1, "_updatedDate" = NOW() WHERE "_id" = $2 RETURNING "_updatedDate"`;
       params = [value, historiaId];
@@ -119,7 +119,8 @@ class HistoriaMutationService {
   }
 
   async updateMedicalHistory(
-    payload: UpdateMedicalHistoryPayload
+    payload: UpdateMedicalHistoryPayload,
+    sedes?: string[]
   ): Promise<{ success: boolean; error?: string; code?: number }> {
     try {
       console.log(`💾 Actualizando historia clínica para ID: ${payload.historiaId}`);
@@ -132,10 +133,13 @@ class HistoriaMutationService {
       // PASO 0: Obtener datos base del paciente (delegado al query service para
       // mantener una sola fuente de verdad sobre la lectura — mutation→query
       // sin ciclo porque query NO importa mutation).
-      const historiaBase = await historiaQueryService.getMedicalHistory(payload.historiaId);
+      // Aislamiento por sede: la carga base se acota a las sedes del actor; si
+      // la historia no pertenece a su alcance, devuelve null → NOT_FOUND (no se
+      // puede sobrescribir una historia de otra sede).
+      const historiaBase = await historiaQueryService.getMedicalHistory(payload.historiaId, sedes);
 
       if (!historiaBase) {
-        // No existe la historia: el controller mapea code=404.
+        // No existe la historia o está fuera de alcance: el controller mapea code=404.
         return { success: false, error: 'NOT_FOUND', code: 404 };
       }
 

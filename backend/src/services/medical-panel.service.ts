@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'crypto';
 import postgresService from './postgres.service';
+import { sedeFilter } from '../helpers/sede-scope';
 
 interface PatientStats {
   programadosHoy: number;
@@ -144,7 +145,7 @@ class MedicalPanelService {
   /**
    * Obtiene las estadísticas del día para un médico específico
    */
-  async getDailyStats(medicoCode: string): Promise<PatientStats> {
+  async getDailyStats(medicoCode: string, sedes?: string[]): Promise<PatientStats> {
     try {
       // Calcular inicio y fin del día en Colombia (UTC-5)
       const now = new Date();
@@ -156,13 +157,18 @@ class MedicalPanelService {
       const startOfDay = new Date(Date.UTC(year, month, day, 5, 0, 0, 0)); // 00:00 Colombia = 05:00 UTC
       const endOfDay = new Date(Date.UTC(year, month, day + 1, 4, 59, 59, 999)); // 23:59:59 Colombia
 
+      // Aislamiento por sede: las 3 queries comparten los mismos params
+      // ([medicoCode, start, end] + sedes si aplica).
+      const params: unknown[] = [medicoCode, startOfDay, endOfDay];
+      const sf = sedeFilter(sedes, '"sede_id"', params);
+
       // Query para programados hoy
       const programadosResult = await postgresService.query(
         `SELECT COUNT(*) as count FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
-         AND "fechaAtencion" <= $3`,
-        [medicoCode, startOfDay, endOfDay]
+         AND "fechaAtencion" <= $3${sf}`,
+        params
       );
 
       // Query para atendidos hoy (programados hoy que ya tienen fechaConsulta)
@@ -171,8 +177,8 @@ class MedicalPanelService {
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
-         AND "fechaConsulta" IS NOT NULL`,
-        [medicoCode, startOfDay, endOfDay]
+         AND "fechaConsulta" IS NOT NULL${sf}`,
+        params
       );
 
       // Query para restantes hoy (programados sin fechaConsulta)
@@ -181,8 +187,8 @@ class MedicalPanelService {
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
-         AND "fechaConsulta" IS NULL`,
-        [medicoCode, startOfDay, endOfDay]
+         AND "fechaConsulta" IS NULL${sf}`,
+        params
       );
 
       return {
@@ -206,7 +212,8 @@ class MedicalPanelService {
   async getPendingPatients(
     medicoCode: string,
     page: number = 0,
-    pageSize: number = 10
+    pageSize: number = 10,
+    sedes?: string[]
   ): Promise<PaginatedPatients> {
     try {
       // Calcular inicio y fin del día en Colombia (UTC-5)
@@ -221,6 +228,12 @@ class MedicalPanelService {
 
       const offset = page * pageSize;
 
+      // Aislamiento por sede en el WHERE (antes de LIMIT/OFFSET).
+      const whereParams: unknown[] = [medicoCode, startOfDay, endOfDay];
+      const sf = sedeFilter(sedes, '"sede_id"', whereParams);
+      const limitIdx = whereParams.length + 1;
+      const offsetIdx = whereParams.length + 2;
+
       // Query para obtener pacientes pendientes
       const patientsResult = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
@@ -231,10 +244,10 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
-         AND "numeroId" NOT IN ('TEST', 'test')
+         AND "numeroId" NOT IN ('TEST', 'test')${sf}
          ORDER BY "fechaAtencion" ASC
-         LIMIT $4 OFFSET $5`,
-        [medicoCode, startOfDay, endOfDay, pageSize, offset]
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...whereParams, pageSize, offset]
       );
 
       // Query para contar total
@@ -244,8 +257,8 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
-         AND "numeroId" NOT IN ('TEST', 'test')`,
-        [medicoCode, startOfDay, endOfDay]
+         AND "numeroId" NOT IN ('TEST', 'test')${sf}`,
+        whereParams
       );
 
       const totalItems = parseInt(countResult?.[0]?.count || '0');
@@ -290,18 +303,21 @@ class MedicalPanelService {
   /**
    * Busca un paciente por documento de identidad o celular
    */
-  async searchPatientByDocument(searchTerm: string): Promise<Patient | null> {
+  async searchPatientByDocument(searchTerm: string, sedes?: string[]): Promise<Patient | null> {
     try {
-      // Buscar por numeroId o celular
+      // Aislamiento por sede: la búsqueda por documento/celular se acota a las
+      // sedes del actor (un usuario clínico no ve pacientes de otra sede).
+      const params: unknown[] = [searchTerm];
+      const sf = sedeFilter(sedes, '"sede_id"', params);
       const result = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "fechaConsulta", "atendido", "pvEstado", "codEmpresa",
                 "empresa", "medico", "motivoConsulta", "tipoExamen"
          FROM "HistoriaClinica"
-         WHERE "numeroId" = $1 OR "celular" = $1
+         WHERE ("numeroId" = $1 OR "celular" = $1)${sf}
          ORDER BY "fechaAtencion" DESC
          LIMIT 1`,
-        [searchTerm]
+        params
       );
 
       if (!result || result.length === 0) {
@@ -356,14 +372,16 @@ class MedicalPanelService {
   /**
    * Obtiene detalles completos de un paciente
    */
-  async getPatientDetails(documento: string): Promise<PatientDetails | null> {
+  async getPatientDetails(documento: string, sedes?: string[]): Promise<PatientDetails | null> {
     try {
+      const params: unknown[] = [documento];
+      const sf = sedeFilter(sedes, '"sede_id"', params);
       const result = await postgresService.query(
         `SELECT * FROM "HistoriaClinica"
-         WHERE "numeroId" = $1
+         WHERE "numeroId" = $1${sf}
          ORDER BY "fechaAtencion" DESC
          LIMIT 1`,
-        [documento]
+        params
       );
 
       if (!result || result.length === 0) {

@@ -26,13 +26,14 @@ import { telemedicineSocketService } from './services/telemedicine-socket.servic
 import { sessionTracker } from './services/session-tracker.service';
 import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
-import {
-  optionalAuthMiddleware,
-  requireAuthMiddleware,
-} from './middleware/auth.middleware';
+import { optionalAuthMiddleware } from './middleware/auth.middleware';
 import { sessionContextMiddleware, requireRole } from './middleware/rbac.middleware';
 
 const app: Application = express();
+// Detrás del proxy de DigitalOcean App Platform: confiar en X-Forwarded-For
+// para que req.ip sea la IP real del cliente (necesario para los rate-limiters
+// y el limitador por-IP del bot Trepsi).
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 
 // Initialize Socket.io with CORS configuration
@@ -141,8 +142,9 @@ app.use('/api/bot-trepsi', botTrepsiRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
 // Calidad — antes público; ahora solo coordinador/admin (auditoría).
 app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
-// Admin del outbox del webhook BSL → Trepsi (JWT requerido).
-app.use('/api/admin/trepsi-webhook', requireAuthMiddleware, trepsiWebhookAdminRoutes);
+// Admin del outbox del webhook BSL → Trepsi (contiene PHI). RBAC: solo
+// admin/coordinador (antes usaba el token legacy code+sede → cualquier médico).
+app.use('/api/admin/trepsi-webhook', requireRole('admin', 'coordinador'), trepsiWebhookAdminRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
 // la API Key se rota por ambiente (TREPSI_API_KEY).
 // El middleware `trepsiMonitorMiddleware` registra CADA request en

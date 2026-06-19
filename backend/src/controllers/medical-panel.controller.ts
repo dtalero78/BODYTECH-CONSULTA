@@ -5,7 +5,17 @@ import medicalPanelService, {
   OrdenUpdateInput,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
-import { getSession, canActOnSede } from '../middleware/rbac.middleware';
+import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
+
+// Para médico/coach, su panel solo debe mostrar SUS pacientes: forzamos el
+// medicoCode al código del profesional de la sesión (ignora el de la URL →
+// cierra el IDOR horizontal). Coordinador/admin sí pueden consultar otros
+// códigos, pero acotados por sede vía effectiveSedes.
+function ownCodeOrParam(req: Request, paramCode: string): string {
+  const s = getSession(req);
+  if (s && (s.role === 'medico' || s.role === 'coach') && s.codigo) return s.codigo;
+  return paramCode;
+}
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -118,7 +128,10 @@ class MedicalPanelController {
     const { medicoCode } = parsed.data;
 
     try {
-      const stats = await medicalPanelService.getDailyStats(medicoCode);
+      const stats = await medicalPanelService.getDailyStats(
+        ownCodeOrParam(req, medicoCode),
+        effectiveSedes(req)
+      );
       res.json(stats);
     } catch (error) {
       next(error);
@@ -143,7 +156,12 @@ class MedicalPanelController {
     const pageSize = queryParsed.data.pageSize ?? 10;
 
     try {
-      const result = await medicalPanelService.getPendingPatients(medicoCode, page, pageSize);
+      const result = await medicalPanelService.getPendingPatients(
+        ownCodeOrParam(req, medicoCode),
+        page,
+        pageSize,
+        effectiveSedes(req)
+      );
       res.json(result);
     } catch (error) {
       next(error);
@@ -161,7 +179,10 @@ class MedicalPanelController {
     const { documento } = parsed.data;
 
     try {
-      const patient = await medicalPanelService.searchPatientByDocument(documento);
+      const patient = await medicalPanelService.searchPatientByDocument(
+        documento,
+        effectiveSedes(req)
+      );
 
       if (!patient) {
         res.status(404).json({ error: 'Paciente no encontrado' });
@@ -209,7 +230,10 @@ class MedicalPanelController {
     const { documento } = parsed.data;
 
     try {
-      const patientDetails = await medicalPanelService.getPatientDetails(documento);
+      const patientDetails = await medicalPanelService.getPatientDetails(
+        documento,
+        effectiveSedes(req)
+      );
 
       if (!patientDetails) {
         res.status(404).json({ error: 'Paciente no encontrado' });

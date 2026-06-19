@@ -14,6 +14,7 @@ import { CoordinadorPage } from './pages/CoordinadorPage';
 import { BotTrepsiPage } from './pages/BotTrepsiPage';
 import { MonitorIntegracionPage } from './pages/MonitorIntegracionPage';
 import { ReprogramarPage } from './pages/ReprogramarPage';
+import { TerminosPage } from './pages/TerminosPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
 import { RequireRole } from './components/RequireRole';
@@ -69,6 +70,8 @@ function App() {
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
           <Route path="/monitor-integracion" element={<MonitorIntegracionPage />} />
           <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
+          <Route path="/terminos" element={<TerminosPage />} />
+          <Route path="/terminos-y-condiciones" element={<Navigate to="/terminos" replace />} />
           {/* Panel clínico — sesión RBAC (médico/coach/coordinador/admin). */}
           <Route
             path="/panel-medico"

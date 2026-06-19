@@ -149,19 +149,48 @@ class MonitorIntegracionController {
       const numIds = ids
         .map((v: unknown) => Number(v))
         .filter((n: number) => Number.isInteger(n) && n > 0);
-      if (numIds.length === 0) {
-        res.status(400).json({ ok: false, error: { code: 'NO_IDS', message: 'ids[] requerido.' } });
+      const filter = typeof req.body?.filter === 'string' ? req.body.filter : null;
+
+      if (numIds.length === 0 && !filter) {
+        res
+          .status(400)
+          .json({ ok: false, error: { code: 'NO_TARGET', message: 'ids[] o filter requerido.' } });
         return;
       }
-      const rows = await postgresService.query(
-        `UPDATE trepsi_webhook_outbox
-            SET estado = 'dead',
-                last_error = COALESCE(last_error, '') || ' | descartado por operador (monitor)',
-                updated_at = NOW()
-          WHERE id = ANY($1::int[]) AND estado IN ('pending','failed')
-          RETURNING id, estado`,
-        [numIds]
-      );
+
+      let rows;
+      if (numIds.length > 0) {
+        rows = await postgresService.query(
+          `UPDATE trepsi_webhook_outbox
+              SET estado = 'dead',
+                  last_error = COALESCE(last_error, '') || ' | descartado por operador (monitor)',
+                  updated_at = NOW()
+            WHERE id = ANY($1::int[]) AND estado IN ('pending','failed')
+            RETURNING id, estado`,
+          [numIds]
+        );
+      } else if (filter === 'stale-video-call-link') {
+        // Descarta filas pending/failed cuyo payload tiene eventType
+        // 'videoCallLink' pero NO el shape v2.1 (sin fechaConsulta) — son las
+        // que quedaron del fix retrocompatible y nunca van a pasar validación.
+        rows = await postgresService.query(
+          `UPDATE trepsi_webhook_outbox
+              SET estado = 'dead',
+                  last_error = COALESCE(last_error, '') || ' | descartado: payload viejo videoCallLink sin shape v2.1',
+                  updated_at = NOW()
+            WHERE estado IN ('pending','failed')
+              AND payload->>'eventType' = 'videoCallLink'
+              AND payload->>'fechaConsulta' IS NULL
+            RETURNING id, estado`,
+          []
+        );
+      } else {
+        res
+          .status(400)
+          .json({ ok: false, error: { code: 'BAD_FILTER', message: 'filter no soportado.' } });
+        return;
+      }
+
       res.status(200).json({
         ok: true,
         descartadas: rows?.length ?? 0,

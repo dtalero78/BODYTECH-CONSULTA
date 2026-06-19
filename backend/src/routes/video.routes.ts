@@ -7,7 +7,7 @@ const router = Router();
 // RBAC: las rutas de historia clínica (PHI), sugerencias IA, WhatsApp y
 // transcripción son de personal clínico — medico, coordinador, admin. Los
 // pacientes acceden por link SOLO al video (token + eventos), nunca a estas.
-const clinico = requireRole('medico', 'coordinador', 'admin');
+const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
 
 // Generar token de acceso
 router.post('/token', videoController.generateToken);

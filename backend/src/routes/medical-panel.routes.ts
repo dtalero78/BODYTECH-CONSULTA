@@ -7,7 +7,9 @@ const router = Router();
 // RBAC: gating por ruta (los roles difieren dentro del mismo grupo).
 //   - Pacientes / stats: atención clínica → medico, coordinador, admin.
 //   - Órdenes: gestión operativa → coordinador, admin, auxiliar (NO medico).
-const clinico = requireRole('medico', 'coordinador', 'admin');
+// Incluye coach: los coaches atienden pacientes vía el panel nutricional y
+// usan los mismos endpoints de búsqueda/listado/historia que los médicos.
+const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
 const operativo = requireRole('coordinador', 'admin', 'auxiliar');
 
 // Estadísticas del día para un médico

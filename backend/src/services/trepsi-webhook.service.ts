@@ -79,14 +79,32 @@ class TrepsiWebhookService {
     }
     const citaId = String(cita.cita_id);
 
+    // Cargamos la HC para incluir los campos required por la validación de
+    // Trepsi (`fechaConsulta`, `medico.codigo`, `estado`) — sin esto su Cloud
+    // Function responde 400 "Missing required fields".
+    const hcRows = await postgresService.query(
+      'SELECT * FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1',
+      [historiaId]
+    );
+    if (hcRows === null || hcRows.length === 0) {
+      return { enqueued: false, reason: 'HC_NOT_FOUND' };
+    }
+    const hc = hcRows[0];
+
+    // Mismo shape v2.1 §6 que `completed`, con dos campos extra para que
+    // ellos distingan el evento: `eventType` y `videoCallUrl`. Reusar el
+    // builder garantiza que la forma sea retrocompatible.
+    const base = buildPayload({ citaId, historiaId, hc });
     const payload = {
+      ...base,
+      // Aún no se ha consignado la consulta: marcamos `in_progress` para no
+      // mentirle a Trepsi diciendo `completed`. Si su validador es estricto
+      // con el enum, lo refinamos.
+      estado: 'in_progress',
       eventType: 'videoCallLink',
-      citaId,
-      historiaClinicaId: historiaId,
       videoCallUrl,
       patientPhone: patientPhone ?? null,
       sentAt: new Date().toISOString(),
-      sourceVersion: '2.1',
     };
 
     await postgresService.query(

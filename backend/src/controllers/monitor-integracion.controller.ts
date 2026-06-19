@@ -134,6 +134,45 @@ class MonitorIntegracionController {
   };
 
   /**
+   * POST /discard-outbox?token=...
+   * Body: { ids: number[] }
+   *
+   * Marca como 'dead' las filas seleccionadas del outbox para que el worker
+   * deje de reintentarlas. Usado para descartar payloads viejos que fallan
+   * con formato incorrecto en el receptor (ej. videoCallLink sin required
+   * fields antes del fix). Es una operación de housekeeping del operador.
+   */
+  discardOutbox = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const numIds = ids
+        .map((v: unknown) => Number(v))
+        .filter((n: number) => Number.isInteger(n) && n > 0);
+      if (numIds.length === 0) {
+        res.status(400).json({ ok: false, error: { code: 'NO_IDS', message: 'ids[] requerido.' } });
+        return;
+      }
+      const rows = await postgresService.query(
+        `UPDATE trepsi_webhook_outbox
+            SET estado = 'dead',
+                last_error = COALESCE(last_error, '') || ' | descartado por operador (monitor)',
+                updated_at = NOW()
+          WHERE id = ANY($1::int[]) AND estado IN ('pending','failed')
+          RETURNING id, estado`,
+        [numIds]
+      );
+      res.status(200).json({
+        ok: true,
+        descartadas: rows?.length ?? 0,
+        ids: rows?.map((r: { id: number }) => r.id) ?? [],
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * GET /summary?token=...
    * Resumen agregado: total inbound/outbound, errores, últimos por tipo.
    * Útil para los counters del header del dashboard.

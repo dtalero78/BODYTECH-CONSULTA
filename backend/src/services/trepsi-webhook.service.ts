@@ -423,7 +423,12 @@ interface BuildPayloadInput {
 
 /**
  * Construye el payload del webhook según la sección 6 de la spec v2.1.
- * Solo incluye campos que tengan valor — Trepsi recibe un objeto compacto.
+ * Sólo se envían los campos del panel nutricional que Trepsi necesita —
+ * los del panel médico estándar (signos vitales, dx, recomendaciones,
+ * transcripción, etc.) se omiten a propósito.
+ *
+ * Cada subgrupo se incluye SOLO si tiene al menos un valor — Trepsi recibe
+ * un objeto compacto.
  */
 function buildPayload(input: BuildPayloadInput): Record<string, unknown> {
   const { citaId, historiaId, hc } = input;
@@ -435,49 +440,141 @@ function buildPayload(input: BuildPayloadInput): Record<string, unknown> {
         ? String(hc.fechaConsulta)
         : new Date().toISOString();
 
-  // Diagnósticos: tomar mdDx1 y mdDx2 si existen.
-  const diagnosticos: Array<{ codigo?: string; descripcion: string; tipo: string }> = [];
-  if (hc.mdDx1 && String(hc.mdDx1).trim()) {
-    diagnosticos.push({ descripcion: String(hc.mdDx1).trim(), tipo: 'principal' });
-  }
-  if (hc.mdDx2 && String(hc.mdDx2).trim()) {
-    diagnosticos.push({ descripcion: String(hc.mdDx2).trim(), tipo: 'relacionado' });
-  }
-
-  // Signos vitales: combinar tas/tad → ta, fcr → fc.
-  const signosVitales: Record<string, unknown> = {};
-  if (hc.tas && hc.tad) signosVitales.ta = `${hc.tas}/${hc.tad}`;
-  if (hc.fcr != null) signosVitales.fc = Number(hc.fcr);
-  if (hc.cc_peso_nuevo != null) signosVitales.peso = Number(hc.cc_peso_nuevo);
-  if (hc.cc_estatura_nuevo != null) signosVitales.talla = Number(hc.cc_estatura_nuevo);
-  if (hc.cc_imc_nuevo != null) signosVitales.imc = Number(hc.cc_imc_nuevo);
-
-  // Examen físico (string libre desde hallazgos).
-  const examenFisico: Record<string, unknown> = {};
-  if (hc.hallazgos_descripcion) {
-    examenFisico.general = String(hc.hallazgos_descripcion);
-  }
-  if (hc.hallazgos_dolor) {
-    examenFisico.dolor = String(hc.hallazgos_dolor);
+  // El panel nutricional persiste casi todo dentro de la columna JSONB
+  // `datosNutricionales`. Puede llegar como objeto (parseado por pg) o como
+  // string JSON (algunas conexiones). Normalizamos a objeto.
+  let dn: Record<string, unknown> = {};
+  if (hc.datosNutricionales && typeof hc.datosNutricionales === 'object') {
+    dn = hc.datosNutricionales as Record<string, unknown>;
+  } else if (typeof hc.datosNutricionales === 'string') {
+    try {
+      dn = JSON.parse(hc.datosNutricionales);
+    } catch {
+      dn = {};
+    }
   }
 
-  // Resultados (objeto compacto, sólo campos no vacíos).
+  // Helpers — devuelven undefined si el valor está vacío para que JSON.stringify
+  // no incluya la key.
+  const str = (v: unknown): string | undefined => {
+    if (v === null || v === undefined) return undefined;
+    const s = String(v).trim();
+    return s.length === 0 ? undefined : s;
+  };
+  const num = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const compact = <T extends Record<string, unknown>>(obj: T): T | undefined => {
+    const out: Record<string, unknown> = {};
+    for (const k in obj) {
+      if (obj[k] !== undefined) out[k] = obj[k];
+    }
+    return Object.keys(out).length > 0 ? (out as T) : undefined;
+  };
+
+  // ---- Motivo de Consulta y Objetivos (card nutricional) ----
+  const motivoConsultaYObjetivos = compact({
+    tipoConsulta: str(dn.tipoConsulta),
+    objetivoPrincipal: str(dn.objetivoPrincipal),
+    motivoConsulta: str(dn.motivoConsultaTexto),
+  });
+
+  // ---- Actividad Física y Contexto Deportivo ----
+  const actividadFisica = compact({
+    realiza: str(dn.realizaActividadFisica),
+    frecuencia: str(dn.frecuenciaEjercicio),
+    tipoEntrenamiento: str(dn.tipoEntrenamiento),
+    intensidad: str(dn.intensidadPercibida),
+    horario: str(dn.horarioEjercicio),
+  });
+
+  // ---- Estilo de Vida ----
+  const estiloDeVida = compact({
+    horasSueno: str(dn.horasSueno),
+    calidadSueno: str(dn.calidadSueno),
+    nivelEstres: str(dn.nivelEstres),
+  });
+
+  // ---- Medidas Físicas (sin pliegues / perímetros / diámetros ISAK) ----
+  const medidasFisicas = compact({
+    talla: num(hc.talla),
+    peso: num(hc.peso),
+    pesoHabitual: num(dn.pesoHabitual),
+    porcentajeGrasa: num(dn.porcentajeGrasa),
+    masaMuscular: num(dn.masaMuscular),
+    cintura: num(dn.circunferenciaCintura),
+    cadera: num(dn.circunferenciaCadera),
+  });
+
+  // ---- Evaluación Dietética ----
+  const evaluacionDietetica = compact({
+    recordatorio24h: str(dn.recordatorio24h),
+    numComidasDia: str(dn.numComidasDia),
+    consumoAgua: str(dn.consumoAgua),
+    preferenciasAlimentarias: str(dn.preferenciasAlimentarias),
+    alergiasAlimentarias: str(dn.alergiasAlimentarias),
+    suplementos: str(dn.suplementos),
+    cambiosPesoRecientes: str(dn.cambiosPesoRecientes),
+    horariosComida: str(dn.horariosComida),
+    consumoAlcohol: str(dn.consumoAlcohol),
+    frecuenciaAlcohol: str(dn.frecuenciaAlcohol),
+  });
+
+  // ---- Anamnesis Alimentaria ----
+  const anamnesisAlimentaria = compact({
+    desayuno: str(dn.anamnesisDesayuno),
+    mediaManana: str(dn.anamnesisMediaManana),
+    almuerzo: str(dn.anamnesisAlmuerzo),
+    mediaTarde: str(dn.anamnesisMediaTarde),
+    cena: str(dn.anamnesisCena),
+    finSemana: str(dn.anamnesisFinSemana),
+    alimentosPreferidos: str(dn.alimentosPreferidos),
+    alimentosRechazados: str(dn.alimentosRechazados),
+    intolerancias: str(dn.intoleranciasAlimentarias),
+  });
+
+  // ---- Evaluación Clínica Nutricional ----
+  const evaluacionClinicaNutricional = compact({
+    signosClinicos: str(dn.signosClinicos),
+    problemasDigestivos: str(dn.problemasDigestivos),
+    masticacionDeglucion: str(dn.masticacionDeglucion),
+    observaciones: str(dn.observacionesNutricionales),
+    analisisComposicionCorporal: str(dn.analisisComposicionCorporal),
+    identificacionRiesgos: str(dn.identificacionRiesgos),
+  });
+
+  // ---- Diagnóstico Nutricional ----
+  const diagnosticoNutricional = compact({
+    cie10: str(dn.diagnosticoCIE10),
+    descripcion: str(dn.diagnosticoNutricional),
+  });
+
+  // ---- Tipo de Consulta (top-level) — columna DB primero, luego JSONB ----
+  const tipoConsulta =
+    str(hc.tipoConsulta) ?? str(hc.tipo_consulta) ?? str(dn.tipoConsulta);
+
+  // ---- Ensamblar `resultados` — sólo claves con valor ----
+  const resultadosRaw: Record<string, unknown> = {
+    tipoConsulta,
+    motivoConsultaYObjetivos,
+    objetivosEspecificos: str(dn.objetivosEspecificos),
+    actividadFisica,
+    estiloDeVida,
+    enfermedadActual: str(dn.descripcionEnfermedad),
+    medidasFisicas,
+    evaluacionDietetica,
+    anamnesisAlimentaria,
+    evaluacionClinicaNutricional,
+    fechaProximaCita: str(dn.fechaProximaCita),
+    conceptoFinal: str(hc.mdConceptoFinal),
+    diagnosticoNutricional,
+  };
   const resultados: Record<string, unknown> = {};
-  const motivo = hc.motivo_consulta_texto || hc.motivoConsulta;
-  if (motivo) resultados.motivoConsulta = String(motivo);
-  if (Object.keys(examenFisico).length > 0) resultados.examenFisico = examenFisico;
-  if (Object.keys(signosVitales).length > 0) resultados.signosVitales = signosVitales;
-  if (hc.mdAntecedentes) resultados.antecedentes = String(hc.mdAntecedentes);
-  if (hc.mdConceptoFinal) resultados.analisis = String(hc.mdConceptoFinal);
-  if (diagnosticos.length > 0) resultados.diagnosticos = diagnosticos;
-  if (hc.mdRecomendacionesMedicasAdicionales) {
-    resultados.recomendaciones = String(hc.mdRecomendacionesMedicasAdicionales);
+  for (const k in resultadosRaw) {
+    if (resultadosRaw[k] !== undefined) resultados[k] = resultadosRaw[k];
   }
-  if (hc.mdObservacionesCertificado) {
-    resultados.notasMedico = String(hc.mdObservacionesCertificado);
-  }
-  if (hc.intervencion_meta_texto) resultados.plan = String(hc.intervencion_meta_texto);
-  if (hc.transcription_text) resultados.transcripcion = String(hc.transcription_text);
 
   const nombreMedico = hc.medico ? String(hc.medico) : '';
 

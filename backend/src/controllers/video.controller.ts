@@ -484,9 +484,12 @@ class VideoController {
 
       // Validar que el slot elegido siga disponible para el MISMO médico de la
       // cita (evita doble reserva si alguien tomó el cupo entre que se listó y
-      // que el paciente eligió).
+      // que el paciente eligió). Se usa la sede EFECTIVA del coach (no la de la
+      // cita, que puede ser genérica) para que coincida con su agenda.
+      const sedeEfectiva =
+        (await calendarioService.resolveSedeMedico(cita.medico, cita.sedeId)) ?? cita.sedeId;
       const val = await calendarioService.validarSlotDisponible(
-        cita.sedeId,
+        sedeEfectiva,
         cita.medico,
         fecha,
         hora,

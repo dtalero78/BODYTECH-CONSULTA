@@ -836,15 +836,47 @@ class CalendarioService {
    *
    * Es la fuente del selector "día → hora" de la página pública de reprogramar.
    */
+  /**
+   * Resuelve la sede EFECTIVA de un médico/coach por su código, prefiriendo
+   * `preferSedeId` si el profesional existe activo ahí; si no, cae a su sede
+   * real (la primera sede activa con ese código).
+   *
+   * Necesario porque la cita puede traer una sede genérica ('bsl' por el
+   * COALESCE, o 'trepsi') distinta a la sede donde el coach tiene su agenda
+   * (p. ej. 'bdt-nutricion'). Devuelve null si no hay profesional activo.
+   */
+  async resolveSedeMedico(medicoCodigo: string, preferSedeId: string): Promise<string | null> {
+    const rows = await postgresService.query(
+      `SELECT sede_id FROM profesionales
+        WHERE codigo = $1 AND activo = TRUE
+        ORDER BY (sede_id = $2) DESC
+        LIMIT 1`,
+      [medicoCodigo, preferSedeId]
+    );
+    if (!rows || rows.length === 0) return null;
+    return String(rows[0].sede_id);
+  }
+
   async getHorariosReprogramar(
     sedeId: string,
     medicoCodigo: string,
     modalidad: Modalidad = 'virtual',
     maxDias = 10
   ): Promise<ServiceResult<{ dias: Array<{ fecha: string; horarios: string[] }> }>> {
+    // Resolver la sede donde el coach realmente tiene agenda (no la de la cita,
+    // que puede ser genérica). Sin esto, las citas 'bsl'/'trepsi' nunca encuentran
+    // la disponibilidad (almacenada bajo la sede real, ej. 'bdt-nutricion').
+    const sedeEfectiva = await this.resolveSedeMedico(medicoCodigo, sedeId);
+    if (sedeEfectiva === null) {
+      return {
+        ok: false,
+        status: 409,
+        error: { code: 'NO_PROFESIONAL', message: 'El profesional no tiene agenda configurada para reprogramar.' },
+      };
+    }
     const profRows = await postgresService.query(
       `SELECT id FROM profesionales WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
-      [medicoCodigo, sedeId]
+      [medicoCodigo, sedeEfectiva]
     );
     if (profRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
@@ -864,7 +896,7 @@ class CalendarioService {
     for (let offset = 1; offset <= MAX_SCAN && dias.length < maxDias; offset++) {
       const { fecha, dow } = addDaysIso(base, offset);
       if (dow === 0 || dow === 6) continue; // sólo lun-vie
-      const res = await this.getHorariosDisponibles(fecha, profesionalId, sedeId, modalidad);
+      const res = await this.getHorariosDisponibles(fecha, profesionalId, sedeEfectiva, modalidad);
       if (!res.ok || !res.data) continue;
       const libres = res.data.horarios.filter((s) => s.disponible).map((s) => s.hora);
       if (libres.length > 0) dias.push({ fecha, horarios: libres });

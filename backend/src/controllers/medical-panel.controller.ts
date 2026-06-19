@@ -5,12 +5,14 @@ import medicalPanelService, {
   OrdenUpdateInput,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
-import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
+import { getSession, canActOnSede } from '../middleware/rbac.middleware';
 
-// Para médico/coach, su panel solo debe mostrar SUS pacientes: forzamos el
-// medicoCode al código del profesional de la sesión (ignora el de la URL →
-// cierra el IDOR horizontal). Coordinador/admin sí pueden consultar otros
-// códigos, pero acotados por sede vía effectiveSedes.
+// Para médico/coach, su AGENDA del día solo debe mostrar SUS pacientes:
+// forzamos el medicoCode al código del profesional de la sesión (ignora el de
+// la URL → cierra el IDOR de agenda). Coordinador/admin sí pueden consultar
+// otros códigos. NOTA: el acceso clínico a pacientes (búsqueda por cédula,
+// historia, atender) es GLOBAL por decisión de negocio — cualquier clínico
+// puede atender a cualquier paciente que busque por documento, sin filtro de sede.
 function ownCodeOrParam(req: Request, paramCode: string): string {
   const s = getSession(req);
   if (s && (s.role === 'medico' || s.role === 'coach') && s.codigo) return s.codigo;
@@ -128,10 +130,7 @@ class MedicalPanelController {
     const { medicoCode } = parsed.data;
 
     try {
-      const stats = await medicalPanelService.getDailyStats(
-        ownCodeOrParam(req, medicoCode),
-        effectiveSedes(req)
-      );
+      const stats = await medicalPanelService.getDailyStats(ownCodeOrParam(req, medicoCode));
       res.json(stats);
     } catch (error) {
       next(error);
@@ -159,8 +158,7 @@ class MedicalPanelController {
       const result = await medicalPanelService.getPendingPatients(
         ownCodeOrParam(req, medicoCode),
         page,
-        pageSize,
-        effectiveSedes(req)
+        pageSize
       );
       res.json(result);
     } catch (error) {
@@ -179,10 +177,9 @@ class MedicalPanelController {
     const { documento } = parsed.data;
 
     try {
-      const patient = await medicalPanelService.searchPatientByDocument(
-        documento,
-        effectiveSedes(req)
-      );
+      // Acceso clínico global: buscar por cédula encuentra al paciente sin
+      // importar su sede, para poder atenderlo.
+      const patient = await medicalPanelService.searchPatientByDocument(documento);
 
       if (!patient) {
         res.status(404).json({ error: 'Paciente no encontrado' });
@@ -230,10 +227,7 @@ class MedicalPanelController {
     const { documento } = parsed.data;
 
     try {
-      const patientDetails = await medicalPanelService.getPatientDetails(
-        documento,
-        effectiveSedes(req)
-      );
+      const patientDetails = await medicalPanelService.getPatientDetails(documento);
 
       if (!patientDetails) {
         res.status(404).json({ error: 'Paciente no encontrado' });

@@ -12,7 +12,6 @@ import pdfService from '../services/pdf.service';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
-import { effectiveSedes } from '../middleware/rbac.middleware';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -529,12 +528,10 @@ class VideoController {
     const { page, limit, buscar } = parsed.data;
 
     try {
-      const sedes = effectiveSedes(req);
       const result = await medicalHistoryService.getAtendidos({
         page: page ?? 1,
         limit: limit ?? 20,
         buscar,
-        sedes,
       });
 
       res.status(200).json({
@@ -567,7 +564,7 @@ class VideoController {
         return;
       }
 
-      const html = await medicalHistoryService.getPreviewHTML(id, effectiveSedes(req));
+      const html = await medicalHistoryService.getPreviewHTML(id);
 
       if (html === null) {
         res.status(404).json({ success: false, error: 'NOT_FOUND' });
@@ -593,7 +590,7 @@ class VideoController {
     try {
       const { historiaId } = req.params;
 
-      const html = await medicalHistoryService.getPreviewHTML(historiaId, effectiveSedes(req));
+      const html = await medicalHistoryService.getPreviewHTML(historiaId);
 
       if (!html) {
         res.status(404).send('<h1>Historia clínica no encontrada</h1>');
@@ -621,10 +618,7 @@ class VideoController {
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const medicalHistory = await medicalHistoryService.getMedicalHistory(
-        historiaId,
-        effectiveSedes(req)
-      );
+      const medicalHistory = await medicalHistoryService.getMedicalHistory(historiaId);
 
       if (!medicalHistory) {
         res.status(404).json({
@@ -656,7 +650,7 @@ class VideoController {
         return;
       }
 
-      const history = await medicalHistoryService.getPatientHistory(numeroId, effectiveSedes(req));
+      const history = await medicalHistoryService.getPatientHistory(numeroId);
 
       res.status(200).json({
         success: true,
@@ -681,7 +675,7 @@ class VideoController {
     try {
       console.log('📥 [updateMedicalHistory] Payload recibido:', JSON.stringify(payload, null, 2));
 
-      const result = await medicalHistoryService.updateMedicalHistory(payload, effectiveSedes(req));
+      const result = await medicalHistoryService.updateMedicalHistory(payload);
 
       if (result.success) {
         res.status(200).json({
@@ -739,12 +733,7 @@ class VideoController {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await medicalHistoryService.updateField(
-        historiaId,
-        field,
-        value,
-        effectiveSedes(req)
-      );
+      const result = await medicalHistoryService.updateField(historiaId, field, value);
 
       if (result.success) {
         res.status(200).json(result);

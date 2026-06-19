@@ -213,10 +213,9 @@ describe('PATCH /api/video/medical-history/:id/field', () => {
     // req.sedeId='bsl' desde el token de prueba) → WHERE ... AND "sede_id" = $3.
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toMatch(/UPDATE\s+"HistoriaClinica"\s+SET\s+"cc_imc_nuevo"\s*=\s*\$1/);
-    // Aislamiento por sede: ahora se filtra con ANY($3::text[]) sobre las sedes
-    // del actor (effectiveSedes → ['bsl'] en el test).
-    expect(sql).toMatch(/COALESCE\("sede_id",\s*'bsl'\)\s*=\s*ANY\(\$3::text\[\]\)/);
-    expect(params).toEqual([23.4, 'abc', ['bsl']]);
+    // Acceso clínico global: la escritura por campo NO se acota por sede
+    // (cualquier clínico atiende a cualquier paciente que busque por documento).
+    expect(params).toEqual([23.4, 'abc']);
   });
 });
 

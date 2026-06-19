@@ -70,6 +70,8 @@ export interface OrdenItem {
   horaAtencion?: string;
   atendido?: string;
   ciudad?: string;
+  /** Timestamp de creación de la fila (`_createdDate`). Ordena el listado. */
+  createdAt?: string;
   // Calidad: última evaluación (cualquier estado) ligada a esta historia.
   // Si no hay ninguna, los tres campos van null.
   calidadEvalId?: number | null;
@@ -504,7 +506,7 @@ class MedicalPanelService {
       const rows = await postgresService.query(
         `SELECT h."_id", h."numeroId", h."primerNombre", h."segundoNombre", h."primerApellido", h."segundoApellido",
                 h."celular", h."empresa", h."codEmpresa", h."tipoExamen", h."examenes", h."medico",
-                h."fechaAtencion", h."horaAtencion", h."atendido", h."ciudad",
+                h."fechaAtencion", h."horaAtencion", h."atendido", h."ciudad", h."_createdDate",
                 ce.id           AS calidad_eval_id,
                 ce.puntaje_total AS calidad_puntaje,
                 ce.estado       AS calidad_estado
@@ -517,7 +519,7 @@ class MedicalPanelService {
            LIMIT 1
          ) ce ON TRUE
          WHERE ${whereClause}
-         ORDER BY h."fechaAtencion" DESC NULLS LAST
+         ORDER BY h."_createdDate" DESC NULLS LAST, h."_id" DESC
          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         dataParams
       );
@@ -539,6 +541,12 @@ class MedicalPanelService {
         horaAtencion: (row.horaAtencion as string) ?? undefined,
         atendido: (row.atendido as string) ?? undefined,
         ciudad: (row.ciudad as string) ?? undefined,
+        createdAt:
+          row._createdDate instanceof Date
+            ? row._createdDate.toISOString()
+            : row._createdDate
+            ? String(row._createdDate)
+            : undefined,
         calidadEvalId: row.calidad_eval_id != null ? Number(row.calidad_eval_id) : null,
         calidadPuntaje: row.calidad_puntaje != null ? Number(row.calidad_puntaje) : null,
         calidadEstado: (row.calidad_estado as OrdenItem['calidadEstado']) ?? null,

@@ -828,6 +828,51 @@ class CalendarioService {
   }
 
   /**
+   * Lista los próximos días hábiles con cupos disponibles para un médico/coach
+   * (el MISMO profesional de la cita), agrupados por fecha. Reutiliza
+   * getHorariosDisponibles (respeta disponibilidad efectiva > override semanal,
+   * cupos ocupados y horas ya pasadas). Devuelve hasta `maxDias` días con al
+   * menos un cupo, escaneando hasta 30 días calendario hacia adelante.
+   *
+   * Es la fuente del selector "día → hora" de la página pública de reprogramar.
+   */
+  async getHorariosReprogramar(
+    sedeId: string,
+    medicoCodigo: string,
+    modalidad: Modalidad = 'virtual',
+    maxDias = 10
+  ): Promise<ServiceResult<{ dias: Array<{ fecha: string; horarios: string[] }> }>> {
+    const profRows = await postgresService.query(
+      `SELECT id FROM profesionales WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
+      [medicoCodigo, sedeId]
+    );
+    if (profRows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
+    }
+    if (profRows.length === 0) {
+      return {
+        ok: false,
+        status: 409,
+        error: { code: 'NO_PROFESIONAL', message: 'El profesional no tiene agenda configurada para reprogramar.' },
+      };
+    }
+    const profesionalId = Number(profRows[0].id);
+
+    const base = nowColombia().fecha;
+    const MAX_SCAN = 30; // días calendario hacia adelante
+    const dias: Array<{ fecha: string; horarios: string[] }> = [];
+    for (let offset = 1; offset <= MAX_SCAN && dias.length < maxDias; offset++) {
+      const { fecha, dow } = addDaysIso(base, offset);
+      if (dow === 0 || dow === 6) continue; // sólo lun-vie
+      const res = await this.getHorariosDisponibles(fecha, profesionalId, sedeId, modalidad);
+      if (!res.ok || !res.data) continue;
+      const libres = res.data.horarios.filter((s) => s.disponible).map((s) => s.hora);
+      if (libres.length > 0) dias.push({ fecha, horarios: libres });
+    }
+    return { ok: true, status: 200, data: { dias } };
+  }
+
+  /**
    * Reasigna en lote N citas a un nuevo médico, opcionalmente cambiando la
    * fecha y hora de todas a un mismo valor. Útil cuando un médico no puede
    * atender un día y hay que redistribuir sus citas.

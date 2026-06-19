@@ -52,6 +52,7 @@ router.post('/whatsapp/send', clinico, videoController.sendWhatsApp);
 
 // Reprogramación de cita (público — abierto desde el botón de WhatsApp)
 router.get('/reprogramar/:id', videoController.getReprogramarInfo);
+router.get('/reprogramar/:id/horarios', videoController.getReprogramarHorarios);
 router.post('/reprogramar/:id', videoController.reprogramarCita);
 
 // Medical History — TODAS las rutas exigen JWT: contienen PHI (lectura y

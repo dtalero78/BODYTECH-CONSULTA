@@ -191,11 +191,20 @@ class ApiService {
     return res.data;
   }
 
+  /** Días hábiles con cupos disponibles del mismo coach (selector día → hora). */
+  async getReprogramarHorarios(
+    id: string
+  ): Promise<{ success: boolean; dias: Array<{ fecha: string; horarios: string[] }> }> {
+    const res = await this.client.get(`/api/video/reprogramar/${id}/horarios`);
+    return res.data;
+  }
+
   async reprogramarCita(
     id: string,
-    franja: 'manana' | 'tarde'
+    fecha: string,
+    hora: string
   ): Promise<{ success: boolean; fecha: string; hora: string }> {
-    const res = await this.client.post(`/api/video/reprogramar/${id}`, { franja });
+    const res = await this.client.post(`/api/video/reprogramar/${id}`, { fecha, hora });
     return res.data;
   }
 

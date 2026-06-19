@@ -59,7 +59,8 @@ const sendWhatsAppSchema = z.object({
 });
 
 const reprogramarSchema = z.object({
-  franja: z.enum(['manana', 'tarde']),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha inválida (YYYY-MM-DD)'),
+  hora: z.string().regex(/^\d{2}:\d{2}$/, 'hora inválida (HH:MM)'),
 });
 
 const getAtendidosQuerySchema = z.object({
@@ -468,7 +469,7 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { franja } = parsed.data;
+    const { fecha, hora } = parsed.data;
 
     try {
       const cita = await medicalPanelService.getCitaBasics(id);
@@ -481,15 +482,26 @@ class VideoController {
         return;
       }
 
-      const slot = await calendarioService.findRescheduleSlot(cita.sedeId, cita.medico, franja, 'virtual');
-      if (!slot.ok || !slot.data) {
-        res.status(slot.status).json({ success: false, error: slot.error?.message ?? 'Sin cupos disponibles' });
+      // Validar que el slot elegido siga disponible para el MISMO médico de la
+      // cita (evita doble reserva si alguien tomó el cupo entre que se listó y
+      // que el paciente eligió).
+      const val = await calendarioService.validarSlotDisponible(
+        cita.sedeId,
+        cita.medico,
+        fecha,
+        hora,
+        'virtual'
+      );
+      if (!val.ok) {
+        res
+          .status(val.status)
+          .json({ success: false, error: val.error?.message ?? 'El horario ya no está disponible.' });
         return;
       }
 
       const ok = await medicalPanelService.updateOrden(id, {
-        fechaAtencion: slot.data.fecha,
-        horaAtencion: slot.data.hora,
+        fechaAtencion: fecha,
+        horaAtencion: hora,
         // Marca la cita como reprogramada → el panel coordinador la pinta en naranja.
         // Sigue contando como pendiente de atención (no toca fechaConsulta).
         atendido: 'REPROGRAMADA',
@@ -499,18 +511,51 @@ class VideoController {
         return;
       }
 
-      // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h).
-      // No se revela la fecha/hora autoasignada: el equipo confirma por llamada.
+      // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h),
+      // revelando la fecha/hora que el paciente eligió.
       if (cita.celular) {
+        const [y, m, d] = fecha.split('-');
+        const fechaLegible = `${d}/${m}/${y}`;
         whatsappService
           .sendTextMessage(
             cita.celular,
-            'Listo! Espera nuestra llamada de confirmación. Gracias!'
+            `Hola ${cita.primerNombre ?? ''} 👋\n\nTu cita quedó reprogramada para el ${fechaLegible} a las ${hora}.\n\n¡Te esperamos!`
           )
           .catch(() => {});
       }
 
-      res.status(200).json({ success: true, fecha: slot.data.fecha, hora: slot.data.hora });
+      res.status(200).json({ success: true, fecha, hora });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /reprogramar/:id/horarios — días hábiles con cupos disponibles del
+   * MISMO médico de la cita, para el selector "día → hora" de la página pública.
+   */
+  async getReprogramarHorarios(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { id } = req.params;
+    try {
+      const cita = await medicalPanelService.getCitaBasics(id);
+      if (!cita) {
+        res.status(404).json({ success: false, error: 'Cita no encontrada' });
+        return;
+      }
+      if (!cita.medico) {
+        res.status(409).json({ success: false, error: 'La cita no tiene médico asignado.' });
+        return;
+      }
+
+      const result = await calendarioService.getHorariosReprogramar(cita.sedeId, cita.medico, 'virtual');
+      if (!result.ok || !result.data) {
+        res
+          .status(result.status)
+          .json({ success: false, error: result.error?.message ?? 'No se pudieron cargar los horarios.' });
+        return;
+      }
+
+      res.status(200).json({ success: true, dias: result.data.dias });
     } catch (error) {
       next(error);
     }

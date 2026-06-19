@@ -202,6 +202,48 @@ class MonitorIntegracionController {
   };
 
   /**
+   * GET /debug-historia?token=...&id=trepsi_xxx
+   * Inspeccionar el estado de una historia: ¿está en HistoriaClinica? ¿está
+   * vinculada en trepsi_appointments? Útil para debug del flujo reschedule.
+   */
+  debugHistoria = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const id = typeof req.query.id === 'string' ? req.query.id : '';
+      if (!id) {
+        res.status(400).json({ ok: false, error: { code: 'NO_ID', message: 'id requerido.' } });
+        return;
+      }
+      const hc = await postgresService.query(
+        `SELECT "_id", "medico", "primerNombre", "fechaAtencion", "horaAtencion", "atendido",
+                COALESCE("sede_id",'bsl') AS sede_id, "datosNutricionales" IS NOT NULL AS tiene_datos_nutri
+           FROM "HistoriaClinica" WHERE "_id" = $1`,
+        [id]
+      );
+      const trepsiAppt = await postgresService.query(
+        `SELECT cita_id, historia_id, estado, fecha_atencion, medico_codigo, sede_origen
+           FROM trepsi_appointments WHERE historia_id = $1`,
+        [id]
+      );
+      const outboxRows = await postgresService.query(
+        `SELECT id, estado, intentos, last_status_code, created_at, updated_at,
+                payload->>'eventType' AS event_type, payload->>'estado' AS payload_estado
+           FROM trepsi_webhook_outbox WHERE historia_id = $1
+           ORDER BY id DESC LIMIT 10`,
+        [id]
+      );
+      res.status(200).json({
+        ok: true,
+        historiaClinica: hc?.[0] ?? null,
+        trepsi_appointments: trepsiAppt ?? [],
+        outbox_lastRows: outboxRows ?? [],
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * GET /summary?token=...
    * Resumen agregado: total inbound/outbound, errores, últimos por tipo.
    * Útil para los counters del header del dashboard.

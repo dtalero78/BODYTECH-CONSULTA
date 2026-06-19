@@ -502,6 +502,11 @@ class VideoController {
         return;
       }
 
+      // Capturamos la fecha/hora previas ANTES del update para incluirlas
+      // en el webhook a Trepsi (campo `fechaAtencionAnterior`).
+      const fechaAnterior = cita.fechaAtencion;
+      const horaAnterior = cita.horaAtencion;
+
       const ok = await medicalPanelService.updateOrden(id, {
         fechaAtencion: fecha,
         horaAtencion: hora,
@@ -513,6 +518,21 @@ class VideoController {
         res.status(500).json({ success: false, error: 'No se pudo reprogramar la cita.' });
         return;
       }
+
+      // Si la cita es de Trepsi, notificamos el reschedule por webhook.
+      // Fire-and-forget — no bloquea la respuesta al paciente.
+      trepsiWebhookService
+        .enqueueReschedule(id, fechaAnterior, horaAnterior, fecha, hora, 'patient')
+        .then((r) => {
+          if (r.enqueued) {
+            console.log(`📨 [Trepsi-Webhook] Reschedule encolado para historia ${id}`);
+          } else if (r.reason && r.reason !== 'NOT_TREPSI') {
+            console.log(`ℹ️  [Trepsi-Webhook] Reschedule no encolado: ${r.reason}`);
+          }
+        })
+        .catch((e) => {
+          console.error(`⚠️  [Trepsi-Webhook] Error encolando reschedule: ${e?.message ?? e}`);
+        });
 
       // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h),
       // revelando la fecha/hora que el paciente eligió.

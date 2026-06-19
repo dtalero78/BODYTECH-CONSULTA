@@ -122,6 +122,79 @@ class TrepsiWebhookService {
   }
 
   // -----------------------------------------------------------------------
+  // ENQUEUE - Reschedule (cuando el paciente reprograma desde nuestro link)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Notifica a Trepsi cuando un paciente reprograma su cita desde el link
+   * público `/reprogramar/:id`. Si la HC no es de Trepsi, no hace nada.
+   *
+   * `fechaAnterior` / `horaAnterior` deben leerse ANTES del update — son los
+   * valores que la HC tenía justo antes de la reprogramación.
+   */
+  async enqueueReschedule(
+    historiaId: string,
+    fechaAnterior: string | null,
+    horaAnterior: string | null,
+    fechaNueva: string,
+    horaNueva: string,
+    rescheduledBy: 'patient' | 'coordinator' = 'patient'
+  ): Promise<{ enqueued: boolean; reason?: string }> {
+    if (!historiaId) return { enqueued: false, reason: 'NO_HISTORIA_ID' };
+
+    const apptRows = await postgresService.query(
+      'SELECT cita_id, estado FROM trepsi_appointments WHERE historia_id = $1 LIMIT 1',
+      [historiaId]
+    );
+    if (apptRows === null) {
+      return { enqueued: false, reason: 'DB_ERROR' };
+    }
+    if (apptRows.length === 0) {
+      return { enqueued: false, reason: 'NOT_TREPSI' };
+    }
+    const cita = apptRows[0];
+    if (String(cita.estado) === 'cancelled') {
+      return { enqueued: false, reason: 'CITA_CANCELLED' };
+    }
+    const citaId = String(cita.cita_id);
+
+    const hcRows = await postgresService.query(
+      'SELECT * FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1',
+      [historiaId]
+    );
+    if (hcRows === null || hcRows.length === 0) {
+      return { enqueued: false, reason: 'HC_NOT_FOUND' };
+    }
+    const hc = hcRows[0];
+
+    // Mismo shape v2.1 que `completed`, con estado y campos del reschedule.
+    const base = buildPayload({ citaId, historiaId, hc });
+    const payload = {
+      ...base,
+      estado: 'rescheduled',
+      eventType: 'rescheduled',
+      fechaAtencionAnterior: fechaAnterior ?? null,
+      horaAtencionAnterior: horaAnterior ?? null,
+      fechaAtencionNueva: fechaNueva,
+      horaAtencionNueva: horaNueva,
+      rescheduledBy,
+      sentAt: new Date().toISOString(),
+    };
+
+    await postgresService.query(
+      `INSERT INTO trepsi_webhook_outbox (cita_id, historia_id, payload)
+       VALUES ($1, $2, $3)`,
+      [citaId, historiaId, JSON.stringify(payload)]
+    );
+
+    this.dispatchPending().catch((e) => {
+      console.error('[trepsi-webhook] dispatchPending (reschedule) falló:', e);
+    });
+
+    return { enqueued: true };
+  }
+
+  // -----------------------------------------------------------------------
   // ENQUEUE
   // -----------------------------------------------------------------------
 
@@ -575,6 +648,10 @@ function buildPayload(input: BuildPayloadInput): Record<string, unknown> {
   for (const k in resultadosRaw) {
     if (resultadosRaw[k] !== undefined) resultados[k] = resultadosRaw[k];
   }
+  // Workaround temporal: el validador de Trepsi aún exige
+  // `resultados.diagnosticos` (campo del shape médico viejo). Mientras ellos
+  // actualizan su schema, mandamos un array vacío para no quedar bloqueados.
+  resultados.diagnosticos = [];
 
   const nombreMedico = hc.medico ? String(hc.medico) : '';
 

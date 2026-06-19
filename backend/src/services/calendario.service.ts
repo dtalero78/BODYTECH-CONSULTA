@@ -515,7 +515,10 @@ class CalendarioService {
   async getHorariosDisponibles(
     fecha: string,
     profesionalId: number,
-    sedeId: string,
+    // Sede del solicitante: se ignora a propósito. La disponibilidad se resuelve
+    // bajo la sede REAL del profesional (profesionalId es PK global). Se conserva
+    // en la firma por compatibilidad con los llamadores existentes.
+    _sedeIdSolicitante: string,
     modalidad: Modalidad
   ): Promise<ServiceResult<HorariosDisponibles>> {
     let range;
@@ -526,11 +529,15 @@ class CalendarioService {
       return { ok: false, status: 400, error: { code: 'INVALID_DATE', message: msg } };
     }
 
-    // 1) Profesional + tiempo_consulta + codigo
+    // 1) Profesional + tiempo_consulta + codigo.
+    // profesionalId es PK global, así que NO se filtra por la sede del solicitante:
+    // la disponibilidad se resuelve bajo la sede REAL del profesional. Si no, un
+    // coordinador de otra sede (o una cita con sede genérica) nunca ve la agenda
+    // del coach (ej. coaches de nutrición viven en 'bdt-nutricion').
     const profRows = await postgresService.query(
-      `SELECT id, codigo, tiempo_consulta FROM profesionales
-         WHERE id = $1 AND sede_id = $2 AND activo = TRUE`,
-      [profesionalId, sedeId]
+      `SELECT id, codigo, tiempo_consulta, sede_id FROM profesionales
+         WHERE id = $1 AND activo = TRUE`,
+      [profesionalId]
     );
     if (profRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
@@ -541,6 +548,8 @@ class CalendarioService {
     const prof = profRows[0];
     const tiempoConsulta = Number(prof.tiempo_consulta) || 30;
     const codigoMedico = String(prof.codigo);
+    // Sede real del profesional — fuente para disponibilidad y cupos ocupados.
+    const sedeReal = String(prof.sede_id);
 
     // 2) Día de la semana (0-6) en Colombia
     const diaSemanaUtc = new Date(range.startUtc);
@@ -551,7 +560,7 @@ class CalendarioService {
     // 3) Rangos EFECTIVOS de disponibilidad (override por fecha > patrón semanal).
     const efectivos = await disponibilidadFechaService.getRangosEfectivos(
       profesionalId,
-      sedeId,
+      sedeReal,
       fecha,
       diaSemana,
       modalidad
@@ -582,7 +591,7 @@ class CalendarioService {
            AND "medico" = $4
            AND "horaAtencion" IS NOT NULL
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
-      [sedeId, range.startUtc, range.endUtc, codigoMedico]
+      [sedeReal, range.startUtc, range.endUtc, codigoMedico]
     );
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };

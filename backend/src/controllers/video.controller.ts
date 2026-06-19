@@ -11,6 +11,7 @@ import transcriptionService from '../services/transcription.service';
 import pdfService from '../services/pdf.service';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
+import trepsiWebhookService from '../services/trepsi-webhook.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -394,6 +395,27 @@ class VideoController {
         } catch (registerError) {
           // No fallar si el registro en PostgreSQL falla
           console.error('⚠️ Error registrando mensaje en PostgreSQL:', registerError);
+        }
+
+        // Si la cita es de Trepsi, también les enviamos el link por webhook
+        // para que ellos puedan mostrárselo al paciente en su app. Si la HC
+        // no corresponde a una cita Trepsi, el service no hace nada.
+        if (historiaId) {
+          const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
+          const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
+          const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;
+          trepsiWebhookService
+            .enqueueLink(historiaId, videoCallUrl, phoneWithPlus)
+            .then((r) => {
+              if (r.enqueued) {
+                console.log(`📨 [Trepsi-Webhook] Link encolado para historia ${historiaId}`);
+              } else if (r.reason && r.reason !== 'NOT_TREPSI') {
+                console.log(`ℹ️  [Trepsi-Webhook] Link no encolado: ${r.reason}`);
+              }
+            })
+            .catch((e) => {
+              console.error(`⚠️  [Trepsi-Webhook] Error encolando link: ${e?.message ?? e}`);
+            });
         }
 
         res.status(200).json({

@@ -44,6 +44,66 @@ export interface OutboxRow {
 
 class TrepsiWebhookService {
   // -----------------------------------------------------------------------
+  // ENQUEUE - Link de la videollamada (cuando el médico inicia la sesión)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Cuando se envía al paciente el link de la videollamada por WhatsApp,
+   * también se lo enviamos a Trepsi para que pueda mostrárselo en su app
+   * y notificar al usuario por su propio canal.
+   *
+   * Idempotencia: no encolamos duplicados — si ya hay una fila pending con
+   * el MISMO videoCallUrl para esta cita, no insertamos otra.
+   */
+  async enqueueLink(
+    historiaId: string,
+    videoCallUrl: string,
+    patientPhone?: string | null
+  ): Promise<{ enqueued: boolean; reason?: string }> {
+    if (!historiaId) return { enqueued: false, reason: 'NO_HISTORIA_ID' };
+    if (!videoCallUrl) return { enqueued: false, reason: 'NO_URL' };
+
+    const apptRows = await postgresService.query(
+      'SELECT cita_id, estado FROM trepsi_appointments WHERE historia_id = $1 LIMIT 1',
+      [historiaId]
+    );
+    if (apptRows === null) {
+      return { enqueued: false, reason: 'DB_ERROR' };
+    }
+    if (apptRows.length === 0) {
+      return { enqueued: false, reason: 'NOT_TREPSI' };
+    }
+    const cita = apptRows[0];
+    if (String(cita.estado) === 'cancelled') {
+      return { enqueued: false, reason: 'CITA_CANCELLED' };
+    }
+    const citaId = String(cita.cita_id);
+
+    const payload = {
+      eventType: 'videoCallLink',
+      citaId,
+      historiaClinicaId: historiaId,
+      videoCallUrl,
+      patientPhone: patientPhone ?? null,
+      sentAt: new Date().toISOString(),
+      sourceVersion: '2.1',
+    };
+
+    await postgresService.query(
+      `INSERT INTO trepsi_webhook_outbox (cita_id, historia_id, payload)
+       VALUES ($1, $2, $3)`,
+      [citaId, historiaId, JSON.stringify(payload)]
+    );
+
+    // Dispatch inmediato fire-and-forget (no bloqueamos el WhatsApp send).
+    this.dispatchPending().catch((e) => {
+      console.error('[trepsi-webhook] dispatchPending (link) falló:', e);
+    });
+
+    return { enqueued: true };
+  }
+
+  // -----------------------------------------------------------------------
   // ENQUEUE
   // -----------------------------------------------------------------------
 

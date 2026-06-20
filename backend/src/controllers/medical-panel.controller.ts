@@ -254,6 +254,11 @@ class MedicalPanelController {
     }
     const { page, limit, from, to, status, medico, q, trepsi } = parsed.data;
 
+    // Médico/coach: su agenda solo muestra SUS citas → se fuerza el código de la
+    // sesión (cierra el IDOR). Coordinador/admin conservan el `?medico` (o sin
+    // filtro si no lo envían).
+    const medicoEfectivo = ownCodeOrParam(req, medico ?? '') || undefined;
+
     try {
       const result = await medicalPanelService.listOrdenes({
         page: page ?? 0,
@@ -261,7 +266,7 @@ class MedicalPanelController {
         from,
         to,
         status,
-        medico,
+        medico: medicoEfectivo,
         q,
         trepsi: trepsi === '1' || trepsi === 'true',
       });

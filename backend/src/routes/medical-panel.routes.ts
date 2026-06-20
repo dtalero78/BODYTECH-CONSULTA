@@ -11,6 +11,10 @@ const router = Router();
 // usan los mismos endpoints de búsqueda/listado/historia que los médicos.
 const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
 const operativo = requireRole('coordinador', 'admin', 'auxiliar');
+// Listado/agenda de órdenes: lo ven tanto los clínicos (médico/coach → SU
+// propia agenda, vía ownCodeOrParam) como los operativos (coordinador/admin/
+// auxiliar → gestión). Superset de `clinico` ∪ `operativo`.
+const agendaLista = requireRole('medico', 'coach', 'coordinador', 'admin', 'auxiliar');
 
 // Estadísticas del día para un médico
 router.get('/stats/:medicoCode', clinico, medicalPanelController.getDailyStats);
@@ -27,8 +31,11 @@ router.get('/patients/details/:documento', clinico, medicalPanelController.getPa
 // Marcar paciente como "No Contesta"
 router.patch('/patients/:patientId/no-answer', clinico, medicalPanelController.markAsNoAnswer);
 
-// CRUD de Órdenes
-router.get('/ordenes', operativo, medicalPanelController.listOrdenes);
+// CRUD de Órdenes.
+// El LISTADO (agenda) es `clinico`: médico/coach ven SU propia agenda — el
+// controller fuerza su código (ownCodeOrParam) cerrando el IDOR. Las
+// escrituras siguen `operativo` (coordinador/admin/auxiliar).
+router.get('/ordenes', agendaLista, medicalPanelController.listOrdenes);
 router.post('/ordenes', operativo, medicalPanelController.createOrden);
 router.patch('/ordenes/:id', operativo, medicalPanelController.updateOrden);
 router.delete('/ordenes/:id', operativo, medicalPanelController.deleteOrden);

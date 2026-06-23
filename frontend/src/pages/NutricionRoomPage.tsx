@@ -59,7 +59,7 @@ export const NutricionRoomPage = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
             <img
-              src="/trepsiLogo.png"
+              src="/logoBlancoTrepsi.png"
               alt="Trepsi Logo"
               className="w-auto h-auto max-w-full"
             />

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { Compass } from 'lucide-react';
 import { PanelHeader } from './PanelHeader';
 import { PatientStrip } from './PatientStrip';
 import { Tabs, type TabDef } from './Tabs';
 import { FAB } from './FAB';
+import { GuidedConsultation } from './GuidedConsultation';
 import { SaveProvider, useSaveCtx } from './SaveContext';
 import { useMedicalHistory } from './hooks/useMedicalHistory';
 import type { MedicalHistoryFull, TabId } from './types';
@@ -18,6 +20,13 @@ interface MedicalConsultationPanelProps {
   historiaId: string;
   isMaxed: boolean;
   onToggleMaxed: () => void;
+  /**
+   * Auto-abrir la consulta guiada al cargar (solo en la consulta en vivo).
+   * En navegación de historias (HistoriaDetallePage) queda en false para no
+   * abrir el asistente cada vez que se revisa una historia. El botón "Consulta
+   * guiada" sigue disponible siempre.
+   */
+  autoGuide?: boolean;
 }
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -132,11 +141,15 @@ export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   ];
 }
 
-function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationPanelProps) {
+function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalConsultationPanelProps) {
   const { data, loading, error, patchLocal } = useMedicalHistory(historiaId);
   const [activeTab, setActiveTab] = useState<TabId>('t1');
   const [fabOpen, setFabOpen] = useState(false);
   const { aggregate, retryAll } = useSaveCtx();
+  // Consulta guiada ("modo entrevista"): se auto-abre al comenzar la consulta
+  // y se puede reabrir con el botón. Una sola auto-apertura por montaje.
+  const [guideOpen, setGuideOpen] = useState(false);
+  const autoOpenedGuideRef = useRef(false);
   // Phase 3 — Transcripción post-llamada.
   const [showTranscriptionBadge, setShowTranscriptionBadge] = useState(false);
   // Ref con el último status observado, para detectar la transición a 'done'
@@ -164,6 +177,16 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
     }
     lastTranscriptionStatusRef.current = curr;
   }, [data?.transcriptionStatus, historiaId]);
+
+  // Auto-abrir la consulta guiada una vez, cuando la historia ya cargó.
+  // Solo en la consulta en vivo (autoGuide) — no al navegar historias.
+  useEffect(() => {
+    if (!autoGuide || autoOpenedGuideRef.current) return;
+    if (!loading && !error && data) {
+      autoOpenedGuideRef.current = true;
+      setGuideOpen(true);
+    }
+  }, [autoGuide, loading, error, data]);
 
   // Atajo M y N — solo si el foco no está en un editable.
   useEffect(() => {
@@ -217,6 +240,16 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
         {!loading && !error && (
           <>
             <PatientStrip data={data} />
+            <div className="px-5 pt-3">
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] text-xs font-semibold bg-[rgba(0,168,132,0.12)] text-[#00a884] border border-[#00a884]/30 hover:bg-[rgba(0,168,132,0.2)] transition"
+              >
+                <Compass size={15} />
+                Consulta guiada
+              </button>
+            </div>
             <Tabs active={activeTab} onChange={setActiveTab} tabs={tabs} />
             <div className="p-5 pb-32">
               {activeTab === 't1' && (
@@ -279,6 +312,14 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed }: MedicalConsultationP
           </>
         )}
       </div>
+      <GuidedConsultation
+        historiaId={historiaId}
+        data={data}
+        isMaxed={isMaxed}
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        onPatchLocal={patchLocal}
+      />
       <FAB isMaxed={isMaxed} externalOpen={fabOpen} onOpenChange={setFabOpen} />
     </div>
   );

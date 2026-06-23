@@ -416,6 +416,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             historiaId={historiaId!}
             isMaxed={isPanelMaxed}
             onToggleMaxed={() => setIsPanelMaxed((p) => !p)}
+            autoGuide
           />
         )}
       </main>

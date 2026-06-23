@@ -10,8 +10,9 @@ import { Compass, ChevronLeft, ChevronRight, X, Mic, Check } from 'lucide-react'
  * estado del panel vía getValue/setValue (que el panel rutea a `datosNutricionales`
  * o a los campos top-level peso/talla). El coach guarda al final como siempre.
  *
- * Las opciones de los <select> coinciden EXACTAMENTE con las del panel para que
- * los valores no queden en blanco al volver al formulario.
+ * El guion cubre la ANAMNESIS NUTRICIONAL completa (no el plan/diagnóstico, que el
+ * coach deriva después). Las opciones de los <select> coinciden EXACTAMENTE con
+ * las del panel para que los valores no queden en blanco al volver al formulario.
  */
 
 type FieldKind = 'textarea' | 'text' | 'select';
@@ -23,6 +24,8 @@ interface GField {
   placeholder?: string;
   options?: { value: string; label: string }[];
   rows?: number;
+  /** Forzar ancho: por defecto los textarea ocupan 2 columnas; `full:false` los compacta. */
+  full?: boolean;
 }
 
 interface GStep {
@@ -38,7 +41,7 @@ const opts = (...vals: string[]) => vals.map((v) => ({ value: v, label: v }));
 const SCRIPT_NUTRI: GStep[] = [
   {
     id: 'motivo',
-    topic: 'Motivo',
+    topic: 'Motivo y objetivo',
     question: '¿Qué te trae a la consulta y cuál es tu objetivo?',
     fields: [
       { kind: 'select', key: 'tipoConsulta', label: 'Tipo de consulta', options: opts('Primera vez', 'Control') },
@@ -54,13 +57,8 @@ const SCRIPT_NUTRI: GStep[] = [
           'Otro'
         ),
       },
-      {
-        kind: 'textarea',
-        key: 'motivoConsultaTexto',
-        label: 'Motivo (descripción)',
-        placeholder: 'Resumen del motivo de la consulta...',
-        rows: 3,
-      },
+      { kind: 'textarea', key: 'motivoConsultaTexto', label: 'Motivo (descripción)', placeholder: 'Resumen del motivo...', rows: 3 },
+      { kind: 'textarea', key: 'objetivosEspecificos', label: 'Objetivos específicos', placeholder: 'Metas concretas del afiliado...', rows: 2 },
     ],
   },
   {
@@ -68,57 +66,37 @@ const SCRIPT_NUTRI: GStep[] = [
     topic: 'Antecedentes',
     question: '¿Tienes alguna enfermedad o condición de salud actual?',
     fields: [
-      {
-        kind: 'textarea',
-        key: 'descripcionEnfermedad',
-        placeholder: 'Diagnósticos, condiciones crónicas, síntomas actuales...',
-        rows: 3,
-      },
+      { kind: 'textarea', key: 'descripcionEnfermedad', placeholder: 'Diagnósticos, condiciones crónicas, síntomas actuales...', rows: 3 },
     ],
   },
   {
-    id: 'medicamentos',
+    id: 'medicamentos_alergias',
     topic: 'Antecedentes',
-    question: '¿Tomas algún medicamento de forma habitual?',
+    question: '¿Tomas medicamentos? ¿Tienes alergias?',
     fields: [
-      {
-        kind: 'textarea',
-        key: 'medicamentosActuales',
-        placeholder: 'Medicamentos, dosis y frecuencia...',
-        rows: 3,
-      },
-    ],
-  },
-  {
-    id: 'alergias',
-    topic: 'Antecedentes',
-    question: '¿Tienes alergias (medicamentos, alimentos, etc.)?',
-    fields: [
-      { kind: 'textarea', key: 'alergias', placeholder: 'Agente y tipo de reacción...', rows: 3 },
+      { kind: 'textarea', key: 'medicamentosActuales', label: 'Medicamentos actuales', placeholder: 'Medicamento, dosis y frecuencia...', rows: 2, full: false },
+      { kind: 'textarea', key: 'alergias', label: 'Alergias', placeholder: 'Agente y tipo de reacción...', rows: 2, full: false },
     ],
   },
   {
     id: 'cirugias',
     topic: 'Antecedentes',
-    question: '¿Te han realizado alguna cirugía?',
+    question: '¿Te han operado u hospitalizado?',
     fields: [
-      { kind: 'textarea', key: 'cirugias', placeholder: 'Cirugía y fecha aproximada...', rows: 3 },
+      { kind: 'textarea', key: 'cirugias', label: 'Cirugías', placeholder: 'Cirugía y fecha aproximada...', rows: 2, full: false },
+      { kind: 'textarea', key: 'hospitalizaciones', label: 'Hospitalizaciones', placeholder: 'Motivo y fecha...', rows: 2, full: false },
     ],
   },
   {
     id: 'actividad',
     topic: 'Actividad física',
-    question: '¿Realizas actividad física? ¿Con qué frecuencia y tipo?',
+    question: '¿Realizas actividad física? ¿Cómo es tu rutina?',
     fields: [
       { kind: 'select', key: 'realizaActividadFisica', label: '¿Realiza actividad física?', options: opts('Sí', 'No') },
       { kind: 'text', key: 'frecuenciaEjercicio', label: 'Frecuencia (veces/semana)', placeholder: 'Ej: 3' },
-      {
-        kind: 'select',
-        key: 'tipoEntrenamiento',
-        label: 'Tipo de entrenamiento',
-        options: opts('Fuerza', 'Cardio', 'Mixto', 'Otro'),
-      },
+      { kind: 'select', key: 'tipoEntrenamiento', label: 'Tipo de entrenamiento', options: opts('Fuerza', 'Cardio', 'Mixto', 'Otro') },
       { kind: 'select', key: 'intensidadPercibida', label: 'Intensidad percibida', options: opts('Baja', 'Media', 'Alta') },
+      { kind: 'select', key: 'horarioEjercicio', label: 'Horario habitual', options: opts('AM', 'PM', 'Mixto') },
     ],
   },
   {
@@ -132,35 +110,30 @@ const SCRIPT_NUTRI: GStep[] = [
     ],
   },
   {
-    id: 'comidas',
+    id: 'antropometria',
+    topic: 'Composición corporal',
+    question: 'Medidas y composición corporal',
+    hint: 'Registra las medidas tomadas en la consulta.',
+    fields: [
+      { kind: 'text', key: 'peso', label: 'Peso actual (kg)', placeholder: '0' },
+      { kind: 'text', key: 'talla', label: 'Estatura (cm)', placeholder: '0' },
+      { kind: 'text', key: 'pesoHabitual', label: 'Peso habitual (kg)', placeholder: '0' },
+      { kind: 'text', key: 'porcentajeGrasa', label: '% grasa corporal', placeholder: '0' },
+      { kind: 'text', key: 'masaMuscular', label: 'Masa muscular (kg)', placeholder: '0' },
+      { kind: 'text', key: 'circunferenciaCintura', label: 'Cintura (cm)', placeholder: '0' },
+      { kind: 'text', key: 'circunferenciaCadera', label: 'Cadera (cm)', placeholder: '0' },
+    ],
+  },
+  {
+    id: 'habitos',
     topic: 'Hábitos alimentarios',
-    question: '¿Cuántas comidas haces al día y cuánta agua tomas?',
+    question: '¿Cómo son tus hábitos alimentarios generales?',
     fields: [
       { kind: 'text', key: 'numComidasDia', label: 'Comidas por día', placeholder: 'Ej: 4' },
       { kind: 'text', key: 'consumoAgua', label: 'Agua (L/día)', placeholder: 'Ej: 2' },
-    ],
-  },
-  {
-    id: 'recordatorio',
-    topic: 'Hábitos alimentarios',
-    question: 'Recordatorio de 24h: ¿qué comiste ayer?',
-    hint: 'Desayuno, media mañana, almuerzo, media tarde, cena y snacks.',
-    fields: [
-      {
-        kind: 'textarea',
-        key: 'recordatorio24h',
-        placeholder: 'Detalle de lo consumido en las últimas 24 horas...',
-        rows: 4,
-      },
-    ],
-  },
-  {
-    id: 'preferencias',
-    topic: 'Hábitos alimentarios',
-    question: '¿Preferencias o alergias alimentarias?',
-    fields: [
-      { kind: 'textarea', key: 'preferenciasAlimentarias', label: 'Preferencias', rows: 2 },
-      { kind: 'textarea', key: 'alergiasAlimentarias', label: 'Alergias alimentarias', rows: 2 },
+      { kind: 'text', key: 'horariosComida', label: 'Horarios de comida', placeholder: 'Ej: 7am, 12m, 7pm' },
+      { kind: 'textarea', key: 'suplementos', label: 'Suplementos', placeholder: 'Tipo, dosis...', rows: 2, full: false },
+      { kind: 'textarea', key: 'cambiosPesoRecientes', label: 'Cambios de peso recientes', placeholder: 'Subió/bajó, cuánto y cuándo...', rows: 2, full: false },
     ],
   },
   {
@@ -173,14 +146,48 @@ const SCRIPT_NUTRI: GStep[] = [
     ],
   },
   {
-    id: 'medidas',
-    topic: 'Medidas',
-    question: 'Peso, estatura y peso habitual',
+    id: 'recordatorio',
+    topic: 'Recordatorio 24h',
+    question: 'Recordatorio de 24h: ¿qué comiste ayer?',
+    hint: 'Desayuno, media mañana, almuerzo, media tarde, cena y snacks.',
     fields: [
-      // peso/talla son top-level en el panel; el ruteo lo hace getValue/setValue.
-      { kind: 'text', key: 'peso', label: 'Peso actual (kg)', placeholder: '0' },
-      { kind: 'text', key: 'talla', label: 'Estatura (cm)', placeholder: '0' },
-      { kind: 'text', key: 'pesoHabitual', label: 'Peso habitual (kg)', placeholder: '0' },
+      { kind: 'textarea', key: 'recordatorio24h', placeholder: 'Detalle de lo consumido en las últimas 24 horas...', rows: 4 },
+    ],
+  },
+  {
+    id: 'anamnesis_semana',
+    topic: 'Anamnesis alimentaria',
+    question: 'Patrón alimentario habitual',
+    hint: 'Lo que suele comer en cada momento del día.',
+    fields: [
+      { kind: 'textarea', key: 'anamnesisDesayuno', label: 'Desayuno', rows: 2, full: false },
+      { kind: 'textarea', key: 'anamnesisMediaManana', label: 'Media mañana', rows: 2, full: false },
+      { kind: 'textarea', key: 'anamnesisAlmuerzo', label: 'Almuerzo', rows: 2, full: false },
+      { kind: 'textarea', key: 'anamnesisMediaTarde', label: 'Media tarde', rows: 2, full: false },
+      { kind: 'textarea', key: 'anamnesisCena', label: 'Cena', rows: 2, full: false },
+      { kind: 'textarea', key: 'anamnesisFinSemana', label: 'Fin de semana', rows: 2, full: false },
+    ],
+  },
+  {
+    id: 'preferencias',
+    topic: 'Preferencias',
+    question: '¿Qué alimentos prefieres, rechazas o no toleras?',
+    fields: [
+      { kind: 'textarea', key: 'alimentosPreferidos', label: 'Alimentos preferidos', rows: 2, full: false },
+      { kind: 'textarea', key: 'alimentosRechazados', label: 'Alimentos rechazados', rows: 2, full: false },
+      { kind: 'textarea', key: 'preferenciasAlimentarias', label: 'Preferencias (vegetariano, etc.)', rows: 2, full: false },
+      { kind: 'textarea', key: 'alergiasAlimentarias', label: 'Alergias alimentarias', rows: 2, full: false },
+      { kind: 'textarea', key: 'intoleranciasAlimentarias', label: 'Intolerancias', rows: 2, full: false },
+    ],
+  },
+  {
+    id: 'signos',
+    topic: 'Signos clínicos',
+    question: '¿Síntomas digestivos o signos clínicos a considerar?',
+    fields: [
+      { kind: 'textarea', key: 'signosClinicos', label: 'Signos clínicos', rows: 2, full: false },
+      { kind: 'textarea', key: 'problemasDigestivos', label: 'Problemas digestivos', rows: 2, full: false },
+      { kind: 'textarea', key: 'masticacionDeglucion', label: 'Masticación y deglución', rows: 2, full: false },
     ],
   },
 ];
@@ -318,11 +325,14 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {step.fields.map((f) => (
-              <div key={f.key} className={f.kind === 'textarea' ? 'md:col-span-2' : ''}>
-                <GFieldView f={f} getValue={getValue} setValue={setValue} />
-              </div>
-            ))}
+            {step.fields.map((f) => {
+              const spanFull = f.full ?? f.kind === 'textarea';
+              return (
+                <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
+                  <GFieldView f={f} getValue={getValue} setValue={setValue} />
+                </div>
+              );
+            })}
           </div>
         </div>
 

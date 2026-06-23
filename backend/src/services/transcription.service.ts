@@ -110,6 +110,90 @@ REGLAS DURAS:
 Devuelve únicamente el JSON, sin texto adicional ni markdown.
 `.trim();
 
+// ── Variante NUTRICIONAL ────────────────────────────────────────────────────
+// El panel nutricional (MedicalHistoryPanel) guarda en el JSONB
+// `datosNutricionales` (no en columnas). Estas claves coinciden con el guion de
+// GuidedNutricion. La transcripción las autollena (solo las que queden vacías,
+// sin pisar lo que el coach ya escribió).
+const NUTRICION_DATOS_KEYS = [
+  'motivoConsultaTexto', 'objetivoPrincipal', 'objetivosEspecificos',
+  'descripcionEnfermedad', 'medicamentosActuales', 'alergias', 'cirugias', 'hospitalizaciones',
+  'realizaActividadFisica', 'frecuenciaEjercicio', 'tipoEntrenamiento', 'intensidadPercibida', 'horarioEjercicio',
+  'horasSueno', 'calidadSueno', 'nivelEstres',
+  'numComidasDia', 'consumoAgua', 'horariosComida', 'suplementos', 'cambiosPesoRecientes',
+  'consumoAlcohol', 'frecuenciaAlcohol', 'recordatorio24h',
+  'anamnesisDesayuno', 'anamnesisMediaManana', 'anamnesisAlmuerzo', 'anamnesisMediaTarde', 'anamnesisCena', 'anamnesisFinSemana',
+  'alimentosPreferidos', 'alimentosRechazados', 'preferenciasAlimentarias', 'alergiasAlimentarias', 'intoleranciasAlimentarias',
+  'signosClinicos', 'problemasDigestivos', 'masticacionDeglucion',
+  'pesoHabitual', 'porcentajeGrasa', 'masaMuscular', 'circunferenciaCintura', 'circunferenciaCadera',
+] as const;
+const NUTRICION_DATOS_SET = new Set<string>(NUTRICION_DATOS_KEYS);
+// Columnas top-level (en EDITABLE_FIELDS) que también extraemos en la variante nutricional.
+const NUTRICION_COLUMN_KEYS = ['peso', 'talla'] as const;
+
+const NUTRICION_EXTRACTION_PROMPT = `
+Eres un asistente de nutrición que sintetiza la anamnesis nutricional a partir de
+la transcripción completa de una consulta (coach + afiliado) en español.
+
+OBJETIVO: leer toda la conversación y diligenciar SOLO los campos sobre los que
+se haya hablado. Parafrasea en lenguaje claro y en tercera persona. Si un tema no
+apareció, OMITÍ la clave.
+
+Devuelve un objeto JSON con valores string. Claves permitidas:
+
+Motivo/objetivo:
+  - motivoConsultaTexto (string)
+  - objetivoPrincipal: exactamente uno de ["Pérdida de grasa","Ganancia de masa muscular","Rendimiento deportivo","Salud general","Otro"]
+  - objetivosEspecificos (string)
+
+Antecedentes:
+  - descripcionEnfermedad, medicamentosActuales, alergias, cirugias, hospitalizaciones (strings)
+
+Actividad física:
+  - realizaActividadFisica: "Sí" o "No"
+  - frecuenciaEjercicio (string: veces por semana)
+  - tipoEntrenamiento: uno de ["Fuerza","Cardio","Mixto","Otro"]
+  - intensidadPercibida: uno de ["Baja","Media","Alta"]
+  - horarioEjercicio: uno de ["AM","PM","Mixto"]
+
+Estilo de vida:
+  - horasSueno (string)
+  - calidadSueno: uno de ["Buena","Regular","Mala"]
+  - nivelEstres: uno de ["Bajo","Medio","Alto"]
+
+Hábitos alimentarios:
+  - numComidasDia, consumoAgua, horariosComida, suplementos, cambiosPesoRecientes (strings)
+  - consumoAlcohol: "Sí" o "No"
+  - frecuenciaAlcohol (string)
+  - recordatorio24h (string: lo consumido en las últimas 24 h)
+
+Patrón alimentario habitual:
+  - anamnesisDesayuno, anamnesisMediaManana, anamnesisAlmuerzo, anamnesisMediaTarde, anamnesisCena, anamnesisFinSemana (strings)
+
+Preferencias:
+  - alimentosPreferidos, alimentosRechazados, preferenciasAlimentarias, alergiasAlimentarias, intoleranciasAlimentarias (strings)
+
+Signos clínicos:
+  - signosClinicos, problemasDigestivos, masticacionDeglucion (strings)
+
+Medidas (SOLO si se dijo el número explícito):
+  - peso (kg), talla (cm), pesoHabitual (kg), porcentajeGrasa, masaMuscular (kg),
+    circunferenciaCintura (cm), circunferenciaCadera (cm)
+
+REGLAS DURAS:
+  1. En los campos con lista de valores permitidos, usa EXACTAMENTE uno de esos
+     valores, con tildes ("Sí", no "Si").
+  2. Medidas numéricas: solo si hay número explícito; conviértelo a la unidad
+     indicada y devuélvelo como string sin unidad (ej. "72").
+  3. Omití las claves de temas que no se trataron. NO inventes.
+  4. Devuelve únicamente el JSON, sin markdown.
+`.trim();
+
+/** ¿Valor string no vacío? Para no pisar lo que el coach ya escribió. */
+function isFilledStr(v: unknown): boolean {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
 interface TwilioCredentials {
   sid: string;
   token: string;
@@ -303,7 +387,8 @@ class TranscriptionService {
   async processClientAudio(
     historiaId: string,
     audioBuf: Buffer,
-    contentType: string
+    contentType: string,
+    variant: 'consulta' | 'nutricional' = 'consulta'
   ): Promise<void> {
     const t0 = Date.now();
     if (!historiaId) {
@@ -319,13 +404,17 @@ class TranscriptionService {
 
       const { ext, mime } = audioFormatFromContentType(contentType);
       console.log(
-        `[Transcription] processClientAudio start historia=${historiaId} ${(audioBuf.byteLength / 1024 / 1024).toFixed(2)} MB (${mime})`
+        `[Transcription] processClientAudio start historia=${historiaId} variant=${variant} ${(audioBuf.byteLength / 1024 / 1024).toFixed(2)} MB (${mime})`
       );
 
       // Marcar processing antes del I/O largo (Whisper + GPT).
       await this.markStatus(historiaId, 'processing');
 
-      await this.runWhisperPipeline(historiaId, audioBuf, `consulta.${ext}`, t0, mime);
+      if (variant === 'nutricional') {
+        await this.runNutricionPipeline(historiaId, audioBuf, `consulta.${ext}`, t0, mime);
+      } else {
+        await this.runWhisperPipeline(historiaId, audioBuf, `consulta.${ext}`, t0, mime);
+      }
     } catch (err: any) {
       console.error(
         '[Transcription] processClientAudio error:',
@@ -620,6 +709,130 @@ class TranscriptionService {
           /* swallow */
         });
       }
+    }
+  }
+
+  /**
+   * Pipeline para la variante NUTRICIONAL: Whisper → guarda transcript →
+   * GPT-4o-mini extrae campos de la anamnesis nutricional → autollena el JSONB
+   * `datosNutricionales` (y columnas peso/talla) SOLO en los campos vacíos, para
+   * no pisar lo que el coach ya escribió. Persiste sin pasar por el bulk-save del
+   * panel.
+   *
+   * Captura sus propios errores y los persiste en status='error'.
+   */
+  private async runNutricionPipeline(
+    historiaId: string,
+    audioBuf: Buffer,
+    audioFileName: string,
+    t0: number,
+    audioMime: string = 'audio/mpeg'
+  ): Promise<void> {
+    try {
+      // 1) Whisper
+      const audioFile = await toFile(audioBuf, audioFileName, { type: audioMime });
+      const whisperResp = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-1',
+        language: 'es',
+      });
+      const transcript = (whisperResp as any)?.text?.trim?.() ?? '';
+      console.log(`[Transcription][nutri] Whisper OK, ${transcript.length} chars`);
+
+      if (!transcript) {
+        console.error('[Transcription][nutri] Whisper devolvió transcript vacío');
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+
+      // 2) Persistir transcript completo (misma columna que la variante consulta)
+      await medicalHistoryService.updateField(historiaId, 'transcription_text', transcript);
+
+      // 3) GPT-4o-mini → JSON nutricional
+      const gptResp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: NUTRICION_EXTRACTION_PROMPT },
+          { role: 'user', content: `Transcripción de la consulta:\n\n${transcript}` },
+        ],
+      });
+      const raw = gptResp.choices?.[0]?.message?.content?.trim() || '';
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        console.error('[Transcription][nutri] No pude parsear JSON de GPT:', e);
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        console.error('[Transcription][nutri] GPT no devolvió un objeto plano');
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+      const obj = parsed as Record<string, unknown>;
+      console.log(`[Transcription][nutri] GPT keys: [${Object.keys(obj).join(', ')}]`);
+
+      // 4) Estado actual (peso/talla columnas + datosNutricionales JSONB) para
+      //    rellenar SOLO lo vacío.
+      const rows = await postgresService.query(
+        `SELECT "peso", "talla", "datosNutricionales" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
+      );
+      if (!rows || rows.length === 0) {
+        console.warn(`[Transcription][nutri] historia ${historiaId} no encontrada`);
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+      const current = rows[0] as { peso?: unknown; talla?: unknown; datosNutricionales?: unknown };
+      const currentDatos: Record<string, unknown> =
+        current.datosNutricionales && typeof current.datosNutricionales === 'object' && !Array.isArray(current.datosNutricionales)
+          ? { ...(current.datosNutricionales as Record<string, unknown>) }
+          : {};
+
+      let applied = 0;
+
+      // 4a) Columnas top-level peso/talla (whitelist) — solo si están vacías.
+      for (const col of NUTRICION_COLUMN_KEYS) {
+        if (isFilledStr(obj[col]) && !isFilledStr((current as Record<string, unknown>)[col])) {
+          try {
+            const r = await medicalHistoryService.updateField(historiaId, col, String(obj[col]).trim());
+            if (r.success) applied++;
+          } catch (e: any) {
+            console.warn(`[Transcription][nutri] updateField ${col} falló:`, e?.message || e);
+          }
+        }
+      }
+
+      // 4b) Claves del JSONB datosNutricionales — merge en los vacíos.
+      let mergedCount = 0;
+      for (const key of NUTRICION_DATOS_SET) {
+        if (isFilledStr(obj[key]) && !isFilledStr(currentDatos[key])) {
+          currentDatos[key] = String(obj[key]).trim();
+          mergedCount++;
+        }
+      }
+      if (mergedCount > 0) {
+        await postgresService.query(
+          `UPDATE "HistoriaClinica" SET "datosNutricionales" = $1 WHERE "_id" = $2`,
+          [JSON.stringify(currentDatos), historiaId]
+        );
+        applied += mergedCount;
+      }
+
+      console.log(
+        `[Transcription][nutri] autollenado: ${applied} campos (${mergedCount} en datosNutricionales) historia=${historiaId} ms=${Date.now() - t0}`
+      );
+
+      // El transcript siempre quedó guardado → done aunque GPT no extrajera nada.
+      await this.markStatus(historiaId, 'done');
+    } catch (err: any) {
+      console.error('[Transcription][nutri] Pipeline error:', err?.message || err, err?.stack);
+      await this.markStatus(historiaId, 'error').catch(() => {
+        /* swallow */
+      });
     }
   }
 

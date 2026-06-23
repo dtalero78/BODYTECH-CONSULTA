@@ -353,6 +353,7 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
               <button
                 type="button"
                 onClick={goNext}
+                title="La transcripción intentará llenarlo al finalizar la llamada"
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-white hover:bg-[#2a3942] transition"
               >
                 <Mic size={14} />

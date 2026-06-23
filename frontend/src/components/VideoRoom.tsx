@@ -55,6 +55,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
   const { isRecording, stopAndUpload } = useConsultationRecorder(room, {
     historiaId,
     active: role === 'doctor' && !!historiaId && isConnected,
+    variant: panelVariant,
   });
 
   const {

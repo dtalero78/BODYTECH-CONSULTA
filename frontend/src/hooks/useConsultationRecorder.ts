@@ -11,6 +11,11 @@ interface UseConsultationRecorderOptions {
    * isConnected`. Solo el médico graba.
    */
   active: boolean;
+  /**
+   * Variante de panel: define qué campos autollena el backend con la
+   * transcripción ('consulta' → columnas; 'nutricional' → datosNutricionales).
+   */
+  variant?: 'consulta' | 'nutricional';
 }
 
 interface UseConsultationRecorderReturn {
@@ -40,7 +45,7 @@ interface UseConsultationRecorderReturn {
  */
 export function useConsultationRecorder(
   room: Room | null,
-  { historiaId, active }: UseConsultationRecorderOptions
+  { historiaId, active, variant }: UseConsultationRecorderOptions
 ): UseConsultationRecorderReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -200,7 +205,7 @@ export function useConsultationRecorder(
     try {
       setIsUploading(true);
       setError(null);
-      await apiService.transcribeConsulta(historiaId, blob);
+      await apiService.transcribeConsulta(historiaId, blob, variant);
       console.log(`[ConsultaRecorder] Audio subido (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
     } catch (e) {
       console.error('[ConsultaRecorder] Error subiendo la grabación:', e);
@@ -208,7 +213,7 @@ export function useConsultationRecorder(
     } finally {
       setIsUploading(false);
     }
-  }, [historiaId, teardownAudio]);
+  }, [historiaId, variant, teardownAudio]);
 
   // Autostart cuando hay sala conectada y el caller lo habilita.
   useEffect(() => {

@@ -1374,21 +1374,26 @@ class VideoController {
       }
 
       const contentType = req.header('content-type') || 'audio/webm';
+      // El panel nutricional guarda en datosNutricionales (JSONB); el de consulta
+      // en columnas. El frontend indica la variante por query param.
+      const variant: 'consulta' | 'nutricional' =
+        req.query.variant === 'nutricional' ? 'nutricional' : 'consulta';
 
       console.log(
-        `[Transcription] transcribe-consulta historia=${historiaId} bytes=${audioBuf.byteLength} ct=${contentType}`
+        `[Transcription] transcribe-consulta historia=${historiaId} variant=${variant} bytes=${audioBuf.byteLength} ct=${contentType}`
       );
 
       // Respondemos rápido — el procesamiento corre en background.
       res.status(202).json({
         accepted: true,
         historiaId,
+        variant,
         bytes: audioBuf.byteLength,
         message: 'Transcripción disparada en background. Polleá transcription_status.',
       });
 
       transcriptionService
-        .processClientAudio(historiaId, audioBuf, contentType)
+        .processClientAudio(historiaId, audioBuf, contentType, variant)
         .catch((err) => {
           console.error('[Transcription] processClientAudio lanzó (no debería):', err);
         });

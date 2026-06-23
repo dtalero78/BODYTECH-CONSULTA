@@ -165,8 +165,15 @@ class ApiService {
    * el mime del MediaRecorder (webm/opus o mp4) para que el backend elija la
    * extensión correcta.
    */
-  async transcribeConsulta(historiaId: string, audio: Blob): Promise<void> {
-    await this.client.post(`/api/video/transcribe-consulta/${historiaId}`, audio, {
+  async transcribeConsulta(
+    historiaId: string,
+    audio: Blob,
+    variant?: 'consulta' | 'nutricional'
+  ): Promise<void> {
+    // El backend elige qué campos autollenar según la variante (columnas en el
+    // panel de consulta; JSONB datosNutricionales en el nutricional).
+    const q = variant === 'nutricional' ? '?variant=nutricional' : '';
+    await this.client.post(`/api/video/transcribe-consulta/${historiaId}${q}`, audio, {
       headers: { 'Content-Type': audio.type || 'application/octet-stream' },
       // El servidor responde 202 apenas recibe el body; el await es básicamente
       // el tiempo de subida del audio.

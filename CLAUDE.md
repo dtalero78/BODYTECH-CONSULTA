@@ -16,6 +16,10 @@ BSL Consulta Video is a medical telemedicine platform built around Twilio Video.
 - Ordenes panel: CRUD for medical orders
 - Calidad module: evaluation of consultation quality using Anthropic Managed Agents + Whisper
 - PDF export of historia clínica via Puppeteer (server-side)
+- Coordinador panel (`/coordinador`): professionals CRUD, multi-sede calendar, availability management (recurring + per-date override), orders, and a "Team" day panel with drag-and-drop slot reassignment
+- Nutritional panel (`/nutricion/:roomName`): a separate variant of the call panel (somatocarta, ISAK anthropometry, Heath-Carter somatotype, AI nutrition plan)
+- Trepsi integration (bidirectional B2B): inbound API to create/reschedule/cancel appointments + historias from Trepsi, and an outbound webhook (BSL → Trepsi) that pushes consultation results once the historia is saved
+- Bot Trepsi (`/bot-trepsi`): a public, scope-restricted GPT-4o-mini assistant that helps the Trepsi team with the integration
 
 Two halves of the app share one Express server in production: API + WebSocket on `/api/*` and `/socket.io/*`, static React build on everything else.
 
@@ -60,10 +64,15 @@ Routing in [backend/src/index.ts](backend/src/index.ts):
 3. `/api/video/*` → Twilio video, tracking events, medical history, AI suggestions, WhatsApp, transcription webhooks
 4. `/api/telemedicine/*` → postural analysis session metadata
 5. `/api/medical-panel/*` → doctor panel (stats, patient list, search) — requires `requireAuthMiddleware`
-6. `/api/twilio/*` → outbound voice calls
-7. `/api/calidad/*` → calidad evaluation with Anthropic Managed Agents
-8. `/socket.io/*` → Socket.io (telemedicine + session-tracker broadcasts)
-9. Everything else → static frontend (`backend/frontend-dist/`) with SPA fallback to `index.html`
+6. `/api/profesionales/*` → professionals CRUD + availability (recurring + per-date) — requires `requireAuthMiddleware`
+7. `/api/calendario/*` → coordinador calendar (month/day, available slots, bulk reassign) — requires `requireAuthMiddleware`
+8. `/api/bot-trepsi/*` → public Trepsi integration assistant chat (no auth; per-IP rate limit in controller)
+9. `/api/twilio/*` → outbound voice calls
+10. `/api/calidad/*` → calidad evaluation with Anthropic Managed Agents
+11. `/api/admin/trepsi-webhook/*` → outbox admin for the BSL → Trepsi webhook — requires `requireAuthMiddleware`
+12. `/api/v1/integrations/trepsi/*` → inbound Trepsi B2B API — protected by `requireApiKey('TREPSI_API_KEY', 'trepsi')`
+13. `/socket.io/*` → Socket.io (telemedicine + session-tracker broadcasts)
+14. Everything else → static frontend (`backend/frontend-dist/`) with SPA fallback to `index.html`
 
 Implication: in dev you have CORS (set `ALLOWED_ORIGINS=http://localhost:5173`); in prod you don't, because frontend and API share an origin. `VITE_API_BASE_URL=""` in production makes the frontend use relative URLs.
 
@@ -82,6 +91,11 @@ Main tables:
 - `ordenes` — medical orders with CRUD, linked to `historia_id`.
 - `citas` — appointments (schedule, list, status).
 - `sedes` — multi-tenancy root: each sede has its own doctor/patient scope and JWT.
+- `profesionales` — coordinador-managed professionals (doctors/coaches) with sede, especialidad, license, photo.
+- `profesionales_disponibilidad` — recurring weekly availability (`dia_semana` 0–6, per modalidad).
+- `profesionales_disponibilidad_fecha` — per-date availability overrides (hours, full block, or none).
+- `trepsi_appointments` — Trepsi appointment lifecycle keyed by `cita_id` (PK): `estado`, `fecha_atencion`, doctor, raw `payload`, and link to `historia_id`. `cita_id` is the idempotency key.
+- `trepsi_webhook_outbox` — persistent queue for the BSL → Trepsi webhook (`cita_id`, `historia_id`, `payload` jsonb, `estado`, `intentos`, `proximo_intento_at`, `last_error`, `last_status_code`, `response_body`).
 
 **Timezone gotcha — Colombia is UTC-5.** "Today" queries must convert via `Date.UTC(y, m, d, 5, 0, 0)` for start-of-day and `Date.UTC(y, m, d+1, 4, 59, 59, 999)` for end-of-day. See `getDailyStats` and `getPendingPatients` in `medical-panel.service.ts`. Don't use `new Date()` directly — local server TZ in production is UTC.
 
@@ -188,6 +202,49 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
 
+### Coordinador panel
+
+Route: `/coordinador` (login at `/coordinador-login`) → `CoordinadorPage.tsx`. Three views toggled by a `View` state (`'profesionales' | 'calendario' | 'ordenes'`):
+
+- **Profesionales** (`components/coordinador/ProfesionalesView.tsx`) — CRUD over `profesionales` (sede as a colored chip, photo, especialidad). Form in `ProfesionalFormModal.tsx`. Also hosts the "Afiliados" / "Crear consulta" flow.
+- **Calendario** (`components/coordinador/CalendarioView.tsx`) — month/day calendar filterable by sede (multiple sedes grouped) and professional. Shows BSL citas plus **Trepsi citas** (placed by the doctor's sede). Reprogrammed citas render orange. A "Team" day panel (`a2e0365`) shows the day's roster with photo avatars and supports **drag-and-drop slot reassignment** (`ReasignarModal.tsx`, `POST /api/calendario/reasignar-bulk`).
+- **Ordenes** (`components/coordinador/OrdenesView.tsx`) — orders view.
+
+**Availability (disponibilidad)** is managed at two levels and is the single source of truth for scheduling:
+- **Recurring by weekday** (`DisponibilidadModal` → `profesionales_disponibilidad`, `dia_semana` 0–6, per modalidad) — the base pattern ("Fijar disponibilidad").
+- **Per-date override** (`DisponibilidadDiaModal` → `profesionales_disponibilidad_fecha`) — the calendar's "Disponibilidad" toggle lets the coordinador adjust one or more professionals' slots for a single date (or block the day) without touching the weekly pattern. The override exists ⟺ there is ≥1 row for `(profesional, sede, fecha, modalidad)`.
+
+`disponibilidad-fecha.service.getRangosEfectivos()` resolves override > weekly and is the single source used by `calendario.service.getHorariosDisponibles()` and `validarSlotDisponible()`, so scheduling and rescheduling both respect the override. A day blocked by override prevents scheduling (`SLOT_BLOCKED`); absence of a weekly pattern keeps the legacy degradation (does not block).
+
+Endpoints: `GET/PUT/DELETE /api/profesionales/:id/disponibilidad-fecha`, `GET /api/calendario/disponibilidad-dia`, `GET /api/calendario/disponibilidad-mes`.
+
+### Nutritional panel
+
+Route: `/nutricion/:roomName?doctor=CODE&documento=HISTORIA_ID&paciente=NOMBRE` → `NutricionRoomPage.tsx` (a mirror of `DoctorRoomPage` that passes `panelVariant="nutricional"` to `VideoRoom`). The default `panelVariant="consulta"` preserves the standard 7-tab `MedicalConsultationPanel`; the nutritional variant renders the **restored** `MedicalHistoryPanel.tsx` (somatocarta cartesiana, ISAK anthropometry, Heath-Carter somatotype, AI nutrition plan, voximetría). Nutritional data persists in the `datosNutricionales` (JSONB) column of `HistoriaClinica`. Routing to this panel is driven by the coach's especialidad. **Note:** `MedicalHistoryPanel.tsx` is no longer orphaned — it is the active nutritional panel.
+
+### Trepsi integration (bidirectional B2B)
+
+Spec: `Especificacion_Integracion_Trepsi_Bodytech.pdf` (v2.1). Two directions:
+
+**Inbound (Trepsi → BSL)** — `trepsi.service.ts` + `trepsi.routes.ts`, mounted at `/api/v1/integrations/trepsi` behind `requireApiKey('TREPSI_API_KEY', 'trepsi')`:
+- `POST /appointments` — create cita + historia clínica (writes `trepsi_appointments` + a `HistoriaClinica` row)
+- `POST /appointments/:citaId/schedule` — reschedule
+- `PATCH /appointments/:citaId/historia` — update historia
+- `DELETE /appointments/:citaId` — cancel
+- `GET /appointments/:citaId` — query status
+- `GET /medicos`, `GET /horarios-disponibles`, `GET /health`
+
+Idempotency is keyed on `cita_id` — resends never duplicate. Trepsi citas appear in the coordinador calendar grouped by the doctor's sede.
+
+**Outbound (BSL → Trepsi)** — `trepsi-webhook.service.ts` with a persistent outbox (`trepsi_webhook_outbox`):
+- `historia-mutation.updateMedicalHistory()` calls `trepsiWebhookService.enqueue(historiaId)` fire-and-forget after saving an HC. `enqueue()` checks whether the HC corresponds to a Trepsi cita (via `trepsi_appointments`), builds the spec v2.1 §6 payload, and stores it as `pending` (updating the existing pending/failed row so the latest version is sent). It marks `trepsi_appointments.estado='attended'` (idempotent) and triggers an immediate dispatch.
+- `dispatchPending()` POSTs up to 25 ready rows with `Bearer TREPSI_WEBHOOK_API_KEY` (10s timeout). On failure it applies exponential backoff (1s/5s/30s/5min/30min/2h); after 6 attempts the row goes `dead`. `index.ts` runs `dispatchPending()` every 30s via `setInterval` for retries.
+- Admin endpoints at `/api/admin/trepsi-webhook` (JWT): `GET /queue?limit=50`, `POST /queue/:id/retry`, `POST /dispatch`.
+
+### Bot Trepsi
+
+Route: `/bot-trepsi` → `BotTrepsiPage.tsx`. Backend: `bot-trepsi.routes.ts` → `bot-trepsi.service.ts` (`POST /api/bot-trepsi/chat`, public, per-IP rate limit in the controller). A GPT-4o-mini assistant with a very restrictive system prompt that answers **only** about the Trepsi ↔ Bodytech integration — no credentials, internal data, or off-scope topics. Stateless: the frontend passes the conversation history each call. OpenAI is used (not Anthropic) because the prod Anthropic key has a spend cap.
+
 ### Virtual backgrounds / blur
 
 Uses `@twilio/video-processors`. The TFLite models and WASM (~5.1 MB) live in [frontend/public/twilio-processors/](frontend/public/twilio-processors/) — **do not delete** and **do not point at the Twilio CDN**, which returns 403 in production. `assetsPath` must be `/twilio-processors`. UI in [frontend/src/components/BackgroundControls.tsx](frontend/src/components/BackgroundControls.tsx), logic in [frontend/src/hooks/useBackgroundEffects.ts](frontend/src/hooks/useBackgroundEffects.ts). Only shown to `role === 'doctor'`.
@@ -200,10 +257,15 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 |---|---|
 | `/panel-medico` | Doctor login + patient list (default) |
 | `/historias` | Historia clínica browser |
-| `/ordenes` | Medical orders CRUD panel |
+| `/historia/:historiaId` | Historia clínica detail page |
+| `/ordenes` / `/ordenes-login` | Medical orders CRUD panel + its login |
 | `/calidad` | Calidad evaluation module |
+| `/coordinador` / `/coordinador-login` | Coordinador panel (profesionales, calendario, ordenes) + its login |
+| `/bot-trepsi` | Public Trepsi integration assistant chat |
+| `/reprogramar/:id` | Reschedule-an-appointment page |
 | `/doctor` | Manual room creation page |
 | `/doctor/:roomName?doctor=CODE` | Doctor joins specific room — renders `VideoRoom` + `MedicalConsultationPanel` |
+| `/nutricion/:roomName?doctor=CODE&documento=...&paciente=...` | Doctor joins with the nutritional panel variant (`MedicalHistoryPanel`) |
 | `/patient/:roomName?nombre=...&apellido=...&doctor=...` | Patient joins from WhatsApp link |
 | `/panel-medico/patient/:roomName` | Same as `/patient` but routed under panel |
 
@@ -227,13 +289,26 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 - `services/telemedicine-socket.service.ts` — Socket.io rooms for postural analysis
 - `services/openai.service.ts` — AI suggestion prompts for clinical fields
 - `services/pdf.service.ts` — Puppeteer-based PDF generation
-- `services/calidad.service.ts` / `managed-agents-calidad.service.ts` — Anthropic Managed Agents evaluation pipeline
+- `services/calidad.service.ts` / `managed-agents-calidad.service.ts` / `openai-calidad.service.ts` — Anthropic Managed Agents evaluation pipeline
+- `services/profesionales.service.ts` — professionals CRUD + recurring availability
+- `services/disponibilidad.service.ts` / `disponibilidad-fecha.service.ts` — recurring vs per-date availability; `getRangosEfectivos()` resolves override > weekly (single source for scheduling)
+- `services/calendario.service.ts` — coordinador calendar: `getHorariosDisponibles()`, `validarSlotDisponible()`, month/day views, bulk reassign
+- `services/trepsi.service.ts` — inbound Trepsi API (create/reschedule/cancel/patch appointments + historias, idempotent on `cita_id`)
+- `services/trepsi-webhook.service.ts` — outbound BSL → Trepsi webhook: `enqueue()` + `dispatchPending()` with persistent outbox and exponential backoff
+- `services/bot-trepsi.service.ts` — GPT-4o-mini integration assistant (restrictive system prompt, stateless)
+- `services/twilio-media.service.ts` — Twilio media/recording download helpers
 - `controllers/*.controller.ts` — thin HTTP wrappers around the services
+- `middleware/api-key.middleware.ts` — `requireApiKey(envVar, label)` for B2B routes; `auth.middleware.ts` — optional/required JWT; `sede.middleware.ts` — sede resolution; `error.middleware.ts`
 - `routes/auth.routes.ts` — `/api/auth`
 - `routes/video.routes.ts` — `/api/video`
 - `routes/medical-panel.routes.ts` — `/api/medical-panel` (protected)
+- `routes/profesionales.routes.ts` — `/api/profesionales` (protected)
+- `routes/calendario.routes.ts` — `/api/calendario` (protected)
 - `routes/calidad.routes.ts` — `/api/calidad`
 - `routes/twilio-voice.routes.ts` — `/api/twilio`
+- `routes/bot-trepsi.routes.ts` — `/api/bot-trepsi` (public)
+- `routes/trepsi.routes.ts` — `/api/v1/integrations/trepsi` (API Key)
+- `routes/trepsi-webhook-admin.routes.ts` — `/api/admin/trepsi-webhook` (protected)
 - `helpers/historia-clinica-html.ts` — server-rendered HTML template for historia clínica PDF
 - `helpers/phone.helper.ts` — server-side `formatTelefono`
 
@@ -241,13 +316,19 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 - `App.tsx` — react-router routes
 - `pages/MedicalPanelPage.tsx` — doctor login + patient list (default landing)
 - `pages/HistoriasClinicasPage.tsx` — historia browser
-- `pages/OrdenesPage.tsx` — medical orders CRUD (injects JWT explicitly)
+- `pages/HistoriaDetallePage.tsx` — historia clínica detail page (`/historia/:historiaId`)
+- `pages/OrdenesPage.tsx` / `OrdenesLoginPage.tsx` — medical orders CRUD (injects JWT explicitly) + login
 - `pages/CalidadPage.tsx` — calidad evaluation module
+- `pages/CoordinadorPage.tsx` / `CoordinadorLoginPage.tsx` — coordinador panel (profesionales/calendario/ordenes views) + login
+- `pages/BotTrepsiPage.tsx` — public Trepsi integration assistant chat
+- `pages/ReprogramarPage.tsx` — reschedule-an-appointment page (`/reprogramar/:id`)
 - `pages/DoctorPage.tsx` / `DoctorRoomPage.tsx` — manual + link-routed doctor entry; `DoctorRoomPage` renders `VideoRoom` + `MedicalConsultationPanel` side by side
+- `pages/NutricionRoomPage.tsx` — mirror of `DoctorRoomPage` that passes `panelVariant="nutricional"` (renders `MedicalHistoryPanel`)
 - `pages/PatientPage.tsx` — patient entry from WhatsApp link
-- `components/VideoRoom.tsx` — main call layout (75/25 split with panel), hosts `PosturalAnalysisModal`
+- `components/coordinador/` — `CoordinadorPage` views and modals: `ProfesionalesView.tsx`, `CalendarioView.tsx`, `OrdenesView.tsx`, `CalendarioStats.tsx`, `DisponibilidadModal.tsx` (recurring), `DisponibilidadDiaModal.tsx` (per-date override), `ProfesionalFormModal.tsx`, `ReasignarModal.tsx` (drag-and-drop slot reassign), `CalidadDetalleModal.tsx`
+- `components/VideoRoom.tsx` — main call layout (75/25 split with panel), hosts `PosturalAnalysisModal`; `panelVariant` prop (`'consulta'` default | `'nutricional'`)
 - `components/Participant.tsx` — track attachment (two-useEffect pattern)
-- `components/MedicalHistoryPanel.tsx` — **legacy, orphaned** (kept on disk, not imported anywhere)
+- `components/MedicalHistoryPanel.tsx` — **active nutritional panel** (somatocarta, ISAK, Heath-Carter, AI nutrition plan); rendered by `VideoRoom` when `panelVariant="nutricional"`
 - `components/PosturalAnalysisCanvas.tsx` / `PosturalAnalysisModal.tsx` / `PosturalAnalysisPatient.tsx` — postural flow
 - `components/panel/MedicalConsultationPanel.tsx` — **active** 7-tab historia clínica editor (orchestrator)
 - `components/panel/PanelHeader.tsx` — header with patient info + transcription-ready badge
@@ -294,6 +375,11 @@ OPENAI_API_KEY=sk-...
 
 # Anthropic (Calidad module — Managed Agents)
 ANTHROPIC_API_KEY=sk-ant-...
+
+# Trepsi integration
+TREPSI_API_KEY=...                          # inbound: validates POST/GET on /api/v1/integrations/trepsi
+TREPSI_WEBHOOK_URL=https://us-central1-trepsi-v5-dev.cloudfunctions.net/bslConsultationResultsWebhook
+TREPSI_WEBHOOK_API_KEY=...                   # outbound: Bearer token for BSL → Trepsi webhook (SECRET)
 
 # Server
 PORT=3000
@@ -400,6 +486,10 @@ These docs go deeper than this file — read them when working on a specific are
   - **Override por fecha específica** (`DisponibilidadDiaModal` → tabla `profesionales_disponibilidad_fecha`). El toggle "Disponibilidad" del calendario permite elegir un día y ajustar las franjas de uno o más profesionales SOLO para esa fecha (o bloquear el día), sin tocar el patrón semanal. El override existe ⟺ hay ≥1 fila para `(profesional, sede, fecha, modalidad)`: con horas (`bloqueado=false`), bloqueo total (1 fila centinela `bloqueado=true` + horas NULL), o sin override (cae al patrón semanal).
   - El helper `disponibilidad-fecha.service.getRangosEfectivos()` resuelve override > semanal y es la fuente única que usan `calendario.service.getHorariosDisponibles()` y `validarSlotDisponible()`, de modo que agendamiento y reprogramación respetan el override. Un día bloqueado por override impide agendar (`SLOT_BLOCKED`); la ausencia de patrón semanal mantiene la degradación legacy (no bloquea).
   - Endpoints: `GET/PUT/DELETE /api/profesionales/:id/disponibilidad-fecha`, `GET /api/calendario/disponibilidad-dia`, `GET /api/calendario/disponibilidad-mes`.
+- **Panel coordinador completo**: `/coordinador` con vistas Profesionales (CRUD), Calendario (filtrable por sede/profesional) y Ordenes. Calendario muestra citas BSL + Trepsi por sede del médico, citas reprogramadas en naranja, panel "Team" del día con avatares y drag-and-drop de horas para reasignar (`ReasignarModal` → `POST /api/calendario/reasignar-bulk`).
+- **Panel nutricional**: `/nutricion/:roomName` con `panelVariant="nutricional"` → `MedicalHistoryPanel` (somatocarta, ISAK, Heath-Carter, plan nutricional con IA). Persiste en `datosNutricionales` (JSONB). `MedicalHistoryPanel.tsx` dejó de estar huérfano.
+- **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
+- **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.
 - **Twilio Voice**: TwiML webhook con audio Bodytech, número unificado `+576016284820`.

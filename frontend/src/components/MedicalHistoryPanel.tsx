@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiService from '../services/api.service';
 import { PatientHistoryModal } from './PatientHistoryModal';
+import { GuidedNutricion } from './GuidedNutricion';
 
 interface AntecedentesPersonales {
   cirugiaOcular?: boolean;
@@ -128,6 +129,24 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
     setDatosNutricionales((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  // ----- Consulta guiada (modo entrevista) -----
+  const [guideOpen, setGuideOpen] = useState(false);
+  const autoOpenedGuideRef = useRef(false);
+
+  // peso/talla son top-level; el resto vive en datosNutricionales. La guía
+  // (controlada) lee/escribe a través de este ruteo para que persista al
+  // "Guardar Historia Clínica".
+  const guideGet = (key: string): string => {
+    if (key === 'peso') return peso;
+    if (key === 'talla') return talla;
+    return datosNutricionales[key] ?? '';
+  };
+  const guideSet = (key: string, value: string) => {
+    if (key === 'peso') return setPeso(value);
+    if (key === 'talla') return setTalla(value);
+    return updateNutri(key, value);
+  };
+
   // Abrir la vista imprimible de la HC. La ruta /preview ahora exige JWT, así
   // que no se puede usar un <a href> (la navegación del browser no envía el
   // header Authorization). Hacemos fetch autenticado → blob → nueva pestaña.
@@ -153,6 +172,16 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
   useEffect(() => {
     loadMedicalHistory();
   }, [historiaId]);
+
+  // Auto-abrir la consulta guiada una vez, cuando la historia ya cargó.
+  // Este panel solo se renderiza en la consulta nutricional en vivo.
+  useEffect(() => {
+    if (autoOpenedGuideRef.current) return;
+    if (!isLoading && data) {
+      autoOpenedGuideRef.current = true;
+      setGuideOpen(true);
+    }
+  }, [isLoading, data]);
 
   // Exponer función para agregar texto a observaciones desde componentes externos
   useEffect(() => {
@@ -713,6 +742,16 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       <div className="flex items-center justify-between p-4 pl-14 border-b border-gray-700 bg-[#1f2c34] sticky top-0 z-10">
         <h2 className="text-lg font-bold text-[#00a884]">Historia Clínica</h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setGuideOpen(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-[rgba(0,168,132,0.12)] text-[#00a884] border border-[#00a884]/30 text-base rounded-lg hover:bg-[rgba(0,168,132,0.2)] transition"
+            title="Consulta guiada (modo entrevista)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6z" />
+            </svg>
+            Consulta guiada
+          </button>
           {data?.numeroId && (
             <button
               onClick={() => setIsHistoryModalOpen(true)}
@@ -2449,6 +2488,14 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
           </div>
         </div>
       )}
+
+      {/* Consulta guiada (modo entrevista) */}
+      <GuidedNutricion
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        getValue={guideGet}
+        setValue={guideSet}
+      />
     </div>
   );
 };

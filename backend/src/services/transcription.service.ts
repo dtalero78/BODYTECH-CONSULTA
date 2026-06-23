@@ -135,58 +135,58 @@ const NUTRICION_EXTRACTION_PROMPT = `
 Eres un asistente de nutrición que sintetiza la anamnesis nutricional a partir de
 la transcripción completa de una consulta (coach + afiliado) en español.
 
-OBJETIVO: leer toda la conversación y diligenciar SOLO los campos sobre los que
-se haya hablado. Parafrasea en lenguaje claro y en tercera persona. Si un tema no
-apareció, OMITÍ la clave.
+OBJETIVO: leer toda la conversación y diligenciar SOLO los campos sobre los que se
+haya hablado. Parafrasea en lenguaje claro y en tercera persona. Si un tema no
+apareció, OMITÍ la clave (no la incluyas).
 
-Devuelve un objeto JSON con valores string. Claves permitidas:
+IMPORTANTE: devuelve un OBJETO JSON PLANO, con las claves directamente en el nivel
+raíz. NO las agrupes en secciones ni en objetos anidados.
 
-Motivo/objetivo:
+Claves permitidas (con sus valores válidos cuando aplica):
   - motivoConsultaTexto (string)
-  - objetivoPrincipal: exactamente uno de ["Pérdida de grasa","Ganancia de masa muscular","Rendimiento deportivo","Salud general","Otro"]
+  - objetivoPrincipal: uno de ["Pérdida de grasa","Ganancia de masa muscular","Rendimiento deportivo","Salud general","Otro"]
   - objetivosEspecificos (string)
-
-Antecedentes:
-  - descripcionEnfermedad, medicamentosActuales, alergias, cirugias, hospitalizaciones (strings)
-
-Actividad física:
+  - descripcionEnfermedad (string)
+  - medicamentosActuales (string)
+  - alergias (string)
+  - cirugias (string)
+  - hospitalizaciones (string)
   - realizaActividadFisica: "Sí" o "No"
   - frecuenciaEjercicio (string: veces por semana)
   - tipoEntrenamiento: uno de ["Fuerza","Cardio","Mixto","Otro"]
   - intensidadPercibida: uno de ["Baja","Media","Alta"]
   - horarioEjercicio: uno de ["AM","PM","Mixto"]
-
-Estilo de vida:
   - horasSueno (string)
   - calidadSueno: uno de ["Buena","Regular","Mala"]
   - nivelEstres: uno de ["Bajo","Medio","Alto"]
-
-Hábitos alimentarios:
-  - numComidasDia, consumoAgua, horariosComida, suplementos, cambiosPesoRecientes (strings)
+  - numComidasDia (string)
+  - consumoAgua (string)
+  - horariosComida (string)
+  - suplementos (string)
+  - cambiosPesoRecientes (string)
   - consumoAlcohol: "Sí" o "No"
   - frecuenciaAlcohol (string)
   - recordatorio24h (string: lo consumido en las últimas 24 h)
-
-Patrón alimentario habitual:
   - anamnesisDesayuno, anamnesisMediaManana, anamnesisAlmuerzo, anamnesisMediaTarde, anamnesisCena, anamnesisFinSemana (strings)
-
-Preferencias:
-  - alimentosPreferidos, alimentosRechazados, preferenciasAlimentarias, alergiasAlimentarias, intoleranciasAlimentarias (strings)
-
-Signos clínicos:
-  - signosClinicos, problemasDigestivos, masticacionDeglucion (strings)
-
-Medidas (SOLO si se dijo el número explícito):
-  - peso (kg), talla (cm), pesoHabitual (kg), porcentajeGrasa, masaMuscular (kg),
-    circunferenciaCintura (cm), circunferenciaCadera (cm)
+  - alimentosPreferidos (string)
+  - alimentosRechazados (string)
+  - preferenciasAlimentarias (string)
+  - alergiasAlimentarias (string)
+  - intoleranciasAlimentarias (string)
+  - signosClinicos (string)
+  - problemasDigestivos (string)
+  - masticacionDeglucion (string)
+  - peso, talla, pesoHabitual, porcentajeGrasa, masaMuscular, circunferenciaCintura, circunferenciaCadera (strings, SOLO si se dijo el número explícito)
 
 REGLAS DURAS:
-  1. En los campos con lista de valores permitidos, usa EXACTAMENTE uno de esos
+  1. JSON PLANO: las claves van directo en la raíz. Ejemplo de la forma esperada:
+     {"motivoConsultaTexto":"...","objetivoPrincipal":"Pérdida de grasa","realizaActividadFisica":"Sí","peso":"72"}
+  2. En los campos con lista de valores permitidos, usa EXACTAMENTE uno de esos
      valores, con tildes ("Sí", no "Si").
-  2. Medidas numéricas: solo si hay número explícito; conviértelo a la unidad
+  3. Medidas numéricas: solo si hay número explícito; conviértelo a la unidad
      indicada y devuélvelo como string sin unidad (ej. "72").
-  3. Omití las claves de temas que no se trataron. NO inventes.
-  4. Devuelve únicamente el JSON, sin markdown.
+  4. Omití las claves de temas que no se trataron. NO inventes.
+  5. Devuelve únicamente el JSON, sin markdown.
 `.trim();
 
 /** ¿Valor string no vacío? Para no pisar lo que el coach ya escribió. */
@@ -773,7 +773,17 @@ class TranscriptionService {
         return;
       }
       const obj = parsed as Record<string, unknown>;
-      console.log(`[Transcription][nutri] GPT keys: [${Object.keys(obj).join(', ')}]`);
+      // Defensivo: si el modelo agrupa las claves en secciones (objetos
+      // anidados), las aplanamos un nivel. Nuestras claves objetivo son únicas.
+      const flat: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) flat[k2] = v2;
+        } else {
+          flat[k] = v;
+        }
+      }
+      console.log(`[Transcription][nutri] GPT keys: [${Object.keys(flat).join(', ')}]`);
 
       // 4) Estado actual (peso/talla columnas + datosNutricionales JSONB) para
       //    rellenar SOLO lo vacío.
@@ -796,9 +806,9 @@ class TranscriptionService {
 
       // 4a) Columnas top-level peso/talla (whitelist) — solo si están vacías.
       for (const col of NUTRICION_COLUMN_KEYS) {
-        if (isFilledStr(obj[col]) && !isFilledStr((current as Record<string, unknown>)[col])) {
+        if (isFilledStr(flat[col]) && !isFilledStr((current as Record<string, unknown>)[col])) {
           try {
-            const r = await medicalHistoryService.updateField(historiaId, col, String(obj[col]).trim());
+            const r = await medicalHistoryService.updateField(historiaId, col, String(flat[col]).trim());
             if (r.success) applied++;
           } catch (e: any) {
             console.warn(`[Transcription][nutri] updateField ${col} falló:`, e?.message || e);
@@ -809,8 +819,8 @@ class TranscriptionService {
       // 4b) Claves del JSONB datosNutricionales — merge en los vacíos.
       let mergedCount = 0;
       for (const key of NUTRICION_DATOS_SET) {
-        if (isFilledStr(obj[key]) && !isFilledStr(currentDatos[key])) {
-          currentDatos[key] = String(obj[key]).trim();
+        if (isFilledStr(flat[key]) && !isFilledStr(currentDatos[key])) {
+          currentDatos[key] = String(flat[key]).trim();
           mergedCount++;
         }
       }

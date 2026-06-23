@@ -1231,27 +1231,19 @@ class VideoController {
 
           // Transcripción por composición = FALLBACK. La entrada principal es
           // el audio grabado en el navegador (processClientAudio), que deja el
-          // transcript listo a los segundos de terminar la llamada. Solo
-          // re-transcribimos desde la composición si ese path NO entregó
-          // (navegador falló, subida perdida, etc.) — la composición se
-          // conserva igual para revisión de video. Fire-and-forget.
+          // transcript listo a los segundos de terminar la llamada. El service
+          // decide si re-transcribir (incluye reconfirmación diferida si el
+          // client-side está en vuelo); la composición se conserva igual para
+          // revisión de video. Fire-and-forget.
           if (status === 'completed') {
-            const hid = historiaId;
-            const yaTranscrito = await transcriptionService.hasTranscript(hid);
-            if (yaTranscrito) {
-              console.log(
-                `[Webhook composition-status] historia ${hid} ya tiene transcript (client-side) — composición queda solo para revisión de video, no re-transcribo.`
-              );
-            } else {
-              transcriptionService
-                .processComposition(hid, compositionSid)
-                .catch((err) => {
-                  console.error(
-                    '[Webhook composition-status] processComposition lanzó (no debería):',
-                    err
-                  );
-                });
-            }
+            transcriptionService
+              .ensureTranscribedFromComposition(historiaId, compositionSid)
+              .catch((err) => {
+                console.error(
+                  '[Webhook composition-status] ensureTranscribedFromComposition lanzó (no debería):',
+                  err
+                );
+              });
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);

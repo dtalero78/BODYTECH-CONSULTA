@@ -216,6 +216,82 @@ class TranscriptionService {
     }
   }
 
+  /** Estado de transcripción de una historia (para decisiones de fallback). */
+  private async getTranscriptState(
+    historiaId: string
+  ): Promise<{ status: string | null; hasText: boolean }> {
+    try {
+      const rows = await postgresService.query(
+        `SELECT "transcription_status", "transcription_text"
+           FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
+      );
+      if (!rows || rows.length === 0) return { status: null, hasText: false };
+      const status = (rows[0].transcription_status ?? null) as string | null;
+      const text = rows[0].transcription_text;
+      return { status, hasText: typeof text === 'string' && text.trim().length > 0 };
+    } catch (e: any) {
+      console.warn('[Transcription] getTranscriptState error:', e?.message || e);
+      return { status: null, hasText: false };
+    }
+  }
+
+  /**
+   * Decide si transcribir desde la composición (FALLBACK). La entrada principal
+   * es el audio client-side; la composición solo cubre cuando ese path no
+   * entregó. Maneja el race "client en vuelo": si la historia está 'processing'
+   * cuando la composición termina, espera y reconfirma antes de re-transcribir
+   * — así no duplica trabajo si el client va a terminar bien, pero tampoco deja
+   * la historia atascada si el client falla justo después.
+   *
+   * Nunca lanza al caller (fire-and-forget desde el webhook).
+   */
+  async ensureTranscribedFromComposition(
+    historiaId: string,
+    compositionSid: string
+  ): Promise<void> {
+    if (!historiaId || !compositionSid) return;
+    const state = await this.getTranscriptState(historiaId);
+
+    // Ya hay transcript utilizable → la composición queda solo para video.
+    if (state.hasText || state.status === 'done') {
+      console.log(
+        `[Transcription] ensureFromComposition: historia ${historiaId} ya tiene transcript (status=${state.status}) — no re-transcribo.`
+      );
+      return;
+    }
+
+    // Client-side en vuelo: esperar y reconfirmar antes de gastar en la
+    // composición. Cierra el race en que el client falla justo después.
+    if (state.status === 'processing') {
+      const RECHECK_MS = 120_000;
+      console.log(
+        `[Transcription] ensureFromComposition: historia ${historiaId} en 'processing' (client-side) — reconfirmo en ${RECHECK_MS / 1000}s.`
+      );
+      setTimeout(() => {
+        void (async () => {
+          const s2 = await this.getTranscriptState(historiaId);
+          if (s2.hasText || s2.status === 'done') {
+            console.log(
+              `[Transcription] ensureFromComposition: historia ${historiaId} resolvió por client-side — fallback innecesario.`
+            );
+            return;
+          }
+          console.log(
+            `[Transcription] ensureFromComposition: historia ${historiaId} sigue sin transcript (status=${s2.status}) — corro fallback por composición.`
+          );
+          this.processComposition(historiaId, compositionSid).catch((err) => {
+            console.error('[Transcription] ensureFromComposition fallback lanzó:', err);
+          });
+        })();
+      }, RECHECK_MS);
+      return;
+    }
+
+    // pending | error | null → transcribir desde composición ya.
+    await this.processComposition(historiaId, compositionSid);
+  }
+
   /**
    * Entrada del pipeline para audio grabado en el navegador (client-side) y
    * subido directo. Es la entrada PRINCIPAL desde que el médico finaliza la

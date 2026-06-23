@@ -52,6 +52,7 @@ export function useConsultationRecorder(
   const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const connectedTrackIds = useRef<Set<string>>(new Set());
   const trackSubscribedRef = useRef<((track: RemoteTrack) => void) | null>(null);
+  const resumeHandlerRef = useRef<(() => void) | null>(null);
   const mimeRef = useRef<string>('audio/webm');
   const startedRef = useRef(false);
 
@@ -80,6 +81,23 @@ export function useConsultationRecorder(
       const ctx = new AudioCtx();
       // El doctor ya interactuó (botón "Unirse"), así que resume() debería pasar.
       await ctx.resume().catch(() => undefined);
+      // Red de seguridad: si el navegador dejó el contexto suspendido (política
+      // de autoplay sin gesto directo), lo reanudamos en la próxima interacción
+      // del médico (que ocurre a los segundos en el panel). Sin esto, el
+      // destino produciría silencio y el blob saldría vacío.
+      if (ctx.state === 'suspended') {
+        const resumeOnGesture = () => {
+          ctx.resume().catch(() => undefined);
+          if (ctx.state === 'running') {
+            window.removeEventListener('pointerdown', resumeOnGesture);
+            window.removeEventListener('keydown', resumeOnGesture);
+            resumeHandlerRef.current = null;
+          }
+        };
+        resumeHandlerRef.current = resumeOnGesture;
+        window.addEventListener('pointerdown', resumeOnGesture);
+        window.addEventListener('keydown', resumeOnGesture);
+      }
       const dest = ctx.createMediaStreamDestination();
       audioCtxRef.current = ctx;
       destRef.current = dest;
@@ -131,6 +149,11 @@ export function useConsultationRecorder(
 
   /** Libera AudioContext y listeners (no toca el recorder ni los chunks). */
   const teardownAudio = useCallback(() => {
+    if (resumeHandlerRef.current) {
+      window.removeEventListener('pointerdown', resumeHandlerRef.current);
+      window.removeEventListener('keydown', resumeHandlerRef.current);
+      resumeHandlerRef.current = null;
+    }
     if (room && trackSubscribedRef.current) {
       // Los typings de Room heredan un EventEmitter sin removeListener/off,
       // pero existe en runtime (Twilio usa un EventEmitter real).

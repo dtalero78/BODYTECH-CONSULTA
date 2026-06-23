@@ -147,54 +147,77 @@ async function procesarEvaluacion(
   const tag = `[calidad][eval#${evaluacionId}]`;
 
   try {
-    // 1. Obtener URL pre-firmada de Twilio
-    await agregarPaso(evaluacionId, 'Solicitando URL de la grabación a Twilio...');
-    console.log(`${tag} Resolviendo URL del MP4 (composition ${compositionSid})...`);
-    const mp4Url = await obtenerUrlMediaTwilio(compositionSid);
-    await agregarPaso(evaluacionId, 'URL obtenida. Descargando grabación...');
+    let transcript = '';
 
-    // 2. Descargar MP4 como buffer (sin disco)
-    console.log(`${tag} Descargando MP4...`);
-    const mp4Buffer = await descargarMp4ComoBuffer(mp4Url);
-    const mbVideo = (mp4Buffer.byteLength / (1024 * 1024)).toFixed(2);
-    console.log(`${tag} MP4 en buffer: ${mbVideo} MB`);
-    await agregarPaso(evaluacionId, `Grabación descargada (${mbVideo} MB). Extrayendo audio...`);
-
-    // 3. Estado → transcribiendo
-    await setEstado(evaluacionId, 'transcribiendo');
-
-    // 3b. Extraer solo el audio con ffmpeg (evita el límite de 25 MB de Whisper)
-    console.log(`${tag} Extrayendo audio con ffmpeg...`);
-    const audioBuffer = await extraerAudio(mp4Buffer);
-    const mbAudio = (audioBuffer.byteLength / (1024 * 1024)).toFixed(2);
-    console.log(`${tag} Audio extraído: ${mbAudio} MB`);
-    await agregarPaso(evaluacionId, `Audio extraído (${mbAudio} MB). Transcribiendo con Whisper...`);
-
-    // 4. Whisper
-    console.log(`${tag} Transcribiendo con Whisper (es)...`);
-    const audioFile = await toFile(audioBuffer, 'recording.mp3', { type: 'audio/mpeg' });
-    const whisperResp = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: 'whisper-1',
-      language: 'es',
-    });
-    const transcript = (whisperResp as { text?: string }).text?.trim() ?? '';
-    console.log(`${tag} Transcript (${transcript.length} chars)`);
-
-    if (!transcript) {
-      await setEstado(evaluacionId, 'error', {
-        error_msg: 'Whisper devolvió transcript vacío',
-      });
-      return;
-    }
-
-    await agregarPaso(
-      evaluacionId,
-      `Transcripción completada (${transcript.length} caracteres). Enviando al agente de IA...`
+    // 0. Reutilizar el transcript ya generado por el pipeline de transcripción
+    //    (audio client-side de la consulta, o composición como fallback). Evita
+    //    re-descargar el MP4 + ffmpeg + Whisper de nuevo — doble costo y latencia.
+    //    Si no hay transcript guardado, caemos al flujo clásico desde la composición.
+    const cached = await postgresService.query(
+      `SELECT "transcription_text" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+      [historiaId]
     );
+    const cachedText = cached?.[0]?.transcription_text;
 
-    // 5. Estado → evaluando + guardar transcript
-    await setEstado(evaluacionId, 'evaluando', { transcript });
+    if (typeof cachedText === 'string' && cachedText.trim().length > 0) {
+      transcript = cachedText.trim();
+      console.log(`${tag} Reutilizando transcript existente (${transcript.length} chars) — no re-transcribo`);
+      await agregarPaso(
+        evaluacionId,
+        `Reutilizando transcripción de la consulta (${transcript.length} caracteres)...`
+      );
+      // Estado → evaluando + guardar transcript en la evaluación
+      await setEstado(evaluacionId, 'evaluando', { transcript });
+    } else {
+      // 1. Obtener URL pre-firmada de Twilio
+      await agregarPaso(evaluacionId, 'Solicitando URL de la grabación a Twilio...');
+      console.log(`${tag} Resolviendo URL del MP4 (composition ${compositionSid})...`);
+      const mp4Url = await obtenerUrlMediaTwilio(compositionSid);
+      await agregarPaso(evaluacionId, 'URL obtenida. Descargando grabación...');
+
+      // 2. Descargar MP4 como buffer (sin disco)
+      console.log(`${tag} Descargando MP4...`);
+      const mp4Buffer = await descargarMp4ComoBuffer(mp4Url);
+      const mbVideo = (mp4Buffer.byteLength / (1024 * 1024)).toFixed(2);
+      console.log(`${tag} MP4 en buffer: ${mbVideo} MB`);
+      await agregarPaso(evaluacionId, `Grabación descargada (${mbVideo} MB). Extrayendo audio...`);
+
+      // 3. Estado → transcribiendo
+      await setEstado(evaluacionId, 'transcribiendo');
+
+      // 3b. Extraer solo el audio con ffmpeg (evita el límite de 25 MB de Whisper)
+      console.log(`${tag} Extrayendo audio con ffmpeg...`);
+      const audioBuffer = await extraerAudio(mp4Buffer);
+      const mbAudio = (audioBuffer.byteLength / (1024 * 1024)).toFixed(2);
+      console.log(`${tag} Audio extraído: ${mbAudio} MB`);
+      await agregarPaso(evaluacionId, `Audio extraído (${mbAudio} MB). Transcribiendo con Whisper...`);
+
+      // 4. Whisper
+      console.log(`${tag} Transcribiendo con Whisper (es)...`);
+      const audioFile = await toFile(audioBuffer, 'recording.mp3', { type: 'audio/mpeg' });
+      const whisperResp = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-1',
+        language: 'es',
+      });
+      transcript = (whisperResp as { text?: string }).text?.trim() ?? '';
+      console.log(`${tag} Transcript (${transcript.length} chars)`);
+
+      if (!transcript) {
+        await setEstado(evaluacionId, 'error', {
+          error_msg: 'Whisper devolvió transcript vacío',
+        });
+        return;
+      }
+
+      await agregarPaso(
+        evaluacionId,
+        `Transcripción completada (${transcript.length} caracteres). Enviando al agente de IA...`
+      );
+
+      // 5. Estado → evaluando + guardar transcript
+      await setEstado(evaluacionId, 'evaluando', { transcript });
+    }
 
     // 6. Formulario pre-consulta para contexto del agente
     const formulario = await buscarFormulario(numeroId);

@@ -673,6 +673,127 @@ class VideoController {
   }
 
   /**
+   * Generar RIPS JSON (Resolución 2275/2023) para una consulta individual
+   * GET /api/video/medical-history/:historiaId/rips
+   */
+  async getRipsJson(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+
+      if (!historiaId) {
+        res.status(400).json({ success: false, error: 'historiaId requerido' });
+        return;
+      }
+
+      const data = await medicalHistoryService.getMedicalHistory(historiaId);
+
+      if (!data) {
+        res.status(404).json({ success: false, error: 'Historia clínica no encontrada' });
+        return;
+      }
+
+      const ahora = new Date();
+      const yyyymmdd = `${ahora.getFullYear()}${String(ahora.getMonth() + 1).padStart(2, '0')}${String(ahora.getDate()).padStart(2, '0')}`;
+      const hhmm = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+      const fmtFecha = (d: Date | string | null | undefined): string | null => {
+        if (!d) return null;
+        const dt = d instanceof Date ? d : new Date(d);
+        if (isNaN(dt.getTime())) return null;
+        return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      };
+
+      const mapGenero = (g: string | undefined): string => {
+        if (!g) return 'M';
+        const l = g.toLowerCase();
+        if (l.includes('fem') || l === 'f') return 'F';
+        if (l.includes('masc') || l === 'm') return 'M';
+        return 'I';
+      };
+
+      const normalizar = (t: string | undefined | null): string =>
+        (t || '')
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/[^A-Z0-9\s]/g, '')
+          .trim();
+
+      const nitPrestador = process.env.RIPS_NIT_PRESTADOR || '9001234567';
+      const nombrePrestador = process.env.RIPS_NOMBRE_PRESTADOR || 'BSL TELEMEDICINA';
+
+      const rips = {
+        transaccion: {
+          consecutivo: yyyymmdd,
+          tipoNota: null,
+          numDocumentoIdObligado: nitPrestador,
+          numFactura: `RIPS-${yyyymmdd}-${historiaId.slice(-6)}`,
+          fechaExpedicion: fmtFecha(ahora),
+          horaExpedicion: hhmm,
+          entidadObligadaPagoNombre: nombrePrestador,
+        },
+        usuarios: [
+          {
+            tipoDocumentoIdentificacion: 'CC',
+            numDocumentoIdentificacion: data.numeroId,
+            primerApellido: normalizar(data.primerApellido),
+            segundoApellido: normalizar(data.segundoApellido),
+            primerNombre: normalizar(data.primerNombre),
+            segundoNombre: normalizar(data.segundoNombre),
+            fechaNacimiento: fmtFecha((data as unknown as Record<string, unknown>).fechaNacimiento as Date | string | null),
+            codSexo: mapGenero(data.genero),
+            codPaisOrigen: '170',
+            codPaisResidencia: '170',
+            codMunicipioResidencia: '11001',
+            codZonaTerritorialResidencia: 'U',
+            incapacidad: 'NO',
+            consecutivo: '1',
+            tipoUsuario: '01',
+          },
+        ],
+        consultas: [
+          {
+            numDocumentoIdentificacion: data.numeroId,
+            fechaInicioAtencion: fmtFecha(data.fechaAtencion),
+            numAutorizacion: null,
+            codConsulta: '890201',
+            modalidadGrupoServicioTecSal: '06',
+            grupoServicios: '01',
+            codServicio: '890201',
+            finalidadTecnologiaSalud: '13',
+            causaMotivoAtencion: '15',
+            codDiagnosticoPrincipal: data.mdDx1 || 'Z571',
+            codDiagnosticoRelacionado1: data.mdDx2 || null,
+            codDiagnosticoRelacionado2: null,
+            codDiagnosticoRelacionado3: null,
+            tipoDiagnosticoPrincipal: '01',
+            tipoDocumentoIdentificacion: 'CC',
+            numDocumentoIdentificacionMedico: data.medico || '0',
+            vrServicio: 0,
+            conceptoRecaudo: null,
+            valorPagoModerador: 0,
+            numFEVPagoModerador: null,
+            consecutivo: '1',
+          },
+        ],
+        procedimientos: [],
+        urgencias: [],
+        hospitalizacion: [],
+        recienNacidos: [],
+        medicamentos: [],
+        otrosServicios: [],
+      };
+
+      const filename = `RIPS_${data.numeroId}_${yyyymmdd}.json`;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.json(rips);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Obtener historia clínica de un paciente por _id
    * GET /api/video/medical-history/:historiaId
    */
@@ -1108,19 +1229,29 @@ class VideoController {
             `[Webhook composition-status] HistoriaClinica ${historiaId} actualizada → ${status}`
           );
 
-          // Trigger automático de transcripción cuando el composition queda
-          // listo. Es la entrada CANÓNICA del pipeline: 1 trigger por llamada
-          // (no 4 por participante), audio ya mixeado. Fire-and-forget — el
-          // service nunca lanza al caller.
+          // Transcripción por composición = FALLBACK. La entrada principal es
+          // el audio grabado en el navegador (processClientAudio), que deja el
+          // transcript listo a los segundos de terminar la llamada. Solo
+          // re-transcribimos desde la composición si ese path NO entregó
+          // (navegador falló, subida perdida, etc.) — la composición se
+          // conserva igual para revisión de video. Fire-and-forget.
           if (status === 'completed') {
-            transcriptionService
-              .processComposition(historiaId, compositionSid)
-              .catch((err) => {
-                console.error(
-                  '[Webhook composition-status] processComposition lanzó (no debería):',
-                  err
-                );
-              });
+            const hid = historiaId;
+            const yaTranscrito = await transcriptionService.hasTranscript(hid);
+            if (yaTranscrito) {
+              console.log(
+                `[Webhook composition-status] historia ${hid} ya tiene transcript (client-side) — composición queda solo para revisión de video, no re-transcribo.`
+              );
+            } else {
+              transcriptionService
+                .processComposition(hid, compositionSid)
+                .catch((err) => {
+                  console.error(
+                    '[Webhook composition-status] processComposition lanzó (no debería):',
+                    err
+                  );
+                });
+            }
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -1217,6 +1348,62 @@ class VideoController {
       // Si ya respondimos no podemos volver a responder; solo loguear.
       if (!res.headersSent) {
         res.status(500).send();
+      }
+    }
+  }
+
+  /**
+   * POST /api/video/transcribe-consulta/:historiaId
+   *
+   * Entrada PRINCIPAL de transcripción: el navegador del médico graba el audio
+   * de la consulta (mezcla mic médico + audio paciente) y lo sube como binario
+   * crudo cuando termina la llamada. El body llega vía express.raw (Buffer).
+   *
+   * Async: respondemos 202 inmediato y corremos Whisper → GPT-4o-mini → PATCH
+   * en background (mismo contrato que los webhooks). El frontend ya pollea
+   * `transcription_status` y muestra el badge "Transcripción lista".
+   *
+   * Protegido por `clinico` (JWT) — maneja PHI; lo usa el panel del médico, no
+   * el paciente.
+   */
+  async transcribeConsulta(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+      if (!historiaId) {
+        res.status(400).json({ error: 'historiaId requerido' });
+        return;
+      }
+
+      const body = req.body;
+      const audioBuf = Buffer.isBuffer(body) ? body : null;
+      if (!audioBuf || audioBuf.byteLength === 0) {
+        res.status(400).json({ error: 'Audio vacío o ausente' });
+        return;
+      }
+
+      const contentType = req.header('content-type') || 'audio/webm';
+
+      console.log(
+        `[Transcription] transcribe-consulta historia=${historiaId} bytes=${audioBuf.byteLength} ct=${contentType}`
+      );
+
+      // Respondemos rápido — el procesamiento corre en background.
+      res.status(202).json({
+        accepted: true,
+        historiaId,
+        bytes: audioBuf.byteLength,
+        message: 'Transcripción disparada en background. Polleá transcription_status.',
+      });
+
+      transcriptionService
+        .processClientAudio(historiaId, audioBuf, contentType)
+        .catch((err) => {
+          console.error('[Transcription] processClientAudio lanzó (no debería):', err);
+        });
+    } catch (error) {
+      console.error('[Transcription] transcribeConsulta error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error interno' });
       }
     }
   }

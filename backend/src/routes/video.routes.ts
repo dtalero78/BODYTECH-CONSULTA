@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import videoController from '../controllers/video.controller';
 import { requireRole } from '../middleware/rbac.middleware';
 
@@ -32,6 +32,16 @@ router.get('/events/connected-patients', videoController.getConnectedPatients);
 // Phase 3 — Transcripción post-llamada
 router.post('/events/session-start', videoController.sessionStart);
 router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
+
+// Transcripción client-side (entrada principal): el navegador sube el audio
+// crudo de la consulta. express.raw captura el binario (el parser json/urlencoded
+// global no toca content-types de audio). Protegido con JWT — maneja PHI.
+router.post(
+  '/transcribe-consulta/:historiaId',
+  clinico,
+  express.raw({ type: () => true, limit: '60mb' }),
+  videoController.transcribeConsulta
+);
 // Retry/backfill manual: usa el composition_sid ya cargado en HistoriaClinica
 // para volver a correr la transcripción si el webhook composition-status no
 // llegó o el pipeline falló. Protegido: endpoint de operación (no lo usa el
@@ -69,6 +79,7 @@ router.get(
 // Run 6 — PDF descarga. Va antes de la ruta genérica para que `:id/pdf` no
 // caiga en `:historiaId`. Protegida con JWT (solo médicos autenticados).
 router.get('/medical-history/:id/pdf', clinico, videoController.getHistoriaPdf);
+router.get('/medical-history/:historiaId/rips', clinico, videoController.getRipsJson);
 router.get(
   '/medical-history/:historiaId/preview',
   clinico,

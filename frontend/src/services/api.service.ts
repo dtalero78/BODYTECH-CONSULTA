@@ -89,6 +89,23 @@ class ApiService {
   }
 
   /**
+   * Descargar RIPS JSON de una consulta y disparar la descarga en el navegador
+   */
+  async downloadRips(historiaId: string, numeroId: string): Promise<void> {
+    const response = await this.client.get(`/api/video/medical-history/${historiaId}/rips`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    a.href = url;
+    a.download = `RIPS_${numeroId}_${fecha}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
    * Listar participantes
    */
   async listParticipants(roomName: string) {
@@ -137,6 +154,23 @@ class ApiService {
     await this.client.post('/api/video/events/session-start', {
       roomName,
       historiaId,
+    });
+  }
+
+  /**
+   * Subir el audio de la consulta grabado en el navegador (entrada principal de
+   * transcripción). El backend responde 202 y procesa async (Whisper →
+   * GPT-4o-mini → PATCH); el panel ya pollea `transcription_status` y muestra el
+   * badge "Transcripción lista". El body es el Blob crudo; el Content-Type lleva
+   * el mime del MediaRecorder (webm/opus o mp4) para que el backend elija la
+   * extensión correcta.
+   */
+  async transcribeConsulta(historiaId: string, audio: Blob): Promise<void> {
+    await this.client.post(`/api/video/transcribe-consulta/${historiaId}`, audio, {
+      headers: { 'Content-Type': audio.type || 'application/octet-stream' },
+      // El servidor responde 202 apenas recibe el body; el await es básicamente
+      // el tiempo de subida del audio.
+      timeout: 120000,
     });
   }
 

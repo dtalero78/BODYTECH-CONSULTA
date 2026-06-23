@@ -125,6 +125,24 @@ function getTwilioCreds(): TwilioCredentials | null {
   return { sid, token };
 }
 
+/**
+ * Deriva extensión + mime de un Content-Type de upload del navegador.
+ * MediaRecorder produce típicamente `audio/webm;codecs=opus` (Chrome) o
+ * `audio/mp4` (Safari). Whisper reconoce el formato por el nombre de archivo,
+ * así que la extensión importa.
+ */
+function audioFormatFromContentType(contentType: string): { ext: string; mime: string } {
+  const ct = (contentType || '').toLowerCase();
+  if (ct.includes('webm')) return { ext: 'webm', mime: 'audio/webm' };
+  if (ct.includes('ogg')) return { ext: 'ogg', mime: 'audio/ogg' };
+  if (ct.includes('mp4') || ct.includes('m4a') || ct.includes('aac'))
+    return { ext: 'mp4', mime: 'audio/mp4' };
+  if (ct.includes('wav')) return { ext: 'wav', mime: 'audio/wav' };
+  if (ct.includes('mpeg') || ct.includes('mp3')) return { ext: 'mp3', mime: 'audio/mpeg' };
+  // Default: el grabador client-side por defecto graba webm/opus.
+  return { ext: 'webm', mime: 'audio/webm' };
+}
+
 class TranscriptionService {
   /**
    * Vincula un roomName con la historia clínica activa. Idempotente.
@@ -171,6 +189,80 @@ class TranscriptionService {
   }
 
   /**
+   * ¿La historia ya tiene transcripción (o la está procesando)? Se usa como
+   * guard para que el path por composición de Twilio NO re-transcriba cuando
+   * el audio client-side ya entregó el transcript. NO se usa en el retry
+   * manual (retranscribeHistoria) — ese fuerza re-transcripción a propósito.
+   */
+  async hasTranscript(historiaId: string): Promise<boolean> {
+    if (!historiaId) return false;
+    try {
+      const rows = await postgresService.query(
+        `SELECT "transcription_status", "transcription_text"
+           FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
+      );
+      if (!rows || rows.length === 0) return false;
+      const status = rows[0].transcription_status;
+      const text = rows[0].transcription_text;
+      return (
+        status === 'done' ||
+        status === 'processing' ||
+        (typeof text === 'string' && text.trim().length > 0)
+      );
+    } catch (e: any) {
+      console.warn('[Transcription] hasTranscript error:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Entrada del pipeline para audio grabado en el navegador (client-side) y
+   * subido directo. Es la entrada PRINCIPAL desde que el médico finaliza la
+   * llamada: el transcript queda listo a los segundos, sin esperar el render
+   * de la composición de Twilio. Reutiliza el motor común runWhisperPipeline.
+   *
+   * Nunca lanza al caller (fire-and-forget desde el controller).
+   */
+  async processClientAudio(
+    historiaId: string,
+    audioBuf: Buffer,
+    contentType: string
+  ): Promise<void> {
+    const t0 = Date.now();
+    if (!historiaId) {
+      console.warn('[Transcription] processClientAudio: historiaId vacío');
+      return;
+    }
+    try {
+      if (!audioBuf || audioBuf.byteLength === 0) {
+        console.error('[Transcription] processClientAudio: audio vacío');
+        await this.markStatus(historiaId, 'error');
+        return;
+      }
+
+      const { ext, mime } = audioFormatFromContentType(contentType);
+      console.log(
+        `[Transcription] processClientAudio start historia=${historiaId} ${(audioBuf.byteLength / 1024 / 1024).toFixed(2)} MB (${mime})`
+      );
+
+      // Marcar processing antes del I/O largo (Whisper + GPT).
+      await this.markStatus(historiaId, 'processing');
+
+      await this.runWhisperPipeline(historiaId, audioBuf, `consulta.${ext}`, t0, mime);
+    } catch (err: any) {
+      console.error(
+        '[Transcription] processClientAudio error:',
+        err?.message || err,
+        err?.stack
+      );
+      await this.markStatus(historiaId, 'error').catch(() => {
+        /* swallow */
+      });
+    }
+  }
+
+  /**
    * Pipeline completo del recording. Nunca lanza al caller.
    *
    * - Resuelve historiaId. Si no hay → log + abort.
@@ -195,6 +287,15 @@ class TranscriptionService {
       if (!historiaId) {
         console.warn(
           `[Transcription] No hay historia vinculada al room ${roomName}, abortando.`
+        );
+        return;
+      }
+
+      // Dedup: si el audio client-side ya entregó (o está entregando) el
+      // transcript, no re-transcribimos desde la grabación de Twilio.
+      if (await this.hasTranscript(historiaId)) {
+        console.log(
+          `[Transcription] processRecording: historia ${historiaId} ya transcrita/en proceso — skip.`
         );
         return;
       }
@@ -323,12 +424,13 @@ class TranscriptionService {
     historiaId: string,
     audioBuf: Buffer,
     audioFileName: string,
-    t0: number
+    t0: number,
+    audioMime: string = 'audio/mpeg'
   ): Promise<void> {
     try {
       // 1) Whisper
       const audioFile = await toFile(audioBuf, audioFileName, {
-        type: 'audio/mpeg',
+        type: audioMime,
       });
 
       const whisperResp = await openai.audio.transcriptions.create({

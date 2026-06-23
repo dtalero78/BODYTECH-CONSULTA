@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
+import { useConsultationRecorder } from '../hooks/useConsultationRecorder';
 import { usePosturalAnalysis } from '../hooks/usePosturalAnalysis';
 import { Participant } from './Participant';
 import { VideoControls } from './VideoControls';
@@ -30,7 +31,10 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
 
   const [cameraWarnDismissed, setCameraWarnDismissed] = useState(false);
 
+  const [isFinishing, setIsFinishing] = useState(false);
+
   const {
+    room,
     localParticipant,
     remoteParticipants,
     isConnecting,
@@ -45,6 +49,13 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     isVideoEnabled,
     localVideoTrack,
   } = useVideoRoom({ identity, roomName, role, documento, medicoCode, historiaId });
+
+  // Grabación de audio de la consulta (entrada principal de transcripción).
+  // Solo el médico con historia activa graba; arranca apenas la sala conecta.
+  const { isRecording, stopAndUpload } = useConsultationRecorder(room, {
+    historiaId,
+    active: role === 'doctor' && !!historiaId && isConnected,
+  });
 
   const {
     currentEffect,
@@ -75,13 +86,31 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     sendPoseData,
   } = posturalAnalysis;
 
-  const handleLeave = () => {
+  const handleLeave = async () => {
+    // El médico graba el audio de la consulta en el navegador. Subimos ANTES de
+    // desconectar (al desconectar Twilio detiene los tracks que alimentan el
+    // grabador). El backend procesa async, así que esto dura básicamente la
+    // transferencia. Si falla o el médico cierra la pestaña de golpe, el
+    // fallback por composición de Twilio transcribe igual.
+    if (role === 'doctor') {
+      setIsFinishing(true);
+      try {
+        await stopAndUpload();
+      } catch (err) {
+        console.warn('[VideoRoom] stopAndUpload falló (fallback por composición cubrirá):', err);
+      }
+      setIsFinishing(false);
+    }
+
     disconnectFromRoom();
     // El médico cierra el room explícitamente para disparar el webhook
-    // inmediatamente (statusCallback → composición + transcripción).
-    // El paciente solo se desconecta; el room lo cierra el médico.
+    // inmediatamente (statusCallback → composición). El paciente solo se
+    // desconecta; el room lo cierra el médico.
     if (role === 'doctor') {
       apiService.endRoom(roomName).catch(() => {});
+      if (historiaId && documento) {
+        apiService.downloadRips(historiaId, documento).catch(() => {});
+      }
     }
     onLeave?.();
   };
@@ -223,6 +252,28 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
           <button onClick={() => setCameraWarnDismissed(true)} className="ml-1 text-white/70 hover:text-white leading-none text-base">✕</button>
         </div>
       )}
+      {/* Indicador de grabación de la consulta (solo médico) */}
+      {role === 'doctor' && isRecording && !isFinishing && (
+        <div className="absolute top-2 right-3 z-30 flex items-center gap-1.5 bg-black/55 backdrop-blur text-white text-[11px] font-medium rounded-full px-2.5 py-1 shadow-lg">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          Grabando consulta
+        </div>
+      )}
+
+      {/* Overlay mientras se sube el audio al finalizar */}
+      {isFinishing && (
+        <div className="fixed inset-0 z-[100] bg-[#0b141a]/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-white">
+            <svg className="animate-spin h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-sm font-medium">Guardando consulta…</p>
+            <p className="text-xs text-gray-400">Procesando la transcripción</p>
+          </div>
+        </div>
+      )}
+
       {/* Header tipo WhatsApp — solo para vista paciente o cuando no hay panel */}
       {!showPanel && (
         <div className="bg-[#1f2c34] px-4 py-3 flex items-center justify-between shadow-lg">

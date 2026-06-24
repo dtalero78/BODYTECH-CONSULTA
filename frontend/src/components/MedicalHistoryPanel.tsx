@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import type { Room } from 'twilio-video';
 import apiService from '../services/api.service';
 import { PatientHistoryModal } from './PatientHistoryModal';
 import { GuidedNutricion } from './GuidedNutricion';
@@ -85,6 +86,8 @@ interface MedicalHistoryData {
 interface MedicalHistoryPanelProps {
   historiaId: string;
   onAppendToObservaciones?: (text: string) => void;
+  /** Sala de Twilio — para la transcripción en vivo del audio del paciente. */
+  room?: Room | null;
 }
 
 const LABS = [
@@ -100,7 +103,7 @@ const LABS = [
   { key: 'vitaminaB12', label: 'Vitamina B12' },
 ];
 
-export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: MedicalHistoryPanelProps) => {
+export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room }: MedicalHistoryPanelProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2493,6 +2496,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones }: Med
       <GuidedNutricion
         open={guideOpen}
         onClose={() => setGuideOpen(false)}
+        room={room}
         getValue={guideGet}
         setValue={guideSet}
       />

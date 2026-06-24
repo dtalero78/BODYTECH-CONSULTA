@@ -38,3 +38,6 @@ build_*.py
 guion-*.md
 my-video/
 .claude/
+
+# app-tutorial-video skill workspace
+.tutorial-video/

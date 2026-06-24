@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import twilio from 'twilio';
 import { z, ZodError } from 'zod';
 import twilioService from '../services/twilio.service';
@@ -1005,6 +1006,58 @@ class VideoController {
       res.status(200).json({ success: true });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Transcripción EN VIVO — emite un token efímero de OpenAI Realtime para que
+   * el navegador del médico abra el WebSocket directo a OpenAI y transmita el
+   * audio del paciente (sin exponer la API key). El token vive ~1 min; el
+   * cliente conecta de inmediato.
+   *
+   * POST /api/video/realtime-token  (protegido: clinico)
+   */
+  async createRealtimeToken(_req: Request, res: Response): Promise<void> {
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: 'OPENAI_API_KEY no configurada' });
+        return;
+      }
+      const model = 'gpt-4o-mini-transcribe';
+      // API Realtime GA: el token efímero se emite en /v1/realtime/client_secrets
+      // con la sesión de transcripción ya configurada (modelo, idioma, VAD).
+      const resp = await axios.post(
+        'https://api.openai.com/v1/realtime/client_secrets',
+        {
+          session: {
+            type: 'transcription',
+            audio: {
+              input: {
+                transcription: { model, language: 'es' },
+                turn_detection: { type: 'server_vad', silence_duration_ms: 600 },
+              },
+            },
+          },
+        },
+        {
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          timeout: 10_000,
+        }
+      );
+      const data = resp.data as { value?: string; expires_at?: number };
+      const token = data?.value;
+      if (!token) {
+        res.status(502).json({ error: 'OpenAI no devolvió token de sesión' });
+        return;
+      }
+      res.status(200).json({ token, expiresAt: data?.expires_at, model });
+    } catch (error: any) {
+      console.error(
+        '[Realtime] No se pudo crear la sesión de transcripción:',
+        error?.response?.data || error?.message || error
+      );
+      res.status(502).json({ error: 'No se pudo crear la sesión de transcripción en vivo' });
     }
   }
 

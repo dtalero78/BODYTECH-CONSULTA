@@ -165,6 +165,12 @@ class ApiService {
    * el mime del MediaRecorder (webm/opus o mp4) para que el backend elija la
    * extensión correcta.
    */
+  /** Token efímero para abrir el WebSocket de transcripción en vivo (OpenAI Realtime). */
+  async getRealtimeToken(): Promise<{ token: string; expiresAt?: number; model?: string }> {
+    const r = await this.client.post('/api/video/realtime-token');
+    return r.data;
+  }
+
   async transcribeConsulta(
     historiaId: string,
     audio: Blob,

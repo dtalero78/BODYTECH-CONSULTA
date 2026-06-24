@@ -29,6 +29,9 @@ router.post('/events/participant-connected', videoController.trackParticipantCon
 router.post('/events/participant-disconnected', videoController.trackParticipantDisconnected);
 router.get('/events/connected-patients', videoController.getConnectedPatients);
 
+// Transcripción EN VIVO — token efímero de OpenAI Realtime (protegido).
+router.post('/realtime-token', clinico, videoController.createRealtimeToken);
+
 // Phase 3 — Transcripción post-llamada
 router.post('/events/session-start', videoController.sessionStart);
 router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Compass, ChevronLeft, ChevronRight, X, Mic, MicOff, Check } from 'lucide-react';
-import { useLiveDictation } from '../hooks/useLiveDictation';
+import type { Room } from 'twilio-video';
+import { useRealtimeTranscription } from '../hooks/useRealtimeTranscription';
 
 /**
  * Consulta guiada para el panel NUTRICIONAL (MedicalHistoryPanel).
@@ -201,6 +202,8 @@ interface GuidedNutricionProps {
   onClose: () => void;
   getValue: (key: string) => string;
   setValue: (key: string, value: string) => void;
+  /** Sala de Twilio — fuente del audio del paciente para la transcripción en vivo. */
+  room?: Room | null;
 }
 
 function GFieldView({
@@ -266,12 +269,13 @@ function GFieldView({
   );
 }
 
-export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNutricionProps) {
+export function GuidedNutricion({ open, onClose, getValue, setValue, room }: GuidedNutricionProps) {
   const steps = SCRIPT_NUTRI;
   const [index, setIndex] = useState(0);
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
-  const dict = useLiveDictation({ lang: 'es-CO' });
+  // Transcribe al PACIENTE (audio remoto) en vivo y lo escribe en el campo activo.
+  const dict = useRealtimeTranscription(room ?? null, { lang: 'es' });
   const getValueRef = useRef(getValue);
   getValueRef.current = getValue;
   const setValueRef = useRef(setValue);
@@ -441,9 +445,9 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
                 {dict.interim ? (
                   <span className="italic text-[#cfd8dd]">{dict.interim}</span>
                 ) : activeKey ? (
-                  'Hablá y se irá escribiendo en el campo resaltado…'
+                  'Transcribiendo al afiliado en el campo resaltado…'
                 ) : (
-                  'Toca un campo de texto para dictar en él.'
+                  'Toca el campo donde quieres que quede la respuesta del afiliado.'
                 )}
               </span>
             </div>

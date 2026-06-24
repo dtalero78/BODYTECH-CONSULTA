@@ -183,9 +183,9 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             {/* Logo BSL */}
             <div className="flex justify-center mb-6">
               <img
-                src="/bodyLogo.jpg"
-                alt="BSL Logo"
-                className="h-20 w-auto"
+                src="/logoBlancoTrepsi.png"
+                alt="Trepsi Logo"
+                className="w-auto h-auto max-w-full"
               />
             </div>
 
@@ -410,7 +410,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       <main className="flex-1 min-w-0 relative">
         {panelVariant === 'nutricional' ? (
           <div className="h-full overflow-y-auto">
-            <MedicalHistoryPanel historiaId={historiaId!} />
+            <MedicalHistoryPanel historiaId={historiaId!} room={room} />
           </div>
         ) : (
           <MedicalConsultationPanel

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Compass, ChevronLeft, ChevronRight, X, Mic, Check } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Compass, ChevronLeft, ChevronRight, X, Mic, MicOff, Check } from 'lucide-react';
+import { useLiveDictation } from '../hooks/useLiveDictation';
 
 /**
  * Consulta guiada para el panel NUTRICIONAL (MedicalHistoryPanel).
@@ -206,12 +207,19 @@ function GFieldView({
   f,
   getValue,
   setValue,
+  onFocusField,
+  dictating,
 }: {
   f: GField;
   getValue: (key: string) => string;
   setValue: (key: string, value: string) => void;
+  /** Marca este campo como destino del dictado al enfocarlo (solo texto). */
+  onFocusField: (key: string | null) => void;
+  /** Si el dictado está activo y apunta a este campo, lo resaltamos. */
+  dictating: boolean;
 }) {
   const value = getValue(f.key) ?? '';
+  const ring = dictating ? 'border-[#00a884] ring-2 ring-[#00a884]/40' : '';
   return (
     <div className="flex flex-col gap-1.5">
       {f.label && (
@@ -221,14 +229,21 @@ function GFieldView({
       )}
       {f.kind === 'textarea' ? (
         <textarea
+          data-vkey={f.key}
           value={value}
           onChange={(e) => setValue(f.key, e.target.value)}
+          onFocus={() => onFocusField(f.key)}
           rows={f.rows ?? 3}
           placeholder={f.placeholder}
-          className={`${INPUT_CLS} resize-y`}
+          className={`${INPUT_CLS} resize-y ${ring}`}
         />
       ) : f.kind === 'select' ? (
-        <select value={value} onChange={(e) => setValue(f.key, e.target.value)} className={INPUT_CLS}>
+        <select
+          value={value}
+          onChange={(e) => setValue(f.key, e.target.value)}
+          onFocus={() => onFocusField(null)}
+          className={INPUT_CLS}
+        >
           <option value="">Seleccione</option>
           {(f.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
@@ -238,11 +253,13 @@ function GFieldView({
         </select>
       ) : (
         <input
+          data-vkey={f.key}
           type="text"
           value={value}
           onChange={(e) => setValue(f.key, e.target.value)}
+          onFocus={() => onFocusField(f.key)}
           placeholder={f.placeholder}
-          className={INPUT_CLS}
+          className={`${INPUT_CLS} ${ring}`}
         />
       )}
     </div>
@@ -252,7 +269,54 @@ function GFieldView({
 export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNutricionProps) {
   const steps = SCRIPT_NUTRI;
   const [index, setIndex] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
 
+  const dict = useLiveDictation({ lang: 'es-CO' });
+  const getValueRef = useRef(getValue);
+  getValueRef.current = getValue;
+  const setValueRef = useRef(setValue);
+  setValueRef.current = setValue;
+  const activeKeyRef = useRef<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  const focusField = (key: string | null) => {
+    activeKeyRef.current = key;
+    setActiveKey(key);
+  };
+
+  // El texto dictado (final) se anexa al campo de texto enfocado.
+  useEffect(() => {
+    dict.setOnFinal((text) => {
+      const k = activeKeyRef.current;
+      if (!k) return;
+      const cur = getValueRef.current(k) || '';
+      const sep = cur && !/\s$/.test(cur) ? ' ' : '';
+      setValueRef.current(k, (cur + sep + text).trim());
+    });
+  }, [dict]);
+
+  // Voz por defecto: el micrófono escucha mientras la guía está abierta.
+  useEffect(() => {
+    if (!dict.supported) return;
+    if (open) dict.start();
+    else dict.stop();
+    return () => dict.stop();
+  }, [open, dict.supported, dict.start, dict.stop]);
+
+  // Al cambiar de paso, enfocar el primer campo de texto (destino del dictado).
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => {
+      const el = bodyRef.current?.querySelector(
+        'textarea, input[type="text"]'
+      ) as HTMLElement | null;
+      if (el) el.focus();
+      else focusField(null);
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [index, open]);
+
+  // Esc para cerrar.
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -297,6 +361,34 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
               Paso {index + 1} de {steps.length}
             </div>
           </div>
+          {dict.supported ? (
+            <button
+              type="button"
+              onClick={() => (dict.listening ? dict.stop() : dict.start())}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold transition flex-shrink-0 ${
+                dict.listening
+                  ? 'bg-[rgba(0,168,132,0.15)] text-[#00a884] border border-[#00a884]/40'
+                  : 'bg-[#2a3942] text-[#a4b1b9] border border-[#324049] hover:text-white'
+              }`}
+              title={dict.listening ? 'Dictado activo — clic para pausar' : 'Reanudar dictado por voz'}
+            >
+              {dict.listening ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-[#00a884] animate-pulse" />
+                  Escuchando
+                </>
+              ) : (
+                <>
+                  <MicOff size={13} />
+                  Pausado
+                </>
+              )}
+            </button>
+          ) : (
+            <span className="text-[10.5px] text-[#6b7882] flex-shrink-0 max-w-[150px] leading-tight text-right">
+              Dictado no disponible (usa Chrome)
+            </span>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -316,7 +408,7 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div ref={bodyRef} className="flex-1 overflow-y-auto px-6 py-6">
           <div className="text-[19px] leading-snug font-bold text-white mb-1.5">{step.question}</div>
           {step.hint ? (
             <div className="text-[12.5px] text-[#6b7882] mb-4">{step.hint}</div>
@@ -329,11 +421,33 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
               const spanFull = f.full ?? f.kind === 'textarea';
               return (
                 <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
-                  <GFieldView f={f} getValue={getValue} setValue={setValue} />
+                  <GFieldView
+                    f={f}
+                    getValue={getValue}
+                    setValue={setValue}
+                    onFocusField={focusField}
+                    dictating={dict.listening && activeKey === f.key}
+                  />
                 </div>
               );
             })}
           </div>
+
+          {/* Preview en vivo del dictado */}
+          {dict.supported && dict.listening && (
+            <div className="mt-3 flex items-start gap-2 text-[12.5px] text-[#a4b1b9]">
+              <Mic size={14} className="text-[#00a884] mt-0.5 flex-shrink-0 animate-pulse" />
+              <span>
+                {dict.interim ? (
+                  <span className="italic text-[#cfd8dd]">{dict.interim}</span>
+                ) : activeKey ? (
+                  'Hablá y se irá escribiendo en el campo resaltado…'
+                ) : (
+                  'Toca un campo de texto para dictar en él.'
+                )}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Footer / navegación */}
@@ -349,17 +463,6 @@ export function GuidedNutricion({ open, onClose, getValue, setValue }: GuidedNut
           </button>
 
           <div className="flex items-center gap-2.5">
-            {!isLast && (
-              <button
-                type="button"
-                onClick={goNext}
-                title="La transcripción intentará llenarlo al finalizar la llamada"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-white hover:bg-[#2a3942] transition"
-              >
-                <Mic size={14} />
-                Preguntar de viva voz
-              </button>
-            )}
             <button
               type="button"
               onClick={goNext}

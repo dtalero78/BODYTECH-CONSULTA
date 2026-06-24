@@ -171,6 +171,19 @@ class ApiService {
     return r.data;
   }
 
+  /** Procesa el transcript completo con IA → devuelve los campos extraídos. */
+  async extractFields(
+    historiaId: string,
+    transcript: string,
+    variant: 'consulta' | 'nutricional'
+  ): Promise<{ fields: Record<string, string> }> {
+    const r = await this.client.post(`/api/video/extract-fields/${historiaId}`, {
+      transcript,
+      variant,
+    });
+    return r.data;
+  }
+
   async transcribeConsulta(
     historiaId: string,
     audio: Blob,

@@ -31,6 +31,8 @@ router.get('/events/connected-patients', videoController.getConnectedPatients);
 
 // Transcripción EN VIVO — token efímero de OpenAI Realtime (protegido).
 router.post('/realtime-token', clinico, videoController.createRealtimeToken);
+// Extracción de campos desde el transcript acumulado en vivo (IA al finalizar).
+router.post('/extract-fields/:historiaId', clinico, videoController.extractFields);
 
 // Phase 3 — Transcripción post-llamada
 router.post('/events/session-start', videoController.sessionStart);

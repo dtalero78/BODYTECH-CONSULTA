@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Compass, ChevronLeft, ChevronRight, X, Mic, MicOff, Check } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Compass, X, Mic, Sparkles } from 'lucide-react';
 import type { Room } from 'twilio-video';
 import { useRealtimeTranscription } from '../hooks/useRealtimeTranscription';
 
@@ -202,27 +202,24 @@ interface GuidedNutricionProps {
   onClose: () => void;
   getValue: (key: string) => string;
   setValue: (key: string, value: string) => void;
-  /** Sala de Twilio — fuente del audio del paciente para la transcripción en vivo. */
+  /** Sala de Twilio — fuente del audio (coach + paciente) para la transcripción. */
   room?: Room | null;
+  /** Procesa el transcript completo con IA y guarda la historia. */
+  onFinalize: (transcript: string) => Promise<void>;
+  /** True mientras la IA procesa + guarda. */
+  aiProcessing: boolean;
 }
 
 function GFieldView({
   f,
   getValue,
   setValue,
-  onFocusField,
-  dictating,
 }: {
   f: GField;
   getValue: (key: string) => string;
   setValue: (key: string, value: string) => void;
-  /** Marca este campo como destino del dictado al enfocarlo (solo texto). */
-  onFocusField: (key: string | null) => void;
-  /** Si el dictado está activo y apunta a este campo, lo resaltamos. */
-  dictating: boolean;
 }) {
   const value = getValue(f.key) ?? '';
-  const ring = dictating ? 'border-[#00a884] ring-2 ring-[#00a884]/40' : '';
   return (
     <div className="flex flex-col gap-1.5">
       {f.label && (
@@ -232,21 +229,14 @@ function GFieldView({
       )}
       {f.kind === 'textarea' ? (
         <textarea
-          data-vkey={f.key}
           value={value}
           onChange={(e) => setValue(f.key, e.target.value)}
-          onFocus={() => onFocusField(f.key)}
           rows={f.rows ?? 3}
           placeholder={f.placeholder}
-          className={`${INPUT_CLS} resize-y ${ring}`}
+          className={`${INPUT_CLS} resize-y`}
         />
       ) : f.kind === 'select' ? (
-        <select
-          value={value}
-          onChange={(e) => setValue(f.key, e.target.value)}
-          onFocus={() => onFocusField(null)}
-          className={INPUT_CLS}
-        >
+        <select value={value} onChange={(e) => setValue(f.key, e.target.value)} className={INPUT_CLS}>
           <option value="">Seleccione</option>
           {(f.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
@@ -256,234 +246,188 @@ function GFieldView({
         </select>
       ) : (
         <input
-          data-vkey={f.key}
           type="text"
           value={value}
           onChange={(e) => setValue(f.key, e.target.value)}
-          onFocus={() => onFocusField(f.key)}
           placeholder={f.placeholder}
-          className={`${INPUT_CLS} ${ring}`}
+          className={INPUT_CLS}
         />
       )}
     </div>
   );
 }
 
-export function GuidedNutricion({ open, onClose, getValue, setValue, room }: GuidedNutricionProps) {
-  const steps = SCRIPT_NUTRI;
-  const [index, setIndex] = useState(0);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+export function GuidedNutricion({
+  open,
+  onClose,
+  getValue,
+  setValue,
+  room,
+  onFinalize,
+  aiProcessing,
+}: GuidedNutricionProps) {
+  // Transcribe TODA la consulta (coach + paciente) en vivo y la acumula.
+  const live = useRealtimeTranscription(room ?? null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // Transcribe al PACIENTE (audio remoto) en vivo y lo escribe en el campo activo.
-  const dict = useRealtimeTranscription(room ?? null, { lang: 'es' });
-  const getValueRef = useRef(getValue);
-  getValueRef.current = getValue;
-  const setValueRef = useRef(setValue);
-  setValueRef.current = setValue;
-  const activeKeyRef = useRef<string | null>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  const focusField = (key: string | null) => {
-    activeKeyRef.current = key;
-    setActiveKey(key);
-  };
-
-  // El texto dictado (final) se anexa al campo de texto enfocado.
+  // Transcribir mientras la guía está abierta.
   useEffect(() => {
-    dict.setOnFinal((text) => {
-      const k = activeKeyRef.current;
-      if (!k) return;
-      const cur = getValueRef.current(k) || '';
-      const sep = cur && !/\s$/.test(cur) ? ' ' : '';
-      setValueRef.current(k, (cur + sep + text).trim());
-    });
-  }, [dict]);
+    if (!live.supported) return;
+    if (open) live.start();
+    else live.stop();
+    return () => live.stop();
+  }, [open, live.supported, live.start, live.stop]);
 
-  // Voz por defecto: el micrófono escucha mientras la guía está abierta.
+  // Auto-scroll del panel de transcripción.
   useEffect(() => {
-    if (!dict.supported) return;
-    if (open) dict.start();
-    else dict.stop();
-    return () => dict.stop();
-  }, [open, dict.supported, dict.start, dict.stop]);
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [live.transcript, live.interim]);
 
-  // Al cambiar de paso, enfocar el primer campo de texto (destino del dictado).
-  useEffect(() => {
-    if (!open) return;
-    const t = window.setTimeout(() => {
-      const el = bodyRef.current?.querySelector(
-        'textarea, input[type="text"]'
-      ) as HTMLElement | null;
-      if (el) el.focus();
-      else focusField(null);
-    }, 60);
-    return () => window.clearTimeout(t);
-  }, [index, open]);
-
-  // Esc para cerrar.
+  // Esc para cerrar (no mientras la IA procesa).
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !aiProcessing) onClose();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, onClose, aiProcessing]);
 
   if (!open) return null;
 
-  const step = steps[index];
-  const isLast = index === steps.length - 1;
-  const isFirst = index === 0;
-  const progress = Math.round(((index + 1) / steps.length) * 100);
-
-  const goNext = () => {
-    if (isLast) onClose();
-    else setIndex((i) => Math.min(i + 1, steps.length - 1));
+  const handleFinalize = async () => {
+    await onFinalize(live.getTranscript());
+    onClose();
   };
-  const goPrev = () => setIndex((i) => Math.max(i - 1, 0));
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
-      style={{ background: 'rgba(11,20,26,0.86)', backdropFilter: 'blur(6px)' }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className="fixed inset-0 z-[100] flex items-stretch justify-center p-3 sm:p-5"
+      style={{ background: 'rgba(11,20,26,0.9)', backdropFilter: 'blur(6px)' }}
     >
-      <div className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)]">
+      <div className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)]">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-[#324049]">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-[#324049] flex-shrink-0">
           <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
             <Compass size={18} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[10.5px] text-[#6b7882] tracking-widest uppercase font-semibold">
-              Consulta guiada · {step.topic}
+              Consulta guiada · Nutrición
             </div>
             <div className="text-[12px] text-[#a4b1b9] mt-0.5">
-              Paso {index + 1} de {steps.length}
+              Pregunta y anota; la IA completa la historia con la transcripción al finalizar.
             </div>
           </div>
-          {dict.supported ? (
-            <button
-              type="button"
-              onClick={() => (dict.listening ? dict.stop() : dict.start())}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold transition flex-shrink-0 ${
-                dict.listening
-                  ? 'bg-[rgba(0,168,132,0.15)] text-[#00a884] border border-[#00a884]/40'
-                  : 'bg-[#2a3942] text-[#a4b1b9] border border-[#324049] hover:text-white'
-              }`}
-              title={dict.listening ? 'Dictado activo — clic para pausar' : 'Reanudar dictado por voz'}
-            >
-              {dict.listening ? (
-                <>
-                  <span className="w-2 h-2 rounded-full bg-[#00a884] animate-pulse" />
-                  Escuchando
-                </>
-              ) : (
-                <>
-                  <MicOff size={13} />
-                  Pausado
-                </>
-              )}
-            </button>
-          ) : (
-            <span className="text-[10.5px] text-[#6b7882] flex-shrink-0 max-w-[150px] leading-tight text-right">
-              Dictado no disponible (usa Chrome)
-            </span>
-          )}
           <button
             type="button"
             onClick={onClose}
-            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#a4b1b9] hover:bg-[#2a3942] hover:text-white transition"
+            disabled={aiProcessing}
+            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#a4b1b9] hover:bg-[#2a3942] hover:text-white transition disabled:opacity-30"
             aria-label="Cerrar guía"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Progress */}
-        <div className="h-1 bg-[#16222a]">
-          <div
-            className="h-full bg-[#00a884] transition-[width] duration-300 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-
-        {/* Body */}
-        <div ref={bodyRef} className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="text-[19px] leading-snug font-bold text-white mb-1.5">{step.question}</div>
-          {step.hint ? (
-            <div className="text-[12.5px] text-[#6b7882] mb-4">{step.hint}</div>
-          ) : (
-            <div className="mb-4" />
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {step.fields.map((f) => {
-              const spanFull = f.full ?? f.kind === 'textarea';
-              return (
-                <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
-                  <GFieldView
-                    f={f}
-                    getValue={getValue}
-                    setValue={setValue}
-                    onFocusField={focusField}
-                    dictating={dict.listening && activeKey === f.key}
-                  />
+        {/* Cuerpo: dos columnas (campos | transcripción) */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">
+          {/* Izquierda — campos para preguntar/anotar */}
+          <div className="overflow-y-auto px-6 py-5 lg:border-r border-[#324049]">
+            <div className="flex flex-col gap-6">
+              {SCRIPT_NUTRI.map((step) => (
+                <div key={step.id}>
+                  <div className="text-[14px] font-bold text-[#e9edef] mb-0.5">{step.question}</div>
+                  {step.hint ? (
+                    <div className="text-[11.5px] text-[#6b7882] mb-2.5">{step.hint}</div>
+                  ) : (
+                    <div className="mb-2" />
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {step.fields.map((f) => {
+                      const spanFull = f.full ?? f.kind === 'textarea';
+                      return (
+                        <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
+                          <GFieldView f={f} getValue={getValue} setValue={setValue} />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
-          {/* Preview en vivo del dictado */}
-          {dict.supported && dict.listening && (
-            <div className="mt-3 flex items-start gap-2 text-[12.5px] text-[#a4b1b9]">
-              <Mic size={14} className="text-[#00a884] mt-0.5 flex-shrink-0 animate-pulse" />
-              <span>
-                {dict.interim ? (
-                  <span className="italic text-[#cfd8dd]">{dict.interim}</span>
-                ) : activeKey ? (
-                  'Transcribiendo al afiliado en el campo resaltado…'
-                ) : (
-                  'Toca el campo donde quieres que quede la respuesta del afiliado.'
-                )}
-              </span>
+          {/* Derecha — transcripción simultánea */}
+          <div className="flex flex-col min-h-0 px-6 py-5 bg-[#1a262e]">
+            <div className="flex items-center gap-2 mb-2.5 flex-shrink-0">
+              <Mic size={14} className="text-[#00a884]" />
+              <div className="text-[12px] font-semibold text-[#a4b1b9] tracking-wide uppercase flex-1">
+                Transcripción simultánea
+              </div>
+              {live.supported ? (
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${
+                    live.listening ? 'text-[#00a884]' : 'text-[#6b7882]'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      live.listening ? 'bg-[#00a884] animate-pulse' : 'bg-[#6b7882]'
+                    }`}
+                  />
+                  {live.listening ? 'Escuchando' : 'Conectando…'}
+                </span>
+              ) : (
+                <span className="text-[10.5px] text-[#6b7882]">No disponible (usa Chrome)</span>
+              )}
             </div>
-          )}
+            <div
+              ref={transcriptRef}
+              className="flex-1 min-h-[220px] overflow-y-auto rounded-xl bg-[#0b141a] border border-[#324049] p-3.5 text-[13.5px] leading-relaxed text-[#cfd8dd] whitespace-pre-wrap"
+            >
+              {live.transcript ? (
+                <span>{live.transcript}</span>
+              ) : (
+                !live.interim && (
+                  <span className="text-[#6b7882] italic">
+                    La conversación con el afiliado se irá transcribiendo aquí…
+                  </span>
+                )
+              )}
+              {live.interim && (
+                <span className="text-[#8a99a1] italic">
+                  {live.transcript ? ' ' : ''}
+                  {live.interim}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Footer / navegación */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[#324049] bg-[#1a262e] rounded-b-2xl">
+        {/* Footer — finalizar y guardar */}
+        <div className="px-6 py-4 border-t border-[#324049] bg-[#1a262e] rounded-b-2xl flex-shrink-0">
           <button
             type="button"
-            onClick={goPrev}
-            disabled={isFirst}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-white hover:bg-[#2a3942] transition disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={handleFinalize}
+            disabled={aiProcessing}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-[#00a884] text-[#001b14] hover:bg-[#008f6f] transition shadow-[0_4px_14px_rgba(0,168,132,0.25)] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <ChevronLeft size={15} />
-            Atrás
+            {aiProcessing ? (
+              <>
+                <span className="w-4 h-4 border-2 border-[#001b14]/40 border-t-[#001b14] rounded-full animate-spin" />
+                Analizando con IA y guardando…
+              </>
+            ) : (
+              <>
+                <Sparkles size={16} />
+                Finalizar y guardar
+              </>
+            )}
           </button>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={goNext}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-xs font-bold bg-[#00a884] text-[#001b14] hover:bg-[#008f6f] transition shadow-[0_4px_14px_rgba(0,168,132,0.25)]"
-            >
-              {isLast ? (
-                <>
-                  Finalizar guía
-                  <Check size={15} />
-                </>
-              ) : (
-                <>
-                  Siguiente
-                  <ChevronRight size={15} />
-                </>
-              )}
-            </button>
+          <div className="text-[11px] text-[#6b7882] text-center mt-2">
+            La IA analiza la transcripción, respeta lo que anotaste y diligencia la historia.
           </div>
         </div>
       </div>

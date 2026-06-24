@@ -847,6 +847,58 @@ class TranscriptionService {
   }
 
   /**
+   * Extrae campos clínicos a partir de un TRANSCRIPT ya hecho (texto), sin pasar
+   * por Whisper. La usa el flujo de transcripción EN VIVO: el navegador acumula
+   * toda la conversación y al final pide la extracción. Devuelve un objeto plano
+   * (clave → valor string) filtrado a las claves permitidas según la variante.
+   * NO escribe en BD — el llamador decide cómo aplicar/mergear.
+   */
+  async extractFieldsFromTranscript(
+    transcript: string,
+    variant: 'consulta' | 'nutricional'
+  ): Promise<Record<string, string>> {
+    if (!transcript || !transcript.trim()) return {};
+    const prompt = variant === 'nutricional' ? NUTRICION_EXTRACTION_PROMPT : EXTRACTION_PROMPT;
+    const gptResp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: `Transcripción de la consulta:\n\n${transcript}` },
+      ],
+    });
+    const raw = gptResp.choices?.[0]?.message?.content?.trim() || '';
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+    // Aplanado defensivo (por si el modelo agrupa en secciones).
+    const flat: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) flat[k2] = v2;
+      } else {
+        flat[k] = v;
+      }
+    }
+
+    const allowed: Set<string> =
+      variant === 'nutricional'
+        ? new Set<string>([...NUTRICION_DATOS_KEYS, ...NUTRICION_COLUMN_KEYS])
+        : TARGET_FIELDS_SET;
+    const out: Record<string, string> = {};
+    for (const key of Object.keys(flat)) {
+      if (allowed.has(key) && isFilledStr(flat[key])) out[key] = String(flat[key]).trim();
+    }
+    return out;
+  }
+
+  /**
    * Wrapper para escribir el status. Usa updateField para mantener el path único
    * (whitelist + auditoría).
    */

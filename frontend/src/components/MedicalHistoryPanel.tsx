@@ -134,6 +134,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
 
   // ----- Consulta guiada (modo entrevista) -----
   const [guideOpen, setGuideOpen] = useState(false);
+  const [aiProcessing, setAiProcessing] = useState(false);
   const autoOpenedGuideRef = useRef(false);
 
   // peso/talla son top-level; el resto vive en datosNutricionales. La guía
@@ -642,13 +643,23 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrides?: {
+    datosNutricionales?: any;
+    peso?: string;
+    talla?: string;
+  }) => {
     if (!data) return;
 
     if (!mdConceptoFinal) {
       alert('Debe seleccionar un Concepto Final antes de guardar.');
       return;
     }
+
+    // Permite guardar con valores explícitos (ej. los recién aplicados por la IA)
+    // sin depender del estado de React, que podría ir un render atrás.
+    const datosToSave = overrides?.datosNutricionales ?? datosNutricionales;
+    const tallaToSave = overrides?.talla ?? talla;
+    const pesoToSave = overrides?.peso ?? peso;
 
     try {
       setIsSaving(true);
@@ -675,10 +686,10 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
         mdConceptoFinal,
         mdDx1,
         mdDx2,
-        talla,
-        peso,
+        talla: tallaToSave,
+        peso: pesoToSave,
         cargo: data.cargo,
-        datosNutricionales,
+        datosNutricionales: datosToSave,
       });
 
       alert('Historia clínica guardada exitosamente');
@@ -688,6 +699,45 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
       alert('Error al guardar historia clínica');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  /**
+   * "Finalizar y guardar" de la guía: manda TODO el transcript a la IA, mergea
+   * lo extraído con lo que el coach anotó (las notas del coach mandan: la IA solo
+   * llena lo vacío) y guarda la historia con esos valores.
+   */
+  const finalizeWithAI = async (transcript: string): Promise<void> => {
+    const filled = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== '';
+    setAiProcessing(true);
+    try {
+      let fields: Record<string, string> = {};
+      if (transcript && transcript.trim()) {
+        const r = await apiService.extractFields(historiaId, transcript, 'nutricional');
+        fields = r.fields || {};
+      }
+      const newDatos: any = { ...datosNutricionales };
+      let newPeso = peso;
+      let newTalla = talla;
+      for (const [k, v] of Object.entries(fields)) {
+        if (!filled(v)) continue;
+        if (k === 'peso') {
+          if (!filled(newPeso)) newPeso = v;
+        } else if (k === 'talla') {
+          if (!filled(newTalla)) newTalla = v;
+        } else if (!filled(newDatos[k])) {
+          newDatos[k] = v;
+        }
+      }
+      setDatosNutricionales(newDatos);
+      setPeso(newPeso);
+      setTalla(newTalla);
+      await handleSave({ datosNutricionales: newDatos, peso: newPeso, talla: newTalla });
+    } catch (err: any) {
+      console.error('[finalizeWithAI] error:', err);
+      alert('No se pudo procesar la transcripción con IA. Revisa los campos y guarda manualmente.');
+    } finally {
+      setAiProcessing(false);
     }
   };
 
@@ -2381,7 +2431,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
       {/* Botón Guardar - Footer fijo */}
       <div className="border-t border-gray-700 p-4 bg-[#1f2c34]">
         <button
-          onClick={handleSave}
+          onClick={() => handleSave()}
           disabled={isSaving}
           className="w-full bg-[#00a884] text-white px-6 py-3 rounded-lg hover:bg-[#008f6f] transition font-semibold disabled:bg-gray-600 disabled:cursor-not-allowed shadow-lg"
         >
@@ -2499,6 +2549,8 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
         room={room}
         getValue={guideGet}
         setValue={guideSet}
+        onFinalize={finalizeWithAI}
+        aiProcessing={aiProcessing}
       />
     </div>
   );

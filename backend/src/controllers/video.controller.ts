@@ -1062,6 +1062,44 @@ class VideoController {
   }
 
   /**
+   * Extrae los campos de la historia a partir del TRANSCRIPT completo (texto)
+   * acumulado por la transcripción en vivo. Guarda el transcript (para Calidad)
+   * y devuelve los campos extraídos para que el frontend los aplique/mergee con
+   * lo que el coach anotó. No escribe los campos clínicos (eso lo decide el panel).
+   *
+   * POST /api/video/extract-fields/:historiaId  Body: { transcript, variant }
+   */
+  async extractFields(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+      const transcript = typeof req.body?.transcript === 'string' ? req.body.transcript : '';
+      const variant: 'consulta' | 'nutricional' =
+        req.body?.variant === 'nutricional' ? 'nutricional' : 'consulta';
+      if (!transcript.trim()) {
+        res.status(400).json({ error: 'transcript requerido' });
+        return;
+      }
+
+      const fields = await transcriptionService.extractFieldsFromTranscript(transcript, variant);
+
+      // Persistir el transcript completo (best-effort) para Calidad / auditoría.
+      if (historiaId) {
+        medicalHistoryService
+          .updateField(historiaId, 'transcription_text', transcript)
+          .catch(() => undefined);
+        medicalHistoryService
+          .updateField(historiaId, 'transcription_status', 'done')
+          .catch(() => undefined);
+      }
+
+      res.status(200).json({ fields });
+    } catch (error: any) {
+      console.error('[extractFields] error:', error?.message || error);
+      res.status(502).json({ error: 'No se pudo procesar la transcripción con IA' });
+    }
+  }
+
+  /**
    * Phase 4 — Webhook de Twilio cuando una sala de video se completa (status=completed).
    * Crea una Composition mp4 (audio + video de todos los participantes) y guarda
    * el composition_sid en la HistoriaClinica vinculada.

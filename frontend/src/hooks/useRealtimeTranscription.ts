@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Room, RemoteAudioTrack, RemoteTrack } from 'twilio-video';
+import type { Room, LocalAudioTrack, RemoteAudioTrack, RemoteTrack } from 'twilio-video';
 import apiService from '../services/api.service';
 
 /**
- * Transcripción EN VIVO del audio del PACIENTE (pista remota de Twilio) vía
- * OpenAI Realtime. El navegador del médico:
- *   1. pide un token efímero al backend (no se expone la API key),
- *   2. abre un WebSocket directo a OpenAI (intent=transcription),
- *   3. transmite la pista de audio remota como PCM16 24 kHz,
- *   4. recibe deltas (preview) y transcripciones finales por turno (server_vad).
+ * Transcripción EN VIVO de TODA la consulta (coach + paciente) vía OpenAI
+ * Realtime GA. Mezcla el micrófono local + el audio remoto y los transmite como
+ * PCM16 24 kHz por WebSocket directo a OpenAI (token efímero del backend, sin
+ * exponer la API key). Acumula el transcript completo; NO lo escribe en campos
+ * — al finalizar, la IA procesa todo el texto y diligencia la historia.
  *
- * Expone la misma forma que useLiveDictation para integrarse igual en la guía:
- * { supported, listening, interim, start, stop, setOnFinal }.
- *
- * Captura SOLO al paciente (audio remoto). La voz del coach (mic local) no entra
- * — eso es justamente lo que se necesitaba.
+ * Eventos GA: conversation.item.input_audio_transcription.delta (.delta) y
+ * .completed (.transcript). Sólo Chrome/Edge de escritorio.
  */
 function floatToPCM16Base64(float32: Float32Array): string {
   const buf = new ArrayBuffer(float32.length * 2);
@@ -33,67 +29,62 @@ function floatToPCM16Base64(float32: Float32Array): string {
   return btoa(binary);
 }
 
-export function useRealtimeTranscription(room: Room | null, opts?: { lang?: string }) {
+export function useRealtimeTranscription(room: Room | null) {
   const supported =
     typeof window !== 'undefined' &&
     'WebSocket' in window &&
     ('AudioContext' in window || 'webkitAudioContext' in window);
-  void opts; // el idioma/modelo se configuran en el token efímero (backend)
 
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState('');
+  const [transcript, setTranscript] = useState('');
 
-  const onFinalRef = useRef<((text: string) => void) | null>(null);
+  const transcriptRef = useRef('');
   const wsRef = useRef<WebSocket | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
-  const srcRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const procRef = useRef<ScriptProcessorNode | null>(null);
   const muteRef = useRef<GainNode | null>(null);
-  const connectedTrackId = useRef<string | null>(null);
+  const sourcesRef = useRef<MediaStreamAudioSourceNode[]>([]);
+  const connectedTrackIds = useRef<Set<string>>(new Set());
   const trackSubRef = useRef<((t: RemoteTrack) => void) | null>(null);
   const shouldRunRef = useRef(false);
 
-  const setOnFinal = useCallback((fn: ((text: string) => void) | null) => {
-    onFinalRef.current = fn;
+  const getTranscript = useCallback(() => transcriptRef.current.trim(), []);
+  const reset = useCallback(() => {
+    transcriptRef.current = '';
+    setTranscript('');
+    setInterim('');
   }, []);
 
-  /** Conecta la pista de audio remota al grafo que la empuja al WebSocket. */
+  /** Conecta un track de audio (mic local o remoto) al mismo ScriptProcessor (se suman). */
   const attachTrack = useCallback((mst?: MediaStreamTrack | null) => {
     const ctx = ctxRef.current;
-    if (!ctx || !mst || mst.kind !== 'audio') return;
-    if (connectedTrackId.current === mst.id) return;
+    const proc = procRef.current;
+    if (!ctx || !proc || !mst || mst.kind !== 'audio') return;
+    if (connectedTrackIds.current.has(mst.id)) return;
     try {
-      srcRef.current?.disconnect();
-      procRef.current?.disconnect();
-    } catch {
-      /* noop */
+      const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+      src.connect(proc);
+      sourcesRef.current.push(src);
+      connectedTrackIds.current.add(mst.id);
+    } catch (e) {
+      console.warn('[Realtime] no se pudo conectar un track:', e);
     }
-    const src = ctx.createMediaStreamSource(new MediaStream([mst]));
-    const proc = ctx.createScriptProcessor(4096, 1, 1);
-    const mute = ctx.createGain();
-    mute.gain.value = 0; // no reproducir (evita eco); Twilio ya reproduce el audio
-    proc.onaudioprocess = (e: AudioProcessingEvent) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      const input = e.inputBuffer.getChannelData(0);
-      ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: floatToPCM16Base64(input) }));
-    };
-    src.connect(proc);
-    proc.connect(mute);
-    mute.connect(ctx.destination);
-    srcRef.current = src;
-    procRef.current = proc;
-    muteRef.current = mute;
-    connectedTrackId.current = mst.id;
   }, []);
 
-  const wireRemoteAudio = useCallback(() => {
+  const wireAudio = useCallback(() => {
     if (!room) return;
+    // Mic local (coach)
+    room.localParticipant.audioTracks.forEach((pub) =>
+      attachTrack((pub.track as LocalAudioTrack | null)?.mediaStreamTrack)
+    );
+    // Audio remoto ya presente (paciente)
     room.participants.forEach((p) =>
       p.audioTracks.forEach((pub) =>
         attachTrack((pub.track as RemoteAudioTrack | null)?.mediaStreamTrack)
       )
     );
+    // Audio remoto que llegue luego
     const onSub = (track: RemoteTrack) => {
       if (track.kind === 'audio') attachTrack((track as RemoteAudioTrack).mediaStreamTrack);
     };
@@ -111,16 +102,16 @@ export function useRealtimeTranscription(room: Room | null, opts?: { lang?: stri
       ).removeListener('trackSubscribed', trackSubRef.current as (...args: unknown[]) => void);
     }
     trackSubRef.current = null;
-    connectedTrackId.current = null;
+    connectedTrackIds.current.clear();
     try {
+      sourcesRef.current.forEach((s) => s.disconnect());
       procRef.current?.disconnect();
-      srcRef.current?.disconnect();
       muteRef.current?.disconnect();
     } catch {
       /* noop */
     }
+    sourcesRef.current = [];
     procRef.current = null;
-    srcRef.current = null;
     muteRef.current = null;
     try {
       ctxRef.current?.close();
@@ -147,8 +138,7 @@ export function useRealtimeTranscription(room: Room | null, opts?: { lang?: stri
         shouldRunRef.current = false;
         return;
       }
-      // API GA: token efímero por subprotocolo, SIN 'openai-beta.realtime-v1'
-      // (la API beta fue retirada). La sesión ya viene configurada por el token.
+      // API GA: token efímero por subprotocolo, SIN 'openai-beta.realtime-v1'.
       const ws = new WebSocket('wss://api.openai.com/v1/realtime?intent=transcription', [
         'realtime',
         `openai-insecure-api-key.${token}`,
@@ -170,9 +160,22 @@ export function useRealtimeTranscription(room: Room | null, opts?: { lang?: stri
         const ctx = new AudioCtx({ sampleRate: 24000 });
         ctxRef.current = ctx;
         ctx.resume().catch(() => undefined);
-        wireRemoteAudio();
+        const proc = ctx.createScriptProcessor(4096, 1, 1);
+        const mute = ctx.createGain();
+        mute.gain.value = 0; // no reproducir (Twilio ya reproduce el audio)
+        proc.onaudioprocess = (e: AudioProcessingEvent) => {
+          const w = wsRef.current;
+          if (!w || w.readyState !== WebSocket.OPEN) return;
+          const input = e.inputBuffer.getChannelData(0);
+          w.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: floatToPCM16Base64(input) }));
+        };
+        proc.connect(mute);
+        mute.connect(ctx.destination);
+        procRef.current = proc;
+        muteRef.current = mute;
+        wireAudio();
         setListening(true);
-        console.log('[Realtime] sesión de transcripción en vivo iniciada');
+        console.log('[Realtime] transcripción en vivo iniciada (coach + paciente)');
       };
 
       ws.onmessage = (ev: MessageEvent) => {
@@ -184,31 +187,29 @@ export function useRealtimeTranscription(room: Room | null, opts?: { lang?: stri
         }
         const t: string = m?.type || '';
         if (t.endsWith('input_audio_transcription.delta')) {
-          if (typeof m.delta === 'string') setInterim((prev) => (prev + m.delta).slice(-400));
+          if (typeof m.delta === 'string') setInterim((prev) => (prev + m.delta).slice(-300));
         } else if (t.endsWith('input_audio_transcription.completed')) {
           const txt = (m.transcript || '').trim();
           setInterim('');
-          if (txt && onFinalRef.current) onFinalRef.current(txt);
+          if (txt) {
+            transcriptRef.current = (transcriptRef.current + ' ' + txt).trim();
+            setTranscript(transcriptRef.current);
+          }
         } else if (t === 'error') {
           console.warn('[Realtime] error de sesión:', m?.error || m);
         }
       };
 
-      ws.onerror = (e) => {
-        console.warn('[Realtime] WebSocket error', e);
-      };
-      ws.onclose = () => {
-        setListening(false);
-      };
+      ws.onerror = (e) => console.warn('[Realtime] WebSocket error', e);
+      ws.onclose = () => setListening(false);
     } catch (e) {
       console.error('[Realtime] no se pudo iniciar:', e);
       shouldRunRef.current = false;
       setListening(false);
     }
-  }, [supported, wireRemoteAudio]);
+  }, [supported, wireAudio]);
 
-  // Cleanup al desmontar.
   useEffect(() => () => stop(), [stop]);
 
-  return { supported, listening, interim, start, stop, setOnFinal };
+  return { supported, listening, interim, transcript, getTranscript, reset, start, stop };
 }

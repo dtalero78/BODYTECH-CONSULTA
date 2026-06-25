@@ -27,11 +27,24 @@ import postgresService from './postgres.service';
 // Se comparan sobre el texto NORMALIZADO (minúsculas, sin acentos). Override
 // con WHATSAPP_ENTIDAD_PATTERNS (lista separada por comas).
 const DEFAULT_PATTERNS = [
+  // entidad
   'para q entidad',
   'para que entidad',
   'que entidad',
   'cual entidad',
   'cual es la entidad',
+  'para cual entidad',
+  'de que entidad',
+  'nombre de la entidad',
+  // empresa (el asesor a veces dice "empresa" en vez de "entidad")
+  'para q empresa',
+  'para que empresa',
+  'que empresa',
+  'cual empresa',
+  'cual es la empresa',
+  'para cual empresa',
+  'de que empresa',
+  'nombre de la empresa',
 ];
 
 function getQuestionPatterns(): string[] {
@@ -107,7 +120,31 @@ class WhatsappLeadsService {
         const chatId = m.chat_id || '';
         if (!chatId) continue;
         const text = messageText(m);
-        if (!text) continue;
+
+        // Log de diagnóstico (1 línea por mensaje) para poder reconstruir
+        // cualquier conversación que no se registre. Temporal — quitar al
+        // estabilizar. (Volumen bajo: chats de cotización.)
+        console.log(
+          `[whatsapp-leads] msg tel=${telefonoFromChatId(chatId)} from_me=${m.from_me === true} type=${m.type || '?'} text="${(text || '').slice(0, 60)}"`
+        );
+
+        if (!text) {
+          // Mensaje no-texto (audio/imagen/...). Si es ENTRANTE y hay pregunta
+          // armada, el cliente respondió la entidad por nota de voz/imagen → en
+          // v1 NO se captura. Lo dejamos visible para diagnóstico.
+          if (m.from_me !== true) {
+            const armed = await postgresService.query(
+              `SELECT 1 FROM whatsapp_lead_pending WHERE chat_id = $1`,
+              [chatId]
+            );
+            if (armed && armed.length > 0) {
+              console.warn(
+                `[whatsapp-leads] ⚠️ ${telefonoFromChatId(chatId)} respondió con '${m.type || 'no-texto'}' (no se captura en v1)`
+              );
+            }
+          }
+          continue;
+        }
 
         if (m.from_me === true) {
           // Mensaje del operador → ¿es la pregunta de la entidad?

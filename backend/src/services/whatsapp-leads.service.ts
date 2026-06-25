@@ -247,6 +247,11 @@ async function appendToSheet(row: SheetRow): Promise<boolean> {
   try {
     const res = await fetch(url, {
       method: 'POST',
+      // Apps Script responde 302 al /exec hacia googleusercontent.com. NO seguir
+      // ese redirect: el doPost (y su appendRow) ya se ejecutó en el POST, y
+      // seguir el 302 de forma anónima devuelve un error de Google que nos haría
+      // creer que falló → reintentos → filas duplicadas. El 302 = éxito.
+      redirect: 'manual',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         token: process.env.GSHEET_WEBAPP_TOKEN || '',
@@ -256,7 +261,7 @@ async function appendToSheet(row: SheetRow): Promise<boolean> {
       }),
       signal: controller.signal,
     });
-    if (res.status >= 200 && res.status < 300) return true;
+    if (res.status >= 200 && res.status < 400) return true;
     const txt = await res.text().catch(() => '');
     console.error(`[whatsapp-leads] Sheets respondió HTTP ${res.status}: ${txt.slice(0, 200)}`);
     return false;

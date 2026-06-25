@@ -19,6 +19,8 @@ import usuariosRoutes from './routes/usuarios.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
+import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
+import whatsappLeadsService from './services/whatsapp-leads.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -140,6 +142,9 @@ app.use('/api/usuarios', requireRole('admin', 'coordinador'), usuariosRoutes);
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
 app.use('/api/twilio', twilioVoiceRoutes);
+// WhatsApp Leads — webhook público de WHAPI para capturar la "entidad" del
+// lead. Sin JWT (lo llama WHAPI); se protege con WHAPI_WEBHOOK_SECRET opcional.
+app.use('/api/whatsapp-leads', whatsappLeadsRoutes);
 // Calidad — antes público; ahora solo coordinador/admin (auditoría).
 app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // Admin del outbox del webhook BSL → Trepsi (contiene PHI). RBAC: solo
@@ -192,6 +197,19 @@ if (process.env.NODE_ENV !== 'test') {
     });
   }, TREPSI_WEBHOOK_INTERVAL_MS);
   console.log(`📨 [Trepsi-Webhook] Worker iniciado (cada ${TREPSI_WEBHOOK_INTERVAL_MS / 1000}s)`);
+}
+
+// Worker de WhatsApp Leads: cada 30 s vuelca a Google Sheets las entidades
+// capturadas (tras la ventana de silencio) y purga preguntas sin responder.
+// Si GSHEET_WEBAPP_URL no está configurada, el flush no-op (no rompe nada).
+const WHATSAPP_LEADS_INTERVAL_MS = 30_000;
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    whatsappLeadsService.flushReadyLeads().catch((e) => {
+      console.error('[whatsapp-leads] worker error:', e?.message ?? e);
+    });
+  }, WHATSAPP_LEADS_INTERVAL_MS);
+  console.log(`🟢 [WhatsApp-Leads] Worker iniciado (cada ${WHATSAPP_LEADS_INTERVAL_MS / 1000}s)`);
 }
 
 // Start server

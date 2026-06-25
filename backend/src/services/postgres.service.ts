@@ -684,6 +684,30 @@ class PostgresService {
           WHERE created_at < NOW() - INTERVAL '14 days'
       `);
 
+      // ===== WhatsApp Leads — captura de la "entidad" =====
+      // Estado efímero por chat para capturar la ENTIDAD que el cliente responde
+      // tras la pregunta "¿Para qué entidad?". Cuando el operador envía esa
+      // pregunta (from_me) se crea/re-arma una fila; los mensajes entrantes
+      // siguientes se acumulan en `buffer`. Un sweeper (cada 30 s) vuelca la
+      // entidad a Google Sheets tras una ventana de silencio y borra la fila.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS whatsapp_lead_pending (
+          chat_id          VARCHAR(80) PRIMARY KEY,
+          telefono         VARCHAR(40),
+          from_name        VARCHAR(200),
+          asked_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_inbound_at  TIMESTAMPTZ,
+          buffer           TEXT,
+          created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_lead_pending_flush
+          ON whatsapp_lead_pending (last_inbound_at)
+          WHERE buffer IS NOT NULL
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

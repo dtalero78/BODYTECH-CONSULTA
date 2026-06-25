@@ -317,7 +317,7 @@ export function GuidedNutricion({
               Consulta guiada · Nutrición
             </div>
             <div className="text-[12px] text-[#a4b1b9] mt-0.5">
-              Pregunta y anota; la IA completa la historia con la transcripción al finalizar.
+              Pregunta y anota; la plataforma completa la historia con la transcripción al finalizar.
             </div>
           </div>
           <button
@@ -417,7 +417,7 @@ export function GuidedNutricion({
             {aiProcessing ? (
               <>
                 <span className="w-4 h-4 border-2 border-[#001b14]/40 border-t-[#001b14] rounded-full animate-spin" />
-                Analizando con IA y guardando…
+                Analizando y guardando…
               </>
             ) : (
               <>
@@ -427,7 +427,7 @@ export function GuidedNutricion({
             )}
           </button>
           <div className="text-[11px] text-[#6b7882] text-center mt-2">
-            La IA analiza la transcripción, respeta lo que anotaste y diligencia la historia.
+            La plataforma analiza la transcripción, respeta lo que anotaste y diligencia la historia.
           </div>
         </div>
       </div>

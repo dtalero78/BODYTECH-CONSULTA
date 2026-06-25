@@ -635,9 +635,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
 
       setAiSuggestions(displayText);
     } catch (err: any) {
-      setError(err.message || 'Error al generar sugerencias con IA');
+      setError(err.message || 'Error al generar las sugerencias');
       console.error('Error generating AI suggestions:', err);
-      alert('Error al generar sugerencias con IA');
+      alert('Error al generar las sugerencias');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -735,7 +735,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
       await handleSave({ datosNutricionales: newDatos, peso: newPeso, talla: newTalla });
     } catch (err: any) {
       console.error('[finalizeWithAI] error:', err);
-      alert('No se pudo procesar la transcripción con IA. Revisa los campos y guarda manualmente.');
+      alert('No se pudo procesar la transcripción. Revisa los campos y guarda manualmente.');
     } finally {
       setAiProcessing(false);
     }
@@ -2391,7 +2391,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  {aiSuggestions ? 'Ver / Editar Análisis Nutricional IA' : 'Generar Análisis Nutricional con IA'}
+                  {aiSuggestions ? 'Ver / Editar Análisis Nutricional' : 'Generar Análisis Nutricional'}
                 </>
               )}
             </button>
@@ -2548,7 +2548,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
                 <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <h3 className="text-lg font-bold text-blue-400">Análisis Nutricional IA</h3>
+                <h3 className="text-lg font-bold text-blue-400">Análisis Nutricional</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2600,7 +2600,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
                   value={aiSuggestions}
                   onChange={(e) => setAiSuggestions(e.target.value)}
                   className="w-full h-full min-h-[60vh] bg-[#0b141a] text-white text-base px-4 py-3 rounded-lg border border-gray-700 focus:border-blue-400 focus:outline-none resize-none leading-relaxed"
-                  placeholder="Las sugerencias de IA aparecerán aquí..."
+                  placeholder="Las sugerencias aparecerán aquí..."
                 />
               )}
             </div>

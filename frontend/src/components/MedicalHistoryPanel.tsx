@@ -1479,6 +1479,85 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
               />
             </div>
           </div>
+          {/* Trepsi Perímetros — auto-llenados desde la app Trepsi cuando aplica */}
+          <div className="border-t border-gray-700 mt-4 pt-3 mb-3">
+            <p className="text-sm text-[#00a884] mb-2 font-semibold uppercase tracking-wide">
+              Trepsi Perímetros (cm)
+            </p>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Cuello</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroCuello || ''}
+                onChange={(e) => updateNutri('perimetroCuello', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Pecho</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroPecho || ''}
+                onChange={(e) => updateNutri('perimetroPecho', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Abdomen</label>
+              <input
+                type="text"
+                value={datosNutricionales.perimetroAbdomen || ''}
+                onChange={(e) => updateNutri('perimetroAbdomen', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div />
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Brazo Derecho</label>
+              <input
+                type="text"
+                value={datosNutricionales.brazoDerecho || ''}
+                onChange={(e) => updateNutri('brazoDerecho', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Brazo Izquierdo</label>
+              <input
+                type="text"
+                value={datosNutricionales.brazoIzquierdo || ''}
+                onChange={(e) => updateNutri('brazoIzquierdo', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Pierna Derecha</label>
+              <input
+                type="text"
+                value={datosNutricionales.piernaDerecha || ''}
+                onChange={(e) => updateNutri('piernaDerecha', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Pierna Izquierda</label>
+              <input
+                type="text"
+                value={datosNutricionales.piernaIzquierda || ''}
+                onChange={(e) => updateNutri('piernaIzquierda', e.target.value)}
+                className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+                placeholder="cm"
+              />
+            </div>
+            </div>
+          </div>
           {/* Diámetros óseos (para somatotipo Heath-Carter) */}
           <p className="text-sm text-gray-400 mb-1 font-semibold">Diámetros óseos (cm)</p>
           <div className="grid grid-cols-2 gap-2 mb-3">

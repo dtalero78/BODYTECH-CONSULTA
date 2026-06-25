@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { useConsultationRecorder } from '../hooks/useConsultationRecorder';
@@ -133,6 +133,16 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       removeEffect(localVideoTrack);
     }
   };
+
+  // Fondo virtual automático para el profesional (médico de consulta y coach
+  // nutricional): negro con el logo Trepsi Bodytech. Se aplica una sola vez al
+  // quedar lista la cámara; si lo cambia/quita manualmente, no se vuelve a forzar.
+  useEffect(() => {
+    if (role === 'doctor' && localVideoTrack && currentEffect === 'none') {
+      applyVirtualBackground(localVideoTrack, '/fondoVideoCoach.png');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localVideoTrack, role]);
 
   const handleOpenPosturalAnalysis = () => {
     // Validar que Socket.io esté conectado antes de abrir el modal

@@ -130,6 +130,99 @@ class WhatsAppService {
       return { success: false, error: msg };
     }
   }
+
+  /**
+   * Envía un reporte interno usando la plantilla de utilidad aprobada.
+   * WhatsApp Business NO permite texto libre fuera de la ventana de 24h, así que
+   * los reportes a números internos (admin) deben ir por plantilla.
+   *
+   * Plantilla `bsl_reporte_videollamada` (Utility), variables posicionales:
+   *   {{1}} fecha/hora · {{2}} sala · {{3}} duración · {{4}} doctor · {{5}} paciente
+   *
+   * Requiere `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` (SID HX... de la plantilla aprobada).
+   */
+  async sendReportMessage(
+    phone: string,
+    variables: Record<string, string>,
+    attempt: number = 1
+  ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
+    const reportTemplateSid = process.env.TWILIO_WHATSAPP_REPORT_TEMPLATE_SID || '';
+    if (!reportTemplateSid) {
+      return { success: false, error: 'TWILIO_WHATSAPP_REPORT_TEMPLATE_SID no configurado' };
+    }
+
+    const toNumber = this.formatPhoneNumber(phone);
+
+    try {
+      console.log(`📱 [Twilio WA] Enviando reporte (plantilla) a ${toNumber} (intento ${attempt}/${this.maxRetries})`);
+
+      const msg = await this.client.messages.create({
+        from: this.fromNumber,
+        to: toNumber,
+        contentSid: reportTemplateSid,
+        contentVariables: JSON.stringify(variables),
+      });
+
+      console.log(`✅ [Twilio WA] Reporte enviado — SID: ${msg.sid}`);
+      return { success: true, messageSid: msg.sid };
+    } catch (error: any) {
+      if (this.isRetryableError(error) && attempt < this.maxRetries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
+        await this.sleep(wait);
+        return this.sendReportMessage(phone, variables, attempt + 1);
+      }
+      const msg = this.getErrorMessage(error);
+      console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Envía CUALQUIER plantilla de contenido aprobada por su Content SID, con
+   * variables posicionales. Necesario para mensajes transaccionales fuera de la
+   * ventana de 24h (WhatsApp Business no permite texto libre ahí → error 63016).
+   *
+   * Ej.: confirmación de reprogramación con `cita_reprogramada`
+   *   {{1}} nombre · {{2}} fecha · {{3}} hora.
+   */
+  async sendContentTemplate(
+    phone: string,
+    contentSid: string,
+    variables: Record<string, string>,
+    attempt: number = 1
+  ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
+    if (!contentSid) {
+      return { success: false, error: 'contentSid vacío' };
+    }
+    const toNumber = this.formatPhoneNumber(phone);
+
+    try {
+      console.log(
+        `📱 [Twilio WA] Enviando plantilla ${contentSid} a ${toNumber} (intento ${attempt}/${this.maxRetries})`
+      );
+
+      const msg = await this.client.messages.create({
+        from: this.fromNumber,
+        to: toNumber,
+        contentSid,
+        contentVariables: JSON.stringify(variables),
+      });
+
+      console.log(`✅ [Twilio WA] Plantilla enviada — SID: ${msg.sid}`);
+      return { success: true, messageSid: msg.sid };
+    } catch (error: any) {
+      if (this.isRetryableError(error) && attempt < this.maxRetries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
+        await this.sleep(wait);
+        return this.sendContentTemplate(phone, contentSid, variables, attempt + 1);
+      }
+      const msg = this.getErrorMessage(error);
+      console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);
+      return { success: false, error: msg };
+    }
+  }
 }
 
 export default new WhatsAppService();

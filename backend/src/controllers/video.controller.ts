@@ -535,16 +535,21 @@ class VideoController {
           console.error(`⚠️  [Trepsi-Webhook] Error encolando reschedule: ${e?.message ?? e}`);
         });
 
-      // Confirmación por WhatsApp (best-effort, dentro de la ventana de 24h),
-      // revelando la fecha/hora que el paciente eligió.
+      // Confirmación por WhatsApp con plantilla aprobada `cita_reprogramada`.
+      // El texto libre falla con 63016 fuera de la ventana de 24h (el paciente
+      // nunca abre esa ventana: los botones de URL no cuentan como respuesta).
+      // Variables: {{1}} nombre · {{2}} fecha · {{3}} hora.
       if (cita.celular) {
         const [y, m, d] = fecha.split('-');
         const fechaLegible = `${d}/${m}/${y}`;
+        const reprogramadaSid =
+          process.env.TWILIO_WHATSAPP_REPROGRAMADA_SID || 'HX7b65b5517dbe77d2fc336dd392101241';
         whatsappService
-          .sendTextMessage(
-            cita.celular,
-            `Hola ${cita.primerNombre ?? ''} 👋\n\nTu cita quedó reprogramada para el ${fechaLegible} a las ${hora}.\n\n¡Te esperamos!`
-          )
+          .sendContentTemplate(cita.celular, reprogramadaSid, {
+            '1': cita.primerNombre ?? '',
+            '2': fechaLegible,
+            '3': hora,
+          })
           .catch(() => {});
       }
 

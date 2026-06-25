@@ -49,6 +49,35 @@ export type TrepsiHistoriaClinica = Record<string, any> & {
   consentimientoInformado: boolean;
 };
 
+export interface TrepsiPatientMedidas {
+  perimetroCintura?: number | null;
+  perimetroAbdomen?: number | null;
+  perimetroCadera?: number | null;
+  perimetroPecho?: number | null;
+  brazoDerecho?: number | null;
+  brazoIzquierdo?: number | null;
+  piernaDerecha?: number | null;
+  piernaIzquierda?: number | null;
+  pliegueBiceps?: number | null;
+  pliegueTriceps?: number | null;
+  pliegueSubescapular?: number | null;
+  pliegueAbdominal?: number | null;
+  perimetroCuello?: number | null;
+}
+
+export interface TrepsiAlimentoAnamnesis {
+  alimento: string;
+  cantidad: number;
+}
+
+export interface TrepsiAnamnesis {
+  desayuno?: TrepsiAlimentoAnamnesis[];
+  nueves?: TrepsiAlimentoAnamnesis[];
+  almuerzo?: TrepsiAlimentoAnamnesis[];
+  onces?: TrepsiAlimentoAnamnesis[];
+  cena?: TrepsiAlimentoAnamnesis[];
+}
+
 export interface CreateAppointmentInput {
   citaId: string;
   fechaAtencion: string; // ISO 8601 con offset
@@ -59,6 +88,13 @@ export interface CreateAppointmentInput {
   tipoConsulta?: string;
   sede?: string;
   observaciones?: string;
+  // Datos nutricionales que el paciente diligencia en la app Trepsi.
+  vasosDeAguaBebidos?: string;
+  perimetros?: TrepsiPatientMedidas | null;
+  alimentosNoDeseados?: string[];
+  alimentosFavoritos?: string[];
+  anamnesis?: TrepsiAnamnesis;
+  objective?: string;
 }
 
 export interface ScheduleInput {
@@ -145,6 +181,87 @@ function mapHistoriaToColumns(hc: Record<string, any>): Record<string, unknown> 
   }
 
   return cols;
+}
+
+/**
+ * Mapea los campos nutricionales que envía Trepsi a las keys del JSONB
+ * `datosNutricionales` que consume el panel nutricional de Bodytech.
+ *
+ * - Arrays de strings → cadenas separadas por coma (lo que el TEXT del panel
+ *   nutricional espera).
+ * - Arrays de objetos {alimento, cantidad} → cadena tipo "huevo (2), arepa (1)".
+ * - Perímetros nuevos que no existían en el panel original → mismas keys que
+ *   Trepsi (el JSONB es extensible; el panel puede leerlas cuando se actualice
+ *   la UI).
+ *
+ * Devuelve {} si no hay nada que escribir.
+ */
+function buildDatosNutricionalesFromTrepsi(input: CreateAppointmentInput): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+
+  const joinFood = (list?: TrepsiAlimentoAnamnesis[]): string | undefined => {
+    if (!Array.isArray(list) || list.length === 0) return undefined;
+    return list
+      .filter((it) => it && typeof it.alimento === 'string' && it.alimento.trim())
+      .map((it) => `${it.alimento.trim()} (${Number(it.cantidad)})`)
+      .join(', ');
+  };
+
+  const joinList = (arr?: string[]): string | undefined => {
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    const cleaned = arr.map((s) => String(s).trim()).filter((s) => s.length > 0);
+    return cleaned.length > 0 ? cleaned.join(', ') : undefined;
+  };
+
+  if (input.vasosDeAguaBebidos && input.vasosDeAguaBebidos.trim()) {
+    out.consumoAgua = input.vasosDeAguaBebidos.trim();
+  }
+  if (input.objective && input.objective.trim()) {
+    out.objetivoPrincipal = input.objective.trim();
+  }
+  const favs = joinList(input.alimentosFavoritos);
+  if (favs) out.alimentosPreferidos = favs;
+  const noDes = joinList(input.alimentosNoDeseados);
+  if (noDes) out.alimentosRechazados = noDes;
+
+  if (input.anamnesis) {
+    const a = input.anamnesis;
+    const desayuno = joinFood(a.desayuno);
+    if (desayuno) out.anamnesisDesayuno = desayuno;
+    // Trepsi llama "nueves" al snack de media mañana (típo ~11am). En el panel
+    // nutricional ya existe la key `anamnesisMediaManana`; lo mapeamos ahí.
+    const mediaManana = joinFood(a.nueves);
+    if (mediaManana) out.anamnesisMediaManana = mediaManana;
+    const almuerzo = joinFood(a.almuerzo);
+    if (almuerzo) out.anamnesisAlmuerzo = almuerzo;
+    // "onces" en Colombia/Trepsi = media tarde.
+    const mediaTarde = joinFood(a.onces);
+    if (mediaTarde) out.anamnesisMediaTarde = mediaTarde;
+    const cena = joinFood(a.cena);
+    if (cena) out.anamnesisCena = cena;
+  }
+
+  if (input.perimetros && typeof input.perimetros === 'object') {
+    const p = input.perimetros;
+    // Keys del panel nutricional original.
+    if (p.perimetroCintura != null) out.circunferenciaCintura = Number(p.perimetroCintura);
+    if (p.perimetroCadera != null) out.circunferenciaCadera = Number(p.perimetroCadera);
+    if (p.pliegueBiceps != null) out.pliegueBiceps = Number(p.pliegueBiceps);
+    if (p.pliegueTriceps != null) out.pliegueTriceps = Number(p.pliegueTriceps);
+    if (p.pliegueSubescapular != null) out.pliegueSubescapular = Number(p.pliegueSubescapular);
+    if (p.pliegueAbdominal != null) out.pliegueAbdominal = Number(p.pliegueAbdominal);
+    // Keys nuevas que el panel aún no tiene UI; guardamos con el mismo nombre
+    // que Trepsi para que el panel las pueda exponer luego sin remapear.
+    if (p.perimetroAbdomen != null) out.perimetroAbdomen = Number(p.perimetroAbdomen);
+    if (p.perimetroPecho != null) out.perimetroPecho = Number(p.perimetroPecho);
+    if (p.brazoDerecho != null) out.brazoDerecho = Number(p.brazoDerecho);
+    if (p.brazoIzquierdo != null) out.brazoIzquierdo = Number(p.brazoIzquierdo);
+    if (p.piernaDerecha != null) out.piernaDerecha = Number(p.piernaDerecha);
+    if (p.piernaIzquierda != null) out.piernaIzquierda = Number(p.piernaIzquierda);
+    if (p.perimetroCuello != null) out.perimetroCuello = Number(p.perimetroCuello);
+  }
+
+  return out;
 }
 
 function rowToRecord(row: Record<string, unknown>): AppointmentRecord {
@@ -281,6 +398,25 @@ class TrepsiService {
         status: 500,
         error: { code: 'DB_ERROR', message: 'Error creando historia clínica.' },
       };
+    }
+
+    // Mapear los campos nutricionales que el paciente diligencia en la app
+    // Trepsi al JSONB `datosNutricionales` que consume el panel nutricional.
+    // Si Trepsi no envía nada, no se ejecuta el UPDATE (datosNutricionales
+    // queda NULL y el coach lo llena durante la consulta).
+    const datosNutricionales = buildDatosNutricionalesFromTrepsi(input);
+    if (Object.keys(datosNutricionales).length > 0) {
+      const dnUpdate = await postgresService.query(
+        `UPDATE "HistoriaClinica"
+            SET "datosNutricionales" = $1::jsonb, "_updatedDate" = NOW()
+          WHERE "_id" = $2`,
+        [JSON.stringify(datosNutricionales), historiaId]
+      );
+      if (dnUpdate === null) {
+        // No bloqueamos la creación de la cita: log y seguimos. El coach puede
+        // llenar manualmente lo que faltó.
+        console.error('[trepsi] No se pudo guardar datosNutricionales para', historiaId);
+      }
     }
 
     // Insertar la cita Trepsi + payload crudo para auditoría / reconciliación.

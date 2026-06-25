@@ -55,6 +55,41 @@ const historiaClinicaSchema = z
 const iso8601WithOffsetRegex =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
+// Nuevos campos nutricionales que Trepsi envía a partir de su update (jun 2026).
+// Todos opcionales — citas anteriores siguen funcionando sin ellos.
+const patientMedidasSchema = z
+  .object({
+    perimetroCintura: z.number().nullable().optional(),
+    perimetroAbdomen: z.number().nullable().optional(),
+    perimetroCadera: z.number().nullable().optional(),
+    perimetroPecho: z.number().nullable().optional(),
+    brazoDerecho: z.number().nullable().optional(),
+    brazoIzquierdo: z.number().nullable().optional(),
+    piernaDerecha: z.number().nullable().optional(),
+    piernaIzquierda: z.number().nullable().optional(),
+    pliegueBiceps: z.number().nullable().optional(),
+    pliegueTriceps: z.number().nullable().optional(),
+    pliegueSubescapular: z.number().nullable().optional(),
+    pliegueAbdominal: z.number().nullable().optional(),
+    perimetroCuello: z.number().nullable().optional(),
+  })
+  .passthrough();
+
+const alimentoAnamnesisSchema = z.object({
+  alimento: z.string(),
+  cantidad: z.number(),
+});
+
+const anamnesisSchema = z
+  .object({
+    desayuno: z.array(alimentoAnamnesisSchema).optional(),
+    nueves: z.array(alimentoAnamnesisSchema).optional(),
+    almuerzo: z.array(alimentoAnamnesisSchema).optional(),
+    onces: z.array(alimentoAnamnesisSchema).optional(),
+    cena: z.array(alimentoAnamnesisSchema).optional(),
+  })
+  .passthrough();
+
 const createSchema = z.object({
   citaId: z.string().min(1).max(120),
   fechaAtencion: z
@@ -67,6 +102,13 @@ const createSchema = z.object({
   tipoConsulta: z.string().optional(),
   sede: z.string().optional(),
   observaciones: z.string().max(1000).optional(),
+  // Datos nutricionales que el paciente diligencia en la app Trepsi.
+  vasosDeAguaBebidos: z.string().optional(),
+  perimetros: patientMedidasSchema.nullable().optional(),
+  alimentosNoDeseados: z.array(z.string()).optional(),
+  alimentosFavoritos: z.array(z.string()).optional(),
+  anamnesis: anamnesisSchema.optional(),
+  objective: z.string().optional(),
 });
 
 // PATCH /appointments/:citaId/historia — todos los campos son opcionales,

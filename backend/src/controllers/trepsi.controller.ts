@@ -109,6 +109,10 @@ const createSchema = z.object({
   alimentosFavoritos: z.array(z.string()).optional(),
   anamnesis: anamnesisSchema.optional(),
   objective: z.string().optional(),
+  // Medidas de primer nivel (Trepsi las envía fuera de historiaClinica).
+  // Sin esto, z.object() las descarta antes de llegar al servicio.
+  peso: z.union([z.number(), z.string()]).optional(),
+  alturaEnCm: z.union([z.number(), z.string()]).optional(),
 });
 
 // PATCH /appointments/:citaId/historia — todos los campos son opcionales,

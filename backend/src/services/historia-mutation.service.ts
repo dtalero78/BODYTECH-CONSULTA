@@ -1,6 +1,5 @@
 import historiaClinicaPostgresService from './historia-clinica-postgres.service';
 import { historiaClinicaRepository } from '../repositories';
-import whatsappService from './whatsapp.service';
 import historiaQueryService from './historia-query.service';
 import trepsiWebhookService from './trepsi-webhook.service';
 import {
@@ -185,61 +184,6 @@ class HistoriaMutationService {
       }
 
       console.log(`✅ [PostgreSQL] Historia clínica guardada exitosamente para ${payload.historiaId}`);
-
-      // PASO 1.5: Enviar link de certificado por WhatsApp para empresas específicas (PARTICULAR o SANITHELP-JJ)
-      if (historiaBase.codEmpresa === 'PARTICULAR' || historiaBase.codEmpresa === 'SANITHELP-JJ') {
-        console.log(
-          `📜 [Certificado] Enviando link de certificado para ${payload.historiaId} (${historiaBase.codEmpresa})...`
-        );
-
-        // Construir URL del certificado
-        const certificadoUrl = `https://bsl-utilidades-yp78a.ondigitalocean.app/generar-certificado-desde-wix/${payload.historiaId}`;
-
-        // Formatear número de celular para WhatsApp
-        let celularFormateado = historiaBase.celular
-          .replace(/\s+/g, '') // Quitar espacios
-          .replace(/[()+-]/g, ''); // Quitar caracteres especiales
-
-        // Detectar si ya tiene código de país (números internacionales empiezan con 1-9, no con 3)
-        // Colombia: 57 + 10 dígitos (3001234567)
-        // USA/Canada: 1 + 10 dígitos
-        // Otros países: código país + número
-
-        const codigosPais = ['1', '52', '57', '54', '55', '34', '44', '49', '33']; // USA, México, Colombia, Argentina, Brasil, España, UK, Alemania, Francia
-        const tieneCodigo = codigosPais.some((codigo) => celularFormateado.startsWith(codigo));
-
-        // Si no tiene código de país y empieza con 3 (celulares colombianos), agregar 57
-        if (!tieneCodigo && celularFormateado.startsWith('3') && celularFormateado.length === 10) {
-          celularFormateado = `57${celularFormateado}`;
-        }
-
-        // Construir mensaje de WhatsApp
-        const nombreCompleto = `${historiaBase.primerNombre} ${historiaBase.primerApellido}`;
-        const mensaje =
-          `Hola ${nombreCompleto}! 👋\n\n` +
-          `Tu certificado médico ya está listo. Puedes descargarlo en el siguiente enlace:\n\n` +
-          `${certificadoUrl}\n\n` +
-          `_Este enlace estará disponible por 30 días._`;
-
-        // Enviar WhatsApp en background (fire-and-forget)
-        whatsappService
-          .sendTextMessage(celularFormateado, mensaje)
-          .then((result) => {
-            if (result.success) {
-              console.log(`✅ [Certificado] Link enviado por WhatsApp a ${celularFormateado}`);
-            } else {
-              console.error(`⚠️  [Certificado] Error enviando WhatsApp: ${result.error}`);
-            }
-          })
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .catch((error: any) => {
-            console.error(`⚠️  [Certificado] Error inesperado al enviar WhatsApp: ${error.message}`);
-          });
-
-        console.log(`📤 [Certificado] Enviando link por WhatsApp a ${celularFormateado}...`);
-      } else {
-        console.log(`ℹ️  [Certificado] No se envía certificado para ${historiaBase.codEmpresa || 'N/A'}`);
-      }
 
       // PASO 2: Si la cita es de Trepsi, encolar los resultados en el outbox
       // del webhook. Fire-and-forget: si falla, el médico ya guardó la HC.

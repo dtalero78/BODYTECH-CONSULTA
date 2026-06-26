@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Room } from 'twilio-video';
 import apiService from '../services/api.service';
 import { PatientHistoryModal } from './PatientHistoryModal';
-import { GuidedNutricion } from './GuidedNutricion';
+import { GuidedNutricion, GuidedNutricionFields } from './GuidedNutricion';
 
 interface AntecedentesPersonales {
   cirugiaOcular?: boolean;
@@ -650,10 +650,11 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
   }) => {
     if (!data) return;
 
-    if (!mdConceptoFinal) {
-      alert('Debe seleccionar un Concepto Final antes de guardar.');
-      return;
-    }
+    // "Concepto Final" es visible pero no está en el asistente guiado, así que
+    // "Finalizar y guardar" puede dispararse sin que el coach lo haya elegido.
+    // El backend lo exige no vacío → default para no bloquear el guardado.
+    const conceptoFinalToSave =
+      mdConceptoFinal && mdConceptoFinal.trim() ? mdConceptoFinal : 'Consulta nutricional realizada';
 
     // Permite guardar con valores explícitos (ej. los recién aplicados por la IA)
     // sin depender del estado de React, que podría ir un render atrás.
@@ -683,7 +684,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
         mdObsParaMiDocYa,
         mdObservacionesCertificado,
         mdRecomendacionesMedicasAdicionales: combinedRecommendations,
-        mdConceptoFinal,
+        mdConceptoFinal: conceptoFinalToSave,
         mdDx1,
         mdDx2,
         talla: tallaToSave,
@@ -909,6 +910,65 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
           </div>
         </div>
 
+        {/* Campos del asistente guiado — EXACTAMENTE los mismos que el modal.
+            Al cerrar la guía, estos son los campos visibles. */}
+        <GuidedNutricionFields getValue={guideGet} setValue={guideSet} />
+
+        {/* Análisis Nutricional (la plataforma) + Concepto Final — visibles */}
+        <div className="bg-[#2a3942] rounded-lg p-3 space-y-3">
+          <button
+            onClick={() => {
+              setIsAIModalOpen(true);
+              if (!aiSuggestions) handleGenerateAISuggestions();
+            }}
+            disabled={isGeneratingAI}
+            className="w-full border-2 border-blue-500/30 rounded-lg p-3 bg-blue-900/10 hover:bg-blue-900/20 transition flex items-center justify-center gap-2 text-blue-400 font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingAI ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generando Análisis Nutricional...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                {aiSuggestions ? 'Ver / Editar Análisis Nutricional' : 'Generar Análisis Nutricional'}
+              </>
+            )}
+          </button>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">
+              Concepto Final <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={mdConceptoFinal}
+              onChange={(e) => setMdConceptoFinal(e.target.value)}
+              className="w-full bg-[#1f2c34] text-white text-base px-2 py-2 rounded border border-gray-600 focus:border-[#00a884] focus:outline-none"
+            >
+              <option value="">Seleccione una opción</option>
+              <option value="ESTADO NUTRICIONAL NORMAL">ESTADO NUTRICIONAL NORMAL</option>
+              <option value="SOBREPESO">SOBREPESO</option>
+              <option value="OBESIDAD GRADO I">OBESIDAD GRADO I</option>
+              <option value="OBESIDAD GRADO II">OBESIDAD GRADO II</option>
+              <option value="OBESIDAD GRADO III">OBESIDAD GRADO III</option>
+              <option value="BAJO PESO">BAJO PESO</option>
+              <option value="DESNUTRICION">DESNUTRICION</option>
+              <option value="RIESGO NUTRICIONAL">RIESGO NUTRICIONAL</option>
+              <option value="REQUIERE SEGUIMIENTO">REQUIERE SEGUIMIENTO</option>
+            </select>
+          </div>
+        </div>
+
+        {/* OCULTO POR AHORA — secciones que no están en el asistente guiado.
+            Envueltas en {false && (...)} para esconderlas sin perder el código;
+            para reactivarlas, cambia el `false`. */}
+        {false && (
+          <>
         {/* Datos de Atención */}
         <div className="bg-[#2a3942] rounded-lg p-3">
           <h3 className="text-base font-semibold mb-2 text-[#00a884]">Datos de Atención</h3>
@@ -1159,26 +1219,26 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
         )}
 
         {/* Antecedentes (Solo lectura) */}
-        {(data.antecedentesFamiliares || data.encuestaSalud || data.empresa1) && (
+        {(data?.antecedentesFamiliares || data?.encuestaSalud || data?.empresa1) && (
           <div className="bg-[#2a3942] rounded-lg p-3">
             <h3 className="text-base font-semibold mb-2 text-[#00a884]">Antecedentes</h3>
             <div className="space-y-2 text-sm">
-              {data.antecedentesFamiliares && (
+              {data?.antecedentesFamiliares && (
                 <div>
                   <span className="text-gray-400">Antecedentes Familiares:</span>
-                  <p className="text-white mt-1 whitespace-pre-wrap">{data.antecedentesFamiliares}</p>
+                  <p className="text-white mt-1 whitespace-pre-wrap">{data?.antecedentesFamiliares}</p>
                 </div>
               )}
-              {data.encuestaSalud && (
+              {data?.encuestaSalud && (
                 <div>
                   <span className="text-gray-400">Encuesta de Salud:</span>
-                  <p className="text-white mt-1 whitespace-pre-wrap">{data.encuestaSalud}</p>
+                  <p className="text-white mt-1 whitespace-pre-wrap">{data?.encuestaSalud}</p>
                 </div>
               )}
-              {data.empresa1 && (
+              {data?.empresa1 && (
                 <div>
                   <span className="text-gray-400">Cargo Anterior:</span>
-                  <p className="text-white mt-1">{data.empresa1}</p>
+                  <p className="text-white mt-1">{data?.empresa1}</p>
                 </div>
               )}
             </div>
@@ -2503,6 +2563,8 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
             </div>
           </div>
         </div>
+          </>
+        )}
 
       </div>
       {/* Cierre del contenido scrollable */}

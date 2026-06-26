@@ -257,6 +257,44 @@ function GFieldView({
   );
 }
 
+/**
+ * Render de los campos del guion nutricional (mismo set que usa el modal).
+ * Lo reutiliza el panel para que, al cerrar la guía, los campos visibles sean
+ * EXACTAMENTE los mismos que el asistente guiado.
+ */
+export function GuidedNutricionFields({
+  getValue,
+  setValue,
+}: {
+  getValue: (key: string) => string;
+  setValue: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      {SCRIPT_NUTRI.map((step) => (
+        <div key={step.id}>
+          <div className="text-[14px] font-bold text-[#e9edef] mb-0.5">{step.question}</div>
+          {step.hint ? (
+            <div className="text-[11.5px] text-[#6b7882] mb-2.5">{step.hint}</div>
+          ) : (
+            <div className="mb-2" />
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {step.fields.map((f) => {
+              const spanFull = f.full ?? f.kind === 'textarea';
+              return (
+                <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
+                  <GFieldView f={f} getValue={getValue} setValue={setValue} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function GuidedNutricion({
   open,
   onClose,
@@ -335,28 +373,7 @@ export function GuidedNutricion({
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">
           {/* Izquierda — campos para preguntar/anotar */}
           <div className="overflow-y-auto px-6 py-5 lg:border-r border-[#324049]">
-            <div className="flex flex-col gap-6">
-              {SCRIPT_NUTRI.map((step) => (
-                <div key={step.id}>
-                  <div className="text-[14px] font-bold text-[#e9edef] mb-0.5">{step.question}</div>
-                  {step.hint ? (
-                    <div className="text-[11.5px] text-[#6b7882] mb-2.5">{step.hint}</div>
-                  ) : (
-                    <div className="mb-2" />
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {step.fields.map((f) => {
-                      const spanFull = f.full ?? f.kind === 'textarea';
-                      return (
-                        <div key={f.key} className={spanFull ? 'md:col-span-2' : ''}>
-                          <GFieldView f={f} getValue={getValue} setValue={setValue} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <GuidedNutricionFields getValue={getValue} setValue={setValue} />
           </div>
 
           {/* Derecha — transcripción simultánea */}

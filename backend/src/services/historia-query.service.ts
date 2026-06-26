@@ -56,6 +56,7 @@ export interface MedicalHistoryData {
   segundoApellido?: string;
   celular: string;
   email?: string;
+  tipoDocumento?: string;
   fechaNacimiento?: Date;
   edad?: number;
   genero?: string;
@@ -122,6 +123,22 @@ export interface PatientHistoryRecord {
   atendido: string | null;
 }
 
+/**
+ * Calcula la edad (años cumplidos) a partir de la fecha de nacimiento.
+ * Usado como fallback cuando no hay fila en `formularios` (p.ej. pacientes que
+ * entran por la integración Trepsi, donde solo viene `fecha_nacimiento`).
+ */
+function edadDesdeFechaNacimiento(fecha: unknown): number | undefined {
+  if (!fecha) return undefined;
+  const d = fecha instanceof Date ? fecha : new Date(String(fecha));
+  if (Number.isNaN(d.getTime())) return undefined;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - d.getFullYear();
+  const m = hoy.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < d.getDate())) edad--;
+  return edad >= 0 && edad < 130 ? edad : undefined;
+}
+
 class HistoriaQueryService {
   /**
    * Obtiene la historia clínica de un paciente desde PostgreSQL
@@ -159,8 +176,11 @@ class HistoriaQueryService {
           celular: row.celular,
           // Datos demográficos desde formularios (con fallback a HistoriaClinica)
           email: row.f_email || row.email,
-          edad: row.f_edad,
-          genero: row.f_genero,
+          edad: row.f_edad ?? edadDesdeFechaNacimiento(row.fecha_nacimiento),
+          // Trepsi guarda el sexo en genero_biologico; fallback a identidad_genero.
+          genero: row.f_genero ?? row.genero_biologico ?? row.identidad_genero,
+          // Tipo de documento (lo persiste la integración Trepsi; legacy = null).
+          tipoDocumento: row.tipo_documento ?? undefined,
           // Fix bug #2: priorizar nueva columna HistoriaClinica.estado_civil sobre legacy formularios.f_estado_civil.
           // El spread `extra` ya pone estadoCivil desde row.estado_civil; este explicit mapping lo respeta y solo cae al legacy si la nueva está null.
           estadoCivil: row.estado_civil ?? row.f_estado_civil,

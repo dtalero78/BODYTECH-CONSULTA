@@ -170,6 +170,7 @@ class PostgresService {
       await this.query(`
         ALTER TABLE "HistoriaClinica"
           -- Datos Básicos
+          ADD COLUMN IF NOT EXISTS "tipo_documento" VARCHAR(10),
           ADD COLUMN IF NOT EXISTS "genero_biologico" VARCHAR(20),
           ADD COLUMN IF NOT EXISTS "identidad_genero" VARCHAR(40),
           ADD COLUMN IF NOT EXISTS "grupo_sanguineo" VARCHAR(5),

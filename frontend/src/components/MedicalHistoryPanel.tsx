@@ -54,6 +54,7 @@ interface MedicalHistoryData {
   segundoApellido?: string;
   celular: string;
   email?: string;
+  tipoDocumento?: string;
   fechaNacimiento?: string;
   edad?: number;
   genero?: string;
@@ -847,7 +848,10 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
             </div>
             <div>
               <span className="text-gray-400">Documento:</span>
-              <span className="text-white ml-2">{data.numeroId}</span>
+              <span className="text-white ml-2">
+                {data.tipoDocumento ? `${data.tipoDocumento} ` : ''}
+                {data.numeroId}
+              </span>
             </div>
             <div>
               <span className="text-gray-400">Edad:</span>
@@ -865,30 +869,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
               <span className="text-gray-400">Email:</span>
               <span className="text-white ml-2">{data.email || 'N/A'}</span>
             </div>
-            <div>
-              <span className="text-gray-400">Estado Civil:</span>
-              <span className="text-white ml-2">{data.estadoCivil || 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Hijos:</span>
-              <span className="text-white ml-2">{data.hijos || 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Ejercicio:</span>
-              <span className="text-white ml-2">{data.ejercicio || 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Empresa:</span>
-              <span className="text-white ml-2">{data.codEmpresa || 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Cargo:</span>
-              <span className="text-white ml-2">{data.cargo || 'N/A'}</span>
-            </div>
-            <div>
-              <span className="text-gray-400">Tipo Examen:</span>
-              <span className="text-white ml-2">{data.tipoExamen || 'N/A'}</span>
-            </div>
+            {/* Estado Civil / Hijos / Ejercicio / Empresa / Cargo / Tipo Examen:
+                campos heredados de medicina ocupacional que Trepsi no envía
+                (siempre N/A en este flujo) → ocultos por ahora. */}
             {data.ciudad && (
               <div>
                 <span className="text-gray-400">Ciudad:</span>

@@ -363,6 +363,8 @@ class TrepsiService {
          "eps",
          "fechaAtencion",
          "fecha_nacimiento",
+         "tipo_documento",
+         "genero_biologico",
          "motivoConsulta",
          "motivo_consulta_texto",
          "tipo_consulta",
@@ -370,7 +372,7 @@ class TrepsiService {
          "sede_id"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'PENDIENTE', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'PENDIENTE', 'trepsi'
        ) RETURNING "_id"`,
       [
         historiaId,
@@ -386,6 +388,8 @@ class TrepsiService {
         input.paciente.eps ?? null,
         input.fechaAtencion,
         input.paciente.fechaNacimiento,
+        input.paciente.tipoDocumento ?? null,
+        input.paciente.sexo ?? null,
         motivo,
         motivo,
         input.tipoConsulta ?? null,

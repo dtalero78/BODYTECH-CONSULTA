@@ -127,6 +127,25 @@ const SCRIPT_NUTRI: GStep[] = [
     ],
   },
   {
+    id: 'perimetros',
+    topic: 'Perímetros y pliegues',
+    question: 'Perímetros y pliegues',
+    hint: 'Medidas adicionales (Trepsi las envía si el paciente las registró).',
+    fields: [
+      { kind: 'text', key: 'perimetroAbdomen', label: 'Abdomen (cm)', placeholder: '0' },
+      { kind: 'text', key: 'perimetroPecho', label: 'Pecho (cm)', placeholder: '0' },
+      { kind: 'text', key: 'perimetroCuello', label: 'Cuello (cm)', placeholder: '0' },
+      { kind: 'text', key: 'brazoDerecho', label: 'Brazo derecho (cm)', placeholder: '0' },
+      { kind: 'text', key: 'brazoIzquierdo', label: 'Brazo izquierdo (cm)', placeholder: '0' },
+      { kind: 'text', key: 'piernaDerecha', label: 'Pierna derecha (cm)', placeholder: '0' },
+      { kind: 'text', key: 'piernaIzquierda', label: 'Pierna izquierda (cm)', placeholder: '0' },
+      { kind: 'text', key: 'pliegueBiceps', label: 'Pliegue bíceps (mm)', placeholder: '0' },
+      { kind: 'text', key: 'pliegueTriceps', label: 'Pliegue tríceps (mm)', placeholder: '0' },
+      { kind: 'text', key: 'pliegueSubescapular', label: 'Pliegue subescapular (mm)', placeholder: '0' },
+      { kind: 'text', key: 'pliegueAbdominal', label: 'Pliegue abdominal (mm)', placeholder: '0' },
+    ],
+  },
+  {
     id: 'habitos',
     topic: 'Hábitos alimentarios',
     question: '¿Cómo son tus hábitos alimentarios generales?',
@@ -238,6 +257,11 @@ function GFieldView({
       ) : f.kind === 'select' ? (
         <select value={value} onChange={(e) => setValue(f.key, e.target.value)} className={INPUT_CLS}>
           <option value="">Seleccione</option>
+          {/* Si el valor (p.ej. el que mandó Trepsi) no está en las opciones,
+              lo agregamos para que se muestre y no se pierda. */}
+          {value && !(f.options ?? []).some((o) => o.value === value) && (
+            <option value={value}>{value}</option>
+          )}
           {(f.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}

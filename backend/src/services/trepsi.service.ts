@@ -95,6 +95,9 @@ export interface CreateAppointmentInput {
   alimentosFavoritos?: string[];
   anamnesis?: TrepsiAnamnesis;
   objective?: string;
+  // Medidas de primer nivel (Trepsi las envía fuera de historiaClinica).
+  peso?: number | string;
+  alturaEnCm?: number | string;
 }
 
 export interface ScheduleInput {
@@ -213,6 +216,43 @@ function buildDatosNutricionalesFromTrepsi(input: CreateAppointmentInput): Recor
     return cleaned.length > 0 ? cleaned.join(', ') : undefined;
   };
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // medicacionActual: [{nombre,dosis,frecuencia}] (o strings) → "Acetaminofén 500mg PRN; ..."
+  const joinMedicamentos = (arr?: any): string | undefined => {
+    if (typeof arr === 'string') return arr.trim() || undefined;
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    const items = arr
+      .map((m) =>
+        typeof m === 'string'
+          ? m.trim()
+          : [m?.nombre, m?.dosis, m?.frecuencia]
+              .filter((x) => x != null && String(x).trim())
+              .map(String)
+              .join(' ')
+              .trim()
+      )
+      .filter((s) => s.length > 0);
+    return items.length ? items.join('; ') : undefined;
+  };
+  // alergias: [{sustancia,reaccion}] (o strings) → "Penicilina - Rash; ..."
+  const joinAlergiasArr = (arr?: any): string | undefined => {
+    if (typeof arr === 'string') return arr.trim() || undefined;
+    if (!Array.isArray(arr) || arr.length === 0) return undefined;
+    const items = arr
+      .map((a) =>
+        typeof a === 'string'
+          ? a.trim()
+          : [a?.sustancia, a?.reaccion]
+              .filter((x) => x != null && String(x).trim())
+              .map(String)
+              .join(' - ')
+              .trim()
+      )
+      .filter((s) => s.length > 0);
+    return items.length ? items.join('; ') : undefined;
+  };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   if (input.vasosDeAguaBebidos && input.vasosDeAguaBebidos.trim()) {
     out.consumoAgua = input.vasosDeAguaBebidos.trim();
   }
@@ -260,6 +300,61 @@ function buildDatosNutricionalesFromTrepsi(input: CreateAppointmentInput): Recor
     if (p.piernaIzquierda != null) out.piernaIzquierda = Number(p.piernaIzquierda);
     if (p.perimetroCuello != null) out.perimetroCuello = Number(p.perimetroCuello);
   }
+
+  // ----- historiaClinica diligenciada por el paciente en Trepsi -----
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const hc = input.historiaClinica as Record<string, any> | undefined;
+  if (hc && typeof hc === 'object') {
+    const ap = hc.antecedentesPersonales as Record<string, any> | undefined;
+
+    // Enfermedad actual + antecedentes patológicos → descripción de enfermedad.
+    const enfermedad: string[] = [];
+    if (typeof hc.enfermedadActual === 'string' && hc.enfermedadActual.trim()) {
+      enfermedad.push(hc.enfermedadActual.trim());
+    }
+    const patologicos = joinList(ap?.patologicos);
+    if (patologicos) enfermedad.push(`Patológicos: ${patologicos}`);
+    if (enfermedad.length) out.descripcionEnfermedad = enfermedad.join('\n');
+
+    // Cirugías (antecedentes quirúrgicos).
+    const quirurgicos = joinList(ap?.quirurgicos);
+    if (quirurgicos) out.cirugias = quirurgicos;
+
+    // Medicamentos: medicacionActual + antecedentes farmacológicos.
+    const meds = [joinMedicamentos(hc.medicacionActual), joinList(ap?.farmacologicos)]
+      .filter(Boolean)
+      .join('; ');
+    if (meds) out.medicamentosActuales = meds;
+
+    // Alergias: alergias + antecedentes alérgicos.
+    const alg = [joinAlergiasArr(hc.alergias), joinList(ap?.alergicos)]
+      .filter(Boolean)
+      .join('; ');
+    if (alg) out.alergias = alg;
+
+    // Hábitos: actividad física, alcohol, sueño, tabaquismo.
+    const h = hc.habitos as Record<string, any> | undefined;
+    if (h && typeof h === 'object') {
+      if (typeof h.actividadFisica === 'string' && h.actividadFisica.trim()) {
+        out.realizaActividadFisica = 'Sí';
+        out.frecuenciaEjercicio = h.actividadFisica.trim();
+      }
+      if (typeof h.alcohol === 'string' && h.alcohol.trim()) {
+        const al = h.alcohol.trim();
+        out.consumoAlcohol = /^(no|ninguno|nunca)$/i.test(al) ? 'No' : 'Sí';
+        out.frecuenciaAlcohol = al;
+      }
+      if (h.sueno != null && String(h.sueno).trim()) {
+        out.horasSueno = String(h.sueno).trim();
+      }
+      if (typeof h.tabaquismo === 'string' && h.tabaquismo.trim()) {
+        // Sin campo dedicado en el guion → se anexa a signos clínicos.
+        const prev = typeof out.signosClinicos === 'string' ? out.signosClinicos : '';
+        out.signosClinicos = [prev, `Tabaquismo: ${h.tabaquismo.trim()}`].filter(Boolean).join('\n');
+      }
+    }
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return out;
 }
@@ -345,6 +440,31 @@ class TrepsiService {
     // Crear nueva historia clínica.
     const historiaId = generateHistoriaId();
     const motivo = String(input.historiaClinica.motivoConsulta ?? '').slice(0, 4000);
+    // Antecedentes familiares: Trepsi los manda en historiaClinica; persistir al
+    // crear (antes solo entraban por PATCH) para que se vean en el panel del coach.
+    const antFamiliares =
+      typeof input.historiaClinica.antecedentesFamiliares === 'string'
+        ? input.historiaClinica.antecedentesFamiliares.slice(0, 4000)
+        : null;
+
+    // Peso (kg) y talla (cm). Trepsi los manda de primer nivel (peso/alturaEnCm);
+    // si no, caen a historiaClinica.signosVitales (talla allí puede venir en metros).
+    const toNum = (v: unknown): number | null => {
+      if (v == null || String(v).trim() === '') return null;
+      const n = Number(v);
+      return Number.isNaN(n) ? null : n;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sv = (input.historiaClinica as Record<string, any>)?.signosVitales as
+      | Record<string, unknown>
+      | undefined;
+    const pesoVal = toNum(input.peso) ?? toNum(sv?.peso);
+    let tallaVal = toNum(input.alturaEnCm);
+    if (tallaVal == null) {
+      const t = toNum(sv?.talla);
+      // signosVitales.talla suele venir en metros (ej. 1.65) → convertir a cm.
+      tallaVal = t != null && t > 0 && t < 3 ? Math.round(t * 100) : t;
+    }
 
     const hcInsert = await postgresService.query(
       `INSERT INTO "HistoriaClinica" (
@@ -368,11 +488,14 @@ class TrepsiService {
          "motivoConsulta",
          "motivo_consulta_texto",
          "tipo_consulta",
+         "ant_familiares_obs",
+         "peso",
+         "talla",
          "atendido",
          "sede_id"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'PENDIENTE', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'PENDIENTE', 'trepsi'
        ) RETURNING "_id"`,
       [
         historiaId,
@@ -393,6 +516,9 @@ class TrepsiService {
         motivo,
         motivo,
         input.tipoConsulta ?? null,
+        antFamiliares,
+        pesoVal != null ? String(pesoVal) : null,
+        tallaVal != null ? String(tallaVal) : null,
       ]
     );
 

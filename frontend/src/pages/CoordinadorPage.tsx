@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   UserCog,
+  Map,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
@@ -86,6 +87,12 @@ export function CoordinadorPage() {
       ordenes: count !== null ? { text: String(count), variant: 'mono' } : undefined,
     }));
   }, []);
+
+  // "Mapa de Rutas": botón privado, visible solo para este usuario.
+  const isMapaUser = useMemo(
+    () => (authService.getUser()?.email || '').toLowerCase() === 'danieltalero78@gmail.com',
+    [],
+  );
 
   // Info del usuario para el footer del sidebar (nueva auth RBAC: getUser()).
   const userInfo = useMemo(() => {
@@ -198,6 +205,15 @@ export function CoordinadorPage() {
               active={view === 'usuarios'}
               onClick={() => setView('usuarios')}
             />
+            {isMapaUser && (
+              <NavItem
+                icon={<Map className="w-[15px] h-[15px]" />}
+                label="Mapa de Rutas"
+                onClick={() =>
+                  window.open('/mapa-rutas.html', '_blank', 'noopener,noreferrer')
+                }
+              />
+            )}
             <NavItem
               icon={<Building2 className="w-[15px] h-[15px]" />}
               label="Sedes"

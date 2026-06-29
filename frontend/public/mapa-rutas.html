@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quién entra a cada local — BODYTECH-CONSULTA</title>
+<!--
+  PLANO DE PERSONAS (CAD verde sobre oscuro). Metáfora centro comercial: el edificio
+  con sus locales y las PUERTAS POR DONDE ENTRA LA GENTE (actores), no endpoints.
+  Cada puerta = un actor que entra (paciente, coordinador, profesional, socio) o un
+  resultado que sale. Clic en un local => zoom a quién entra y sale. Autocontenido.
+-->
+<style>
+  :root{
+    --bg:#080a0c; --ink:#e6efe9; --muted:#7f9b8b; --faint:#4f6657;
+    --grn:#46c97e; --grn2:#2f7d52; --grn3:#7fe6a6;
+    --amber:#f5a524; --green:#37c184; --blue:#5b9cff; --gray:#8a93a3;
+    --panel:#0e1512; --line:#1c2b22; --line2:#273a2d;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+  .viewport{position:fixed;inset:0;overflow:hidden;cursor:grab;background:radial-gradient(120% 120% at 50% 0%,#0b0f0d 0%,#080a0c 70%)}
+  .viewport.grabbing{cursor:grabbing}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #world.anim{transition:transform .62s cubic-bezier(.4,0,.15,1)}
+  text{user-select:none}
+
+  .info{position:fixed;top:18px;left:18px;z-index:10;background:rgba(11,16,13,.92);backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:12px;padding:14px 16px;max-width:392px}
+  .info .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--grn2);font-weight:700;font-family:var(--mono)}
+  .info h1{font-size:16px;margin:5px 0 7px;letter-spacing:.02em;font-family:var(--mono)}
+  .info p{font-size:11.6px;color:var(--muted);margin:0 0 8px;line-height:1.5}
+  .info p b{color:var(--ink)}
+  .legend{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:10px;color:var(--muted);margin-top:4px}
+  .legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+  .hint{position:fixed;bottom:14px;left:18px;z-index:10;font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+  .toolbar{position:fixed;top:18px;right:18px;z-index:10;display:flex;gap:6px}
+  .toolbar button{background:rgba(11,16,13,.9);border:1px solid var(--line2);color:var(--muted);height:30px;min-width:30px;padding:0 9px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1;font-family:var(--mono);display:inline-flex;align-items:center;gap:6px}
+  .toolbar button:hover{color:var(--ink);border-color:var(--grn2)}
+  #back{display:none;color:var(--grn3);border-color:var(--grn2)}
+
+  .panel{position:fixed;top:0;right:0;height:100vh;width:392px;background:rgba(9,13,11,.97);backdrop-filter:blur(10px);border-left:1px solid var(--line2);box-shadow:-24px 0 60px -24px rgba(0,0,0,.85);transform:translateX(103%);transition:transform .22s ease;z-index:20;overflow:auto;padding:22px 22px 48px}
+  .panel.open{transform:none}
+  .pclose{position:absolute;top:14px;right:16px;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;border:1px solid var(--line2);background:var(--panel);border-radius:8px;width:30px;height:30px;display:grid;place-items:center}
+  .pclose:hover{color:var(--ink)}
+  .dtitle{font-size:21px;font-weight:650;letter-spacing:-.01em;display:flex;align-items:center;gap:10px;padding-right:34px}
+  .badges{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}
+  .bdg{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--panel);border:1px solid var(--line2);color:var(--muted);font-family:var(--mono)}
+  .dpurpose{font-size:14px;color:var(--ink);margin:8px 0 18px;line-height:1.55}
+  .ml{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:6px;font-family:var(--mono)}
+  .block{margin-bottom:18px}
+  .block .bx{font-size:13px;color:var(--ink);line-height:1.5}
+  .urls{margin:2px 0 0}
+  .url{font-family:var(--mono);font-size:12px;color:var(--ink);padding:4px 0;border-bottom:1px solid var(--line)}
+  .url:last-child{border-bottom:none}
+  .url::before{content:'🏠 ';}
+</style>
+</head>
+<body>
+<div class="info">
+  <div class="eyebrow">Plano del edificio · quién entra a cada local</div>
+  <h1>BODYTECH-CONSULTA</h1>
+  <p>El edificio <b>Bodytech</b> y sus <b>locales</b>. Cada <b>puerta</b> es <b>quién entra</b> (como en un centro comercial) o el <b>resultado que sale</b>. <b>Clic en un local</b> para ver su gente.</p>
+  <div class="legend">
+    <span><i style="background:var(--amber)"></i>Quién agenda la cita</span>
+    <span><i style="background:var(--green)"></i>Paciente</span>
+    <span><i style="background:var(--blue)"></i>Profesional</span>
+    <span><i style="background:var(--gray)"></i>Resultado que sale</span>
+  </div>
+</div>
+<div class="toolbar">
+  <button id="back">← Volver a la planta general</button>
+  <button id="zin">+</button><button id="zout">−</button><button id="zfit">⤢</button>
+</div>
+<div class="hint" id="hint">arrastra para mover · scroll para zoom · clic en un local para entrar</div>
+<div class="viewport" id="vp">
+  <svg id="cv" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="poche" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="7" height="7" fill="transparent"></rect>
+        <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(70,201,126,.34)" stroke-width="1"></line>
+      </pattern>
+      <pattern id="floor" width="30" height="30" patternUnits="userSpaceOnUse">
+        <rect width="30" height="30" fill="#0c110e"></rect>
+        <path d="M30 0H0V30" fill="none" stroke="rgba(70,201,126,.06)" stroke-width="1"></path>
+      </pattern>
+    </defs>
+    <g id="world"></g>
+  </svg>
+</div>
+<div class="panel" id="panel"></div>
+
+<script>
+/* ===== DATOS (inyectados) ===== */
+var REPO  = 'BODYTECH-CONSULTA';
+var SUITES = [{"id":"medica","name":"UNIDAD MÉDICA VIRTUAL","x":24,"y":78,"w":576,"h":600},{"id":"nutricion","name":"NUTRICIÓN VIRTUAL","x":640,"y":78,"w":576,"h":600}];
+var ZONES = [{"id":"medica-nativa","name":"Nativa","full":"Unidad Médica Virtual · Nativa","sub":"la cita la agenda el coordinador","suite":"medica","side":"L","x":48,"y":120,"w":528,"h":540},{"id":"nutricion-trepsi","name":"Trepsi","full":"Nutrición Virtual · Trepsi","sub":"la cita la crea Trepsi","suite":"nutricion","side":"R","x":664,"y":120,"w":528,"h":255},{"id":"nutricion-nativa","name":"Nativa","full":"Nutrición Virtual · Nativa","sub":"la cita la agenda el coordinador","suite":"nutricion","side":"R","x":664,"y":405,"w":528,"h":255}];
+var DOORS = [{"id":"mn-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda y crea la cita médica.","como":"Entra al panel del coordinador en la plataforma.","zones":["medica-nativa"]},{"id":"mn-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su videoconsulta médica.","como":"Por el link que recibe en WhatsApp.","zones":["medica-nativa"]},{"id":"mn-medico","dir":"in","kind":"personal","icon":"🩺","title":"Médico","purpose":"Atiende la consulta y llena la historia clínica.","como":"Entra a la sala de video del consultorio.","zones":["medica-nativa"]},{"id":"mn-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp al terminar la consulta.","zones":["medica-nativa"]},{"id":"nt-trepsi","dir":"in","kind":"crea","icon":"🔗","title":"Trepsi","purpose":"Crea la cita de nutrición automáticamente.","como":"Entra por la integración con Trepsi.","zones":["nutricion-trepsi"]},{"id":"nt-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su consulta de nutrición.","como":"Por el link que recibe en WhatsApp.","zones":["nutricion-trepsi"]},{"id":"nt-coach","dir":"in","kind":"personal","icon":"🥗","title":"Coach","purpose":"Atiende la consulta de nutrición.","como":"Entra a la sala de video.","zones":["nutricion-trepsi"]},{"id":"nt-result","dir":"out","kind":"salida","icon":"🔁","title":"Resultado a Trepsi","purpose":"El resultado de la consulta se devuelve a Trepsi.","como":"Sale por la integración al guardar la historia.","zones":["nutricion-trepsi"]},{"id":"nt-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp.","zones":["nutricion-trepsi"]},{"id":"nn-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda y crea la cita de nutrición.","como":"Entra al panel del coordinador en la plataforma.","zones":["nutricion-nativa"]},{"id":"nn-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su consulta de nutrición.","como":"Por el link que recibe en WhatsApp.","zones":["nutricion-nativa"]},{"id":"nn-coach","dir":"in","kind":"personal","icon":"🥗","title":"Coach","purpose":"Atiende la consulta de nutrición.","como":"Entra a la sala de video.","zones":["nutricion-nativa"]},{"id":"nn-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp.","zones":["nutricion-nativa"]}];
+
+/* ===== helpers de datos ===== */
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function door(id){for(var i=0;i<DOORS.length;i++)if(DOORS[i].id===id)return DOORS[i];return null;}
+function zoneById(id){for(var i=0;i<ZONES.length;i++)if(ZONES[i].id===id)return ZONES[i];return null;}
+function doorsOf(zid,dir){return DOORS.filter(function(d){return d.dir===dir&&(d.zones||[]).indexOf(zid)>=0;});}
+function kindColor(k){var m={crea:'var(--amber)',paciente:'var(--green)',personal:'var(--blue)',salida:'var(--gray)'};return m[k]||'var(--grn)';}
+function kindHex(k){var m={crea:'#f5a524',paciente:'#37c184',personal:'#5b9cff',salida:'#8a93a3'};return m[k]||'#46c97e';}
+function kindLabel(k){var m={crea:'AGENDA LA CITA',paciente:'PACIENTE',personal:'PROFESIONAL',salida:'RESULTADO'};return m[k]||String(k).toUpperCase();}
+function trunc(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
+
+/* ===== helpers SVG ===== */
+function A(o){var s='';for(var k in o){if(o[k]==null)continue;s+=' '+k+'="'+String(o[k]).replace(/"/g,'&quot;')+'"';}return s;}
+function el(tag,attrs,inner){return '<'+tag+A(attrs||{})+'>'+(inner||'')+'</'+tag+'>';}
+function rect(x,y,w,h,a){return el('rect',Object.assign({x:x,y:y,width:w,height:h},a||{}));}
+function lineS(x1,y1,x2,y2,a){return el('line',Object.assign({x1:x1,y1:y1,x2:x2,y2:y2},a||{}));}
+function txt(x,y,s,a){return el('text',Object.assign({x:x,y:y},a||{}),esc(s));}
+function pathS(d,a){return el('path',Object.assign({d:d},a||{}));}
+
+/* puerta en muro vertical: arco de barrido. side 'L'(muro izq) | 'R' */
+function doorV(roomX,roomW,cy,size,side,col){
+  var faceX = side==='L'? roomX : roomX+roomW;
+  var half=size/2, yTop=cy-half;
+  var dir = side==='L'?1:-1;
+  var leafX = faceX + dir*size;
+  var cut = side==='L'? rect(faceX-34, yTop, 40, size, {fill:'url(#floor)'}) : rect(faceX-6, yTop, 40, size, {fill:'url(#floor)'});
+  var j1 = lineS(side==='L'?faceX-30:faceX, yTop, side==='L'?faceX:faceX+30, yTop, {stroke:'var(--grn2)','stroke-width':2});
+  var j2 = lineS(side==='L'?faceX-30:faceX, yTop+size, side==='L'?faceX:faceX+30, yTop+size, {stroke:'var(--grn2)','stroke-width':2});
+  var leaf = lineS(faceX, yTop, leafX, yTop, {stroke:col,'stroke-width':2.4});
+  var sweep = side==='L'?1:0;
+  var arc = pathS('M '+leafX+' '+yTop+' A '+size+' '+size+' 0 0 '+sweep+' '+faceX+' '+(yTop+size), {fill:'none',stroke:col,'stroke-width':1.5});
+  return cut+j1+j2+leaf+arc;
+}
+function dimH(x1,x2,y,label){
+  var t=7, c='var(--grn2)';
+  var s=lineS(x1,y,x2,y,{stroke:c,'stroke-width':1});
+  s+=lineS(x1-t,y+t,x1+t,y-t,{stroke:c,'stroke-width':1.4})+lineS(x2-t,y+t,x2+t,y-t,{stroke:c,'stroke-width':1.4});
+  s+=txt((x1+x2)/2,y-6,label,{fill:'var(--grn3)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle'});
+  return s;
+}
+function dimV(y1,y2,x,label){
+  var t=7,c='var(--grn2)';
+  var s=lineS(x,y1,x,y2,{stroke:c,'stroke-width':1});
+  s+=lineS(x-t,y1+t,x+t,y1-t,{stroke:c,'stroke-width':1.4})+lineS(x-t,y2+t,x+t,y2-t,{stroke:c,'stroke-width':1.4});
+  s+=el('text',{x:x-7,y:(y1+y2)/2,fill:'var(--grn3)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle',transform:'rotate(-90 '+(x-7)+' '+((y1+y2)/2)+')'},esc(label));
+  return s;
+}
+function northArrow(cx,cy){
+  var s=el('circle',{cx:cx,cy:cy,r:24,fill:'none',stroke:'var(--grn2)','stroke-width':1.2});
+  s+=pathS('M '+cx+' '+(cy-18)+' L '+(cx+7)+' '+(cy+6)+' L '+cx+' '+(cy+1)+' L '+(cx-7)+' '+(cy+6)+' Z',{fill:'var(--grn3)',stroke:'var(--grn3)'});
+  s+=txt(cx,cy+20,'N',{fill:'var(--grn3)','font-family':'var(--mono)','font-size':12,'text-anchor':'middle','font-weight':700});
+  return s;
+}
+function cartela(x,y,title,sub){
+  var w=360,h=110;
+  var s=rect(x,y,w,h,{fill:'rgba(10,15,12,.85)',stroke:'var(--grn2)','stroke-width':1.4});
+  s+=lineS(x,y+34,x+w,y+34,{stroke:'var(--grn2)','stroke-width':1})+lineS(x,y+72,x+w,y+72,{stroke:'var(--line2)','stroke-width':1})+lineS(x+w-120,y+72,x+w-120,y+h,{stroke:'var(--line2)','stroke-width':1});
+  s+=txt(x+14,y+22,REPO,{fill:'var(--ink)','font-family':'var(--mono)','font-size':15,'font-weight':700,'letter-spacing':'.04em'});
+  s+=txt(x+14,y+55,title,{fill:'var(--grn3)','font-family':'var(--mono)','font-size':12.5});
+  s+=txt(x+14,y+90,'PLANO',{fill:'var(--faint)','font-family':'var(--mono)','font-size':9,'letter-spacing':'.12em'})+txt(x+14,y+104,sub,{fill:'var(--muted)','font-family':'var(--mono)','font-size':11});
+  s+=txt(x+w-108,y+90,'VISTA',{fill:'var(--faint)','font-family':'var(--mono)','font-size':9,'letter-spacing':'.12em'})+txt(x+w-108,y+104,'quién entra',{fill:'var(--muted)','font-family':'var(--mono)','font-size':11});
+  return s;
+}
+function roomLabelTech(z,inb,out){
+  var cx=z.x+z.w/2, cy=z.y+z.h/2;
+  var s=txt(cx,cy-14,z.name.toUpperCase(),{fill:'var(--ink)','font-family':'var(--mono)','font-size':17,'font-weight':700,'text-anchor':'middle','letter-spacing':'.06em'});
+  s+=lineS(cx-z.name.length*5.4,cy-2,cx+z.name.length*5.4,cy-2,{stroke:'var(--grn2)','stroke-width':1,opacity:.6});
+  s+=txt(cx,cy+18,trunc(z.sub,48),{fill:'var(--muted)','font-family':'var(--mono)','font-size':10.5,'text-anchor':'middle'});
+  s+=txt(cx,cy+40,inb+' ENTRAN · '+out+' SALEN',{fill:'var(--grn3)','font-family':'var(--mono)','font-size':11,'text-anchor':'middle','font-weight':700,'letter-spacing':'.05em'});
+  return s;
+}
+
+/* carretera (calle): banda vertical de asfalto con línea discontinua */
+function roadV(cx,y,h){var w=42;var s=rect(cx-w/2,y,w,h,{fill:'#0f1316',rx:3});s+=lineS(cx,y,cx,y+h,{stroke:'rgba(245,165,36,.5)','stroke-width':2,'stroke-dasharray':'15 12'});return s;}
+
+/* ===== OVERVIEW ===== */
+var FW=1240, FH=720, RD=72;
+function buildOverview(){
+  var s='';
+  // carretera perimetral — por aquí entra y sale la gente
+  s+=rect(-RD,-RD,FW+2*RD,FH+2*RD,{fill:'#0f1316',rx:14});
+  s+=rect(-RD/2,-RD/2,FW+RD,FH+RD,{fill:'none',stroke:'rgba(245,165,36,.42)','stroke-width':2,'stroke-dasharray':'16 13',rx:9});
+  s+=el('text',{x:-RD/2,y:FH/2,fill:'var(--faint)','font-family':'var(--mono)','font-size':11,'text-anchor':'middle','letter-spacing':'.34em',transform:'rotate(-90 '+(-RD/2)+' '+(FH/2)+')'},'CARRETERA · ACCESO');
+  s+=el('text',{x:FW+RD/2,y:FH/2,fill:'var(--faint)','font-family':'var(--mono)','font-size':11,'text-anchor':'middle','letter-spacing':'.34em',transform:'rotate(90 '+(FW+RD/2)+' '+(FH/2)+')'},'CARRETERA · ACCESO');
+  // huella del edificio
+  s+=rect(0,0,FW,FH,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.4,rx:6});
+  // suites
+  for(var k=0;k<SUITES.length;k++){var su=SUITES[k];
+    s+=rect(su.x,su.y,su.w,su.h,{fill:'none',stroke:'var(--grn3)','stroke-width':1.6,rx:10,opacity:.85});
+    s+=rect(su.x+18,su.y-16,su.name.length*8.6+30,32,{fill:'var(--bg)',stroke:'var(--grn2)','stroke-width':1,rx:3});
+    s+=txt(su.x+32,su.y+5,su.name,{fill:'var(--grn3)','font-family':'var(--mono)','font-size':15,'font-weight':700,'letter-spacing':'.06em'});
+    s+=txt(su.x+su.w-14,su.y-22,'LOCAL',{fill:'var(--faint)','font-family':'var(--mono)','font-size':9,'letter-spacing':'.18em','text-anchor':'end'});
+  }
+  // sub-salas: TODAS las puertas van al muro que da a la carretera (z.side)
+  for(var i=0;i<ZONES.length;i++){var z=ZONES[i];
+    var inb=doorsOf(z.id,'in'),out=doorsOf(z.id,'out'),dl=inb.concat(out),side=z.side||'L';
+    var g='';
+    g+=rect(z.x,z.y,z.w,z.h,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4});
+    for(var a=0;a<dl.length;a++){var cy=z.y+z.h*(a+1)/(dl.length+1);g+=doorV(z.x,z.w,cy,24,side,kindColor(dl[a].kind));}
+    g+=roomLabelTech(z,inb.length,out.length);
+    var hx=(side==='R')?z.x+12:z.x+z.w-12, ha=(side==='R')?'start':'end';
+    g+=txt(hx,z.y+z.h-12,'clic para entrar ▸',{fill:'var(--faint)','font-family':'var(--mono)','font-size':10,'text-anchor':ha});
+    s+=el('g',{'data-zone':z.id,style:'cursor:pointer'},g);
+  }
+  s+=dimH(0,FW,FH+RD+28,'edificio Bodytech');
+  s+=northArrow(FW+RD+46,-RD+34);
+  s+=cartela(FW-360,FH+RD+56,'Quién entra a cada local','centro comercial · personas');
+  s+=txt(0,-RD-22,'PLANTA GENERAL — EDIFICIO BODYTECH',{fill:'var(--grn3)','font-family':'var(--mono)','font-size':20,'font-weight':700,'letter-spacing':'.08em'});
+  return {svg:s, bbox:{x:-RD-120,y:-RD-56,w:FW+2*RD+280,h:FH+2*RD+250}};
+}
+
+/* ===== DETAIL ===== */
+function doorTag(d,x,y,w){
+  var col=kindHex(d.kind), h=54;
+  var g=rect(x,y-h/2,w,h,{fill:'rgba(12,18,14,.92)',stroke:col,'stroke-width':1.3,rx:5});
+  g+=rect(x,y-h/2,4,h,{fill:col});
+  g+=txt(x+12,y-13,trunc((d.icon?d.icon+' ':'')+d.title,30),{fill:'var(--ink)','font-family':'var(--mono)','font-size':13,'font-weight':700});
+  g+=txt(x+12,y+4,trunc(d.purpose,46),{fill:'var(--muted)','font-family':'var(--mono)','font-size':9.5});
+  g+=txt(x+12,y+20,kindLabel(d.kind),{fill:col,'font-family':'var(--mono)','font-size':9,'font-weight':700,'letter-spacing':'.06em'});
+  g+=rect(x,y-h/2,w,h,{fill:'transparent','pointer-events':'all'});
+  return el('g',{'data-door':d.id,style:'cursor:pointer'},g);
+}
+function buildDetail(zid){
+  var z=zoneById(zid);
+  var inb=doorsOf(zid,'in'),out=doorsOf(zid,'out');
+  var WT=22, tagW=380, stepY=80, gap=40;
+  var roomW=430, roomY=170, roomX=600;
+  var total=inb.length+out.length;
+  var roomH=Math.max(330, total*stepY + ((inb.length&&out.length)?gap:0) + 70);
+  var zfull=z.full||z.name, s='';
+  s+=txt(40,92,'QUIÉN ENTRA A — '+zfull.toUpperCase(),{fill:'var(--grn3)','font-family':'var(--mono)','font-size':19,'font-weight':700,'letter-spacing':'.06em'});
+  s+=txt(40,116,trunc(z.sub,90),{fill:'var(--muted)','font-family':'var(--mono)','font-size':11.5});
+  // carretera (la fachada del local da a la calle, a la izquierda)
+  var roadCx=roomX-WT-36;
+  s+=roadV(roadCx,roomY-12,roomH+24);
+  s+=el('text',{x:roadCx,y:roomY+roomH+42,fill:'var(--faint)','font-family':'var(--mono)','font-size':10,'text-anchor':'middle','letter-spacing':'.28em'},'CARRETERA');
+  // muros + piso
+  s+=rect(roomX-WT,roomY-WT,roomW+2*WT,roomH+2*WT,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.2,rx:4});
+  s+=rect(roomX,roomY,roomW,roomH,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4});
+  s+=txt(roomX+roomW/2,roomY+roomH/2,z.name.toUpperCase(),{fill:'rgba(127,230,166,.14)','font-family':'var(--mono)','font-size':24,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+  // TODAS las puertas en el muro que da a la calle (izq), agrupadas entran/salen
+  var tagX=roomX-WT-66-tagW, yy=roomY+52;
+  function place(d){
+    s+=doorV(roomX,roomW,yy,34,'L',kindColor(d.kind));
+    s+=lineS(roomX-WT,yy,tagX+tagW,yy,{stroke:kindHex(d.kind),'stroke-width':1,'stroke-dasharray':'4 3',opacity:.7});
+    s+=el('circle',{cx:roomX-WT,cy:yy,r:3,fill:kindHex(d.kind)});
+    s+=doorTag(d,tagX,yy,tagW);
+    yy+=stepY;
+  }
+  if(inb.length)s+=txt(roomX+16,roomY+28,'▸ ENTRAN',{fill:'var(--green)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
+  for(var i=0;i<inb.length;i++)place(inb[i]);
+  if(out.length){
+    if(inb.length)yy+=gap;
+    s+=txt(roomX+16,yy-26,'◂ SALEN',{fill:'var(--gray)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
+    for(var j=0;j<out.length;j++)place(out[j]);
+  }
+  s+=dimV(roomY,roomY+roomH,roomX+roomW+WT+18,total+' puertas');
+  s+=northArrow(roomX+roomW+WT+92,roomY+6);
+  s+=cartela(roomX-WT, roomY+roomH+WT+44, 'Quién entra a — '+zfull, inb.length+' entran · '+out.length+' salen');
+  var bottom=roomY+roomH+WT+44+120;
+  return {svg:s, bbox:{x:tagX-24,y:40,w:(roomX+roomW+WT+150)-(tagX-24),h:bottom-40}};
+}
+
+/* ===== panel lateral ===== */
+function detailHTML(id){
+  var d=door(id);if(!d)return '';var inbound=d.dir==='in';
+  var zlabels=(d.zones||[]).map(function(zid){var z=zoneById(zid);return z?(z.full||z.name):zid;});
+  var col=kindHex(d.kind);
+  var h='<span class="pclose" data-close="1">×</span><div class="dtitle">'+(d.icon||'')+' '+esc(d.title)+'</div>'
+    +'<div class="badges"><span class="bdg" style="color:'+(inbound?'var(--green)':'var(--gray)')+'">'+(inbound?'Entra':'Sale')+'</span>'
+    +'<span class="bdg" style="color:'+col+'">'+esc(kindLabel(d.kind))+'</span></div>'
+    +'<div class="dpurpose">'+esc(d.purpose)+'</div>';
+  if(d.como){h+='<div class="block"><div class="ml">'+(inbound?'Cómo entra':'Cómo sale')+'</div><div class="bx">'+esc(d.como)+'</div></div>';}
+  if(zlabels.length){h+='<div class="block"><div class="ml">Local'+(zlabels.length>1?'es':'')+'</div><div class="urls">';for(var z=0;z<zlabels.length;z++)h+='<div class="url">'+esc(zlabels[z])+'</div>';h+='</div></div>';}
+  return h;
+}
+
+/* ===== render + pan/zoom (FIJO) ===== */
+var world=document.getElementById('world'), vp=document.getElementById('vp'), panel=document.getElementById('panel'), backBtn=document.getElementById('back');
+var mode='overview', s=1, tx=0, ty=0, drag=false, px, py, moved=false, lastBbox=null;
+function applyT(){world.setAttribute('transform','translate('+tx+' '+ty+') scale('+s+')');}
+function fit(bbox,insetL,insetT,pad){
+  insetL=insetL||30;insetT=insetT||30;pad=pad||60;
+  var availW=window.innerWidth-insetL-pad, availH=window.innerHeight-insetT-pad;
+  s=Math.min(1.5,Math.min(availW/bbox.w,availH/bbox.h));
+  tx=insetL+(availW-bbox.w*s)/2 - bbox.x*s;
+  ty=insetT+(availH-bbox.h*s)/2 - bbox.y*s;
+  lastBbox=bbox;applyT();
+}
+function render(view){world.innerHTML=view.svg;return view;}
+function showOverview(){
+  mode='overview';var v=render(buildOverview());
+  document.querySelector('.info').style.display='';
+  backBtn.style.display='none';
+  document.getElementById('hint').textContent='arrastra para mover · scroll para zoom · clic en un local para entrar';
+  fit(v.bbox,430,40,70);
+}
+function focusZone(zid){
+  var z=zoneById(zid);
+  var ts=Math.min((window.innerWidth*0.8)/z.w,(window.innerHeight*0.8)/z.h);
+  world.classList.add('anim');
+  s=ts;tx=window.innerWidth/2-(z.x+z.w/2)*ts;ty=window.innerHeight/2-(z.y+z.h/2)*ts;applyT();
+  setTimeout(function(){
+    world.classList.remove('anim');
+    mode='detail';var v=render(buildDetail(zid));
+    document.querySelector('.info').style.display='none';
+    backBtn.style.display='inline-flex';
+    document.getElementById('hint').textContent='clic en una puerta para ver quién es · ← volver a la planta general';
+    fit(v.bbox,40,40,70);
+  },600);
+}
+function showDoor(id){panel.innerHTML=detailHTML(id);panel.classList.add('open');}
+function closePanel(){panel.classList.remove('open');}
+
+vp.addEventListener('mousedown',function(e){drag=true;moved=false;px=e.clientX-tx;py=e.clientY-ty;vp.classList.add('grabbing');});
+window.addEventListener('mouseup',function(){drag=false;vp.classList.remove('grabbing');});
+window.addEventListener('mousemove',function(e){if(!drag)return;var nx=e.clientX-px,ny=e.clientY-py;if(Math.abs(nx-tx)+Math.abs(ny-ty)>4)moved=true;tx=nx;ty=ny;applyT();});
+vp.addEventListener('wheel',function(e){e.preventDefault();var dd=Math.exp(-e.deltaY*0.0015),ns=Math.min(3,Math.max(0.12,s*dd));var rx=e.clientX-tx,ry=e.clientY-ty;tx=e.clientX-rx*(ns/s);ty=e.clientY-ry*(ns/s);s=ns;applyT();},{passive:false});
+function zb(f){var cx=window.innerWidth/2,cy=window.innerHeight/2,rx=cx-tx,ry=cy-ty,ns=Math.min(3,Math.max(0.12,s*f));tx=cx-rx*(ns/s);ty=cy-ry*(ns/s);s=ns;applyT();}
+document.getElementById('zin').onclick=function(){zb(1.2);};
+document.getElementById('zout').onclick=function(){zb(1/1.2);};
+document.getElementById('zfit').onclick=function(){closePanel();if(lastBbox)fit(lastBbox,mode==='overview'?430:40,40,70);};
+backBtn.onclick=function(){closePanel();showOverview();};
+vp.addEventListener('click',function(e){
+  if(moved)return;
+  var dc=e.target.closest('[data-door]');
+  if(dc){showDoor(dc.getAttribute('data-door'));return;}
+  if(mode==='overview'){var rc=e.target.closest('[data-zone]');if(rc)focusZone(rc.getAttribute('data-zone'));}
+});
+panel.addEventListener('click',function(e){if(e.target.closest('[data-close]'))closePanel();});
+window.addEventListener('keydown',function(e){if(e.key==='Escape'){if(panel.classList.contains('open'))closePanel();else if(mode==='detail'){closePanel();showOverview();}}});
+
+showOverview();
+</script>
+</body>
+</html>

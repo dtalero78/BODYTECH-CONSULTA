@@ -236,6 +236,33 @@ function doorTag(d,x,y,w){
   g+=rect(x,y-h/2,w,h,{fill:'transparent','pointer-events':'all'});
   return el('g',{'data-door':d.id,style:'cursor:pointer'},g);
 }
+/* Dibuja, dentro del área del local, la gente conectada AHORA (coach/médico + paciente). */
+function gentePanel(z,roomX,roomW,roomY,roomH){
+  var cx=roomX+roomW/2;
+  var s=txt(cx,roomY+52,z.name.toUpperCase(),{fill:'rgba(127,230,166,.13)','font-family':'var(--mono)','font-size':21,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+  var st=LIVE&&LIVE[z.id];
+  if(!st)return s;
+  var cs=st.consultas||[];
+  if(!cs.length){
+    s+=txt(cx,roomY+roomH/2,'— nadie en consulta ahora —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
+    return s;
+  }
+  var cardH=42, gap=12, cw=372, blockH=cs.length*cardH+(cs.length-1)*gap, top=roomY+roomH/2-blockH/2;
+  s+=txt(cx,top-16,'EN CONSULTA AHORA',{fill:'var(--green)','font-family':'var(--mono)','font-size':11,'font-weight':700,'text-anchor':'middle','letter-spacing':'.14em'});
+  for(var i=0;i<cs.length;i++){
+    var c=cs[i], y=top+i*(cardH+gap), x0=cx-cw/2, cy=y+cardH/2;
+    var live=c.prof.online&&c.paciente.online;
+    s+=rect(x0,y,cw,cardH,{fill:'rgba(12,18,14,.94)',stroke:'var(--blue)','stroke-width':1.3,rx:9});
+    s+=rect(x0,y,4,cardH,{fill:'var(--blue)'});
+    s+=el('circle',{cx:x0+22,cy:cy,r:4.5,fill:live?'var(--green)':'var(--amber)'});
+    var profCol=c.prof.online?'var(--ink)':'var(--faint)', patCol=c.paciente.online?'var(--ink)':'var(--faint)';
+    var inner='🩺 <tspan fill="'+profCol+'">'+esc(trunc(c.prof.name||'Profesional',16))+'</tspan>'
+      +'<tspan fill="var(--faint)">  |  </tspan>'
+      +'👤 <tspan fill="'+patCol+'">'+esc(trunc(c.paciente.name||'Paciente',16))+'</tspan>';
+    s+=el('text',{x:x0+40,y:cy+5,'font-family':'var(--mono)','font-size':13.5,'font-weight':700,fill:'var(--ink)'},inner);
+  }
+  return s;
+}
 function buildDetail(zid){
   var z=zoneById(zid);
   var inb=doorsOf(zid,'in'),out=doorsOf(zid,'out');
@@ -253,7 +280,7 @@ function buildDetail(zid){
   // muros + piso
   s+=rect(roomX-WT,roomY-WT,roomW+2*WT,roomH+2*WT,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.2,rx:4});
   s+=rect(roomX,roomY,roomW,roomH,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4});
-  s+=txt(roomX+roomW/2,roomY+roomH/2,z.name.toUpperCase(),{fill:'rgba(127,230,166,.14)','font-family':'var(--mono)','font-size':24,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+  s+=gentePanel(z,roomX,roomW,roomY,roomH);
   // TODAS las puertas en el muro que da a la calle (izq), agrupadas entran/salen
   var tagX=roomX-WT-66-tagW, yy=roomY+52;
   function place(d){

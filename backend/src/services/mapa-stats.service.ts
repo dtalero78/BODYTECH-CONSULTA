@@ -4,13 +4,12 @@
 // Namespace Socket.io AISLADO (`/mapa-rutas`): no comparte salas ni eventos con
 // el postural ni el tracker, así que NO puede interferir con las llamadas.
 // - "ahora": consultas activas del sessionTracker (en memoria), clasificadas por
-//   sub-sala (médica/nutrición por rol del profesional; Trepsi/nativa por el
-//   vínculo sala→room_historia_map→trepsi_appointments). Se clasifica UNA vez por
-//   sala y se cachea → el conteo es pura suma en memoria.
-// - "hoy": agendadas/atendidas hoy (HistoriaClinica.fechaAtencion/fechaConsulta),
-//   por sub-sala. Se refresca con un latido lento (30s) y solo si hay clientes.
-// Push SOLO cuando algo cambia (sessionTracker.onChange) → sin polling.
-// Gated: el handshake valida token+email; sin la sesión correcta, no hay datos.
+//   sub-sala. Además, POR SUB-SALA, la lista de gente conectada ahora
+//   (coach/médico + paciente, con nombre) para pintarlos dentro del local.
+// - "hoy": agendadas/atendidas hoy (HistoriaClinica.fechaAtencion/fechaConsulta).
+// Cada sala se resuelve UNA vez (zona + nombres) y se cachea → el conteo/gente es
+// pura suma en memoria. Push SOLO cuando algo cambia → sin polling.
+// Gated: el handshake valida token+email.
 // ============================================================================
 
 import { Server as SocketIOServer, Namespace, Socket } from 'socket.io';
@@ -23,16 +22,27 @@ const ADMIN_EMAIL = 'danieltalero78@gmail.com';
 type ZoneId = 'medica-nativa' | 'nutricion-trepsi' | 'nutricion-nativa';
 const ZONES: ZoneId[] = ['medica-nativa', 'nutricion-trepsi', 'nutricion-nativa'];
 
-interface ZoneHoy {
-  agendadas: number;
-  atendidas: number;
+interface Consulta {
+  prof: { role: 'medico' | 'coach'; name: string; online: boolean };
+  paciente: { name: string; online: boolean };
 }
 interface ZoneStats {
   ahora: number;
   agendadasHoy: number;
   atendidasHoy: number;
+  consultas: Consulta[]; // una tarjeta por consulta activa (prof arriba, paciente abajo)
 }
 type StatsPayload = Record<ZoneId, ZoneStats>;
+
+interface RoomInfo {
+  zone: ZoneId;
+  rol: 'medico' | 'coach' | null;
+  coach: string | null; // nombre del profesional (de profesionales)
+}
+interface ZoneHoy {
+  agendadas: number;
+  atendidas: number;
+}
 
 function zerosHoy(): Record<ZoneId, ZoneHoy> {
   return {
@@ -44,8 +54,8 @@ function zerosHoy(): Record<ZoneId, ZoneHoy> {
 
 class MapaStatsService {
   private ns: Namespace | null = null;
-  private classifyCache = new Map<string, ZoneId>(); // roomName -> zona
-  private classifying = new Set<string>();
+  private roomCache = new Map<string, RoomInfo>(); // roomName -> {zona, nombres}
+  private resolving = new Set<string>();
   private hoy: Record<ZoneId, ZoneHoy> = zerosHoy();
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private pushDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -54,7 +64,6 @@ class MapaStatsService {
     const ns = io.of('/mapa-rutas');
     this.ns = ns;
 
-    // Candado: solo el usuario autorizado puede conectarse.
     ns.use((socket, next) => {
       try {
         const raw =
@@ -71,14 +80,11 @@ class MapaStatsService {
 
     ns.on('connection', (socket: Socket) => {
       this.ensureHeartbeat();
-      // Push inmediato al conectar (refresca "hoy" una vez).
       this.refreshHoy().finally(() => this.pushTo(socket));
       socket.on('disconnect', () => this.maybeStopHeartbeat());
     });
 
-    // Empujar "ahora" solo cuando alguien entra/sale de una consulta.
     sessionTracker.onChange(() => this.schedulePush());
-
     console.log('[MapaStats] Namespace /mapa-rutas listo (feed privado)');
   }
 
@@ -117,36 +123,60 @@ class MapaStatsService {
   }
 
   private buildPayload(): StatsPayload {
-    const ahora = this.computeAhora();
     const out = {} as StatsPayload;
     for (const z of ZONES) {
       out[z] = {
-        ahora: ahora[z],
+        ahora: 0,
         agendadasHoy: this.hoy[z].agendadas,
         atendidasHoy: this.hoy[z].atendidas,
+        consultas: [],
       };
+    }
+    for (const s of sessionTracker.getActiveSessions()) {
+      const info = this.roomCache.get(s.roomName);
+      // Resolver si es nueva, o si aún no tenemos el profesional pero ya hay medicoCode.
+      if (!info || (info.rol === null && !!s.medicoCode)) {
+        void this.resolveRoom(s.roomName, s.medicoCode);
+      }
+      if (!info) continue;
+      const zs = out[info.zone];
+      zs.ahora += 1;
+      const profName = info.coach || (s.doctorName && s.doctorName.trim()) || 'Profesional';
+      const patName =
+        (s.patientName && s.patientName.trim()) ||
+        (s.patientDocumento ? 'Doc. ' + s.patientDocumento : 'Paciente');
+      zs.consultas.push({
+        prof: { role: info.rol === 'coach' ? 'coach' : 'medico', name: profName, online: s.doctorConnected },
+        paciente: { name: patName, online: s.patientConnected },
+      });
     }
     return out;
   }
 
-  private computeAhora(): Record<ZoneId, number> {
-    const acc: Record<ZoneId, number> = {
-      'medica-nativa': 0,
-      'nutricion-trepsi': 0,
-      'nutricion-nativa': 0,
-    };
-    for (const s of sessionTracker.getActiveSessions()) {
-      const zone = this.classifyCache.get(s.roomName);
-      if (zone) acc[zone] += 1;
-      else void this.classifyRoom(s.roomName, s.medicoCode); // async; entra en el próximo push
-    }
-    return acc;
-  }
-
-  private async classifyRoom(roomName: string, medicoCode?: string): Promise<void> {
-    if (this.classifying.has(roomName)) return;
-    this.classifying.add(roomName);
+  private async resolveRoom(roomName: string, medicoCode?: string): Promise<void> {
+    if (this.resolving.has(roomName)) return;
+    this.resolving.add(roomName);
     try {
+      // Profesional: rol + nombre (por su código).
+      let rol: 'medico' | 'coach' | null = null;
+      let coach: string | null = null;
+      if (medicoCode) {
+        try {
+          const r = await postgresService.query(
+            `SELECT rol,
+                    COALESCE(NULLIF(alias, ''), TRIM(BOTH ' ' FROM COALESCE(primer_nombre, '') || ' ' || COALESCE(primer_apellido, ''))) AS nombre
+             FROM profesionales WHERE codigo = $1 LIMIT 1`,
+            [medicoCode],
+          );
+          const v = r?.[0]?.rol;
+          rol = v === 'coach' ? 'coach' : v === 'medico' ? 'medico' : null;
+          coach = r?.[0]?.nombre || null;
+        } catch {
+          /* profesional desconocido */
+        }
+      }
+
+      // Origen: ¿la sala corresponde a una historia creada por Trepsi?
       let isTrepsi = false;
       try {
         const r = await postgresService.query(
@@ -160,20 +190,7 @@ class MapaStatsService {
         const v = r?.[0]?.is_trepsi;
         isTrepsi = v === true || v === 't' || v === 'true';
       } catch {
-        /* origen desconocido → se asume nativa */
-      }
-
-      let rol: string | null = null;
-      if (medicoCode) {
-        try {
-          const r = await postgresService.query(
-            `SELECT rol FROM profesionales WHERE codigo = $1 LIMIT 1`,
-            [medicoCode],
-          );
-          rol = r?.[0]?.rol ?? null;
-        } catch {
-          /* rol desconocido → cae a médica */
-        }
+        /* origen desconocido → nativa */
       }
 
       const zone: ZoneId = isTrepsi
@@ -181,10 +198,10 @@ class MapaStatsService {
         : rol === 'coach'
           ? 'nutricion-nativa'
           : 'medica-nativa';
-      this.classifyCache.set(roomName, zone);
+      this.roomCache.set(roomName, { zone, rol, coach });
       this.schedulePush();
     } finally {
-      this.classifying.delete(roomName);
+      this.resolving.delete(roomName);
     }
   }
 

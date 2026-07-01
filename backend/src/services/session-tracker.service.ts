@@ -77,6 +77,8 @@ class SessionTrackerService {
     patientDocumento?: string;
     patientConnected: boolean;
     doctorConnected: boolean;
+    patientName?: string; // identity del paciente conectado (= su nombre)
+    doctorName?: string; // identity del médico/coach conectado
   }> {
     const out: Array<{
       roomName: string;
@@ -84,14 +86,24 @@ class SessionTrackerService {
       patientDocumento?: string;
       patientConnected: boolean;
       doctorConnected: boolean;
+      patientName?: string;
+      doctorName?: string;
     }> = [];
     for (const session of this.sessions.values()) {
       let patientConnected = false;
       let doctorConnected = false;
+      let patientName: string | undefined;
+      let doctorName: string | undefined;
       for (const p of session.participants.values()) {
         if (p.disconnectedAt) continue;
-        if (p.role === 'patient') patientConnected = true;
-        if (p.role === 'doctor') doctorConnected = true;
+        if (p.role === 'patient') {
+          patientConnected = true;
+          patientName = p.identity;
+        }
+        if (p.role === 'doctor') {
+          doctorConnected = true;
+          doctorName = p.identity;
+        }
       }
       if (patientConnected || doctorConnected) {
         out.push({
@@ -100,6 +112,8 @@ class SessionTrackerService {
           patientDocumento: session.patientDocumento,
           patientConnected,
           doctorConnected,
+          patientName,
+          doctorName,
         });
       }
     }

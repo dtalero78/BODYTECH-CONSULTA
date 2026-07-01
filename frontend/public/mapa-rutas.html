@@ -246,13 +246,13 @@ function fmtElapsed(iso){
 }
 /* Dibuja, dentro del área del local, la gente conectada AHORA (coach/médico + paciente). */
 function gentePanel(z,roomX,roomW,roomY,roomH){
-  var cx=roomX+roomW/2;
-  var s=txt(cx,roomY+52,z.name.toUpperCase(),{fill:'rgba(127,230,166,.13)','font-family':'var(--mono)','font-size':21,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+  var cx=roomX+roomW/2, s='';
   var st=LIVE&&LIVE[z.id];
-  if(!st)return s;
-  var cs=st.consultas||[];
+  var cs=(st&&st.consultas)||[];
   if(!cs.length){
-    s+=txt(cx,roomY+roomH/2,'— nadie en consulta ahora —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
+    // Sin consultas: nombre fantasma del local (+ aviso si el feed está conectado).
+    s+=txt(cx,roomY+52,z.name.toUpperCase(),{fill:'rgba(127,230,166,.13)','font-family':'var(--mono)','font-size':21,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+    if(st)s+=txt(cx,roomY+roomH/2,'— nadie en consulta ahora —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
     return s;
   }
   var cardH=42, gap=12, cw=410, blockH=cs.length*cardH+(cs.length-1)*gap, top=roomY+roomH/2-blockH/2;
@@ -280,7 +280,10 @@ function buildDetail(zid){
   var WT=22, tagW=380, stepY=80, gap=40;
   var roomW=430, roomY=170, roomX=600;
   var total=inb.length+out.length;
-  var roomH=Math.max(330, total*stepY + ((inb.length&&out.length)?gap:0) + 70);
+  // El local crece para que quepan TODAS las consultas activas (sin cortar ninguna).
+  var nCons=(LIVE&&LIVE[zid]&&LIVE[zid].consultas)?LIVE[zid].consultas.length:0;
+  var consH=nCons?(nCons*54+72):0; // 42(alto)+12(gap) por tarjeta + encabezado/margen
+  var roomH=Math.max(330, total*stepY + ((inb.length&&out.length)?gap:0) + 70, consH);
   var zfull=z.full||z.name, s='';
   s+=txt(40,92,'QUIÉN ENTRA A — '+zfull.toUpperCase(),{fill:'var(--grn3)','font-family':'var(--mono)','font-size':19,'font-weight':700,'letter-spacing':'.06em'});
   s+=txt(40,116,trunc(z.sub,90),{fill:'var(--muted)','font-family':'var(--mono)','font-size':11.5});
@@ -301,11 +304,11 @@ function buildDetail(zid){
     s+=doorTag(d,tagX,yy,tagW);
     yy+=stepY;
   }
-  if(inb.length)s+=txt(roomX+16,roomY+28,'▸ ENTRAN',{fill:'var(--green)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
+  if(inb.length&&!nCons)s+=txt(roomX+16,roomY+28,'▸ ENTRAN',{fill:'var(--green)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
   for(var i=0;i<inb.length;i++)place(inb[i]);
   if(out.length){
     if(inb.length)yy+=gap;
-    s+=txt(roomX+16,yy-26,'◂ SALEN',{fill:'var(--gray)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
+    if(!nCons)s+=txt(roomX+16,yy-26,'◂ SALEN',{fill:'var(--gray)','font-family':'var(--mono)','font-size':12,'font-weight':700,'letter-spacing':'.08em'});
     for(var j=0;j<out.length;j++)place(out[j]);
   }
   s+=dimV(roomY,roomY+roomH,roomX+roomW+WT+18,total+' puertas');

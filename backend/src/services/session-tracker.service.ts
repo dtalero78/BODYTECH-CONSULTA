@@ -424,6 +424,49 @@ class SessionTrackerService {
       }
     }
   }
+
+  /**
+   * Reconcilia el estado en memoria contra Twilio (fuente de verdad de quién está
+   * realmente en cada sala). Marca desconectado a quien Twilio ya no reporta como
+   * conectado → limpia badges/tarjetas "fantasma" aunque nunca llegara el aviso del
+   * cliente (paciente que entró/salió sin coach, cierre abrupto, red caída, etc.).
+   * DEFENSIVO: si la consulta a Twilio falla, NO toca la sesión → nunca desconecta
+   * por error una llamada activa (en el peor caso, no arregla, pero no empeora).
+   */
+  async reconcileWithTwilio(): Promise<void> {
+    // Sin Twilio configurado (dev/sandbox): no hay contra qué reconciliar.
+    if (!(this.twilioClient as unknown as { video?: unknown }).video) return;
+    for (const [roomName, session] of Array.from(this.sessions.entries())) {
+      const hasConnected = Array.from(session.participants.values()).some((p) => !p.disconnectedAt);
+      if (!hasConnected) continue;
+      await this.reconcileRoom(roomName, session);
+    }
+  }
+
+  private async reconcileRoom(roomName: string, session: VideoSession): Promise<void> {
+    let connectedIds: Set<string> | null = null;
+    try {
+      const room = await this.twilioClient.video.v1.rooms(roomName).fetch();
+      if (room.status === 'in-progress') {
+        const parts = await this.twilioClient.video.v1.rooms(roomName).participants.list({ limit: 50 });
+        connectedIds = new Set(parts.filter((p) => p.status === 'connected').map((p) => p.identity));
+      } else {
+        // completed/failed → ya no hay nadie en la sala.
+        connectedIds = new Set();
+      }
+    } catch {
+      // Sala no encontrada / error de red → no arriesgar: dejar la sesión como está.
+      connectedIds = null;
+    }
+    if (!connectedIds) return;
+    for (const p of Array.from(session.participants.values())) {
+      if (p.disconnectedAt) continue;
+      if (!connectedIds.has(p.identity)) {
+        console.log(`[SessionTracker] Reconcile: ${p.identity} ya no está en Twilio (${roomName}) → marcando desconectado`);
+        this.trackParticipantDisconnected(roomName, p.identity);
+      }
+    }
+  }
 }
 
 export const sessionTracker = new SessionTrackerService();
@@ -432,3 +475,9 @@ export const sessionTracker = new SessionTrackerService();
 setInterval(() => {
   sessionTracker.cleanOldSessions();
 }, 60 * 60 * 1000);
+
+// Reconciliar contra Twilio cada 60s: poda participantes/sesiones "fantasma" cuando
+// se perdió el aviso de desconexión del cliente (limpia el badge CONECTADO y el mapa).
+setInterval(() => {
+  sessionTracker.reconcileWithTwilio().catch((e) => console.error('[SessionTracker] reconcile error:', e));
+}, 60 * 1000);

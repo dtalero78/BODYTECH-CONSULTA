@@ -11,5 +11,6 @@ router.post('/test-webhook', monitorIntegracionController.testWebhook);
 router.post('/discard-outbox', monitorIntegracionController.discardOutbox);
 router.get('/debug-historia', monitorIntegracionController.debugHistoria);
 router.post('/revive-cita', monitorIntegracionController.reviveCita);
+router.get('/agenda-simultaneidad', monitorIntegracionController.agendaSimultaneidad);
 
 export default router;

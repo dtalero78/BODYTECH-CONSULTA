@@ -202,6 +202,128 @@ class MonitorIntegracionController {
   };
 
   /**
+   * GET /agenda-simultaneidad?token=...&year=YYYY&month=1-12
+   *
+   * Devuelve estadísticas de la agenda de un mes (por defecto: mes actual en
+   * Colombia UTC-5) para ver cuántas consultas simultáneas hay por slot.
+   *
+   * - `porDia`: citas por día (útil para ver picos)
+   * - `porSlot`: citas agrupadas por (fecha, hora) — cada fila = un slot con N
+   *   citas simultáneas. Ordenado desc por count.
+   * - `porHora`: histograma total por hora del día (para ver bandas ocupadas)
+   * - `topSimultaneidad`: los 10 slots con más consultas al mismo tiempo
+   * - `totales`: totales del mes (citas, únicos, por sede)
+   */
+  agendaSimultaneidad = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      // Ventana en hora Colombia (UTC-5). Un día = [00:00, 24:00) Colombia.
+      const now = new Date();
+      const colombiaNow = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+      const year = Number(req.query.year) || colombiaNow.getUTCFullYear();
+      const month = Number(req.query.month) || colombiaNow.getUTCMonth() + 1; // 1-12
+      if (month < 1 || month > 12) {
+        res.status(400).json({ ok: false, error: { code: 'BAD_MONTH' } });
+        return;
+      }
+      // Inicio y fin del mes en UTC (Colombia = UTC-5 → sumar 5 h para bordes).
+      const startUtc = new Date(Date.UTC(year, month - 1, 1, 5, 0, 0)).toISOString();
+      const endUtc = new Date(Date.UTC(year, month, 1, 5, 0, 0)).toISOString();
+
+      // Total y por sede
+      const totales = await postgresService.query(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(DISTINCT "numeroId")::int AS pacientes_unicos,
+           COUNT(*) FILTER (WHERE "atendido" = 'REPROGRAMADA')::int AS reprogramadas,
+           COUNT(*) FILTER (WHERE "atendido" = 'PENDIENTE')::int AS pendientes,
+           COUNT(*) FILTER (WHERE "atendido" = 'ATENDIDO')::int AS atendidas
+         FROM "HistoriaClinica"
+         WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz`,
+        [startUtc, endUtc]
+      );
+
+      const porSede = await postgresService.query(
+        `SELECT COALESCE("sede_id",'bsl') AS sede, COUNT(*)::int AS total
+           FROM "HistoriaClinica"
+          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          GROUP BY 1 ORDER BY 2 DESC`,
+        [startUtc, endUtc]
+      );
+
+      // Por día (fecha Colombia)
+      const porDia = await postgresService.query(
+        `SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+                COUNT(*)::int AS total,
+                COUNT(DISTINCT "medico")::int AS medicos_distintos
+           FROM "HistoriaClinica"
+          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          GROUP BY 1 ORDER BY 1`,
+        [startUtc, endUtc]
+      );
+
+      // Por slot (fecha + hora) — mide simultaneidad exacta
+      const porSlot = await postgresService.query(
+        `SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+                COALESCE("horaAtencion",'—') AS hora,
+                COUNT(*)::int AS simultaneas,
+                COUNT(DISTINCT "medico")::int AS medicos,
+                COUNT(DISTINCT COALESCE("sede_id",'bsl'))::int AS sedes,
+                ARRAY_AGG(DISTINCT COALESCE("sede_id",'bsl')) AS sedes_list
+           FROM "HistoriaClinica"
+          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+            AND "horaAtencion" IS NOT NULL
+          GROUP BY 1, 2
+          HAVING COUNT(*) > 1
+          ORDER BY simultaneas DESC, fecha, hora
+          LIMIT 100`,
+        [startUtc, endUtc]
+      );
+
+      // Histograma por hora del día (0-23)
+      const porHora = await postgresService.query(
+        `SELECT SUBSTRING(COALESCE("horaAtencion",''), 1, 2) AS hora,
+                COUNT(*)::int AS total
+           FROM "HistoriaClinica"
+          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+            AND "horaAtencion" IS NOT NULL
+          GROUP BY 1 ORDER BY 1`,
+        [startUtc, endUtc]
+      );
+
+      // Simultaneidad global por día (pico del día — máximo de citas al mismo tiempo)
+      const picoPorDia = await postgresService.query(
+        `SELECT fecha, MAX(simultaneas)::int AS pico_simultaneidad,
+                (ARRAY_AGG(hora ORDER BY simultaneas DESC))[1] AS hora_pico
+           FROM (
+             SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+                    "horaAtencion" AS hora,
+                    COUNT(*)::int AS simultaneas
+               FROM "HistoriaClinica"
+              WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+                AND "horaAtencion" IS NOT NULL
+              GROUP BY 1, 2
+           ) s
+           GROUP BY fecha ORDER BY fecha`,
+        [startUtc, endUtc]
+      );
+
+      res.status(200).json({
+        ok: true,
+        ventana: { year, month, startUtc, endUtc },
+        totales: totales?.[0] ?? null,
+        porSede: porSede ?? [],
+        porDia: porDia ?? [],
+        porHora: porHora ?? [],
+        picoPorDia: picoPorDia ?? [],
+        porSlot: porSlot ?? [],
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * POST /revive-cita?token=...
    * Body: { citaId: string, resendReschedule?: boolean }
    *

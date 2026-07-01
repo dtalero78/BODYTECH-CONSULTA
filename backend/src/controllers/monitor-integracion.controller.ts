@@ -239,39 +239,39 @@ class MonitorIntegracionController {
            COUNT(*) FILTER (WHERE "atendido" = 'PENDIENTE')::int AS pendientes,
            COUNT(*) FILTER (WHERE "atendido" = 'ATENDIDO')::int AS atendidas
          FROM "HistoriaClinica"
-         WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz`,
+         WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz`,
         [startUtc, endUtc]
       );
 
       const porSede = await postgresService.query(
         `SELECT COALESCE("sede_id",'bsl') AS sede, COUNT(*)::int AS total
            FROM "HistoriaClinica"
-          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz
           GROUP BY 1 ORDER BY 2 DESC`,
         [startUtc, endUtc]
       );
 
       // Por día (fecha Colombia)
       const porDia = await postgresService.query(
-        `SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+        `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
                 COUNT(*)::int AS total,
                 COUNT(DISTINCT "medico")::int AS medicos_distintos
            FROM "HistoriaClinica"
-          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz
           GROUP BY 1 ORDER BY 1`,
         [startUtc, endUtc]
       );
 
       // Por slot (fecha + hora) — mide simultaneidad exacta
       const porSlot = await postgresService.query(
-        `SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+        `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
                 COALESCE("horaAtencion",'—') AS hora,
                 COUNT(*)::int AS simultaneas,
                 COUNT(DISTINCT "medico")::int AS medicos,
                 COUNT(DISTINCT COALESCE("sede_id",'bsl'))::int AS sedes,
                 ARRAY_AGG(DISTINCT COALESCE("sede_id",'bsl')) AS sedes_list
            FROM "HistoriaClinica"
-          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz
             AND "horaAtencion" IS NOT NULL
           GROUP BY 1, 2
           HAVING COUNT(*) > 1
@@ -285,7 +285,7 @@ class MonitorIntegracionController {
         `SELECT SUBSTRING(COALESCE("horaAtencion",''), 1, 2) AS hora,
                 COUNT(*)::int AS total
            FROM "HistoriaClinica"
-          WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+          WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz
             AND "horaAtencion" IS NOT NULL
           GROUP BY 1 ORDER BY 1`,
         [startUtc, endUtc]
@@ -296,11 +296,11 @@ class MonitorIntegracionController {
         `SELECT fecha, MAX(simultaneas)::int AS pico_simultaneidad,
                 (ARRAY_AGG(hora ORDER BY simultaneas DESC))[1] AS hora_pico
            FROM (
-             SELECT to_char("fechaAtencion" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
+             SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
                     "horaAtencion" AS hora,
                     COUNT(*)::int AS simultaneas
                FROM "HistoriaClinica"
-              WHERE "fechaAtencion" >= $1::timestamptz AND "fechaAtencion" < $2::timestamptz
+              WHERE "fechaAtencion"::timestamptz >= $1::timestamptz AND "fechaAtencion"::timestamptz < $2::timestamptz
                 AND "horaAtencion" IS NOT NULL
               GROUP BY 1, 2
            ) s

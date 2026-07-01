@@ -140,6 +140,9 @@ class MapaStatsService {
         void this.resolveRoom(s.roomName, s.medicoCode);
       }
       if (!info) continue;
+      // Solo "en consulta ahora" si AMBOS siguen conectados. Si uno se desconecta
+      // (o quedó una sesión fantasma por un disconnect perdido), no se muestra.
+      if (!(s.doctorConnected && s.patientConnected)) continue;
       const zs = out[info.zone];
       zs.ahora += 1;
       const profName = info.coach || (s.doctorName && s.doctorName.trim()) || 'Profesional';

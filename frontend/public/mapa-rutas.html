@@ -236,6 +236,14 @@ function doorTag(d,x,y,w){
   g+=rect(x,y-h/2,w,h,{fill:'transparent','pointer-events':'all'});
   return el('g',{'data-door':d.id,style:'cursor:pointer'},g);
 }
+/* Tiempo transcurrido (mm:ss o h:mm:ss) desde el inicio ISO de la consulta. */
+function fmtElapsed(iso){
+  var t=Date.parse(iso); if(isNaN(t))return '';
+  var sec=Math.max(0,Math.floor((Date.now()-t)/1000));
+  var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s2=sec%60;
+  function p(n){return (n<10?'0':'')+n;}
+  return h>0?(h+':'+p(m)+':'+p(s2)):(p(m)+':'+p(s2));
+}
 /* Dibuja, dentro del área del local, la gente conectada AHORA (coach/médico + paciente). */
 function gentePanel(z,roomX,roomW,roomY,roomH){
   var cx=roomX+roomW/2;
@@ -247,7 +255,7 @@ function gentePanel(z,roomX,roomW,roomY,roomH){
     s+=txt(cx,roomY+roomH/2,'— nadie en consulta ahora —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
     return s;
   }
-  var cardH=42, gap=12, cw=372, blockH=cs.length*cardH+(cs.length-1)*gap, top=roomY+roomH/2-blockH/2;
+  var cardH=42, gap=12, cw=410, blockH=cs.length*cardH+(cs.length-1)*gap, top=roomY+roomH/2-blockH/2;
   s+=txt(cx,top-16,'EN CONSULTA AHORA',{fill:'var(--green)','font-family':'var(--mono)','font-size':11,'font-weight':700,'text-anchor':'middle','letter-spacing':'.14em'});
   for(var i=0;i<cs.length;i++){
     var c=cs[i], y=top+i*(cardH+gap), x0=cx-cw/2, cy=y+cardH/2;
@@ -256,10 +264,13 @@ function gentePanel(z,roomX,roomW,roomY,roomH){
     s+=rect(x0,y,4,cardH,{fill:'var(--blue)'});
     s+=el('circle',{cx:x0+22,cy:cy,r:4.5,fill:live?'var(--green)':'var(--amber)'});
     var profCol=c.prof.online?'var(--ink)':'var(--faint)', patCol=c.paciente.online?'var(--ink)':'var(--faint)';
-    var inner='🩺 <tspan fill="'+profCol+'">'+esc(trunc(c.prof.name||'Profesional',16))+'</tspan>'
+    var inner='🩺 <tspan fill="'+profCol+'">'+esc(trunc(c.prof.name||'Profesional',13))+'</tspan>'
       +'<tspan fill="var(--faint)">  |  </tspan>'
-      +'👤 <tspan fill="'+patCol+'">'+esc(trunc(c.paciente.name||'Paciente',16))+'</tspan>';
-    s+=el('text',{x:x0+40,y:cy+5,'font-family':'var(--mono)','font-size':13.5,'font-weight':700,fill:'var(--ink)'},inner);
+      +'👤 <tspan fill="'+patCol+'">'+esc(trunc(c.paciente.name||'Paciente',13))+'</tspan>';
+    s+=el('text',{x:x0+40,y:cy+5,'font-family':'var(--mono)','font-size':12.5,'font-weight':700,fill:'var(--ink)'},inner);
+    if(c.startedAt){
+      s+=el('text',{x:x0+cw-14,y:cy+5,'text-anchor':'end','font-family':'var(--mono)','font-size':12,'font-weight':700,fill:'var(--green)','data-started':c.startedAt},esc('⏱ '+fmtElapsed(c.startedAt)));
+    }
   }
   return s;
 }
@@ -389,6 +400,12 @@ function rerender(){
     socket.on('stats',function(data){LIVE=data;rerender();});
   }catch(e){}
 })();
+
+/* Cronómetro: refresca cada segundo los tiempos de las consultas activas. */
+setInterval(function(){
+  var els=document.querySelectorAll('[data-started]');
+  for(var i=0;i<els.length;i++){els[i].textContent='⏱ '+fmtElapsed(els[i].getAttribute('data-started'));}
+},1000);
 
 showOverview();
 </script>

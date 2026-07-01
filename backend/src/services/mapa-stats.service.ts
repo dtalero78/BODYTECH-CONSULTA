@@ -25,6 +25,7 @@ const ZONES: ZoneId[] = ['medica-nativa', 'nutricion-trepsi', 'nutricion-nativa'
 interface Consulta {
   prof: { role: 'medico' | 'coach'; name: string; online: boolean };
   paciente: { name: string; online: boolean };
+  startedAt?: string; // inicio de la consulta (ISO) para el cronómetro
 }
 interface ZoneStats {
   ahora: number;
@@ -148,6 +149,7 @@ class MapaStatsService {
       zs.consultas.push({
         prof: { role: info.rol === 'coach' ? 'coach' : 'medico', name: profName, online: s.doctorConnected },
         paciente: { name: patName, online: s.patientConnected },
+        startedAt: s.startedAt,
       });
     }
     return out;

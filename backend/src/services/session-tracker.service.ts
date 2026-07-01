@@ -79,6 +79,7 @@ class SessionTrackerService {
     doctorConnected: boolean;
     patientName?: string; // identity del paciente conectado (= su nombre)
     doctorName?: string; // identity del médico/coach conectado
+    startedAt?: string; // inicio de la consulta (ISO)
   }> {
     const out: Array<{
       roomName: string;
@@ -88,6 +89,7 @@ class SessionTrackerService {
       doctorConnected: boolean;
       patientName?: string;
       doctorName?: string;
+      startedAt?: string;
     }> = [];
     for (const session of this.sessions.values()) {
       let patientConnected = false;
@@ -114,6 +116,7 @@ class SessionTrackerService {
           doctorConnected,
           patientName,
           doctorName,
+          startedAt: session.createdAt ? session.createdAt.toISOString() : undefined,
         });
       }
     }

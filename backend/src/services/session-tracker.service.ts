@@ -1,6 +1,5 @@
 import twilio from 'twilio';
 import { Server as SocketIOServer } from 'socket.io';
-import whatsappService from './whatsapp.service';
 
 interface SessionParticipant {
   identity: string;
@@ -20,11 +19,10 @@ interface VideoSession {
 
 class SessionTrackerService {
   private sessions: Map<string, VideoSession> = new Map();
-  private readonly ADMIN_PHONE = '+573008021701';
+  private readonly ADMIN_PHONE = 'whatsapp:+573008021701';
   private readonly twilioClient: twilio.Twilio;
   private readonly twilioWhatsAppFrom: string;
   private io: SocketIOServer | null = null;
-  private changeListeners: Array<() => void> = [];
 
   constructor() {
     const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
@@ -46,81 +44,6 @@ class SessionTrackerService {
   initialize(io: SocketIOServer): void {
     this.io = io;
     console.log('[SessionTracker] Socket.io initialized');
-  }
-
-  /**
-   * Registra un listener que se invoca cuando cambia el estado de sesiones
-   * (alguien se conecta/desconecta). Lo usa el mapa de rutas para empujar
-   * el conteo "ahora" solo cuando de verdad pasa algo (sin polling).
-   */
-  onChange(listener: () => void): void {
-    this.changeListeners.push(listener);
-  }
-
-  private notifyChange(): void {
-    for (const cb of this.changeListeners) {
-      try {
-        cb();
-      } catch {
-        /* aislado: un listener no debe romper el tracking ni la llamada */
-      }
-    }
-  }
-
-  /**
-   * Sesiones con al menos un participante conectado en este momento.
-   * Solo lectura, en memoria — no toca Twilio ni el socket de la llamada.
-   */
-  getActiveSessions(): Array<{
-    roomName: string;
-    medicoCode?: string;
-    patientDocumento?: string;
-    patientConnected: boolean;
-    doctorConnected: boolean;
-    patientName?: string; // identity del paciente conectado (= su nombre)
-    doctorName?: string; // identity del médico/coach conectado
-    startedAt?: string; // inicio de la consulta (ISO)
-  }> {
-    const out: Array<{
-      roomName: string;
-      medicoCode?: string;
-      patientDocumento?: string;
-      patientConnected: boolean;
-      doctorConnected: boolean;
-      patientName?: string;
-      doctorName?: string;
-      startedAt?: string;
-    }> = [];
-    for (const session of this.sessions.values()) {
-      let patientConnected = false;
-      let doctorConnected = false;
-      let patientName: string | undefined;
-      let doctorName: string | undefined;
-      for (const p of session.participants.values()) {
-        if (p.disconnectedAt) continue;
-        if (p.role === 'patient') {
-          patientConnected = true;
-          patientName = p.identity;
-        }
-        if (p.role === 'doctor') {
-          doctorConnected = true;
-          doctorName = p.identity;
-        }
-      }
-      if (patientConnected || doctorConnected) {
-        out.push({
-          roomName: session.roomName,
-          medicoCode: session.medicoCode,
-          patientDocumento: session.patientDocumento,
-          patientConnected,
-          doctorConnected,
-          patientName,
-          doctorName,
-          startedAt: session.createdAt ? session.createdAt.toISOString() : undefined,
-        });
-      }
-    }
-    return out;
   }
 
   /**
@@ -170,7 +93,6 @@ class SessionTrackerService {
         connectedAt: new Date().toISOString(),
       });
     }
-    this.notifyChange();
   }
 
   /**
@@ -186,11 +108,6 @@ class SessionTrackerService {
     }
 
     const participant = session.participants.get(identity);
-    if (participant && participant.disconnectedAt) {
-      // Ya estaba marcado como desconectado (p.ej. lo reportaron el beacon del propio
-      // navegador Y el cliente del coach): idempotente, no re-emitir ni re-enviar reporte.
-      return;
-    }
     if (participant) {
       participant.disconnectedAt = new Date();
 
@@ -217,7 +134,6 @@ class SessionTrackerService {
       session.completedAt = new Date();
       this.sendSessionReport(session);
     }
-    this.notifyChange();
   }
 
   /**
@@ -235,9 +151,8 @@ class SessionTrackerService {
 
       const duration = this.calculateDuration(session);
       const report = this.formatSessionReport(session, doctor, patient, duration);
-      const variables = this.buildReportVariables(session, doctor, patient, duration);
 
-      await this.sendWhatsAppMessage(variables, report);
+      await this.sendWhatsAppMessage(report);
 
       console.log(`[SessionTracker] Report sent successfully for room ${session.roomName}`);
 
@@ -308,57 +223,9 @@ class SessionTrackerService {
   }
 
   /**
-   * Construye las variables posicionales de la plantilla `bsl_reporte_videollamada`.
-   *   {{1}} fecha/hora · {{2}} sala · {{3}} duración · {{4}} doctor · {{5}} paciente
+   * Envía mensaje por WhatsApp usando Twilio
    */
-  private buildReportVariables(
-    session: VideoSession,
-    doctor: SessionParticipant,
-    patient: SessionParticipant,
-    duration: string
-  ): Record<string, string> {
-    const timestamp = new Date().toLocaleString('es-CO', {
-      timeZone: 'America/Bogota',
-      hour12: false,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    return {
-      '1': timestamp,
-      '2': session.roomName,
-      '3': duration,
-      '4': doctor.identity.replace('Dr. ', ''),
-      '5': patient.identity,
-    };
-  }
-
-  /**
-   * Envía el reporte por WhatsApp.
-   *
-   * WhatsApp Business no entrega texto libre fuera de la ventana de 24h, por eso se
-   * usa la plantilla aprobada (`whatsappService.sendReportMessage`). Si la plantilla
-   * no está configurada (dev/sandbox), cae a texto libre con el cliente propio.
-   */
-  private async sendWhatsAppMessage(
-    variables: Record<string, string>,
-    fallbackBody: string
-  ): Promise<void> {
-    // Ruta preferida: plantilla aprobada (requerida en producción)
-    if (process.env.TWILIO_WHATSAPP_REPORT_TEMPLATE_SID) {
-      const result = await whatsappService.sendReportMessage(this.ADMIN_PHONE, variables);
-      if (result.success) {
-        console.log(`[SessionTracker] Reporte enviado por plantilla — SID: ${result.messageSid}`);
-      } else {
-        console.error(`[SessionTracker] Error enviando reporte por plantilla: ${result.error}`);
-      }
-      return;
-    }
-
-    // Fallback (dev / sandbox): texto libre con el cliente propio
+  private async sendWhatsAppMessage(message: string): Promise<void> {
     if (!this.twilioClient.messages) {
       console.error('[SessionTracker] Twilio client not configured');
       return;
@@ -367,11 +234,11 @@ class SessionTrackerService {
     try {
       const twilioMessage = await this.twilioClient.messages.create({
         from: this.twilioWhatsAppFrom,
-        to: `whatsapp:${this.ADMIN_PHONE}`,
-        body: fallbackBody,
+        to: this.ADMIN_PHONE,
+        body: message,
       });
 
-      console.warn('[SessionTracker] ⚠️ Reporte enviado como texto libre (sin plantilla) — solo válido dentro de la ventana de 24h');
+      console.log('[SessionTracker] WhatsApp message sent via Twilio');
       console.log(`   Message SID: ${twilioMessage.sid}`);
       console.log(`   Estado: ${twilioMessage.status}`);
     } catch (error) {
@@ -424,68 +291,6 @@ class SessionTrackerService {
       }
     }
   }
-
-  /**
-   * Reconcilia el estado en memoria contra Twilio (fuente de verdad de quién está
-   * realmente en cada sala). Marca desconectado a quien Twilio ya no reporta como
-   * conectado → limpia badges/tarjetas "fantasma" aunque nunca llegara el aviso del
-   * cliente (paciente que entró/salió sin coach, cierre abrupto, red caída, etc.).
-   * DEFENSIVO: si la consulta a Twilio falla, NO toca la sesión → nunca desconecta
-   * por error una llamada activa (en el peor caso, no arregla, pero no empeora).
-   */
-  async reconcileWithTwilio(): Promise<void> {
-    // Sin Twilio configurado (dev/sandbox): no hay contra qué reconciliar.
-    if (!(this.twilioClient as unknown as { video?: unknown }).video) return;
-    // ¿Hay alguien marcado como conectado que valga la pena verificar?
-    const needsCheck = Array.from(this.sessions.values()).some((s) =>
-      Array.from(s.participants.values()).some((p) => !p.disconnectedAt),
-    );
-    if (!needsCheck) return;
-
-    // Fuente de verdad: las salas EN CURSO en Twilio y quién está conectado en
-    // cada una. Se listan por estado y los participantes se piden POR SID (no por
-    // uniqueName): Twilio REUSA el uniqueName al recrear una sala, así que un
-    // `rooms(uniqueName).fetch()` puede fallar o traer la sala equivocada — ese
-    // era el bug por el que el fantasma nunca se podaba. Método verificado 1:1
-    // contra el CLI de Twilio (rooms:list + participants:list por --room-sid).
-    const connectedByRoom = new Map<string, Set<string>>(); // uniqueName -> identidades conectadas
-    const unknownRooms = new Set<string>(); // salas cuyo detalle no se pudo leer → no arriesgar
-    try {
-      const rooms = await this.twilioClient.video.v1.rooms.list({ status: 'in-progress', limit: 200 });
-      for (const room of rooms) {
-        try {
-          const parts = await this.twilioClient.video.v1
-            .rooms(room.sid)
-            .participants.list({ status: 'connected', limit: 100 });
-          connectedByRoom.set(room.uniqueName, new Set(parts.map((p) => p.identity)));
-        } catch {
-          unknownRooms.add(room.uniqueName);
-        }
-      }
-    } catch (e) {
-      // Sin datos de Twilio → NO tocar nada (nunca desconectar por un error de red).
-      console.error('[SessionTracker] reconcile: no se pudo listar salas in-progress:', e);
-      return;
-    }
-
-    let podados = 0;
-    for (const [roomName, session] of Array.from(this.sessions.entries())) {
-      if (unknownRooms.has(roomName)) continue; // no arriesgar en salas sin detalle
-      const connectedIds = connectedByRoom.get(roomName); // undefined = no hay sala en curso con ese nombre
-      for (const p of Array.from(session.participants.values())) {
-        if (p.disconnectedAt) continue;
-        const sigueConectado = connectedIds ? connectedIds.has(p.identity) : false;
-        if (!sigueConectado) {
-          console.log(
-            `[SessionTracker] Reconcile: ${p.identity} ya no está en Twilio (sala ${roomName}) → desconectando`,
-          );
-          this.trackParticipantDisconnected(roomName, p.identity);
-          podados++;
-        }
-      }
-    }
-    if (podados) console.log(`[SessionTracker] Reconcile: podados ${podados} participante(s) fantasma`);
-  }
 }
 
 export const sessionTracker = new SessionTrackerService();
@@ -494,9 +299,3 @@ export const sessionTracker = new SessionTrackerService();
 setInterval(() => {
   sessionTracker.cleanOldSessions();
 }, 60 * 60 * 1000);
-
-// Reconciliar contra Twilio cada 60s: poda participantes/sesiones "fantasma" cuando
-// se perdió el aviso de desconexión del cliente (limpia el badge CONECTADO y el mapa).
-setInterval(() => {
-  sessionTracker.reconcileWithTwilio().catch((e) => console.error('[SessionTracker] reconcile error:', e));
-}, 60 * 1000);

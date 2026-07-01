@@ -212,16 +212,6 @@ export const useVideoRoom = ({
           newMap.delete(participant.sid);
           return newMap;
         });
-        // Reportar la desconexión del OTRO participante: Twilio la detecta de forma
-        // fiable (incluso si su navegador se cerró de golpe), así el backend marca
-        // la desconexión y el badge "CONECTADO" se quita automáticamente.
-        if (role) {
-          try {
-            apiService.trackParticipantDisconnected(roomName, participant.identity);
-          } catch (err) {
-            console.error('Error tracking remote participant disconnection:', err);
-          }
-        }
       });
 
       // Escuchar desconexión

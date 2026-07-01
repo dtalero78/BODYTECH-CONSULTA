@@ -436,36 +436,55 @@ class SessionTrackerService {
   async reconcileWithTwilio(): Promise<void> {
     // Sin Twilio configurado (dev/sandbox): no hay contra qué reconciliar.
     if (!(this.twilioClient as unknown as { video?: unknown }).video) return;
-    for (const [roomName, session] of Array.from(this.sessions.entries())) {
-      const hasConnected = Array.from(session.participants.values()).some((p) => !p.disconnectedAt);
-      if (!hasConnected) continue;
-      await this.reconcileRoom(roomName, session);
-    }
-  }
+    // ¿Hay alguien marcado como conectado que valga la pena verificar?
+    const needsCheck = Array.from(this.sessions.values()).some((s) =>
+      Array.from(s.participants.values()).some((p) => !p.disconnectedAt),
+    );
+    if (!needsCheck) return;
 
-  private async reconcileRoom(roomName: string, session: VideoSession): Promise<void> {
-    let connectedIds: Set<string> | null = null;
+    // Fuente de verdad: las salas EN CURSO en Twilio y quién está conectado en
+    // cada una. Se listan por estado y los participantes se piden POR SID (no por
+    // uniqueName): Twilio REUSA el uniqueName al recrear una sala, así que un
+    // `rooms(uniqueName).fetch()` puede fallar o traer la sala equivocada — ese
+    // era el bug por el que el fantasma nunca se podaba. Método verificado 1:1
+    // contra el CLI de Twilio (rooms:list + participants:list por --room-sid).
+    const connectedByRoom = new Map<string, Set<string>>(); // uniqueName -> identidades conectadas
+    const unknownRooms = new Set<string>(); // salas cuyo detalle no se pudo leer → no arriesgar
     try {
-      const room = await this.twilioClient.video.v1.rooms(roomName).fetch();
-      if (room.status === 'in-progress') {
-        const parts = await this.twilioClient.video.v1.rooms(roomName).participants.list({ limit: 50 });
-        connectedIds = new Set(parts.filter((p) => p.status === 'connected').map((p) => p.identity));
-      } else {
-        // completed/failed → ya no hay nadie en la sala.
-        connectedIds = new Set();
+      const rooms = await this.twilioClient.video.v1.rooms.list({ status: 'in-progress', limit: 200 });
+      for (const room of rooms) {
+        try {
+          const parts = await this.twilioClient.video.v1
+            .rooms(room.sid)
+            .participants.list({ status: 'connected', limit: 100 });
+          connectedByRoom.set(room.uniqueName, new Set(parts.map((p) => p.identity)));
+        } catch {
+          unknownRooms.add(room.uniqueName);
+        }
       }
-    } catch {
-      // Sala no encontrada / error de red → no arriesgar: dejar la sesión como está.
-      connectedIds = null;
+    } catch (e) {
+      // Sin datos de Twilio → NO tocar nada (nunca desconectar por un error de red).
+      console.error('[SessionTracker] reconcile: no se pudo listar salas in-progress:', e);
+      return;
     }
-    if (!connectedIds) return;
-    for (const p of Array.from(session.participants.values())) {
-      if (p.disconnectedAt) continue;
-      if (!connectedIds.has(p.identity)) {
-        console.log(`[SessionTracker] Reconcile: ${p.identity} ya no está en Twilio (${roomName}) → marcando desconectado`);
-        this.trackParticipantDisconnected(roomName, p.identity);
+
+    let podados = 0;
+    for (const [roomName, session] of Array.from(this.sessions.entries())) {
+      if (unknownRooms.has(roomName)) continue; // no arriesgar en salas sin detalle
+      const connectedIds = connectedByRoom.get(roomName); // undefined = no hay sala en curso con ese nombre
+      for (const p of Array.from(session.participants.values())) {
+        if (p.disconnectedAt) continue;
+        const sigueConectado = connectedIds ? connectedIds.has(p.identity) : false;
+        if (!sigueConectado) {
+          console.log(
+            `[SessionTracker] Reconcile: ${p.identity} ya no está en Twilio (sala ${roomName}) → desconectando`,
+          );
+          this.trackParticipantDisconnected(roomName, p.identity);
+          podados++;
+        }
       }
     }
+    if (podados) console.log(`[SessionTracker] Reconcile: podados ${podados} participante(s) fantasma`);
   }
 }
 

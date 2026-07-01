@@ -373,7 +373,8 @@ export function MedicalPanelPage() {
         nombre: patient.primerNombre,
         apellido: patient.primerApellido,
         documento: patient.numeroId,
-        doctor: medicoCode
+        doctor: medicoCode,
+        historiaId: patient._id,
       });
       const roomNameWithParams = `${roomName}?${params.toString()}`;
 

@@ -192,11 +192,11 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
           <div className="text-center">
             {/* Logo BSL */}
             <div className="flex justify-center mb-6">
-              <img
-                src="/logoBlancoTrepsi.png"
-                alt="Trepsi Logo"
-                className="w-auto h-auto max-w-full"
-              />
+              {historiaId?.startsWith('trepsi_') ? (
+                <img src="/logoBlancoTrepsi.png" alt="Trepsi" className="w-auto h-auto max-w-full" />
+              ) : (
+                <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full opacity-50" />
+              )}
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-6">Consulta Video</h2>

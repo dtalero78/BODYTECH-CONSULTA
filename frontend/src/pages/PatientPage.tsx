@@ -13,6 +13,8 @@ export const PatientPage = () => {
   const apellidoParam = searchParams.get('apellido');
   const doctorParam = searchParams.get('doctor');
   const documentoParam = searchParams.get('documento');
+  const historiaIdParam = searchParams.get('historiaId');
+  const isTrepsi = historiaIdParam?.startsWith('trepsi_') ?? false;
 
   // Auto-llenar nombre del paciente si viene en la URL
   useEffect(() => {
@@ -52,11 +54,11 @@ export const PatientPage = () => {
         {/* Logo y Título */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <img
-              src="/logoBlancoTrepsi.png"
-              alt="Trepsi Logo"
-              className="w-auto h-auto max-w-full"
-            />
+            {isTrepsi ? (
+              <img src="/logoBlancoTrepsi.png" alt="Trepsi" className="w-auto h-auto max-w-full" />
+            ) : (
+              <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full opacity-50" />
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
             Consulta Video

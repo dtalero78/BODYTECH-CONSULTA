@@ -20,7 +20,8 @@ export const NutricionRoomPage = () => {
   // Extraer parámetros de la URL
   const doctorParam = searchParams.get('doctor');
   const historiaIdParam = searchParams.get('historiaId') || searchParams.get('documento');
-  const pacienteParam = searchParams.get('paciente'); // Nombre del paciente
+  const pacienteParam = searchParams.get('paciente');
+  const isTrepsi = historiaIdParam?.startsWith('trepsi_') ?? false;
 
   // Auto-llenar nombre del doctor si viene en la URL
   useEffect(() => {
@@ -58,11 +59,11 @@ export const NutricionRoomPage = () => {
         {/* Logo y Título */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <img
-              src="/logoBlancoTrepsi.png"
-              alt="Trepsi Logo"
-              className="w-auto h-auto max-w-full"
-            />
+            {isTrepsi ? (
+              <img src="/logoBlancoTrepsi.png" alt="Trepsi" className="w-auto h-auto max-w-full" />
+            ) : (
+              <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full opacity-50" />
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
             Consulta Video

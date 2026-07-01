@@ -186,6 +186,11 @@ class SessionTrackerService {
     }
 
     const participant = session.participants.get(identity);
+    if (participant && participant.disconnectedAt) {
+      // Ya estaba marcado como desconectado (p.ej. lo reportaron el beacon del propio
+      // navegador Y el cliente del coach): idempotente, no re-emitir ni re-enviar reporte.
+      return;
+    }
     if (participant) {
       participant.disconnectedAt = new Date();
 

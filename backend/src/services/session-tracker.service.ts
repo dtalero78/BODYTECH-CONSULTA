@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { Server as SocketIOServer } from 'socket.io';
+import whatsappService from './whatsapp.service';
 
 interface SessionParticipant {
   identity: string;
@@ -19,10 +20,11 @@ interface VideoSession {
 
 class SessionTrackerService {
   private sessions: Map<string, VideoSession> = new Map();
-  private readonly ADMIN_PHONE = 'whatsapp:+573008021701';
+  private readonly ADMIN_PHONE = '+573008021701';
   private readonly twilioClient: twilio.Twilio;
   private readonly twilioWhatsAppFrom: string;
   private io: SocketIOServer | null = null;
+  private changeListeners: Array<() => void> = [];
 
   constructor() {
     const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
@@ -44,6 +46,64 @@ class SessionTrackerService {
   initialize(io: SocketIOServer): void {
     this.io = io;
     console.log('[SessionTracker] Socket.io initialized');
+  }
+
+  /**
+   * Registra un listener que se invoca cuando cambia el estado de sesiones
+   * (alguien se conecta/desconecta). Lo usa el mapa de rutas para empujar
+   * el conteo "ahora" solo cuando de verdad pasa algo (sin polling).
+   */
+  onChange(listener: () => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyChange(): void {
+    for (const cb of this.changeListeners) {
+      try {
+        cb();
+      } catch {
+        /* aislado: un listener no debe romper el tracking ni la llamada */
+      }
+    }
+  }
+
+  /**
+   * Sesiones con al menos un participante conectado en este momento.
+   * Solo lectura, en memoria — no toca Twilio ni el socket de la llamada.
+   */
+  getActiveSessions(): Array<{
+    roomName: string;
+    medicoCode?: string;
+    patientDocumento?: string;
+    patientConnected: boolean;
+    doctorConnected: boolean;
+  }> {
+    const out: Array<{
+      roomName: string;
+      medicoCode?: string;
+      patientDocumento?: string;
+      patientConnected: boolean;
+      doctorConnected: boolean;
+    }> = [];
+    for (const session of this.sessions.values()) {
+      let patientConnected = false;
+      let doctorConnected = false;
+      for (const p of session.participants.values()) {
+        if (p.disconnectedAt) continue;
+        if (p.role === 'patient') patientConnected = true;
+        if (p.role === 'doctor') doctorConnected = true;
+      }
+      if (patientConnected || doctorConnected) {
+        out.push({
+          roomName: session.roomName,
+          medicoCode: session.medicoCode,
+          patientDocumento: session.patientDocumento,
+          patientConnected,
+          doctorConnected,
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -93,6 +153,7 @@ class SessionTrackerService {
         connectedAt: new Date().toISOString(),
       });
     }
+    this.notifyChange();
   }
 
   /**
@@ -134,6 +195,7 @@ class SessionTrackerService {
       session.completedAt = new Date();
       this.sendSessionReport(session);
     }
+    this.notifyChange();
   }
 
   /**
@@ -151,8 +213,9 @@ class SessionTrackerService {
 
       const duration = this.calculateDuration(session);
       const report = this.formatSessionReport(session, doctor, patient, duration);
+      const variables = this.buildReportVariables(session, doctor, patient, duration);
 
-      await this.sendWhatsAppMessage(report);
+      await this.sendWhatsAppMessage(variables, report);
 
       console.log(`[SessionTracker] Report sent successfully for room ${session.roomName}`);
 
@@ -223,9 +286,57 @@ class SessionTrackerService {
   }
 
   /**
-   * Envía mensaje por WhatsApp usando Twilio
+   * Construye las variables posicionales de la plantilla `bsl_reporte_videollamada`.
+   *   {{1}} fecha/hora · {{2}} sala · {{3}} duración · {{4}} doctor · {{5}} paciente
    */
-  private async sendWhatsAppMessage(message: string): Promise<void> {
+  private buildReportVariables(
+    session: VideoSession,
+    doctor: SessionParticipant,
+    patient: SessionParticipant,
+    duration: string
+  ): Record<string, string> {
+    const timestamp = new Date().toLocaleString('es-CO', {
+      timeZone: 'America/Bogota',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    return {
+      '1': timestamp,
+      '2': session.roomName,
+      '3': duration,
+      '4': doctor.identity.replace('Dr. ', ''),
+      '5': patient.identity,
+    };
+  }
+
+  /**
+   * Envía el reporte por WhatsApp.
+   *
+   * WhatsApp Business no entrega texto libre fuera de la ventana de 24h, por eso se
+   * usa la plantilla aprobada (`whatsappService.sendReportMessage`). Si la plantilla
+   * no está configurada (dev/sandbox), cae a texto libre con el cliente propio.
+   */
+  private async sendWhatsAppMessage(
+    variables: Record<string, string>,
+    fallbackBody: string
+  ): Promise<void> {
+    // Ruta preferida: plantilla aprobada (requerida en producción)
+    if (process.env.TWILIO_WHATSAPP_REPORT_TEMPLATE_SID) {
+      const result = await whatsappService.sendReportMessage(this.ADMIN_PHONE, variables);
+      if (result.success) {
+        console.log(`[SessionTracker] Reporte enviado por plantilla — SID: ${result.messageSid}`);
+      } else {
+        console.error(`[SessionTracker] Error enviando reporte por plantilla: ${result.error}`);
+      }
+      return;
+    }
+
+    // Fallback (dev / sandbox): texto libre con el cliente propio
     if (!this.twilioClient.messages) {
       console.error('[SessionTracker] Twilio client not configured');
       return;
@@ -234,11 +345,11 @@ class SessionTrackerService {
     try {
       const twilioMessage = await this.twilioClient.messages.create({
         from: this.twilioWhatsAppFrom,
-        to: this.ADMIN_PHONE,
-        body: message,
+        to: `whatsapp:${this.ADMIN_PHONE}`,
+        body: fallbackBody,
       });
 
-      console.log('[SessionTracker] WhatsApp message sent via Twilio');
+      console.warn('[SessionTracker] ⚠️ Reporte enviado como texto libre (sin plantilla) — solo válido dentro de la ventana de 24h');
       console.log(`   Message SID: ${twilioMessage.sid}`);
       console.log(`   Estado: ${twilioMessage.status}`);
     } catch (error) {

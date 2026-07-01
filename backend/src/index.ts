@@ -26,6 +26,7 @@ import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware'
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
+import { mapaStatsService } from './services/mapa-stats.service';
 import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
 import { optionalAuthMiddleware } from './middleware/auth.middleware';
@@ -54,6 +55,10 @@ console.log('[Socket.io] Telemedicine service initialized');
 // Initialize session tracker with Socket.io
 sessionTracker.initialize(io);
 console.log('[Socket.io] Session tracker initialized');
+
+// Feed en vivo del Mapa de Rutas (namespace aislado /mapa-rutas, privado)
+mapaStatsService.initialize(io);
+console.log('[Socket.io] Mapa de Rutas stats initialized');
 
 // Socket.io: Handle join-room event for doctors
 io.on('connection', (socket) => {

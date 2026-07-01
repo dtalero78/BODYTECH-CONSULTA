@@ -66,6 +66,8 @@ interface MedicalHistoryData {
   tipoExamen?: string;
   encuestaSalud?: string;
   antecedentesFamiliares?: string;
+  /** Antecedentes familiares (texto libre). Lo manda Trepsi en historiaClinica. */
+  antFamiliaresObs?: string;
   empresa1?: string;
   antecedentesPersonales?: AntecedentesPersonales;
   antecedentesFamiliaresDetalle?: AntecedentesFamiliares;
@@ -888,6 +890,12 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
               <div>
                 <span className="text-gray-400">Motivo de Consulta:</span>
                 <p className="text-white mt-1 whitespace-pre-wrap">{data.motivoConsulta}</p>
+              </div>
+            )}
+            {data.antFamiliaresObs && (
+              <div>
+                <span className="text-gray-400">Antecedentes Familiares:</span>
+                <p className="text-white mt-1 whitespace-pre-wrap">{data.antFamiliaresObs}</p>
               </div>
             )}
           </div>

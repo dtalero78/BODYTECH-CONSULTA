@@ -195,7 +195,7 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
               {historiaId?.startsWith('trepsi_') ? (
                 <img src="/logoBlancoTrepsi.png" alt="Trepsi" className="w-auto h-auto max-w-full" />
               ) : (
-                <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full opacity-50" />
+                <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full mix-blend-screen" />
               )}
             </div>
 

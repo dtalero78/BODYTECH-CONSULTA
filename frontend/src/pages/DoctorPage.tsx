@@ -55,7 +55,7 @@ export const DoctorPage = () => {
         {/* Logo y Título */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full opacity-50" />
+            <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full mix-blend-screen" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">
             Consulta Video

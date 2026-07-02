@@ -367,7 +367,7 @@ export function GuidedNutricion({
     <div
       className="fixed inset-0 z-[100] flex items-stretch justify-end p-3 sm:p-5 pointer-events-none"
     >
-      <div className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)] pointer-events-auto">
+      <div className="relative bg-[#111c23] border border-[#3b4a54] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)] pointer-events-auto">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-[#324049] flex-shrink-0">
           <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
@@ -400,7 +400,7 @@ export function GuidedNutricion({
           </div>
 
           {/* Derecha — transcripción simultánea */}
-          <div className="flex flex-col min-h-0 px-6 py-5 bg-[#1a262e]">
+          <div className="flex flex-col min-h-0 px-6 py-5 bg-[#111c23]">
             <div className="flex items-center gap-2 mb-2.5 flex-shrink-0">
               <Mic size={14} className="text-[#00a884]" />
               <div className="text-[12px] font-semibold text-[#a4b1b9] tracking-wide uppercase flex-1">
@@ -447,7 +447,7 @@ export function GuidedNutricion({
         </div>
 
         {/* Footer — finalizar y guardar */}
-        <div className="px-6 py-4 border-t border-[#324049] bg-[#1a262e] rounded-b-2xl flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[#324049] bg-[#111c23] rounded-b-2xl flex-shrink-0">
           <button
             type="button"
             onClick={handleFinalize}

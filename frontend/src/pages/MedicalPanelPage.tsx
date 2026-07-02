@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -165,6 +165,20 @@ export function MedicalPanelPage() {
   const patients: Patient[] = patientsQuery.data?.patients ?? [];
   const totalPages = patientsQuery.data?.totalPages ?? 0;
   const searchResult = patientSearchQuery.data ?? null;
+
+  // IDs de los pacientes que ESTE coach tiene en pantalla (lista + búsqueda).
+  // El backend emite `patient-connected` por código de médico, pero un mismo
+  // código puede tener más pacientes que los visibles (paginación) — solo
+  // anunciamos por voz a los que el coach realmente ve en su lista.
+  const myPatientIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const ids = new Set<string>();
+    const add = (v?: string) => { if (v) ids.add(String(v)); };
+    patients.forEach((p) => { add(p._id); add(p.numeroId); });
+    const sr = searchResult as { _id?: string; numeroId?: string } | null;
+    if (sr) { add(sr._id); add(sr.numeroId); }
+    myPatientIdsRef.current = ids;
+  }, [patients, searchResult]);
   // `isLoading` (compat) es true si alguna de las queries principales está
   // refetcheando. Para el botón de login usamos `isValidating`.
   const isLoading = statsQuery.isFetching || patientsQuery.isFetching;
@@ -267,9 +281,15 @@ export function MedicalPanelPage() {
         return updated;
       });
 
-      // Reproducir sonido y anuncio de voz cuando el paciente se conecta
-      const patientName = data.identity || 'Paciente';
-      speakText(`${patientName} conectado`);
+      // Solo anunciar por voz si el paciente está en la lista de ESTE coach.
+      // Evita que suene el aviso por pacientes de otro código o que no están
+      // en la lista visible (mismo código, otra página / pool de médicos).
+      if (myPatientIdsRef.current.has(String(data.documento))) {
+        const patientName = data.identity || 'Paciente';
+        speakText(`${patientName} conectado`);
+      } else {
+        console.log('[MedicalPanel] Aviso de voz omitido (paciente no está en la lista):', data.documento);
+      }
     });
 
     // Escuchar cuando un paciente se desconecta

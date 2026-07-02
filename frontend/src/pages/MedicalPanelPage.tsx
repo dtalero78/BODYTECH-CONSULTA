@@ -530,7 +530,7 @@ export function MedicalPanelPage() {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
               <img
-                src="/bodyLogo.jpg"
+                src="/bodySinFondo.png"
                 alt="BSL Logo"
                 className="h-20 w-auto"
               />
@@ -619,7 +619,7 @@ export function MedicalPanelPage() {
         <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
-              <img src="/bodyLogo.jpg" alt="BSL Logo" className="h-12 w-auto" />
+              <img src="/bodySinFondo.png" alt="BSL Logo" className="h-12 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-white">Panel Médico</h1>
                 <p className="text-gray-400 text-sm">

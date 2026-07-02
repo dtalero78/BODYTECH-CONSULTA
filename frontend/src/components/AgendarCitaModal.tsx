@@ -59,13 +59,8 @@ function initialForm(): FormState {
 }
 
 const TIPO_EXAMEN_OPTIONS: string[] = [
-  'Periódico',
-  'Ingreso',
-  'Retiro',
-  'Post-incapacidad',
-  'Especial',
-  'Consulta médica',
-  'Otro',
+  'Primera vez',
+  'Control',
 ];
 
 function nombreProfesional(p: Profesional): string {

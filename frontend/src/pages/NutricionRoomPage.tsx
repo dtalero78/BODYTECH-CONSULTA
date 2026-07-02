@@ -62,7 +62,7 @@ export const NutricionRoomPage = () => {
             {isTrepsi ? (
               <img src="/logoBlancoTrepsi.png" alt="Trepsi" className="w-auto h-auto max-w-full" />
             ) : (
-              <img src="/bodyLogo.jpg" alt="Bodytech" className="w-auto h-auto max-w-full mix-blend-screen" />
+              <img src="/bodySinFondo.png" alt="Bodytech" className="w-auto h-auto max-w-full" />
             )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white mb-2">

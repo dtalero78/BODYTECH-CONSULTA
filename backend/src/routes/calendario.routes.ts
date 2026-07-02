@@ -2,7 +2,8 @@
 // calendario.routes — Endpoints del calendario del Panel Coordinador.
 //
 // Base: /api/calendario
-// Auth: requiere JWT (montado bajo `requireAuthMiddleware` en index.ts).
+// Auth: RBAC por-ruta (requireRole). El mount en index.ts NO añade guard
+//       blanket para poder abrir `horarios-disponibles` a médico/coach.
 //
 // Endpoints:
 //   GET  /mes?year=&month=&medico=     → conteos por día del mes
@@ -15,14 +16,21 @@
 
 import { Router } from 'express';
 import calendarioController from '../controllers/calendario.controller';
+import { requireRole } from '../middleware/rbac.middleware';
 
 const router = Router();
 
-router.get('/mes', calendarioController.getMes);
-router.get('/dia', calendarioController.getDia);
-router.get('/horarios-disponibles', calendarioController.getHorariosDisponibles);
-router.get('/disponibilidad-dia', calendarioController.getDisponibilidadDia);
-router.get('/disponibilidad-mes', calendarioController.getDisponibilidadMes);
-router.post('/reasignar-bulk', calendarioController.reasignarBulk);
+// RBAC por-ruta. Vistas y reasignación del calendario: coordinador/admin/auxiliar.
+// `horarios-disponibles` lo consultan además médico/coach al autoagendar su
+// cita desde /panel-medico (el sede se resuelve al alcance del usuario).
+const operativo = requireRole('coordinador', 'admin', 'auxiliar');
+const horarios = requireRole('coordinador', 'admin', 'auxiliar', 'medico', 'coach');
+
+router.get('/mes', operativo, calendarioController.getMes);
+router.get('/dia', operativo, calendarioController.getDia);
+router.get('/horarios-disponibles', horarios, calendarioController.getHorariosDisponibles);
+router.get('/disponibilidad-dia', operativo, calendarioController.getDisponibilidadDia);
+router.get('/disponibilidad-mes', operativo, calendarioController.getDisponibilidadMes);
+router.post('/reasignar-bulk', operativo, calendarioController.reasignarBulk);
 
 export default router;

@@ -15,6 +15,11 @@ const operativo = requireRole('coordinador', 'admin', 'auxiliar');
 // propia agenda, vía ownCodeOrParam) como los operativos (coordinador/admin/
 // auxiliar → gestión). Superset de `clinico` ∪ `operativo`.
 const agendaLista = requireRole('medico', 'coach', 'coordinador', 'admin', 'auxiliar');
+// Crear cita/orden: además de los operativos, médico/coach pueden AUTOAGENDAR
+// su propia cita desde /panel-medico. El controller fuerza su propio código
+// (ownCodeOrParam) → no pueden agendar bajo otro profesional. Editar/eliminar
+// sigue siendo operativo.
+const crearOrden = requireRole('medico', 'coach', 'coordinador', 'admin', 'auxiliar');
 
 // Estadísticas del día para un médico
 router.get('/stats/:medicoCode', clinico, medicalPanelController.getDailyStats);
@@ -36,7 +41,7 @@ router.patch('/patients/:patientId/no-answer', clinico, medicalPanelController.m
 // controller fuerza su código (ownCodeOrParam) cerrando el IDOR. Las
 // escrituras siguen `operativo` (coordinador/admin/auxiliar).
 router.get('/ordenes', agendaLista, medicalPanelController.listOrdenes);
-router.post('/ordenes', operativo, medicalPanelController.createOrden);
+router.post('/ordenes', crearOrden, medicalPanelController.createOrden);
 router.patch('/ordenes/:id', operativo, medicalPanelController.updateOrden);
 router.delete('/ordenes/:id', operativo, medicalPanelController.deleteOrden);
 

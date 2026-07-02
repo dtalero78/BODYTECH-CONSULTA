@@ -143,10 +143,13 @@ app.use('/api/telemedicine', telemedicineRoutes);
 // `/api/medical-panel` — RBAC por ruta (pacientes: clínico; órdenes: operativo).
 // El gating vive en medical-panel.routes.ts (roles distintos por sub-ruta).
 app.use('/api/medical-panel', medicalPanelRoutes);
-// Panel Coordinador — RBAC: solo coordinador/admin gestionan profesionales y
-// disponibilidad; el calendario lo ve además el auxiliar (agendar citas).
-app.use('/api/profesionales', requireRole('coordinador', 'admin'), profesionalesRoutes);
-app.use('/api/calendario', requireRole('coordinador', 'admin', 'auxiliar'), calendarioRoutes);
+// Panel Coordinador — RBAC por-ruta DENTRO de cada router: la gestión de
+// profesionales/disponibilidad y las vistas del calendario siguen siendo
+// coordinador/admin(/auxiliar), pero el LISTADO de profesionales y los HORARIOS
+// disponibles los consultan además médico/coach al autoagendar su propia cita
+// desde /panel-medico (ver profesionales.routes.ts y calendario.routes.ts).
+app.use('/api/profesionales', profesionalesRoutes);
+app.use('/api/calendario', calendarioRoutes);
 // Gestión de usuarios — admin + coordinador (límites P7 en el controller).
 app.use('/api/usuarios', requireRole('admin', 'coordinador'), usuariosRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.

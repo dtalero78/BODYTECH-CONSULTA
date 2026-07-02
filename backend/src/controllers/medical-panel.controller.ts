@@ -287,6 +287,11 @@ class MedicalPanelController {
     }
     const data = parsed.data;
 
+    // Médico/coach solo pueden AUTOAGENDAR: se fuerza su propio código (cierra
+    // el IDOR de agendar bajo otro profesional vía body manipulado). Coordinador/
+    // admin/auxiliar conservan el médico elegido en el formulario.
+    data.medico = ownCodeOrParam(req, data.medico);
+
     // Sede de la orden, acotada al alcance del usuario (RBAC): un `?sede`
     // explícito solo si está en su alcance; si no, su (primera) sede. Sin
     // sesión, comportamiento legacy.

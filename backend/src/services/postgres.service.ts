@@ -709,6 +709,55 @@ class PostgresService {
           WHERE buffer IS NOT NULL
       `);
 
+      // ===== Chat de WhatsApp (panel médico) =====
+      // Conversación por número de celular + hilo de mensajes (entrante/saliente).
+      // Alimenta el "cuadrito" de chat en cada fila de la Agenda del panel médico:
+      // el inbound llega por el webhook de Twilio y el saliente por respuestas del
+      // panel (o notificaciones de cita). Real-time vía Socket.io.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS conversaciones_whatsapp (
+          id                     SERIAL PRIMARY KEY,
+          celular                VARCHAR(40) NOT NULL,
+          nombre_paciente        VARCHAR(200),
+          origen                 VARCHAR(60),
+          estado                 VARCHAR(30) DEFAULT 'nueva',
+          canal                  VARCHAR(30) DEFAULT 'bot',
+          estado_actual          VARCHAR(30) DEFAULT 'inicio',
+          fecha_inicio           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          fecha_ultima_actividad TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_conversaciones_whatsapp_celular
+          ON conversaciones_whatsapp (celular)
+      `);
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS mensajes_whatsapp (
+          id                SERIAL PRIMARY KEY,
+          conversacion_id   INTEGER NOT NULL REFERENCES conversaciones_whatsapp(id) ON DELETE CASCADE,
+          direccion         VARCHAR(10) NOT NULL,
+          contenido         TEXT,
+          tipo_mensaje      VARCHAR(20) DEFAULT 'text',
+          media_url         TEXT,
+          media_type        TEXT,
+          sid_twilio        VARCHAR(100),
+          leido_por_agente  BOOLEAN DEFAULT FALSE,
+          created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT mensajes_whatsapp_direccion_chk CHECK (direccion IN ('entrante', 'saliente'))
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_mensajes_whatsapp_conv
+          ON mensajes_whatsapp (conversacion_id, created_at)
+      `);
+      // Unique por SID de Twilio → idempotencia del webhook. Nombre exacto usado
+      // por el catch de registrarMensajeSaliente/Entrante para ignorar duplicados.
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mensajes_sid_twilio_unique
+          ON mensajes_whatsapp (sid_twilio)
+          WHERE sid_twilio IS NOT NULL AND sid_twilio <> ''
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);
@@ -772,9 +821,9 @@ class PostgresService {
     contenido: string,
     sidTwilio: string,
     nombrePaciente?: string
-  ): Promise<boolean> {
+  ): Promise<{ mensajeId: number; createdAt: string } | null> {
     const client = await this.getClient();
-    if (!client) return false;
+    if (!client) return null;
 
     try {
       // Obtener o crear conversación
@@ -782,30 +831,128 @@ class PostgresService {
 
       if (!conversacionId) {
         console.error('❌ [PostgreSQL] No se pudo obtener/crear la conversación');
-        return false;
+        return null;
       }
 
       // Insertar mensaje
-      await client.query(
+      const res = await client.query(
         `INSERT INTO mensajes_whatsapp
          (conversacion_id, direccion, contenido, tipo_mensaje, sid_twilio, leido_por_agente)
-         VALUES ($1, 'saliente', $2, 'text', $3, true)`,
+         VALUES ($1, 'saliente', $2, 'text', $3, true)
+         RETURNING id, created_at`,
         [conversacionId, contenido, sidTwilio]
       );
 
       console.log(`✅ [PostgreSQL] Mensaje registrado para ${celular} (conversacion_id: ${conversacionId})`);
-      return true;
+      return { mensajeId: res.rows[0].id, createdAt: res.rows[0].created_at };
     } catch (error: any) {
       // Si el error es por SID duplicado, ignorarlo (mensaje ya registrado)
       if (error.code === '23505' && error.constraint === 'idx_mensajes_sid_twilio_unique') {
         console.log(`ℹ️ [PostgreSQL] Mensaje con SID ${sidTwilio} ya existe en la base de datos`);
-        return true;
+        return null;
       }
       console.error('❌ [PostgreSQL] Error registrando mensaje:', error);
-      return false;
+      return null;
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Registra un mensaje ENTRANTE (lo que el paciente escribe por WhatsApp).
+   * Idempotente por sid_twilio. Devuelve la conversación + mensaje para que el
+   * webhook pueda emitir el evento de Socket.io; null si falla.
+   */
+  async registrarMensajeEntrante(
+    celular: string,
+    contenido: string,
+    sidTwilio: string,
+    opts?: { tipoMensaje?: string; mediaUrl?: string; mediaType?: string; nombrePaciente?: string }
+  ): Promise<{ conversacionId: number; mensajeId: number; createdAt: string } | null> {
+    const client = await this.getClient();
+    if (!client) return null;
+    try {
+      const conversacionId = await this.getOrCreateConversacion(celular, opts?.nombrePaciente);
+      if (!conversacionId) return null;
+
+      const res = await client.query(
+        `INSERT INTO mensajes_whatsapp
+           (conversacion_id, direccion, contenido, tipo_mensaje, media_url, media_type, sid_twilio, leido_por_agente)
+         VALUES ($1, 'entrante', $2, $3, $4, $5, $6, false)
+         RETURNING id, created_at`,
+        [
+          conversacionId,
+          contenido,
+          opts?.tipoMensaje || 'text',
+          opts?.mediaUrl || null,
+          opts?.mediaType || null,
+          sidTwilio || null,
+        ]
+      );
+      return {
+        conversacionId,
+        mensajeId: res.rows[0].id,
+        createdAt: res.rows[0].created_at,
+      };
+    } catch (error: any) {
+      if (error.code === '23505' && error.constraint === 'idx_mensajes_sid_twilio_unique') {
+        console.log(`ℹ️ [PostgreSQL] Mensaje entrante SID ${sidTwilio} ya existe`);
+        return null;
+      }
+      console.error('❌ [PostgreSQL] Error registrando mensaje entrante:', error);
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Devuelve el hilo de mensajes de una conversación por celular (orden
+   * cronológico). Si no existe conversación, devuelve []. Marca los entrantes
+   * como leídos (fire-and-forget).
+   */
+  async getMensajesPorCelular(
+    celular: string,
+    limit = 200
+  ): Promise<
+    Array<{
+      id: number;
+      direccion: string;
+      contenido: string;
+      tipoMensaje: string;
+      mediaUrl: string | null;
+      createdAt: string;
+    }>
+  > {
+    const rows = await this.query(
+      `SELECT m.id, m.direccion, m.contenido, m.tipo_mensaje, m.media_url, m.created_at
+         FROM mensajes_whatsapp m
+         JOIN conversaciones_whatsapp c ON c.id = m.conversacion_id
+        WHERE c.celular = $1
+        ORDER BY m.created_at ASC
+        LIMIT $2`,
+      [celular, limit]
+    );
+    if (!rows) return [];
+
+    // Marcar entrantes como leídos (no bloquea la respuesta).
+    this.query(
+      `UPDATE mensajes_whatsapp m
+          SET leido_por_agente = true
+         FROM conversaciones_whatsapp c
+        WHERE m.conversacion_id = c.id AND c.celular = $1
+          AND m.direccion = 'entrante' AND m.leido_por_agente = false`,
+      [celular]
+    ).catch(() => {});
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      direccion: r.direccion,
+      contenido: r.contenido ?? '',
+      tipoMensaje: r.tipo_mensaje ?? 'text',
+      mediaUrl: r.media_url ?? null,
+      createdAt: r.created_at,
+    }));
   }
 }
 

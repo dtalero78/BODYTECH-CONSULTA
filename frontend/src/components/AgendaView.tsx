@@ -8,10 +8,12 @@ import {
   ChevronRight,
   Loader2,
   X,
+  MessageCircle,
 } from 'lucide-react';
 import medicalPanelService, {
   OrdenRow,
 } from '../services/medical-panel.service';
+import { WhatsappChatDrawer } from './WhatsappChatDrawer';
 
 interface AgendaViewProps {
   medicoCode: string;
@@ -378,6 +380,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
   const [page, setPage] = useState<number>(1);
   const [editingOrden, setEditingOrden] = useState<OrdenRow | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [chatOrden, setChatOrden] = useState<OrdenRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<boolean>(false);
 
   // Debounce de la búsqueda (~400ms) — no dispara fetch en cada tecla.
@@ -543,6 +546,16 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
                     <div className="inline-flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => setChatOrden(row)}
+                        disabled={!row.celular}
+                        className="text-[#00a884] hover:text-[#00c298] transition disabled:opacity-30 disabled:cursor-not-allowed"
+                        aria-label="Chat de WhatsApp"
+                        title={row.celular ? 'Chat de WhatsApp' : 'Sin celular'}
+                      >
+                        <MessageCircle size={16} />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setEditingOrden(row)}
                         className="text-blue-400 hover:text-blue-300 transition"
                         aria-label="Editar"
@@ -596,6 +609,15 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
             <ChevronRight size={16} />
           </button>
         </div>
+      )}
+
+      {/* Chat de WhatsApp del paciente */}
+      {chatOrden !== null && (
+        <WhatsappChatDrawer
+          celular={chatOrden.celular}
+          nombre={fullName(chatOrden)}
+          onClose={() => setChatOrden(null)}
+        />
       )}
 
       {/* Modal de edición */}

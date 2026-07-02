@@ -24,6 +24,16 @@ export interface PatientHistoryRecord {
   atendido: string | null;
 }
 
+/** Un mensaje del chat de WhatsApp (entrante = del paciente, saliente = del panel). */
+export interface WaMensaje {
+  id: number;
+  direccion: 'entrante' | 'saliente';
+  contenido: string;
+  tipoMensaje?: string;
+  mediaUrl?: string | null;
+  createdAt: string;
+}
+
 class ApiService {
   private client: AxiosInstance;
 
@@ -265,6 +275,22 @@ class ApiService {
     hora: string
   ): Promise<{ success: boolean; fecha: string; hora: string }> {
     const res = await this.client.post(`/api/video/reprogramar/${id}`, { fecha, hora });
+    return res.data;
+  }
+
+  // ----- Chat de WhatsApp (panel médico) -----
+  async getWhatsappMensajes(
+    celular: string
+  ): Promise<{ success: boolean; celular: string; mensajes: WaMensaje[] }> {
+    const res = await this.client.get(`/api/whatsapp-chat/mensajes`, { params: { celular } });
+    return res.data;
+  }
+
+  async sendWhatsappReply(
+    celular: string,
+    texto: string
+  ): Promise<{ success: boolean; mensaje?: WaMensaje; error?: string; hint?: string }> {
+    const res = await this.client.post(`/api/whatsapp-chat/mensajes`, { celular, texto });
     return res.data;
   }
 

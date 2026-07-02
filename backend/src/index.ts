@@ -22,11 +22,13 @@ import trepsiWebhookService from './services/trepsi-webhook.service';
 import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
 import whatsappLeadsService from './services/whatsapp-leads.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
+import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
 import { mapaStatsService } from './services/mapa-stats.service';
+import { whatsappChatService } from './services/whatsapp-chat.service';
 import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
 import { optionalAuthMiddleware } from './middleware/auth.middleware';
@@ -60,6 +62,9 @@ console.log('[Socket.io] Session tracker initialized');
 // Requiere 1 sola instancia (usa sessionTracker en memoria + Socket.io sin Redis).
 mapaStatsService.initialize(io);
 console.log('[Socket.io] Mapa de Rutas stats initialized');
+
+// Initialize WhatsApp chat (panel médico) with Socket.io
+whatsappChatService.initialize(io);
 
 // Socket.io: Handle join-room event for doctors
 io.on('connection', (socket) => {
@@ -151,6 +156,10 @@ app.use('/api/twilio', twilioVoiceRoutes);
 // WhatsApp Leads — webhook público de WHAPI para capturar la "entidad" del
 // lead. Sin JWT (lo llama WHAPI); se protege con WHAPI_WEBHOOK_SECRET opcional.
 app.use('/api/whatsapp-leads', whatsappLeadsRoutes);
+
+// Chat de WhatsApp del panel médico. La protección RBAC vive por-ruta dentro
+// del router (el /webhook de Twilio debe quedar público).
+app.use('/api/whatsapp-chat', whatsappChatRoutes);
 // Calidad — antes público; ahora solo coordinador/admin (auditoría).
 app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // Admin del outbox del webhook BSL → Trepsi (contiene PHI). RBAC: solo

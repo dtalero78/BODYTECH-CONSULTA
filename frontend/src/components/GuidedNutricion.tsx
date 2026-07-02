@@ -365,10 +365,9 @@ export function GuidedNutricion({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-stretch justify-center p-3 sm:p-5"
-      style={{ background: 'rgba(11,20,26,0.9)', backdropFilter: 'blur(6px)' }}
+      className="fixed inset-0 z-[100] flex items-stretch justify-end p-3 sm:p-5 pointer-events-none"
     >
-      <div className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)]">
+      <div className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[calc(100%-8px)] pointer-events-auto">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-[#324049] flex-shrink-0">
           <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
@@ -393,8 +392,8 @@ export function GuidedNutricion({
           </button>
         </div>
 
-        {/* Cuerpo: dos columnas (campos | transcripción) */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">
+        {/* Cuerpo: campos (ancho) | transcripción (angosta) */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px]">
           {/* Izquierda — campos para preguntar/anotar */}
           <div className="overflow-y-auto px-6 py-5 lg:border-r border-[#324049]">
             <GuidedNutricionFields getValue={getValue} setValue={setValue} />

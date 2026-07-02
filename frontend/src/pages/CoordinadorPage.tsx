@@ -88,9 +88,10 @@ export function CoordinadorPage() {
     }));
   }, []);
 
-  // "Mapa de Rutas": botón privado, visible solo para este usuario.
+  // "Mapa de Rutas": botón privado, visible solo para emails autorizados.
+  const MAPA_ALLOWED = ['danieltalero78@gmail.com', 'nikolay.correal@bodytechcorp.com'];
   const isMapaUser = useMemo(
-    () => (authService.getUser()?.email || '').toLowerCase() === 'danieltalero78@gmail.com',
+    () => MAPA_ALLOWED.includes((authService.getUser()?.email || '').toLowerCase()),
     [],
   );
 

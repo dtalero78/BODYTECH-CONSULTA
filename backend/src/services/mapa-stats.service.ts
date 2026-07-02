@@ -17,7 +17,11 @@ import authService from './auth.service';
 import postgresService from './postgres.service';
 import { sessionTracker } from './session-tracker.service';
 
-const ADMIN_EMAIL = 'danieltalero78@gmail.com';
+// Emails autorizados a ver el Mapa de Rutas en vivo (privado).
+const MAPA_ALLOWED = new Set<string>([
+  'danieltalero78@gmail.com',
+  'nikolay.correal@bodytechcorp.com',
+]);
 
 type ZoneId = 'medica-nativa' | 'nutricion-trepsi' | 'nutricion-nativa';
 const ZONES: ZoneId[] = ['medica-nativa', 'nutricion-trepsi', 'nutricion-nativa'];
@@ -72,7 +76,7 @@ class MapaStatsService {
           socket.handshake.query?.token;
         const payload = raw ? (authService.verifyToken(String(raw)) as unknown as { email?: string } | null) : null;
         const email = payload?.email ? String(payload.email).toLowerCase() : '';
-        if (email === ADMIN_EMAIL) return next();
+        if (MAPA_ALLOWED.has(email)) return next();
         return next(new Error('unauthorized'));
       } catch {
         return next(new Error('unauthorized'));

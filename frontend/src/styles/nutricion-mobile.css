@@ -39,7 +39,7 @@
   }
 .nmroot .brand{display:flex;align-items:center;gap:9px}
 .nmroot .brand .logotype{
-    font-family:'Instrument Serif',serif;
+    font-family:'Figtree',system-ui,sans-serif;
     font-size:20px;color:var(--text);
     letter-spacing:.005em;
     display:flex;align-items:baseline;gap:2px;
@@ -191,7 +191,7 @@
     margin-bottom:8px;
   }
 .nmroot .progress-count{
-    font-family:'Instrument Serif',serif;
+    font-family:'Figtree',system-ui,sans-serif;
     font-size:14px;color:var(--text-dim);letter-spacing:.02em;
     font-variant-numeric:tabular-nums;
   }
@@ -221,9 +221,9 @@
   }
 .nmroot .q-eyebrow::before{content:"";display:block;width:14px;height:1px;background:var(--accent)}
 .nmroot .q-title{
-    font-family:'Instrument Serif',serif;
-    font-size:24px;line-height:1.18;color:var(--text);
-    letter-spacing:-.005em;margin-bottom:4px;font-weight:400;
+    font-family:'Figtree',system-ui,sans-serif;
+    font-size:22px;line-height:1.22;color:var(--text);
+    letter-spacing:-.01em;margin-bottom:4px;font-weight:600;
   }
 .nmroot .q-title em{font-style:italic;color:#c8f0e2}
 .nmroot .q-help{
@@ -282,8 +282,8 @@
 .nmroot .stat-cell .val{display:flex;align-items:baseline;gap:6px;margin-top:4px}
 .nmroot .stat-cell .val input{
     background:transparent;border:0;outline:0;color:var(--text);
-    font-family:'Instrument Serif',serif;
-    font-size:32px;font-weight:400;width:78px;letter-spacing:-.02em;
+    font-family:'Figtree',system-ui,sans-serif;
+    font-size:32px;font-weight:600;width:78px;letter-spacing:-.02em;
   }
 .nmroot .stat-cell .unit{color:var(--text-dim);font-size:12.5px;font-weight:500}
 .nmroot .stat-cell .stepper{
@@ -455,7 +455,7 @@
     background:#e5484d;color:#fff;font-size:9.5px;font-weight:700;
     min-width:16px;height:16px;border-radius:8px;padding:0 4px;
     display:flex;align-items:center;justify-content:center;
-    border:2px solid var(--bg);font-family:'Inter';
+    border:2px solid var(--bg);font-family:'Figtree',system-ui,sans-serif;
   }
 .nmroot .ctrl-label{
     position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);
@@ -491,7 +491,7 @@
     margin-bottom:10px;
   }
 .nmroot .wa-sheet .wa-title{
-    font-family:'Instrument Serif',serif;font-size:16px;color:var(--text);
+    font-family:'Figtree',system-ui,sans-serif;font-size:16px;color:var(--text);
   }
 .nmroot .wa-sheet .wa-title em{font-style:italic;color:#7fd7c1}
 .nmroot .wa-sheet .wa-close{
@@ -536,7 +536,7 @@
   overflow:hidden;
   background:var(--bg);
   color:var(--text);
-  font-family:'Inter','Figtree',system-ui,sans-serif;
+  font-family:'Figtree',system-ui,sans-serif;
   letter-spacing:-0.005em;
   -webkit-font-smoothing:antialiased;
   z-index:40;

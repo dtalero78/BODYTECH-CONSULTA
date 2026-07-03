@@ -20,6 +20,21 @@ function fmtHora(iso: string): string {
   return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Evita duplicar el mensaje cuando llegan por dos vías (append optimista al
+// responder + echo de Socket.io de la plataforma). Dedup por id real, o por
+// dirección + contenido dentro de una ventana de 15s (el echo no siempre trae
+// el mismo id que la respuesta del POST).
+function esDuplicado(prev: WaMensaje[], m: WaMensaje): boolean {
+  if (m.id && prev.some((x) => x.id === m.id)) return true;
+  const t = new Date(m.createdAt).getTime();
+  return prev.some(
+    (x) =>
+      x.direccion === m.direccion &&
+      x.contenido === m.contenido &&
+      Math.abs(new Date(x.createdAt).getTime() - t) < 15000
+  );
+}
+
 /**
  * Ventana de chat de WhatsApp de UN paciente (abierta desde su fila en la
  * Agenda). Muestra el hilo entrante/saliente, escucha nuevos mensajes en vivo
@@ -74,10 +89,7 @@ export function WhatsappChatDrawer({ celular, nombre, onClose }: Props) {
         mediaUrl: m?.media_url ?? null,
         createdAt: m?.timestamp ?? m?.created_at ?? new Date().toISOString(),
       };
-      setMensajes((prev) => {
-        if (norm.id && prev.some((x) => x.id === norm.id)) return prev;
-        return [...prev, norm];
-      });
+      setMensajes((prev) => (esDuplicado(prev, norm) ? prev : [...prev, norm]));
     };
     socket.on('nuevo_mensaje', onMsg);
     socket.on('nuevo-mensaje', onMsg);
@@ -102,9 +114,7 @@ export function WhatsappChatDrawer({ celular, nombre, onClose }: Props) {
       const r = await apiService.sendWhatsappReply(celular, t);
       if (r.success && r.mensaje) {
         setTexto('');
-        setMensajes((prev) =>
-          prev.some((x) => x.id && x.id === r.mensaje!.id) ? prev : [...prev, r.mensaje!]
-        );
+        setMensajes((prev) => (esDuplicado(prev, r.mensaje!) ? prev : [...prev, r.mensaje!]));
       } else {
         setError(r.hint || r.error || 'No se pudo enviar el mensaje.');
       }

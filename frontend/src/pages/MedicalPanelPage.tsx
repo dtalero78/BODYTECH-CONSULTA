@@ -7,6 +7,7 @@ import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
 import { AgendarCitaModal } from '../components/AgendarCitaModal';
 import { AgendaView } from '../components/AgendaView';
+import { WhatsappChatDrawer } from '../components/WhatsappChatDrawer';
 
 // Helper function para reproducir sonido de notificación
 const playNotificationSound = () => {
@@ -96,6 +97,8 @@ export function MedicalPanelPage() {
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
   const [showAgendarModal, setShowAgendarModal] = useState(false);
   const [panelView, setPanelView] = useState<'hoy' | 'agenda'>('hoy');
+  // Chat de WhatsApp abierto (por celular del paciente).
+  const [chatPatient, setChatPatient] = useState<{ celular: string; nombre: string } | null>(null);
 
   const pageSize = 10;
 
@@ -889,6 +892,22 @@ export function MedicalPanelPage() {
 
                     <div className="flex gap-2">
                       <button
+                        onClick={() =>
+                          setChatPatient({
+                            celular: searchResult.celular,
+                            nombre: searchResult.nombres || 'Paciente',
+                          })
+                        }
+                        disabled={!searchResult.celular}
+                        className="bg-[#075e54] text-white px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                        title={searchResult.celular ? 'Ver chat de WhatsApp' : 'Sin celular'}
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.2 14.8l-.3-.2-2.8.7.8-2.7-.2-.3A8 8 0 0 1 12 4z" />
+                        </svg>
+                        Chat
+                      </button>
+                      <button
                         onClick={() => handleAtender(searchResult)}
                         disabled={attendingPatient === searchResult._id}
                         className="bg-[#00a884] text-white px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -1082,6 +1101,22 @@ export function MedicalPanelPage() {
 
                         <div className="flex gap-2">
                           <button
+                            onClick={() =>
+                              setChatPatient({
+                                celular: patient.celular,
+                                nombre: patient.nombres || 'Paciente',
+                              })
+                            }
+                            disabled={!patient.celular}
+                            className="bg-[#075e54] text-white px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                            title={patient.celular ? 'Ver chat de WhatsApp' : 'Sin celular'}
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2a10 10 0 0 0-8.7 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.2 14.8l-.3-.2-2.8.7.8-2.7-.2-.3A8 8 0 0 1 12 4z" />
+                            </svg>
+                            Chat
+                          </button>
+                          <button
                             onClick={() => handleAtender(patient)}
                             disabled={attendingPatient === patient._id}
                             className="bg-[#00a884] text-white px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -1159,6 +1194,14 @@ export function MedicalPanelPage() {
           queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
         }}
       />
+
+      {chatPatient && (
+        <WhatsappChatDrawer
+          celular={chatPatient.celular}
+          nombre={chatPatient.nombre}
+          onClose={() => setChatPatient(null)}
+        />
+      )}
     </div>
   );
 }

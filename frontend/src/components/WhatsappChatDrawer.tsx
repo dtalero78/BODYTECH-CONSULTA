@@ -3,7 +3,10 @@ import { io, Socket } from 'socket.io-client';
 import { X, Send, Loader2, MessageCircle } from 'lucide-react';
 import apiService, { WaMensaje } from '../services/api.service';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+// Socket.io del chat vive en bsl-plataforma (BODYTECH es un tenant ahí). Al
+// conectarse a este host, la plataforma une el cliente al room tenant:BODYTECH.
+const PLATAFORMA_URL =
+  import.meta.env.VITE_BSL_PLATAFORMA_URL || 'https://mediconecta.bodytech.app';
 
 interface Props {
   celular: string;
@@ -55,21 +58,32 @@ export function WhatsappChatDrawer({ celular, nombre, onClose }: Props) {
     };
   }, [celular]);
 
-  // Tiempo real
+  // Tiempo real desde bsl-plataforma (eventos nuevo_mensaje / nuevo-mensaje).
   useEffect(() => {
-    const socket: Socket = io(API_BASE || undefined, {
-      transports: ['websocket', 'polling'],
-    });
-    const onMsg = (m: WaMensaje & { celular: string }) => {
-      if (m.celular !== canon && m.celular !== celular) return;
+    const tail = (s: string) => (s || '').replace(/\D/g, '').slice(-10);
+    const mine = tail(canon) || tail(celular);
+    const socket: Socket = io(PLATAFORMA_URL, { transports: ['websocket', 'polling'] });
+    const onMsg = (m: any) => {
+      const cel = m?.celular || m?.numero_cliente || '';
+      if (tail(cel) !== mine) return;
+      const norm: WaMensaje = {
+        id: Number(m?.id ?? 0) || 0,
+        direccion: m?.direccion === 'saliente' ? 'saliente' : 'entrante',
+        contenido: m?.contenido ?? '',
+        tipoMensaje: m?.tipo_mensaje ?? 'text',
+        mediaUrl: m?.media_url ?? null,
+        createdAt: m?.timestamp ?? m?.created_at ?? new Date().toISOString(),
+      };
       setMensajes((prev) => {
-        if (m.id && prev.some((x) => x.id === m.id)) return prev;
-        return [...prev, m];
+        if (norm.id && prev.some((x) => x.id === norm.id)) return prev;
+        return [...prev, norm];
       });
     };
-    socket.on('nuevo-mensaje-whatsapp', onMsg);
+    socket.on('nuevo_mensaje', onMsg);
+    socket.on('nuevo-mensaje', onMsg);
     return () => {
-      socket.off('nuevo-mensaje-whatsapp', onMsg);
+      socket.off('nuevo_mensaje', onMsg);
+      socket.off('nuevo-mensaje', onMsg);
       socket.disconnect();
     };
   }, [canon, celular]);

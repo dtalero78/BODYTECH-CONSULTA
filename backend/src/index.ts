@@ -28,7 +28,6 @@ import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
 import { mapaStatsService } from './services/mapa-stats.service';
-import { whatsappChatService } from './services/whatsapp-chat.service';
 import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
 import { optionalAuthMiddleware } from './middleware/auth.middleware';
@@ -62,9 +61,6 @@ console.log('[Socket.io] Session tracker initialized');
 // Requiere 1 sola instancia (usa sessionTracker en memoria + Socket.io sin Redis).
 mapaStatsService.initialize(io);
 console.log('[Socket.io] Mapa de Rutas stats initialized');
-
-// Initialize WhatsApp chat (panel médico) with Socket.io
-whatsappChatService.initialize(io);
 
 // Socket.io: Handle join-room event for doctors
 io.on('connection', (socket) => {

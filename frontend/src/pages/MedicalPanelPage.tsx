@@ -717,18 +717,18 @@ export function MedicalPanelPage() {
 
           {/* Estadísticas */}
           {panelView === 'hoy' && stats && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-[#2a3942] rounded-xl p-4">
-                <div className="text-gray-400 text-sm mb-1">Programados Hoy</div>
-                <div className="text-3xl font-bold text-white">{stats.programadosHoy}</div>
+            <div className="grid grid-cols-3 gap-2 md:gap-4">
+              <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
+                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">Programados</div>
+                <div className="text-2xl md:text-3xl font-bold text-white">{stats.programadosHoy}</div>
               </div>
-              <div className="bg-[#2a3942] rounded-xl p-4">
-                <div className="text-gray-400 text-sm mb-1">Atendidos Hoy</div>
-                <div className="text-3xl font-bold text-[#00a884]">{stats.atendidosHoy}</div>
+              <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
+                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">Atendidos</div>
+                <div className="text-2xl md:text-3xl font-bold text-[#00a884]">{stats.atendidosHoy}</div>
               </div>
-              <div className="bg-[#2a3942] rounded-xl p-4">
-                <div className="text-gray-400 text-sm mb-1">Restantes Hoy</div>
-                <div className="text-3xl font-bold text-yellow-500">{stats.restantesHoy}</div>
+              <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
+                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">Restantes</div>
+                <div className="text-2xl md:text-3xl font-bold text-yellow-500">{stats.restantesHoy}</div>
               </div>
             </div>
           )}
@@ -778,8 +778,8 @@ export function MedicalPanelPage() {
                   ✅ Afiliado encontrado
                 </h3>
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="col-span-2 flex items-center gap-3 mb-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2 text-sm">
+                    <div className="col-span-1 md:col-span-2 flex items-center gap-3 mb-2">
                       <div>
                         <span className="text-gray-400">Nombre:</span>
                         <span className="text-white ml-2 font-semibold">
@@ -827,7 +827,7 @@ export function MedicalPanelPage() {
                         </a>
                       )}
                     </div>
-                    <div>
+                    <div className="hidden md:block">
                       <span className="text-gray-400">Sede:</span>
                       <span className="text-white ml-2">
                         {searchResult.empresaListado === 'SANITHELP-JJ' ? 'PARTICULAR' : searchResult.empresaListado}
@@ -845,12 +845,12 @@ export function MedicalPanelPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-gray-700 flex flex-wrap justify-between items-center gap-2">
-                    <div className="flex gap-2">
+                  <div className="mt-4 pt-4 border-t border-gray-700 flex flex-col gap-2 md:flex-row md:flex-wrap md:justify-between md:items-center">
+                    <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
                       <button
                         onClick={() => handleContactar(searchResult)}
                         disabled={contactingPatient === searchResult._id || contactedPatients.has(searchResult._id)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="bg-blue-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                       >
                         {contactingPatient === searchResult._id ? (
                           <>
@@ -881,7 +881,7 @@ export function MedicalPanelPage() {
                       <button
                         onClick={() => handleRellamar(searchResult)}
                         disabled={recallingPatient === searchResult._id}
-                        className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="bg-orange-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-orange-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                       >
                         {recallingPatient === searchResult._id ? (
                           <>
@@ -909,7 +909,7 @@ export function MedicalPanelPage() {
                           })
                         }
                         disabled={!searchResult.celular}
-                        className="bg-[#075e54] text-white px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="bg-[#075e54] text-white px-2 md:px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-xs md:text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                         title={searchResult.celular ? 'Ver chat de WhatsApp' : 'Sin celular'}
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -919,11 +919,11 @@ export function MedicalPanelPage() {
                       </button>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
                       <button
                         onClick={() => handleAtender(searchResult)}
                         disabled={attendingPatient === searchResult._id}
-                        className="bg-[#00a884] text-white px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="bg-[#00a884] text-white px-2 md:px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                       >
                         {attendingPatient === searchResult._id ? (
                           <>
@@ -945,7 +945,7 @@ export function MedicalPanelPage() {
 
                       <button
                         onClick={() => handleNoAnswer(searchResult._id)}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition text-sm font-medium flex items-center gap-2"
+                        className="bg-gray-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-gray-700 transition text-xs md:text-sm font-medium flex items-center justify-center gap-1.5 md:gap-2"
                       >
                         No Contesta
                       </button>
@@ -1002,7 +1002,7 @@ export function MedicalPanelPage() {
                             </div>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2 text-sm">
                           <div>
                             <span className="text-gray-400">Doc:</span>
                             <span className="text-white ml-2">{patient.numeroId}</span>
@@ -1029,7 +1029,7 @@ export function MedicalPanelPage() {
                               </a>
                             )}
                           </div>
-                          <div>
+                          <div className="hidden md:block">
                             <span className="text-gray-400">Sede:</span>
                             <span className="text-white ml-2">
                               {patient.empresaListado === 'SANITHELP-JJ'
@@ -1055,12 +1055,12 @@ export function MedicalPanelPage() {
                     </div>
 
                     {!collapsedItems[patient._id] && (
-                      <div className="mt-4 pt-4 border-t border-gray-700 flex flex-wrap justify-between items-center gap-2">
-                        <div className="flex gap-2">
+                      <div className="mt-4 pt-4 border-t border-gray-700 flex flex-col gap-2 md:flex-row md:flex-wrap md:justify-between md:items-center">
+                        <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
                           <button
                             onClick={() => handleContactar(patient)}
                             disabled={contactingPatient === patient._id || contactedPatients.has(patient._id)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="bg-blue-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                           >
                             {contactingPatient === patient._id ? (
                               <>
@@ -1091,7 +1091,7 @@ export function MedicalPanelPage() {
                           <button
                             onClick={() => handleRellamar(patient)}
                             disabled={recallingPatient === patient._id}
-                            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="bg-orange-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-orange-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                           >
                             {recallingPatient === patient._id ? (
                               <>
@@ -1119,7 +1119,7 @@ export function MedicalPanelPage() {
                               })
                             }
                             disabled={!patient.celular}
-                            className="bg-[#075e54] text-white px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="bg-[#075e54] text-white px-2 md:px-4 py-2 rounded-lg hover:bg-[#0a7a6c] transition text-xs md:text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                             title={patient.celular ? 'Ver chat de WhatsApp' : 'Sin celular'}
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -1129,11 +1129,11 @@ export function MedicalPanelPage() {
                           </button>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
                           <button
                             onClick={() => handleAtender(patient)}
                             disabled={attendingPatient === patient._id}
-                            className="bg-[#00a884] text-white px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="bg-[#00a884] text-white px-2 md:px-4 py-2 rounded-lg hover:bg-[#008f6f] transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
                           >
                             {attendingPatient === patient._id ? (
                               <>
@@ -1155,7 +1155,7 @@ export function MedicalPanelPage() {
 
                           <button
                             onClick={() => handleNoAnswer(patient._id)}
-                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition text-sm font-medium flex items-center gap-2"
+                            className="bg-gray-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-gray-700 transition text-xs md:text-sm font-medium flex items-center justify-center gap-1.5 md:gap-2"
                           >
                             No Contesta
                           </button>

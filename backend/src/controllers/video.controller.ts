@@ -13,6 +13,7 @@ import pdfService from '../services/pdf.service';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
+import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -367,14 +368,36 @@ class VideoController {
     const { phone, roomNameWithParams, patientName, appointmentTime, historiaId } = parsed.data;
 
     try {
-      // Usar template aprobado con variables para pacientes
-      const result = await whatsappService.sendTemplateMessage(
-        phone,
-        roomNameWithParams,
-        patientName,
-        appointmentTime,
-        historiaId
+      // Enviar la notificación de cita POR la plataforma (mismo Twilio del tenant
+      // BODYTECH → +5716284820) para que quede en el hilo del chat. Si la
+      // plataforma falla, cae al envío directo por Twilio (el paciente igual
+      // recibe, aunque no quede en el chat).
+      const citaTemplateSid =
+        process.env.TWILIO_WHATSAPP_TEMPLATE_SID || 'HX83c2dd7da8954757ee34a310d4f17e62';
+      const citaVars: Record<string, string> = {
+        '1': patientName,
+        '2': appointmentTime,
+        '3': roomNameWithParams,
+        '4': historiaId,
+      };
+      const celularE164 = phone.startsWith('+') ? phone : `+${phone}`;
+      let result: { success: boolean; error?: string; messageSid?: string };
+      const viaPlataforma = await bslPlataformaChatService.enviarPlantilla(
+        celularE164,
+        citaTemplateSid,
+        citaVars
       );
+      if (viaPlataforma) {
+        result = { success: true };
+      } else {
+        result = await whatsappService.sendTemplateMessage(
+          phone,
+          roomNameWithParams,
+          patientName,
+          appointmentTime,
+          historiaId
+        );
+      }
 
       if (result.success) {
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
@@ -540,17 +563,25 @@ class VideoController {
       // nunca abre esa ventana: los botones de URL no cuentan como respuesta).
       // Variables: {{1}} nombre · {{2}} fecha · {{3}} hora.
       if (cita.celular) {
+        const celular = cita.celular;
         const [y, m, d] = fecha.split('-');
         const fechaLegible = `${d}/${m}/${y}`;
         const reprogramadaSid =
           process.env.TWILIO_WHATSAPP_REPROGRAMADA_SID || 'HX7b65b5517dbe77d2fc336dd392101241';
-        whatsappService
-          .sendContentTemplate(cita.celular, reprogramadaSid, {
-            '1': cita.primerNombre ?? '',
-            '2': fechaLegible,
-            '3': hora,
+        const vars: Record<string, string> = {
+          '1': cita.primerNombre ?? '',
+          '2': fechaLegible,
+          '3': hora,
+        };
+        // Por la plataforma (queda en el chat); fallback a Twilio directo.
+        const fallbackDirecto = () =>
+          whatsappService.sendContentTemplate(celular, reprogramadaSid, vars).catch(() => {});
+        bslPlataformaChatService
+          .enviarPlantilla(celular, reprogramadaSid, vars)
+          .then((ok) => {
+            if (!ok) fallbackDirecto();
           })
-          .catch(() => {});
+          .catch(() => fallbackDirecto());
       }
 
       res.status(200).json({ success: true, fecha, hora });

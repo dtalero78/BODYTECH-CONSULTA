@@ -106,6 +106,34 @@ class BslPlataformaChatService {
     });
   }
 
+  /**
+   * Envía una plantilla (por SID) A TRAVÉS de la plataforma, para que quede en
+   * el hilo del chat. Devuelve true si la plataforma la envió/guardó. Se usa
+   * para las notificaciones de cita/reprogramación de bodytech (mismo Twilio
+   * +5716284820 configurado en el tenant BODYTECH). false → el caller cae al
+   * envío directo por Twilio (el paciente igual recibe, aunque no quede en chat).
+   */
+  async enviarPlantilla(
+    celular: string,
+    templateSid: string,
+    variables: Record<string, string>
+  ): Promise<boolean> {
+    if (!this.configurado || !celular || !templateSid) return false;
+    try {
+      return await this.authed(async (headers) => {
+        const res = await this.client.post(
+          '/api/irischat/enviar-plantilla',
+          { celular, templateSid, variables },
+          { headers }
+        );
+        return res.data?.success === true;
+      });
+    } catch (e: any) {
+      console.error('[bsl-plataforma] enviarPlantilla error:', e?.message ?? e);
+      return false;
+    }
+  }
+
   /** Hilo de mensajes por celular (vacío si no hay conversación). */
   async getMensajes(celular: string): Promise<{ celular: string; mensajes: WaMensaje[] }> {
     const conv = await this.findConversacion(celular);

@@ -888,9 +888,7 @@ export function MedicalPanelPage() {
                           </>
                         )}
                       </button>
-                    </div>
 
-                    <div className="flex gap-2">
                       <button
                         onClick={() =>
                           setChatPatient({
@@ -907,6 +905,9 @@ export function MedicalPanelPage() {
                         </svg>
                         Chat
                       </button>
+                    </div>
+
+                    <div className="flex gap-2">
                       <button
                         onClick={() => handleAtender(searchResult)}
                         disabled={attendingPatient === searchResult._id}
@@ -1097,9 +1098,7 @@ export function MedicalPanelPage() {
                               </>
                             )}
                           </button>
-                        </div>
 
-                        <div className="flex gap-2">
                           <button
                             onClick={() =>
                               setChatPatient({
@@ -1116,6 +1115,9 @@ export function MedicalPanelPage() {
                             </svg>
                             Chat
                           </button>
+                        </div>
+
+                        <div className="flex gap-2">
                           <button
                             onClick={() => handleAtender(patient)}
                             disabled={attendingPatient === patient._id}

@@ -92,8 +92,6 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
   const [pip, setPip] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
-  const [lastDraftAt, setLastDraftAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(Date.now());
   const [callSecs, setCallSecs] = useState(0);
 
   // Conectar al montar (la pantalla de "unirse" ya pasó).
@@ -149,7 +147,6 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
             if (d.datos) setDatos((prev) => ({ ...prev, ...d.datos }));
             if (d.concepto) setConcepto(d.concepto);
             if (d.aiSuggestions) setAiSuggestions(d.aiSuggestions);
-            if (d.ts) setLastDraftAt(d.ts);
           }
         } catch {
           /* borrador corrupto → ignorar */
@@ -174,19 +171,12 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
           draftKey(historiaId),
           JSON.stringify({ peso, talla, datos, concepto, aiSuggestions, ts })
         );
-        setLastDraftAt(ts);
       } catch {
         /* storage lleno → no bloquear */
       }
     }, 1200);
     return () => clearTimeout(t);
   }, [peso, talla, datos, concepto, aiSuggestions, historiaId]);
-
-  // Tick para el "hace Ns" del chip.
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 5000);
-    return () => clearInterval(t);
-  }, []);
 
   const guideGet = useCallback(
     (key: string): string => {
@@ -379,7 +369,6 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
     );
   };
 
-  const draftSecs = lastDraftAt ? Math.max(0, Math.round((nowTick - lastDraftAt) / 1000)) : null;
   const transcriptTail = (live.interim || live.transcript || '').slice(-90);
 
   return (
@@ -389,13 +378,6 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
         <div className="topbar">
           <div className="brand">
             <img src="/bodySinFondo.png" alt="Bodytech" />
-            <span className="badge">consulta · en vivo</span>
-          </div>
-          <div className="top-actions">
-            <div className="save-chip" title="Borrador local activo">
-              <span className="dot"></span>
-              <span>{draftSecs === null ? 'Borrador listo' : `Borrador · hace ${draftSecs} s`}</span>
-            </div>
           </div>
         </div>
 
@@ -467,11 +449,7 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
         {/* WIZARD */}
         <div className="wizard">
           <div className="progress-row">
-            <div className="progress-count">
-              <b>{String(stepIdx + 1).padStart(2, '0')}</b> / {String(totalSteps).padStart(2, '0')} ·{' '}
-              <span>{isFinalStep ? 'Cierre' : currentStep!.topic}</span>
-            </div>
-            <div className="progress-label">Consulta guiada</div>
+            <div className="progress-label" style={{ marginLeft: 'auto' }}>Consulta guiada</div>
           </div>
           <div className="progress-bar">
             {Array.from({ length: totalSteps }).map((_, i) => (

@@ -639,13 +639,13 @@ export function MedicalPanelPage() {
     <div className="min-h-screen bg-[#0b141a] p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <img src="/bodySinFondo.png" alt="BSL Logo" className="h-12 w-auto" />
-              <div>
-                <h1 className="text-2xl font-bold text-white">Panel Médico</h1>
-                <p className="text-gray-400 text-sm">
+        <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-4 md:p-6 mb-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+            <div className="flex items-center gap-3 md:gap-4 min-w-0">
+              <img src="/bodySinFondo.png" alt="BSL Logo" className="h-9 md:h-12 w-auto shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-xl md:text-2xl font-bold text-white">Panel Médico</h1>
+                <p className="text-gray-400 text-xs md:text-sm truncate">
                   Código: {medicoCode}
                   {sedeId && (
                     <>
@@ -655,9 +655,18 @@ export function MedicalPanelPage() {
                   )}
                 </p>
               </div>
+              <img
+                src="/mediconectaLogo.png"
+                alt="Mediconecta"
+                className="h-8 md:h-10 w-auto ml-auto md:hidden shrink-0"
+              />
             </div>
-            <div className="flex items-center gap-4">
-              <img src="/mediconectaLogo.png" alt="Mediconecta" className="h-10 w-auto" />
+            <div className="flex items-center gap-2 md:gap-4 flex-wrap">
+              <img
+                src="/mediconectaLogo.png"
+                alt="Mediconecta"
+                className="hidden md:block h-10 w-auto"
+              />
               <div className="flex rounded-lg overflow-hidden border border-gray-600">
                 <button
                   onClick={() => setPanelView('hoy')}
@@ -685,20 +694,23 @@ export function MedicalPanelPage() {
                 className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
               >
                 <Plus size={16} />
-                Agendar Cita
+                <span className="hidden sm:inline">Agendar Cita</span>
+                <span className="sm:hidden">Agendar</span>
               </button>
               <button
                 onClick={handleRefresh}
                 disabled={isLoading}
-                className="bg-[#00a884] text-white px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50"
+                className="bg-[#00a884] text-white px-3 md:px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50 text-sm md:text-base"
               >
-                {isLoading ? '⟳' : '↻ Actualizar'}
+                {isLoading ? '⟳' : '↻'}
+                <span className="hidden sm:inline"> Actualizar</span>
               </button>
               <button
                 onClick={handleLogout}
-                className="bg-gray-700 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition font-semibold"
+                className="bg-gray-700 text-white px-3 md:px-4 py-2 rounded-xl hover:bg-gray-600 transition font-semibold text-sm md:text-base"
               >
-                Cerrar sesión
+                <span className="hidden sm:inline">Cerrar sesión</span>
+                <span className="sm:hidden">Salir</span>
               </button>
             </div>
           </div>
@@ -725,16 +737,16 @@ export function MedicalPanelPage() {
         {panelView === 'hoy' && (
         <>
         {/* Búsqueda */}
-        <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6 mb-6">
+        <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-4 md:p-6 mb-6">
           <h2 className="text-xl font-bold text-white mb-4">Buscar Afiliado</h2>
           <form onSubmit={handleSearch} className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <input
                 type="text"
                 placeholder="Buscar por documento o celular..."
                 value={searchDocument}
                 onChange={(e) => setSearchDocument(e.target.value)}
-                className="flex-1 px-4 py-3 bg-[#2a3942] border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-[#00a884] transition"
+                className="flex-1 min-w-[180px] px-4 py-3 bg-[#2a3942] border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-[#00a884] transition"
               />
               <button
                 type="submit"
@@ -833,7 +845,7 @@ export function MedicalPanelPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
+                  <div className="mt-4 pt-4 border-t border-gray-700 flex flex-wrap justify-between items-center gap-2">
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleContactar(searchResult)}
@@ -1043,7 +1055,7 @@ export function MedicalPanelPage() {
                     </div>
 
                     {!collapsedItems[patient._id] && (
-                      <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
+                      <div className="mt-4 pt-4 border-t border-gray-700 flex flex-wrap justify-between items-center gap-2">
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleContactar(patient)}

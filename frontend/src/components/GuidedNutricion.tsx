@@ -19,7 +19,7 @@ import { useRealtimeTranscription } from '../hooks/useRealtimeTranscription';
 
 type FieldKind = 'textarea' | 'text' | 'select';
 
-interface GField {
+export interface GField {
   kind: FieldKind;
   key: string;
   label?: string;
@@ -30,7 +30,7 @@ interface GField {
   full?: boolean;
 }
 
-interface GStep {
+export interface GStep {
   id: string;
   topic: string;
   question: string;
@@ -40,7 +40,7 @@ interface GStep {
 
 const opts = (...vals: string[]) => vals.map((v) => ({ value: v, label: v }));
 
-const SCRIPT_NUTRI: GStep[] = [
+export const SCRIPT_NUTRI: GStep[] = [
   {
     id: 'motivo',
     topic: 'Motivo y objetivo',

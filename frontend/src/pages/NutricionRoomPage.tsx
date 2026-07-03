@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { VideoRoom } from '../components/VideoRoom';
+import { NutricionRoomMobile } from '../components/NutricionRoomMobile';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 /**
  * Página del Panel Nutricional.
@@ -16,6 +18,7 @@ export const NutricionRoomPage = () => {
   const [searchParams] = useSearchParams();
   const [doctorName, setDoctorName] = useState('');
   const [isInCall, setIsInCall] = useState(false);
+  const isMobile = useIsMobile();
 
   // Extraer parámetros de la URL
   const doctorParam = searchParams.get('doctor');
@@ -41,6 +44,19 @@ export const NutricionRoomPage = () => {
   };
 
   if (isInCall && roomName) {
+    // En teléfono, la sala usa la variante móvil (diseño del harness iter-3):
+    // video colapsable a PiP + consulta guiada paso a paso. Desktop intacto.
+    if (isMobile) {
+      return (
+        <NutricionRoomMobile
+          identity={`Dr. ${doctorName}`}
+          roomName={roomName}
+          historiaId={historiaIdParam || undefined}
+          pacienteNombre={pacienteParam || undefined}
+          onLeave={handleLeaveCall}
+        />
+      );
+    }
     return (
       <VideoRoom
         identity={`Dr. ${doctorName}`}

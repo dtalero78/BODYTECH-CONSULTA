@@ -374,28 +374,14 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
   return (
     <div className="nmroot">
       <div className="app">
-        {/* TOP BAR */}
+        {/* HEADER compacto: logo + paciente + cronómetro en una sola fila */}
         <div className="topbar">
           <div className="brand">
             <img src="/bodySinFondo.png" alt="Bodytech" />
           </div>
-        </div>
-
-        {/* PATIENT STRIP */}
-        <div className="patient-strip">
-          <div className="who">
-            <div className="avatar">
-              {(nombrePaciente || 'P')
-                .split(' ')
-                .map((w) => w[0])
-                .slice(0, 2)
-                .join('')
-                .toUpperCase()}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div className="name">{nombrePaciente || 'Paciente'}</div>
-              <div className="meta">{roomName}</div>
-            </div>
+          <div className="who-min">
+            <span className="pdot"></span>
+            <span className="pname">{nombrePaciente || 'Paciente'}</span>
           </div>
           <div className="timer">
             <span className="rec"></span>
@@ -448,13 +434,15 @@ export function NutricionRoomMobile({ identity, roomName, historiaId, pacienteNo
 
         {/* WIZARD */}
         <div className="wizard">
-          <div className="progress-row">
-            <div className="progress-label" style={{ marginLeft: 'auto' }}>Consulta guiada</div>
-          </div>
-          <div className="progress-bar">
-            {Array.from({ length: totalSteps }).map((_, i) => (
-              <div key={i} className={`seg${i <= stepIdx ? ' active' : ''}`}></div>
-            ))}
+          <div className="wizard-head">
+            <div className="progress-row">
+              <div className="progress-label" style={{ marginLeft: 'auto' }}>Consulta guiada</div>
+            </div>
+            <div className="progress-bar">
+              {Array.from({ length: totalSteps }).map((_, i) => (
+                <div key={i} className={`seg${i <= stepIdx ? ' active' : ''}`}></div>
+              ))}
+            </div>
           </div>
 
           {!isFinalStep && currentStep && (

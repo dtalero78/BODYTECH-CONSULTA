@@ -27,17 +27,29 @@
   }
 .nmroot .app{
     position:absolute;inset:0;
-    padding-top:52px;
+    padding-top:44px;
     display:grid;
-    grid-template-rows:auto auto auto 1fr auto auto auto;
+    grid-template-rows:auto auto 1fr auto auto auto;
     background:var(--bg);
   }
 .nmroot .topbar{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:10px 18px 8px;
+    display:flex;align-items:center;gap:10px;
+    padding:8px 16px 8px;
     background:linear-gradient(180deg, rgba(31,44,52,.55), rgba(11,20,26,0));
   }
-.nmroot .brand{display:flex;align-items:center;gap:9px}
+.nmroot .brand{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.nmroot .brand img{height:24px;width:auto}
+.nmroot .who-min{
+    display:flex;align-items:center;gap:7px;min-width:0;flex:1;
+  }
+.nmroot .who-min .pdot{
+    width:7px;height:7px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 8px var(--accent);flex-shrink:0;
+  }
+.nmroot .who-min .pname{
+    font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
 .nmroot .brand .logotype{
     font-family:'Figtree',system-ui,sans-serif;
     font-size:20px;color:var(--text);
@@ -107,7 +119,7 @@
     border-radius:18px;
     overflow:hidden;
     position:relative;
-    height:158px;
+    height:116px;
     background:radial-gradient(140% 120% at 40% 20%, #2c4a52 0%, #0d181d 60%, #06090b 100%);
     border:1px solid var(--line-strong);
     transition:all .5s cubic-bezier(.16,1,.3,1);
@@ -178,14 +190,18 @@
 .nmroot .video-hero.pip .collapse-btn{width:22px;height:22px}
 .nmroot .wizard{
     display:flex;flex-direction:column;
-    padding:14px 20px 4px;
+    padding:0 18px 18px;
     min-height:0;
     overflow-y:auto;
     scrollbar-width:none;
-    transition:padding-top .4s ease;
     position:relative;
   }
 .nmroot .wizard::-webkit-scrollbar{display:none}
+.nmroot .wizard-head{
+    position:sticky;top:0;z-index:3;
+    background:var(--bg);
+    padding-top:12px;padding-bottom:4px;
+  }
 .nmroot .progress-row{
     display:flex;align-items:center;justify-content:space-between;
     margin-bottom:8px;
@@ -235,13 +251,14 @@
     border:1px solid var(--line);
     border-radius:14px;
     padding:12px 12px 10px;
+    margin-bottom:12px;
     display:flex;flex-direction:column;
     position:relative;
   }
 .nmroot .field-area textarea{
     flex:1;background:transparent;border:0;outline:0;resize:none;
-    color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.5;
-    min-height:64px;letter-spacing:.005em;
+    color:var(--text);font-family:inherit;font-size:15px;line-height:1.5;
+    min-height:52px;max-height:132px;letter-spacing:.005em;
   }
 .nmroot .field-area textarea::placeholder{color:var(--text-mute)}
 .nmroot .field-toolbar{
@@ -338,12 +355,12 @@
 .nmroot .platform-cta .txt b{color:var(--text);font-weight:600;display:block;margin-bottom:1px}
 .nmroot .platform-cta .txt span{color:var(--text-mute)}
 .nmroot .transcript{
-    margin:2px 20px 0;
-    padding:8px 0 6px;
+    margin:0 18px;
+    padding:5px 0 4px;
     display:grid;
     grid-template-columns:auto 1fr auto;
     gap:10px;align-items:center;
-    min-height:36px;
+    min-height:28px;
     border-top:1px solid rgba(255,255,255,.05);
     transition:opacity .3s;
   }
@@ -385,14 +402,14 @@
     padding-left:10px;
   }
 .nmroot .wizard-nav{
-    display:flex;gap:10px;padding:10px 16px 0;
+    display:flex;gap:10px;padding:8px 16px 0;
     align-items:stretch;
   }
 .nmroot .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
     border:0;cursor:pointer;font-family:inherit;font-weight:600;
     font-size:13px;letter-spacing:.005em;transition:all .18s;
-    border-radius:12px;padding:12px 16px;min-height:46px;
+    border-radius:12px;padding:10px 16px;min-height:44px;
   }
 .nmroot .btn-ghost{
     background:var(--surface);color:var(--text);
@@ -410,7 +427,7 @@
 .nmroot .btn-primary:hover{background:#00b892}
 .nmroot .btn-primary.finish{background:linear-gradient(135deg,#00c497 0%, #00a884 100%)}
 .nmroot .dock{
-    padding:10px 18px 18px;
+    padding:8px 18px 14px;
     display:flex;align-items:center;justify-content:space-between;
     gap:8px;border-top:1px solid var(--line);
     background:linear-gradient(180deg, rgba(11,20,26,0), rgba(11,20,26,.9));
@@ -515,7 +532,7 @@
 .nmroot .wa-msg .body p{font-size:12px;color:var(--text);line-height:1.4;margin-top:2px}
 .nmroot .wa-msg .time{font-size:9.5px;color:var(--text-mute);margin-top:2px;font-family:'JetBrains Mono',monospace}
 .nmroot .step{display:none;animation:stepIn .4s cubic-bezier(.16,1,.3,1)}
-.nmroot .step.active{display:block}
+.nmroot .step.active{display:block;padding-top:10px}
 @keyframes stepIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (max-width:420px){
 .nmroot{--phone-scale:.92}
@@ -562,10 +579,10 @@
 .nmroot .dock{padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 10px)}
 
 /* Campos genéricos del wizard (selects / inputs de texto del script real) */
-.nmroot .nm-field{margin-bottom:10px}
+.nmroot .nm-field{margin-bottom:14px}
 .nmroot .nm-field label{
   display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--text-mute);margin-bottom:5px;font-weight:600;
+  color:var(--text-mute);margin-bottom:6px;font-weight:600;
 }
 .nmroot .nm-select, .nmroot .nm-input{
   width:100%;
@@ -586,7 +603,7 @@
   background-position:right 13px center;
   padding-right:34px;
 }
-.nmroot .step{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.nmroot .step{overflow:visible}
 .nmroot .field-area textarea{font-family:inherit}
 .nmroot .finalize-btn{
   width:100%;

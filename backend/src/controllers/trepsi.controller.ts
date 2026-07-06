@@ -34,9 +34,15 @@ const pacienteSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'fechaNacimiento debe ser YYYY-MM-DD.'),
   sexo: z.enum(['M', 'F', 'Otro']).optional(),
-  celular: z
-    .string()
-    .regex(/^\+\d{8,15}$/, 'celular debe estar en formato E.164 (ej. +573001234567).'),
+  // Normalización defensiva: Trepsi a veces manda el celular local colombiano
+  // (10 dígitos empezando por 3) sin el prefijo +57. Lo autopoblamos aquí para
+  // no rechazar la cita, dejando E.164 como formato canónico interno.
+  celular: z.preprocess((v) => {
+    if (typeof v !== 'string') return v;
+    const clean = v.replace(/\s+/g, '').trim();
+    if (/^3\d{9}$/.test(clean)) return `+57${clean}`;
+    return clean;
+  }, z.string().regex(/^\+\d{8,15}$/, 'celular debe estar en formato E.164 (ej. +573001234567) o ser un móvil colombiano de 10 dígitos empezando por 3.')),
   email: z.string().email().optional(),
   direccion: z.string().optional(),
   ciudad: z.string().optional(),

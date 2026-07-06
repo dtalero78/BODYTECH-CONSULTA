@@ -36,6 +36,11 @@ router.get('/patients/details/:documento', clinico, medicalPanelController.getPa
 // Marcar paciente como "No Contesta"
 router.patch('/patients/:patientId/no-answer', clinico, medicalPanelController.markAsNoAnswer);
 
+// Disponibilidad recurrente del PROPIO coach/médico (self-service desde su panel).
+// El profesional se resuelve de la sesión → cada quien solo edita SU horario.
+router.get('/mi-disponibilidad', clinico, medicalPanelController.getMiDisponibilidad);
+router.post('/mi-disponibilidad', clinico, medicalPanelController.replaceMiDisponibilidad);
+
 // CRUD de Órdenes.
 // El LISTADO (agenda) es `clinico`: médico/coach ven SU propia agenda — el
 // controller fuerza su código (ownCodeOrParam) cerrando el IDOR. Las

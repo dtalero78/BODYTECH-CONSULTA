@@ -5,6 +5,8 @@ import medicalPanelService, {
   OrdenUpdateInput,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
+import disponibilidadService from '../services/disponibilidad.service';
+import profesionalesService from '../services/profesionales.service';
 import { getSession, canActOnSede } from '../middleware/rbac.middleware';
 
 // Para médico/coach, su AGENDA del día solo debe mostrar SUS pacientes:
@@ -118,6 +120,51 @@ function validationResponse(res: Response, err: ZodError): void {
   });
 }
 
+// Disponibilidad recurrente self-service (el coach/médico edita SU horario).
+const horaHHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const miDisponibilidadReplaceSchema = z.object({
+  modalidad: z.enum(['presencial', 'virtual']),
+  dias: z.array(
+    z.object({
+      diaSemana: z.number().int().min(0).max(6),
+      rangos: z.array(
+        z.object({
+          horaInicio: z.string().regex(horaHHMM, 'horaInicio debe ser HH:MM'),
+          horaFin: z.string().regex(horaHHMM, 'horaFin debe ser HH:MM'),
+        })
+      ),
+    })
+  ),
+});
+
+// Resuelve el profesional del usuario logueado desde su sesión (código + sede).
+// Garantiza que un coach solo pueda tocar SU propia disponibilidad (no hay :id
+// en la URL → no hay IDOR). Responde el error y devuelve null si no se resuelve.
+async function resolveMiProfesional(
+  req: Request,
+  res: Response
+): Promise<{ id: number; sedeId: string } | null> {
+  const s = getSession(req);
+  const codigo = s?.codigo;
+  const sedeId = s?.sedes && s.sedes.length > 0 ? s.sedes[0] : ((req as unknown) as { sedeId?: string }).sedeId;
+  if (!codigo || !sedeId) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'NO_PROFESIONAL', message: 'No se pudo determinar tu profesional.' },
+    });
+    return null;
+  }
+  const prof = await profesionalesService.getByCodigo(codigo, sedeId);
+  if (!prof.ok || !prof.data) {
+    res.status(404).json({
+      success: false,
+      error: { code: 'PROFESIONAL_NOT_FOUND', message: 'No existe tu ficha de profesional en esta sede.' },
+    });
+    return null;
+  }
+  return { id: prof.data.id, sedeId };
+}
+
 class MedicalPanelController {
   /**
    * Obtiene estadísticas del día para un médico
@@ -213,6 +260,55 @@ class MedicalPanelController {
       res.json({ success: true, message: 'Paciente marcado como "No Contesta"' });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Disponibilidad recurrente del PROPIO coach/médico (self-service).
+   * GET /api/medical-panel/mi-disponibilidad?modalidad=virtual
+   */
+  async getMiDisponibilidad(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const me = await resolveMiProfesional(req, res);
+      if (!me) return;
+      const m = req.query.modalidad;
+      const modalidad = m === 'presencial' || m === 'virtual' ? m : 'virtual';
+      const result = await disponibilidadService.getByProfesional(me.id, me.sedeId, modalidad);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Reemplaza la disponibilidad recurrente del PROPIO coach/médico.
+   * POST /api/medical-panel/mi-disponibilidad  { modalidad, dias }
+   */
+  async replaceMiDisponibilidad(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const me = await resolveMiProfesional(req, res);
+      if (!me) return;
+      const parsed = miDisponibilidadReplaceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return validationResponse(res, parsed.error);
+      }
+      const result = await disponibilidadService.replace(
+        me.id,
+        me.sedeId,
+        parsed.data.modalidad,
+        parsed.data.dias
+      );
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
     }
   }
 

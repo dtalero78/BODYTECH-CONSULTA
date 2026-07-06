@@ -162,6 +162,28 @@ class ProfesionalesService {
     return res.data?.data;
   }
 
+  // --- Disponibilidad del PROPIO coach/médico (self-service desde /panel-medico) ---
+  // No lleva id: el backend resuelve el profesional desde la sesión.
+  async getMiDisponibilidad(modalidad: Modalidad): Promise<DisponibilidadAgrupada> {
+    const res = await axios.get(
+      `${API_BASE_URL}/api/medical-panel/mi-disponibilidad?modalidad=${modalidad}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  async replaceMiDisponibilidad(
+    modalidad: Modalidad,
+    dias: DiaRangos[]
+  ): Promise<DisponibilidadAgrupada> {
+    const res = await axios.post(
+      `${API_BASE_URL}/api/medical-panel/mi-disponibilidad`,
+      { modalidad, dias },
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
   // --- Disponibilidad por FECHA (override puntual) ---
 
   async getDisponibilidadFecha(

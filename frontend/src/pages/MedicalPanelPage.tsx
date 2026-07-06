@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, Clock } from 'lucide-react';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
 import { AgendarCitaModal } from '../components/AgendarCitaModal';
+import { CoachHorarioModal } from '../components/CoachHorarioModal';
 import { AgendaView } from '../components/AgendaView';
 import { WhatsappChatDrawer } from '../components/WhatsappChatDrawer';
 
@@ -96,6 +97,7 @@ export function MedicalPanelPage() {
   const [patientRooms, setPatientRooms] = useState<{ [patientId: string]: string }>({});
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
   const [showAgendarModal, setShowAgendarModal] = useState(false);
+  const [showHorarioModal, setShowHorarioModal] = useState(false);
   const [panelView, setPanelView] = useState<'hoy' | 'agenda'>('hoy');
   // Chat de WhatsApp abierto (por celular del paciente).
   const [chatPatient, setChatPatient] = useState<{ celular: string; nombre: string } | null>(null);
@@ -698,6 +700,14 @@ export function MedicalPanelPage() {
                 <span className="sm:hidden">Agendar</span>
               </button>
               <button
+                onClick={() => setShowHorarioModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors"
+                title="Fijar mi disponibilidad semanal"
+              >
+                <Clock size={16} />
+                <span className="hidden sm:inline">Horario</span>
+              </button>
+              <button
                 onClick={handleRefresh}
                 disabled={isLoading}
                 className="bg-[#00a884] text-white px-3 md:px-4 py-2 rounded-xl hover:bg-[#008f6f] transition font-semibold disabled:opacity-50 text-sm md:text-base"
@@ -1207,6 +1217,17 @@ export function MedicalPanelPage() {
           queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
           queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
         }}
+      />
+
+      <CoachHorarioModal
+        isOpen={showHorarioModal}
+        onClose={() => setShowHorarioModal(false)}
+        subtitulo={`Código: ${medicoCode}`}
+        onSaved={() => {
+          setShowHorarioModal(false);
+          alert('Tu horario fue actualizado.');
+        }}
+        onError={(msg) => alert(msg)}
       />
 
       {chatPatient && (

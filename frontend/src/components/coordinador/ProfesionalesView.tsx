@@ -140,23 +140,15 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
   // ----- Reactivar (set activo=true) -----
   async function reactivar(p: Profesional) {
     try {
-      // El service usa update completo; pasamos solo lo necesario aprovechando partial.
-      // Algunas instalaciones no permiten editar `activo` por PUT — si falla
-      // mostramos el error y dejamos el flujo intacto.
-      await profesionalesService.update(p.id, {
-        rol: p.rol,
-        codigo: p.codigo,
-        primerNombre: p.primerNombre,
-        primerApellido: p.primerApellido,
-      });
+      // `activo` no es editable vía PUT; usamos el endpoint dedicado que revierte
+      // el soft-delete (POST /:id/reactivar).
+      await profesionalesService.reactivar(p.id);
       showToast({ type: 'success', message: `${nombreCompleto(p)} reactivado.` });
       reload();
-    } catch {
-      showToast({
-        type: 'error',
-        message: 'No se pudo reactivar — usa el formulario de edición.',
-      });
-      openEdit(p);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = e?.response?.data?.error?.message || 'No se pudo reactivar el profesional.';
+      showToast({ type: 'error', message: msg });
     }
   }
 

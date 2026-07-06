@@ -365,6 +365,27 @@ class ProfesionalesService {
     }
     return { ok: true, status: 200, data: { id: Number(rows[0].id) } };
   }
+
+  /**
+   * Reactivar: revierte el soft-delete (activo = true). `activo` no es editable
+   * vía PUT (no está en el mapping ni en el schema), así que este es el único
+   * camino para volver a activar un profesional desactivado.
+   */
+  async reactivate(id: number, sedeId: string): Promise<ServiceResult<ProfesionalRow>> {
+    const rows = await postgresService.query(
+      `UPDATE profesionales SET activo = TRUE, updated_at = NOW()
+        WHERE id = $1 AND sede_id = $2
+        RETURNING ${COLS_DETAIL}`,
+      [id, sedeId]
+    );
+    if (rows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error reactivando profesional.' } };
+    }
+    if (rows.length === 0) {
+      return { ok: false, status: 404, error: { code: 'NOT_FOUND', message: 'Profesional no encontrado.' } };
+    }
+    return { ok: true, status: 200, data: rowToProfesional(rows[0]) };
+  }
 }
 
 export default new ProfesionalesService();

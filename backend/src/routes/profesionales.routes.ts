@@ -11,6 +11,7 @@
 //   POST   /                           → crear
 //   PUT    /:id                        → actualizar
 //   DELETE /:id                        → soft-delete
+//   POST   /:id/reactivar              → revertir soft-delete (activo = true)
 //   GET    /:id/disponibilidad         → leer (?modalidad=)
 //   POST   /:id/disponibilidad         → reemplazar (modalidad + dias en body)
 //   DELETE /:id/disponibilidad/:dia    → borrar día (?modalidad=)
@@ -38,6 +39,7 @@ router.get('/:id', gestor, profesionalesController.get);
 router.post('/', gestor, profesionalesController.create);
 router.put('/:id', gestor, profesionalesController.update);
 router.delete('/:id', gestor, profesionalesController.remove);
+router.post('/:id/reactivar', gestor, profesionalesController.reactivate);
 
 router.get('/:id/disponibilidad', gestor, profesionalesController.getDisponibilidad);
 router.post('/:id/disponibilidad', gestor, profesionalesController.replaceDisponibilidad);

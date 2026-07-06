@@ -132,6 +132,15 @@ class ProfesionalesService {
     });
   }
 
+  async reactivar(id: number): Promise<Profesional> {
+    const res = await axios.post(
+      `${API_BASE_URL}/api/profesionales/${id}/reactivar`,
+      {},
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
   async getDisponibilidad(id: number, modalidad: Modalidad): Promise<DisponibilidadAgrupada> {
     const res = await axios.get(
       `${API_BASE_URL}/api/profesionales/${id}/disponibilidad?modalidad=${modalidad}`,

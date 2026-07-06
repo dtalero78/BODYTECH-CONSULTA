@@ -269,6 +269,26 @@ class ProfesionalesController {
     }
   };
 
+  reactivate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        res.status(400).json({ success: false, error: { code: 'INVALID_ID', message: 'ID inválido.' } });
+        return;
+      }
+      const sedeId = await resolveSedeOf(req, res, id);
+      if (sedeId === null) return;
+      const result = await profesionalesService.reactivate(id, sedeId);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   // -------------------------------------------------------------------------
   // Disponibilidad
   // -------------------------------------------------------------------------

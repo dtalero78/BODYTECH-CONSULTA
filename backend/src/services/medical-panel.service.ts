@@ -352,13 +352,19 @@ class MedicalPanelService {
   }
 
   /**
-   * Marca un paciente como "No Contesta"
+   * Marca un paciente como "No Contesta".
+   *
+   * IMPORTANTE: NO se cambia el "medico" — la cita debe conservar su coach
+   * asignado. El estado "No Contesta" se registra en campos aparte:
+   *   - "atendido" = 'NO CONTESTA'  → lo reconoce el calendario del coordinador.
+   *   - "pvEstado" = 'No Contesta'  → estado usado por el panel.
+   * (Antes se ponía "medico" = 'RESERVA', lo que borraba el coach; ya no.)
    */
   async markPatientAsNoAnswer(patientId: string): Promise<boolean> {
     try {
       const result = await postgresService.query(
         `UPDATE "HistoriaClinica"
-         SET "pvEstado" = 'No Contesta', "medico" = 'RESERVA'
+         SET "pvEstado" = 'No Contesta', "atendido" = 'NO CONTESTA'
          WHERE "_id" = $1
          RETURNING "_id"`,
         [patientId]

@@ -183,13 +183,17 @@ class MedicalPanelService {
         params
       );
 
-      // Query para restantes hoy (programados sin fechaConsulta)
+      // Query para restantes hoy (programados sin fechaConsulta y que NO estén
+      // en "No Contesta" — esos se ocultan de la lista del coach, así que el
+      // contador de restantes debe cuadrar con la lista de getPendingPatients).
       const restantesResult = await postgresService.query(
         `SELECT COUNT(*) as count FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
-         AND "fechaConsulta" IS NULL${sf}`,
+         AND "fechaConsulta" IS NULL
+         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
+         AND COALESCE("pvEstado", '') <> 'No Contesta'${sf}`,
         params
       );
 
@@ -246,6 +250,8 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
+         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
+         AND COALESCE("pvEstado", '') <> 'No Contesta'
          AND "numeroId" NOT IN ('TEST', 'test')${sf}
          ORDER BY "fechaAtencion" ASC
          LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
@@ -259,6 +265,8 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
+         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
+         AND COALESCE("pvEstado", '') <> 'No Contesta'
          AND "numeroId" NOT IN ('TEST', 'test')${sf}`,
         whereParams
       );

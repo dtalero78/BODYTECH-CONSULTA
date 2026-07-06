@@ -466,6 +466,20 @@ class TrepsiService {
       tallaVal = t != null && t > 0 && t < 3 ? Math.round(t * 100) : t;
     }
 
+    // horaAtencion (HH:MM en Colombia) derivada de fechaAtencion. El panel usa
+    // esta columna para el chip de hora; sin ella la cita salía "sin hora".
+    // Colombia no tiene DST → offset fijo UTC-5.
+    let horaAtencion: string | null = null;
+    {
+      const ts = Date.parse(input.fechaAtencion);
+      if (!Number.isNaN(ts)) {
+        const cot = new Date(ts - 5 * 60 * 60 * 1000);
+        horaAtencion = `${String(cot.getUTCHours()).padStart(2, '0')}:${String(
+          cot.getUTCMinutes()
+        ).padStart(2, '0')}`;
+      }
+    }
+
     const hcInsert = await postgresService.query(
       `INSERT INTO "HistoriaClinica" (
          "_id",
@@ -491,11 +505,12 @@ class TrepsiService {
          "ant_familiares_obs",
          "peso",
          "talla",
+         "horaAtencion",
          "atendido",
          "sede_id"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'PENDIENTE', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 'PENDIENTE', 'trepsi'
        ) RETURNING "_id"`,
       [
         historiaId,
@@ -519,6 +534,7 @@ class TrepsiService {
         antFamiliares,
         pesoVal != null ? String(pesoVal) : null,
         tallaVal != null ? String(tallaVal) : null,
+        horaAtencion,
       ]
     );
 

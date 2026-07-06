@@ -93,7 +93,9 @@ class HistoriaClinicaPostgresService {
           "medico" = EXCLUDED."medico",
           "ciudad" = EXCLUDED."ciudad",
           "examenes" = EXCLUDED."examenes",
-          "horaAtencion" = EXCLUDED."horaAtencion",
+          -- No borrar la hora si el guardado no la trae (p. ej. al atender);
+          -- se preserva la existente cuando el nuevo valor es null.
+          "horaAtencion" = COALESCE(EXCLUDED."horaAtencion", "HistoriaClinica"."horaAtencion"),
           "datosNutricionales" = EXCLUDED."datosNutricionales",
           "_updatedDate" = NOW()
         RETURNING "_id";

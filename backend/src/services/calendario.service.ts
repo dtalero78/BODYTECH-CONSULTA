@@ -581,15 +581,20 @@ class CalendarioService {
 
     // 4) Citas existentes (pendientes) del médico en ese día → ocupan slots
     const ocupRows = await postgresService.query(
-      `SELECT "horaAtencion"
+      // Cupos ocupados del coach ese día. IMPORTANTE: las citas Trepsi se
+      // guardan con sede_id='trepsi' (placeholder), no con la sede real del
+      // coach; si sólo filtramos por la sede real, quedan invisibles y el cupo
+      // aparece libre → doble-agendamiento. Por eso incluimos 'trepsi'.
+      // La hora ocupada se deriva de fechaAtencion (COT) para no depender de
+      // que horaAtencion esté poblada.
+      `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE sede_id = $1
+         WHERE (sede_id = $1 OR sede_id = 'trepsi')
            AND "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
            AND "fechaAtencion"::timestamptz >= $2::timestamptz
            AND "fechaAtencion"::timestamptz < $3::timestamptz
            AND "medico" = $4
-           AND "horaAtencion" IS NOT NULL
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
       [sedeReal, range.startUtc, range.endUtc, codigoMedico]
     );
@@ -679,15 +684,16 @@ class CalendarioService {
 
     // 1) Citas pendientes del mismo médico ese día → ocupan slots.
     const ocupRows = await postgresService.query(
-      `SELECT "horaAtencion"
+      // Ver nota en getHorariosDisponibles: incluir sede_id='trepsi' para que
+      // las citas Trepsi cuenten como cupo ocupado (si no, se agenda encima).
+      `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE sede_id = $1
+         WHERE (sede_id = $1 OR sede_id = 'trepsi')
            AND "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
            AND "fechaAtencion"::timestamptz >= $2::timestamptz
            AND "fechaAtencion"::timestamptz < $3::timestamptz
            AND "medico" = $4
-           AND "horaAtencion" IS NOT NULL
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
       [sedeId, range.startUtc, range.endUtc, medicoCodigo]
     );

@@ -410,6 +410,8 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
         fechaDesde,
         fechaHasta,
         busqueda: debouncedBusqueda || undefined,
+        // Agenda cronológica: ordenar por hora de atención ascendente.
+        sort: 'fecha_asc',
         // `page` es 1-based para la UI ("Página X de N"), pero el backend
         // pagina en base 0 (offset = page * limit). Sin restar 1, page=1
         // generaba offset=20 y se saltaba la única página de resultados

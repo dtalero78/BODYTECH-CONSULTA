@@ -18,11 +18,12 @@ import authService from '../services/auth.service';
 import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
+import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
-type View = 'profesionales' | 'calendario' | 'ordenes' | 'usuarios';
+type View = 'profesionales' | 'calendario' | 'ordenes' | 'indicadores' | 'usuarios';
 
 interface NavBadge {
   text: string;
@@ -40,6 +41,7 @@ export function CoordinadorPage() {
     profesionales: undefined,
     calendario: undefined,
     ordenes: undefined,
+    indicadores: undefined,
     usuarios: undefined,
   });
 
@@ -187,8 +189,9 @@ export function CoordinadorPage() {
             <NavItem
               icon={<LineChart className="w-[15px] h-[15px]" />}
               label="Indicadores"
-              disabled
-              tooltip="Próximamente"
+              active={view === 'indicadores'}
+              onClick={() => setView('indicadores')}
+              badge={badges.indicadores}
             />
             <NavItem
               icon={<ShieldCheck className="w-[15px] h-[15px]" />}
@@ -280,6 +283,9 @@ export function CoordinadorPage() {
               showToast={showToast}
               reportCount={reportOrdenesCount}
             />
+          )}
+          {view === 'indicadores' && (
+            <IndicadoresView key={`ind-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'usuarios' && (
             <UsuariosView key={`usr-${reloadKey}`} showToast={showToast} />

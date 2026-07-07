@@ -95,6 +95,12 @@ export interface OrdenFilters {
   q?: string;
   /** Solo órdenes originadas en Trepsi (su `_id` empieza con `trepsi_`). */
   trepsi?: boolean;
+  /**
+   * Orden del listado:
+   *   - 'created_desc' (default): más recientes por fecha de creación (paneles de Órdenes).
+   *   - 'fecha_asc': cronológico por fecha/hora de atención ascendente (vista Agenda).
+   */
+  sort?: 'created_desc' | 'fecha_asc';
 }
 
 export interface OrdenCreateInput {
@@ -512,6 +518,26 @@ class MedicalPanelService {
       );
       const total = parseInt(countResult?.[0]?.count ?? '0', 10);
 
+      // ORDER BY según `sort`. Para 'fecha_asc' (Agenda) el orden es cronológico
+      // ascendente por hora de atención. Se ordena PRIMERO por el día calendario
+      // Colombia (para rangos multi-día) y LUEGO por `horaAtencion` — el mismo
+      // valor "HH:MM" que muestra la columna Hora — de modo que el orden calce
+      // exactamente con lo que ve el usuario (la hora derivada de fechaAtencion
+      // puede diferir en filas Trepsi/nutrición por zona horaria). El timestamp
+      // de fechaAtencion desempata cuando falta horaAtencion. `fechaAtencion` es
+      // TEXT con formatos mezclados: sólo se castea si empieza por YYYY-MM-DD
+      // (misma guarda regex que el filtro de fechas).
+      const orderByClause =
+        filters.sort === 'fecha_asc'
+          ? `ORDER BY (CASE WHEN h."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                            THEN (h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota')::date
+                            ELSE NULL END) ASC NULLS LAST,
+                      h."horaAtencion" ASC NULLS LAST,
+                      (CASE WHEN h."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                            THEN h."fechaAtencion"::timestamptz ELSE NULL END) ASC NULLS LAST,
+                      h."_id" ASC`
+          : `ORDER BY h."_createdDate" DESC NULLS LAST, h."_id" DESC`;
+
       const dataParams = [...params, limit, offset];
       // LEFT JOIN LATERAL contra consulta_evaluaciones para traer la última
       // evaluación de calidad (cualquier estado) por historia, sin abrir
@@ -533,7 +559,7 @@ class MedicalPanelService {
            LIMIT 1
          ) ce ON TRUE
          WHERE ${whereClause}
-         ORDER BY h."_createdDate" DESC NULLS LAST, h."_id" DESC
+         ${orderByClause}
          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         dataParams
       );

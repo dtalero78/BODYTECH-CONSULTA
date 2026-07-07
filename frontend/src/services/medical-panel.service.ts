@@ -77,6 +77,8 @@ export interface OrdenListFilters {
   busqueda?: string;
   page?: number;
   limit?: number;
+  /** Orden del listado. 'fecha_asc' = cronológico por hora de atención (Agenda). */
+  sort?: 'created_desc' | 'fecha_asc';
 }
 
 /**
@@ -310,6 +312,7 @@ class MedicalPanelService {
     if (filters.fechaDesde) params.set('from', filters.fechaDesde);
     if (filters.fechaHasta) params.set('to', filters.fechaHasta);
     if (filters.busqueda) params.set('q', filters.busqueda);
+    if (filters.sort) params.set('sort', filters.sort);
     if (filters.page !== undefined) params.set('page', String(filters.page));
     if (filters.limit !== undefined) params.set('limit', String(filters.limit));
     const res = await this.client.get<OrdenListResponse>(

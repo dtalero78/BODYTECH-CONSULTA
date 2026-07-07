@@ -69,6 +69,23 @@ function getMonthRange(year: number, month1Indexed: number): { startUtc: string;
 }
 
 /**
+ * Devuelve el rango ISO [start, endExclusive) para un rango de días
+ * [from, to] (ambos YYYY-MM-DD, inclusivos) en hora Colombia. `to` cubre el día
+ * completo (fin exclusivo = medianoche del día siguiente a `to`, hora Colombia).
+ */
+function getRangeUtc(from: string, to: string): { startUtc: string; endUtc: string } {
+  const mf = from.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const mt = to.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!mf) throw new Error(`Fecha inválida: ${from}. Esperado YYYY-MM-DD.`);
+  if (!mt) throw new Error(`Fecha inválida: ${to}. Esperado YYYY-MM-DD.`);
+  const [, yf, mof, df] = mf;
+  const [, yt, mot, dt] = mt;
+  const startUtc = new Date(Date.UTC(Number(yf), Number(mof) - 1, Number(df), 5, 0, 0)).toISOString();
+  const endUtc = new Date(Date.UTC(Number(yt), Number(mot) - 1, Number(dt) + 1, 5, 0, 0)).toISOString();
+  return { startUtc, endUtc };
+}
+
+/**
  * Devuelve el rango ISO [start, endExclusive) para UN día (YYYY-MM-DD) en
  * hora Colombia.
  */
@@ -165,6 +182,24 @@ export interface DiaDetalle {
     atendidos: number;
     pendientes: number;
   }>;
+}
+
+export interface IndicadorMedico {
+  medicoCodigo: string;
+  nombre: string;
+  rol: 'medico' | 'coach' | null;
+  agendadas: number;
+  atendidas: number;
+  noContactadas: number;
+}
+
+export interface IndicadoresResumen {
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  agendadas: number;
+  atendidas: number;
+  noContactadas: number;
+  porMedico: IndicadorMedico[];
 }
 
 export interface SlotHora {
@@ -461,6 +496,143 @@ class CalendarioService {
         citas,
         medicosResumen,
       },
+    };
+  }
+
+  /**
+   * Indicadores (KPIs) de un rango de fechas [from, to], opcionalmente acotado a
+   * un médico/coach. Devuelve tres métricas — agendadas, atendidas y no
+   * contactadas — a nivel global y desglosadas por profesional.
+   *
+   * Semántica de estados (columna `atendido`, misma que usa el calendario):
+   *   - agendadas      = todas las citas del rango (independiente del estado).
+   *   - atendidas      = estado 'ATENDIDO'.
+   *   - noContactadas  = estado 'NO CONTESTA' (lo marca markPatientAsNoAnswer).
+   *
+   * Multi-sede y Trepsi se resuelven con EFFECTIVE_SEDE_SQL, igual que getMes/getDia,
+   * de modo que los números coinciden con lo que el coordinador ve en el calendario.
+   */
+  async getIndicadores(
+    from: string,
+    to: string,
+    sedeIds: string[],
+    medicoCodigo?: string
+  ): Promise<ServiceResult<IndicadoresResumen>> {
+    let range;
+    try {
+      range = getRangeUtc(from, to);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, status: 400, error: { code: 'INVALID_DATE', message: msg } };
+    }
+    // El rango debe ser cronológico (from <= to).
+    if (range.startUtc >= range.endUtc) {
+      return {
+        ok: false,
+        status: 400,
+        error: { code: 'INVALID_RANGE', message: 'El rango de fechas es inválido (from > to).' },
+      };
+    }
+
+    const params: unknown[] = [sedeIds, range.startUtc, range.endUtc];
+    let medicoFilter = '';
+    if (medicoCodigo) {
+      params.push(medicoCodigo);
+      medicoFilter = `AND "medico" = $${params.length}`;
+    }
+
+    // Agregado por (medico, estado) en todo el rango.
+    const sql = `
+      SELECT
+        COALESCE("medico", '__SIN_ASIGNAR__') AS medico_codigo,
+        UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
+        COUNT(*)::int AS total
+      FROM "HistoriaClinica"
+      WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
+        AND "fechaAtencion" IS NOT NULL
+        AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND "fechaAtencion"::timestamptz >= $2::timestamptz
+        AND "fechaAtencion"::timestamptz < $3::timestamptz
+        ${medicoFilter}
+      GROUP BY medico_codigo, estado
+    `;
+
+    const rows = await postgresService.query(sql, params);
+    if (rows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando indicadores.' } };
+    }
+
+    let agendadas = 0;
+    let atendidas = 0;
+    let noContactadas = 0;
+    const porMedicoMap = new Map<
+      string,
+      { agendadas: number; atendidas: number; noContactadas: number }
+    >();
+
+    for (const row of rows) {
+      const codigo = String(row.medico_codigo);
+      const estado = String(row.estado);
+      const total = Number(row.total);
+
+      let entry = porMedicoMap.get(codigo);
+      if (!entry) {
+        entry = { agendadas: 0, atendidas: 0, noContactadas: 0 };
+        porMedicoMap.set(codigo, entry);
+      }
+      entry.agendadas += total;
+      agendadas += total;
+      if (estado === 'ATENDIDO') {
+        entry.atendidas += total;
+        atendidas += total;
+      } else if (estado === 'NO CONTESTA') {
+        entry.noContactadas += total;
+        noContactadas += total;
+      }
+    }
+
+    // Enriquecer con nombre y rol del profesional (si existe en tabla profesionales).
+    const codigos = Array.from(porMedicoMap.keys()).filter((c) => c !== '__SIN_ASIGNAR__');
+    const profesionalesMap = new Map<string, { nombre: string; rol: 'medico' | 'coach' | null }>();
+    if (codigos.length > 0) {
+      const profRows = await postgresService.query(
+        `SELECT codigo, alias, primer_nombre, primer_apellido, rol
+           FROM profesionales
+           WHERE sede_id = ANY($1::text[]) AND codigo = ANY($2::text[])`,
+        [sedeIds, codigos]
+      );
+      if (profRows) {
+        for (const p of profRows) {
+          const nombre =
+            (p.alias ? String(p.alias) : '') ||
+            [p.primer_nombre, p.primer_apellido].filter(Boolean).join(' ');
+          profesionalesMap.set(String(p.codigo), {
+            nombre,
+            rol: p.rol === 'coach' ? 'coach' : 'medico',
+          });
+        }
+      }
+    }
+
+    const porMedico: IndicadorMedico[] = Array.from(porMedicoMap.entries()).map(([codigo, v]) => {
+      const prof = profesionalesMap.get(codigo);
+      return {
+        medicoCodigo: codigo,
+        nombre: codigo === '__SIN_ASIGNAR__' ? 'Sin asignar' : prof?.nombre || codigo,
+        rol: prof?.rol ?? null,
+        agendadas: v.agendadas,
+        atendidas: v.atendidas,
+        noContactadas: v.noContactadas,
+      };
+    });
+
+    // Orden: más agendadas primero, luego alfabético.
+    porMedico.sort((a, b) => b.agendadas - a.agendadas || a.nombre.localeCompare(b.nombre));
+
+    return {
+      ok: true,
+      status: 200,
+      data: { from, to, agendadas, atendidas, noContactadas, porMedico },
     };
   }
 

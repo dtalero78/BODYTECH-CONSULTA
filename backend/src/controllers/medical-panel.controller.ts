@@ -110,6 +110,7 @@ const listOrdenesQuerySchema = z.object({
   medico: z.string().optional(),
   q: z.string().optional(),
   trepsi: z.string().optional(),
+  sort: z.enum(['created_desc', 'fecha_asc']).optional(),
 });
 
 function validationResponse(res: Response, err: ZodError): void {
@@ -348,7 +349,7 @@ class MedicalPanelController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { page, limit, from, to, status, medico, q, trepsi } = parsed.data;
+    const { page, limit, from, to, status, medico, q, trepsi, sort } = parsed.data;
 
     // Médico/coach: su agenda solo muestra SUS citas → se fuerza el código de la
     // sesión (cierra el IDOR). Coordinador/admin conservan el `?medico` (o sin
@@ -365,6 +366,7 @@ class MedicalPanelController {
         medico: medicoEfectivo,
         q,
         trepsi: trepsi === '1' || trepsi === 'true',
+        sort,
       });
 
       res.json(result);

@@ -70,6 +70,24 @@ export interface DiaDetalle {
   }>;
 }
 
+export interface IndicadorMedico {
+  medicoCodigo: string;
+  nombre: string;
+  rol: 'medico' | 'coach' | null;
+  agendadas: number;
+  atendidas: number;
+  noContactadas: number;
+}
+
+export interface IndicadoresResumen {
+  from: string;
+  to: string;
+  agendadas: number;
+  atendidas: number;
+  noContactadas: number;
+  porMedico: IndicadorMedico[];
+}
+
 export interface SlotHora {
   hora: string;
   disponible: boolean;
@@ -131,6 +149,22 @@ class CalendarioService {
     const res = await axios.get(`${API_BASE_URL}/api/calendario/dia?${params.toString()}`, {
       headers: authHeaders(),
     });
+    return res.data?.data;
+  }
+
+  async getIndicadores(
+    from: string,
+    to: string,
+    medico?: string,
+    sedes?: string[]
+  ): Promise<IndicadoresResumen> {
+    const params = new URLSearchParams({ from, to });
+    if (medico) params.set('medico', medico);
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/indicadores?${params.toString()}`,
+      { headers: authHeaders() }
+    );
     return res.data?.data;
   }
 

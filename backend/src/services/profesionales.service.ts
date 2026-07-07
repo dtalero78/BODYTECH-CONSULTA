@@ -28,6 +28,7 @@ export interface ProfesionalRow {
   fechaVencimientoLicencia: string | null; // YYYY-MM-DD
   tiempoConsulta: number;
   firma: string | null;
+  foto: string | null;
   email: string | null;
   celular: string | null;
   activo: boolean;
@@ -49,6 +50,7 @@ export interface ProfesionalInput {
   fechaVencimientoLicencia?: string | null;
   tiempoConsulta?: number;
   firma?: string | null;
+  foto?: string | null;
   email?: string | null;
   celular?: string | null;
 }
@@ -105,6 +107,7 @@ function rowToProfesional(row: Record<string, unknown>): ProfesionalRow {
           : null,
     tiempoConsulta: Number(row.tiempo_consulta),
     firma: row.firma ? String(row.firma) : null,
+    foto: row.foto ? String(row.foto) : null,
     email: row.email ? String(row.email) : null,
     celular: row.celular ? String(row.celular) : null,
     activo: Boolean(row.activo),
@@ -130,6 +133,7 @@ const COLS_LIST = `
   numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
   tiempo_consulta,
   NULL::text AS firma,
+  foto,
   email, celular, activo, created_at, updated_at
 `;
 
@@ -138,7 +142,7 @@ const COLS_DETAIL = `
   primer_nombre, segundo_nombre, primer_apellido, segundo_apellido,
   alias, especialidad,
   numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
-  tiempo_consulta, firma,
+  tiempo_consulta, firma, foto,
   email, celular, activo, created_at, updated_at
 `;
 
@@ -253,6 +257,7 @@ class ProfesionalesService {
       input.firma ?? null,
       input.email ?? null,
       input.celular ?? null,
+      input.foto ?? null,
     ];
     const sql = `
       INSERT INTO profesionales (
@@ -260,9 +265,9 @@ class ProfesionalesService {
         primer_nombre, segundo_nombre, primer_apellido, segundo_apellido,
         alias, especialidad,
         numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
-        tiempo_consulta, firma, email, celular
+        tiempo_consulta, firma, email, celular, foto
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
       )
       RETURNING ${COLS_DETAIL}
     `;
@@ -311,6 +316,7 @@ class ProfesionalesService {
       fechaVencimientoLicencia: 'fecha_vencimiento_licencia',
       tiempoConsulta: 'tiempo_consulta',
       firma: 'firma',
+      foto: 'foto',
       email: 'email',
       celular: 'celular',
     };

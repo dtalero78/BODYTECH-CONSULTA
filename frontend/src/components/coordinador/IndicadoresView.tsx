@@ -180,6 +180,15 @@ export function IndicadoresView({ showToast }: Props) {
     return p ? p.alias || `${p.primerNombre} ${p.primerApellido}` : filterMedico;
   }, [filterMedico, profesionales]);
 
+  // Foto real del profesional (si la tiene); si no, cae al pool placeholder.
+  const fotoDe = useCallback(
+    (codigo: string): string | null => {
+      const p = profesionales.find((x) => x.codigo === codigo);
+      return p?.foto || avatarFotoFor(codigo);
+    },
+    [profesionales]
+  );
+
   function exportCsv() {
     if (!data) return;
     const rows: string[][] = [
@@ -350,7 +359,7 @@ export function IndicadoresView({ showToast }: Props) {
                         <div className="flex items-center gap-2.5">
                           <MonoAvatar
                             initials={sinAsignar ? '··' : initialsOf(m.nombre)}
-                            src={sinAsignar ? null : avatarFotoFor(m.medicoCodigo)}
+                            src={sinAsignar ? null : fotoDe(m.medicoCodigo)}
                             size={30}
                             variant={sinAsignar ? 'muted' : 'default'}
                           />

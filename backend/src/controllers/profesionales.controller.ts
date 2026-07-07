@@ -37,6 +37,7 @@ const profesionalCreateSchema = z.object({
     .optional(),
   tiempoConsulta: z.number().int().min(5).max(240).optional(),
   firma: z.string().nullable().optional(),
+  foto: z.string().nullable().optional(),
   email: z.string().email().nullable().optional(),
   celular: z.string().nullable().optional(),
 });

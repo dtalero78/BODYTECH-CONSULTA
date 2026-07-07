@@ -1170,6 +1170,16 @@ function TeamDiaModal({
     [profesionales]
   );
 
+  // Foto real del profesional (si la tiene); si no, cae al pool placeholder.
+  const fotoDe = useCallback(
+    (codigo: string): string | null => {
+      if (codigo === SIN_ASIGNAR) return null;
+      const p = profesionales.find((x) => x.codigo === codigo);
+      return p?.foto || avatarFotoFor(codigo);
+    },
+    [profesionales]
+  );
+
   // Agrupar citas por profesional → { codigo, nombre, citas[] (orden desc por hora) }
   const equipo = useMemo(() => {
     const map = new Map<string, { codigo: string; nombre: string; citas: CitaListItem[] }>();
@@ -1347,7 +1357,7 @@ function TeamDiaModal({
                       initials={e.codigo === SIN_ASIGNAR ? '··' : initialsOf(e.nombre)}
                       variant={e.codigo === SIN_ASIGNAR ? 'muted' : 'default'}
                       size={68}
-                      src={e.codigo === SIN_ASIGNAR ? null : avatarFotoFor(e.codigo)}
+                      src={e.codigo === SIN_ASIGNAR ? null : fotoDe(e.codigo)}
                     />
                     <div className="mt-2 h-8 flex items-start justify-center">
                       <div className="text-[12px] font-medium text-zinc-800 leading-tight line-clamp-2 text-center">

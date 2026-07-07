@@ -473,6 +473,14 @@ class PostgresService {
           ON profesionales (sede_id, rol, activo)
       `);
 
+      // Foto de perfil del profesional (avatar). Se guarda como data URL base64
+      // en TEXT, igual que `firma`. La imagen se reescala a ~450px antes de
+      // guardar, por lo que pesa decenas de KB (apta para incluirse en listados).
+      await this.query(`
+        ALTER TABLE profesionales
+          ADD COLUMN IF NOT EXISTS foto TEXT
+      `);
+
       // Disponibilidad horaria: cada fila es UN rango (permite múltiples
       // rangos por día/modalidad, ej. lunes 8-12 y 14-18).
       await this.query(`

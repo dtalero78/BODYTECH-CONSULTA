@@ -34,6 +34,7 @@ export interface Profesional {
   fechaVencimientoLicencia: string | null;
   tiempoConsulta: number;
   firma: string | null;
+  foto: string | null;
   email: string | null;
   celular: string | null;
   activo: boolean;
@@ -55,6 +56,7 @@ export interface ProfesionalInput {
   fechaVencimientoLicencia?: string | null;
   tiempoConsulta?: number;
   firma?: string | null;
+  foto?: string | null;
   email?: string | null;
   celular?: string | null;
 }

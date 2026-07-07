@@ -308,6 +308,7 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                             <MonoAvatar
                               initials={initialsOf(p.primerNombre, p.primerApellido)}
                               variant={inactivo ? 'muted' : 'default'}
+                              src={p.foto}
                             />
                           </div>
                           <div className="min-w-0">

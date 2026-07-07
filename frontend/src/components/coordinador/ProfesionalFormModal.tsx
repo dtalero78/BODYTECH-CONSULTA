@@ -11,6 +11,48 @@ import profesionalesService, {
 // para quedar bajo 2 MB en base64).
 const MAX_FIRMA_BYTES = 1.5 * 1024 * 1024;
 
+// Foto de perfil: se acepta un archivo original de hasta ~15 MB y se reescala
+// en el navegador a un avatar pequeño (lado mayor 450px, JPEG q0.8) antes de
+// guardarlo como data URL. Así la foto pesa decenas de KB y es apta para
+// incluirse en los listados sin inflar el payload.
+const MAX_FOTO_SOURCE_BYTES = 15 * 1024 * 1024;
+const FOTO_MAX_SIDE = 450;
+const FOTO_QUALITY = 0.8;
+
+/** Reescala una imagen a un JPEG data URL con lado mayor <= maxSide. */
+function downscaleToDataUrl(file: File, maxSide: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('No se pudo procesar la imagen.'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('No se pudo procesar la imagen.'));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('No se pudo leer la imagen.'));
+    };
+    img.src = url;
+  });
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +76,7 @@ const EMPTY: ProfesionalInput = {
   fechaVencimientoLicencia: null,
   tiempoConsulta: 30,
   firma: null,
+  foto: null,
   email: null,
   celular: null,
 };
@@ -42,6 +85,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
   const [form, setForm] = useState<ProfesionalInput>(EMPTY);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editing) {
@@ -59,6 +103,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
         fechaVencimientoLicencia: editing.fechaVencimientoLicencia,
         tiempoConsulta: editing.tiempoConsulta,
         firma: editing.firma,
+        foto: editing.foto,
         email: editing.email,
         celular: editing.celular,
       });
@@ -89,6 +134,25 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       onError('No se pudo leer el archivo.');
     };
     reader.readAsDataURL(file);
+  }
+
+  async function handleFotoUpload(file: File) {
+    if (!file.type.startsWith('image/')) {
+      onError('La foto debe ser una imagen (PNG, JPG o WEBP).');
+      return;
+    }
+    if (file.size > MAX_FOTO_SOURCE_BYTES) {
+      onError(
+        `La foto pesa ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo permitido: 15 MB.`
+      );
+      return;
+    }
+    try {
+      const dataUrl = await downscaleToDataUrl(file, FOTO_MAX_SIDE, FOTO_QUALITY);
+      update('foto', dataUrl);
+    } catch (err: unknown) {
+      onError((err as Error)?.message || 'No se pudo procesar la imagen.');
+    }
   }
 
   if (!isOpen) return null;
@@ -140,6 +204,59 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Foto de perfil */}
+          <div className="flex items-center gap-4">
+            <div className="relative shrink-0">
+              {form.foto ? (
+                <img
+                  src={form.foto}
+                  alt="Foto de perfil"
+                  className="w-20 h-20 rounded-full object-cover border border-gray-200 bg-gray-100"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-400">
+                  <Upload className="w-5 h-5" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-gray-500">
+                Foto de perfil <span className="text-gray-400">(PNG, JPG o WEBP)</span>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fotoInputRef.current?.click()}
+                  className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1.5 border border-blue-200"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {form.foto ? 'Reemplazar' : 'Subir foto'}
+                </button>
+                {form.foto && (
+                  <button
+                    type="button"
+                    onClick={() => update('foto', null)}
+                    className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 border border-red-200"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={fotoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFotoUpload(file);
+                if (e.target) e.target.value = '';
+              }}
+            />
+          </div>
+
           {/* Rol + Código */}
           <div className="grid grid-cols-2 gap-4">
             <div>

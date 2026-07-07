@@ -42,7 +42,8 @@ function emptyDiaState(): DiaState {
  * self-service: el backend resuelve el profesional desde la sesión.
  */
 export function CoachHorarioModal({ isOpen, onClose, onSaved, onError, subtitulo }: Props) {
-  const [modalidad, setModalidad] = useState<Modalidad>('virtual');
+  // Solo modalidad virtual: los coaches de nutrición atienden por video.
+  const modalidad: Modalidad = 'virtual';
   const [diasState, setDiasState] = useState<Record<number, DiaState>>(() => {
     const obj: Record<number, DiaState> = {};
     for (const d of DIAS) obj[d.id] = emptyDiaState();
@@ -86,7 +87,7 @@ export function CoachHorarioModal({ isOpen, onClose, onSaved, onError, subtitulo
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, modalidad]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -185,23 +186,8 @@ export function CoachHorarioModal({ isOpen, onClose, onSaved, onError, subtitulo
         </div>
 
         <div className="px-5 pt-4">
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-            {(['virtual', 'presencial'] as Modalidad[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setModalidad(m)}
-                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  modalidad === m
-                    ? 'bg-white text-green-700 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {m === 'virtual' ? 'Virtual' : 'Presencial'}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-2">
-            El horario se guarda por separado para cada modalidad.
+          <p className="text-xs text-gray-500">
+            Marca los días que atiendes y sus rangos de hora. Se aplica a tu agenda virtual.
           </p>
         </div>
 

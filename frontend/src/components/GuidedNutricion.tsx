@@ -17,7 +17,7 @@ import { useRealtimeTranscription } from '../hooks/useRealtimeTranscription';
  * las del panel para que los valores no queden en blanco al volver al formulario.
  */
 
-type FieldKind = 'textarea' | 'text' | 'select';
+type FieldKind = 'textarea' | 'text' | 'select' | 'readonly';
 
 export interface GField {
   kind: FieldKind;
@@ -42,173 +42,105 @@ const opts = (...vals: string[]) => vals.map((v) => ({ value: v, label: v }));
 
 export const SCRIPT_NUTRI: GStep[] = [
   {
-    id: 'motivo',
-    topic: 'Motivo y objetivo',
-    question: '¿Qué te trae a la consulta y cuál es tu objetivo?',
-    fields: [
-      { kind: 'select', key: 'tipoConsulta', label: 'Tipo de consulta', options: opts('Primera vez', 'Control') },
-      {
-        kind: 'select',
-        key: 'objetivoPrincipal',
-        label: 'Objetivo principal',
-        options: opts(
-          'Pérdida de grasa',
-          'Ganancia de masa muscular',
-          'Rendimiento deportivo',
-          'Salud general',
-          'Otro'
-        ),
-      },
-      { kind: 'textarea', key: 'motivoConsultaTexto', label: 'Motivo (descripción)', placeholder: 'Resumen del motivo...', rows: 3 },
-      { kind: 'textarea', key: 'objetivosEspecificos', label: 'Objetivos específicos', placeholder: 'Metas concretas del afiliado...', rows: 2 },
-    ],
-  },
-  {
-    id: 'enfermedad',
-    topic: 'Antecedentes',
-    question: '¿Tienes alguna enfermedad o condición de salud actual?',
-    fields: [
-      { kind: 'textarea', key: 'descripcionEnfermedad', placeholder: 'Diagnósticos, condiciones crónicas, síntomas actuales...', rows: 3 },
-    ],
-  },
-  {
-    id: 'medicamentos_alergias',
-    topic: 'Antecedentes',
-    question: '¿Tomas medicamentos? ¿Tienes alergias?',
-    fields: [
-      { kind: 'textarea', key: 'medicamentosActuales', label: 'Medicamentos actuales', placeholder: 'Medicamento, dosis y frecuencia...', rows: 2, full: false },
-      { kind: 'textarea', key: 'alergias', label: 'Alergias', placeholder: 'Agente y tipo de reacción...', rows: 2, full: false },
-    ],
-  },
-  {
-    id: 'cirugias',
-    topic: 'Antecedentes',
-    question: '¿Te han operado u hospitalizado?',
-    fields: [
-      { kind: 'textarea', key: 'cirugias', label: 'Cirugías', placeholder: 'Cirugía y fecha aproximada...', rows: 2, full: false },
-      { kind: 'textarea', key: 'hospitalizaciones', label: 'Hospitalizaciones', placeholder: 'Motivo y fecha...', rows: 2, full: false },
-    ],
-  },
-  {
-    id: 'actividad',
-    topic: 'Actividad física',
-    question: '¿Realizas actividad física? ¿Cómo es tu rutina?',
-    fields: [
-      { kind: 'select', key: 'realizaActividadFisica', label: '¿Realiza actividad física?', options: opts('Sí', 'No') },
-      { kind: 'text', key: 'frecuenciaEjercicio', label: 'Frecuencia (veces/semana)', placeholder: 'Ej: 3' },
-      { kind: 'select', key: 'tipoEntrenamiento', label: 'Tipo de entrenamiento', options: opts('Fuerza', 'Cardio', 'Mixto', 'Otro') },
-      { kind: 'select', key: 'intensidadPercibida', label: 'Intensidad percibida', options: opts('Baja', 'Media', 'Alta') },
-      { kind: 'select', key: 'horarioEjercicio', label: 'Horario habitual', options: opts('AM', 'PM', 'Mixto') },
-    ],
-  },
-  {
-    id: 'estilo',
-    topic: 'Estilo de vida',
-    question: '¿Cómo es tu sueño y tu nivel de estrés?',
-    fields: [
-      { kind: 'text', key: 'horasSueno', label: 'Horas de sueño', placeholder: 'Ej: 7' },
-      { kind: 'select', key: 'calidadSueno', label: 'Calidad del sueño', options: opts('Buena', 'Regular', 'Mala') },
-      { kind: 'select', key: 'nivelEstres', label: 'Nivel de estrés', options: opts('Bajo', 'Medio', 'Alto') },
-    ],
-  },
-  {
-    id: 'antropometria',
-    topic: 'Composición corporal',
-    question: 'Medidas y composición corporal',
-    hint: 'Registra las medidas tomadas en la consulta.',
+    id: 'confirmar',
+    topic: 'Datos',
+    question: '1. Confirmemos los datos',
+    hint: 'Peso y estatura de la consulta; edad y fecha de nacimiento de referencia.',
     fields: [
       { kind: 'text', key: 'peso', label: 'Peso actual (kg)', placeholder: '0' },
       { kind: 'text', key: 'talla', label: 'Estatura (cm)', placeholder: '0' },
-      { kind: 'text', key: 'pesoHabitual', label: 'Peso habitual (kg)', placeholder: '0' },
-      { kind: 'text', key: 'porcentajeGrasa', label: '% grasa corporal', placeholder: '0' },
-      { kind: 'text', key: 'masaMuscular', label: 'Masa muscular (kg)', placeholder: '0' },
-      { kind: 'text', key: 'circunferenciaCintura', label: 'Cintura (cm)', placeholder: '0' },
-      { kind: 'text', key: 'circunferenciaCadera', label: 'Cadera (cm)', placeholder: '0' },
+      { kind: 'readonly', key: 'edad', label: 'Edad' },
+      { kind: 'readonly', key: 'fechaNacimiento', label: 'Fecha de nacimiento' },
     ],
   },
   {
-    id: 'perimetros',
-    topic: 'Perímetros y pliegues',
-    question: 'Perímetros y pliegues',
-    hint: 'Medidas adicionales (Trepsi las envía si el paciente las registró).',
+    id: 'anamnesis_alim',
+    topic: 'Alimentación',
+    question: '2. Anamnesis alimentaria',
+    hint: 'Cuántas veces come al día, cómo come y horarios de las comidas.',
     fields: [
-      { kind: 'text', key: 'perimetroAbdomen', label: 'Abdomen (cm)', placeholder: '0' },
-      { kind: 'text', key: 'perimetroPecho', label: 'Pecho (cm)', placeholder: '0' },
-      { kind: 'text', key: 'perimetroCuello', label: 'Cuello (cm)', placeholder: '0' },
-      { kind: 'text', key: 'brazoDerecho', label: 'Brazo derecho (cm)', placeholder: '0' },
-      { kind: 'text', key: 'brazoIzquierdo', label: 'Brazo izquierdo (cm)', placeholder: '0' },
-      { kind: 'text', key: 'piernaDerecha', label: 'Pierna derecha (cm)', placeholder: '0' },
-      { kind: 'text', key: 'piernaIzquierda', label: 'Pierna izquierda (cm)', placeholder: '0' },
-      { kind: 'text', key: 'pliegueBiceps', label: 'Pliegue bíceps (mm)', placeholder: '0' },
-      { kind: 'text', key: 'pliegueTriceps', label: 'Pliegue tríceps (mm)', placeholder: '0' },
-      { kind: 'text', key: 'pliegueSubescapular', label: 'Pliegue subescapular (mm)', placeholder: '0' },
-      { kind: 'text', key: 'pliegueAbdominal', label: 'Pliegue abdominal (mm)', placeholder: '0' },
-    ],
-  },
-  {
-    id: 'habitos',
-    topic: 'Hábitos alimentarios',
-    question: '¿Cómo son tus hábitos alimentarios generales?',
-    fields: [
-      { kind: 'text', key: 'numComidasDia', label: 'Comidas por día', placeholder: 'Ej: 4' },
-      { kind: 'text', key: 'consumoAgua', label: 'Agua (L/día)', placeholder: 'Ej: 2' },
+      { kind: 'text', key: 'numComidasDia', label: '¿Cuántas veces come al día?', placeholder: 'Ej: 4' },
       { kind: 'text', key: 'horariosComida', label: 'Horarios de comida', placeholder: 'Ej: 7am, 12m, 7pm' },
-      { kind: 'textarea', key: 'suplementos', label: 'Suplementos', placeholder: 'Tipo, dosis...', rows: 2, full: false },
-      { kind: 'textarea', key: 'cambiosPesoRecientes', label: 'Cambios de peso recientes', placeholder: 'Subió/bajó, cuánto y cuándo...', rows: 2, full: false },
-    ],
-  },
-  {
-    id: 'alcohol',
-    topic: 'Hábitos',
-    question: '¿Consumes alcohol? ¿Con qué frecuencia?',
-    fields: [
-      { kind: 'select', key: 'consumoAlcohol', label: 'Consumo de alcohol', options: opts('Sí', 'No') },
-      { kind: 'text', key: 'frecuenciaAlcohol', label: 'Frecuencia', placeholder: 'Ej: 1 vez/semana' },
-    ],
-  },
-  {
-    id: 'recordatorio',
-    topic: 'Recordatorio 24h',
-    question: 'Recordatorio de 24h: ¿qué comiste ayer?',
-    hint: 'Desayuno, media mañana, almuerzo, media tarde, cena y snacks.',
-    fields: [
-      { kind: 'textarea', key: 'recordatorio24h', placeholder: 'Detalle de lo consumido en las últimas 24 horas...', rows: 4 },
-    ],
-  },
-  {
-    id: 'anamnesis_semana',
-    topic: 'Anamnesis alimentaria',
-    question: 'Patrón alimentario habitual',
-    hint: 'Lo que suele comer en cada momento del día.',
-    fields: [
       { kind: 'textarea', key: 'anamnesisDesayuno', label: 'Desayuno', rows: 2, full: false },
       { kind: 'textarea', key: 'anamnesisMediaManana', label: 'Media mañana', rows: 2, full: false },
       { kind: 'textarea', key: 'anamnesisAlmuerzo', label: 'Almuerzo', rows: 2, full: false },
       { kind: 'textarea', key: 'anamnesisMediaTarde', label: 'Media tarde', rows: 2, full: false },
       { kind: 'textarea', key: 'anamnesisCena', label: 'Cena', rows: 2, full: false },
-      { kind: 'textarea', key: 'anamnesisFinSemana', label: 'Fin de semana', rows: 2, full: false },
     ],
   },
   {
-    id: 'preferencias',
-    topic: 'Preferencias',
-    question: '¿Qué alimentos prefieres, rechazas o no toleras?',
+    id: 'historia',
+    topic: 'Historia clínica',
+    question: '3. Historia clínica',
+    hint: 'Antecedentes del paciente, medicamentos y cirugías.',
     fields: [
-      { kind: 'textarea', key: 'alimentosPreferidos', label: 'Alimentos preferidos', rows: 2, full: false },
-      { kind: 'textarea', key: 'alimentosRechazados', label: 'Alimentos rechazados', rows: 2, full: false },
-      { kind: 'textarea', key: 'preferenciasAlimentarias', label: 'Preferencias (vegetariano, etc.)', rows: 2, full: false },
+      { kind: 'textarea', key: 'descripcionEnfermedad', label: 'Antecedentes / condición actual', placeholder: 'Diagnósticos, condiciones, síntomas...', rows: 3 },
+      { kind: 'textarea', key: 'medicamentosActuales', label: '¿Toma algún medicamento?', placeholder: 'Medicamento, dosis y frecuencia...', rows: 2, full: false },
+      { kind: 'textarea', key: 'cirugias', label: 'Cirugías', placeholder: 'Cirugía y fecha aproximada...', rows: 2, full: false },
+    ],
+  },
+  {
+    id: 'actividad',
+    topic: 'Actividad física',
+    question: '4. Actividad física',
+    hint: 'Cuántos días entrena y en qué horario.',
+    fields: [
+      { kind: 'select', key: 'realizaActividadFisica', label: '¿Realiza actividad física?', options: opts('Sí', 'No') },
+      { kind: 'text', key: 'frecuenciaEjercicio', label: '¿Cuántos días entrena?', placeholder: 'Ej: 3 días/semana' },
+      { kind: 'select', key: 'horarioEjercicio', label: 'Horario', options: opts('AM', 'PM', 'Mixto') },
+      { kind: 'select', key: 'tipoEntrenamiento', label: 'Tipo de entrenamiento', options: opts('Fuerza', 'Cardio', 'Mixto', 'Otro') },
+    ],
+  },
+  {
+    id: 'sueno',
+    topic: 'Sueño',
+    question: '5. Nivel de sueño',
+    hint: 'Cuántas horas duerme y calidad del sueño.',
+    fields: [
+      { kind: 'text', key: 'horasSueno', label: '¿Cuántas horas duerme?', placeholder: 'Ej: 7' },
+      { kind: 'select', key: 'calidadSueno', label: 'Calidad del sueño', options: opts('Buena', 'Regular', 'Mala') },
+    ],
+  },
+  {
+    id: 'consumos',
+    topic: 'Consumos',
+    question: '6. Consumo de agua, alcohol y suplementos',
+    fields: [
+      { kind: 'text', key: 'consumoAgua', label: 'Agua (L/día)', placeholder: 'Ej: 2' },
+      { kind: 'select', key: 'consumoAlcohol', label: 'Consumo de alcohol', options: opts('Sí', 'No') },
+      { kind: 'text', key: 'frecuenciaAlcohol', label: 'Frecuencia de alcohol', placeholder: 'Ej: 1 vez/semana' },
+      { kind: 'textarea', key: 'suplementos', label: 'Suplementos', placeholder: 'Tipo, dosis...', rows: 2 },
+    ],
+  },
+  {
+    id: 'alergias',
+    topic: 'Alergias',
+    question: '7. Alergias o intolerancias a alimentos',
+    fields: [
       { kind: 'textarea', key: 'alergiasAlimentarias', label: 'Alergias alimentarias', rows: 2, full: false },
       { kind: 'textarea', key: 'intoleranciasAlimentarias', label: 'Intolerancias', rows: 2, full: false },
     ],
   },
   {
-    id: 'signos',
-    topic: 'Signos clínicos',
-    question: '¿Síntomas digestivos o signos clínicos a considerar?',
+    id: 'gustos',
+    topic: 'Gustos',
+    question: '8. Gustos de alimentos',
+    hint: 'Qué le gusta y qué NO consume.',
     fields: [
-      { kind: 'textarea', key: 'signosClinicos', label: 'Signos clínicos', rows: 2, full: false },
-      { kind: 'textarea', key: 'problemasDigestivos', label: 'Problemas digestivos', rows: 2, full: false },
-      { kind: 'textarea', key: 'masticacionDeglucion', label: 'Masticación y deglución', rows: 2, full: false },
+      { kind: 'textarea', key: 'alimentosPreferidos', label: 'Alimentos que le gustan', rows: 2, full: false },
+      { kind: 'textarea', key: 'alimentosRechazados', label: 'Alimentos que NO consume', rows: 2, full: false },
+    ],
+  },
+  {
+    id: 'composicion',
+    topic: 'Composición corporal',
+    question: '9. Análisis de composición corporal',
+    hint: '% de grasa y masa muscular; circunferencias si las tomas.',
+    fields: [
+      { kind: 'text', key: 'porcentajeGrasa', label: '% grasa corporal', placeholder: '0' },
+      { kind: 'text', key: 'masaMuscular', label: 'Masa muscular (kg)', placeholder: '0' },
+      { kind: 'text', key: 'circunferenciaCintura', label: 'Cintura (cm)', placeholder: '0' },
+      { kind: 'text', key: 'circunferenciaCadera', label: 'Cadera (cm)', placeholder: '0' },
     ],
   },
 ];
@@ -246,7 +178,11 @@ function GFieldView({
           {f.label}
         </label>
       )}
-      {f.kind === 'textarea' ? (
+      {f.kind === 'readonly' ? (
+        <div className="w-full bg-[#0b141a] text-[#a4b1b9] text-[15px] px-3 py-2.5 rounded-lg border border-[#324049]">
+          {value || '—'}
+        </div>
+      ) : f.kind === 'textarea' ? (
         <textarea
           value={value}
           onChange={(e) => setValue(f.key, e.target.value)}

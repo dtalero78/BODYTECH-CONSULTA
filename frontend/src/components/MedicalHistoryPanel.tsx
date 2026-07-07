@@ -146,11 +146,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
   const guideGet = (key: string): string => {
     if (key === 'peso') return peso;
     if (key === 'talla') return talla;
+    // Solo lectura: se muestran en "Confirmar datos" del guion.
+    if (key === 'edad') return data?.edad != null ? `${data.edad} años` : '';
+    if (key === 'fechaNacimiento') return data?.fechaNacimiento ? String(data.fechaNacimiento).slice(0, 10) : '';
     return datosNutricionales[key] ?? '';
   };
   const guideSet = (key: string, value: string) => {
     if (key === 'peso') return setPeso(value);
     if (key === 'talla') return setTalla(value);
+    if (key === 'edad' || key === 'fechaNacimiento') return; // solo lectura
     return updateNutri(key, value);
   };
 

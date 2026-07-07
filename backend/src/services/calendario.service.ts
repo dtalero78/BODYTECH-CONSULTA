@@ -112,6 +112,10 @@ function nowColombia(): { fecha: string; minutos: number } {
   return { fecha: `${y}-${m}-${d}`, minutos: c.getUTCHours() * 60 + c.getUTCMinutes() };
 }
 
+// Antelación mínima para agendar/reprogramar (minutos): NO se ofrecen cupos que
+// empiecen dentro de este margen desde ahora → se muestra el siguiente turno.
+const MARGEN_ANTICIPACION_MIN = 40;
+
 /**
  * Suma `n` días a una fecha YYYY-MM-DD y devuelve la nueva fecha + día de la
  * semana (0=Dom .. 6=Sáb). Usa mediodía UTC para evitar bordes de DST.
@@ -793,16 +797,18 @@ class CalendarioService {
       const mm = m % 60;
       return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     }
-    // Si la fecha es hoy (Colombia), descartar las franjas que ya pasaron.
+    // Si la fecha es hoy (Colombia), descartar los cupos que empiezan dentro
+    // del margen de anticipación (o que ya pasaron): solo se ofrece a partir de
+    // ahora + MARGEN_ANTICIPACION_MIN.
     const ahora = nowColombia();
-    const minVisible = fecha === ahora.fecha ? ahora.minutos : -1;
+    const minInicio = fecha === ahora.fecha ? ahora.minutos + MARGEN_ANTICIPACION_MIN : -1;
 
     const horarios: SlotHora[] = [];
     for (const r of rangosDisponibles) {
       const inicio = hhmmToMin(r.horaInicio);
       const fin = hhmmToMin(r.horaFin);
       for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
-        if (t <= minVisible) continue; // franja ya pasada hoy
+        if (t < minInicio) continue; // aún no cumple el margen de anticipación
         const hora = minToHHMM(t);
         const ocupado = ocupadasMin.some((o) => Math.abs(t - o) < tiempoConsulta);
         horarios.push({ hora, disponible: !ocupado });
@@ -846,15 +852,26 @@ class CalendarioService {
 
     const horaHHMM = hora.slice(0, 5);
 
-    // 0) No permitir agendar una hora que ya pasó hoy (Colombia).
+    // 0) No permitir agendar una hora pasada ni dentro del margen de anticipación.
     const ahora = nowColombia();
     if (fecha === ahora.fecha) {
       const [hh, mm] = horaHHMM.split(':').map(Number);
-      if (hh * 60 + mm <= ahora.minutos) {
+      const pedido = hh * 60 + mm;
+      if (pedido <= ahora.minutos) {
         return {
           ok: false,
           status: 422,
           error: { code: 'SLOT_PAST', message: 'La hora seleccionada ya pasó.' },
+        };
+      }
+      if (pedido < ahora.minutos + MARGEN_ANTICIPACION_MIN) {
+        return {
+          ok: false,
+          status: 422,
+          error: {
+            code: 'SLOT_TOO_SOON',
+            message: `Debes agendar con al menos ${MARGEN_ANTICIPACION_MIN} minutos de anticipación.`,
+          },
         };
       }
     }

@@ -773,10 +773,14 @@ class CalendarioService {
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };
     }
-    const ocupadas = new Set<string>();
+    // Cupos ocupados en MINUTOS. Un slot candidato se marca ocupado si SOLAPA
+    // con una cita existente (no solo si coincide la hora exacta): las citas
+    // pueden estar en una grilla distinta (ej. :30) a la que generan los slots
+    // (ej. cada 20 min), y un match exacto dejaría pasar los solapes.
+    const ocupadasMin: number[] = [];
     for (const r of ocupRows) {
-      const h = String(r.horaAtencion).slice(0, 5);
-      ocupadas.add(h);
+      const [hh, mm] = String(r.horaAtencion).slice(0, 5).split(':').map(Number);
+      if (Number.isFinite(hh) && Number.isFinite(mm)) ocupadasMin.push(hh * 60 + mm);
     }
 
     // 5) Generar slots dentro de cada rango
@@ -800,7 +804,8 @@ class CalendarioService {
       for (let t = inicio; t + tiempoConsulta <= fin; t += tiempoConsulta) {
         if (t <= minVisible) continue; // franja ya pasada hoy
         const hora = minToHHMM(t);
-        horarios.push({ hora, disponible: !ocupadas.has(hora) });
+        const ocupado = ocupadasMin.some((o) => Math.abs(t - o) < tiempoConsulta);
+        horarios.push({ hora, disponible: !ocupado });
       }
     }
 
@@ -872,19 +877,17 @@ class CalendarioService {
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };
     }
-    const ocupadas = new Set<string>();
+    // Cupos ocupados en MINUTOS (para chequear SOLAPAMIENTO, no coincidencia
+    // exacta: una cita en :30 debe bloquear un slot en :20/:40 que la solape).
+    const ocupadasMin: number[] = [];
     for (const r of ocupRows) {
-      ocupadas.add(String(r.horaAtencion).slice(0, 5));
+      const [hh, mm] = String(r.horaAtencion).slice(0, 5).split(':').map(Number);
+      if (Number.isFinite(hh) && Number.isFinite(mm)) ocupadasMin.push(hh * 60 + mm);
     }
-    if (ocupadas.has(horaHHMM)) {
-      return {
-        ok: false,
-        status: 409,
-        error: { code: 'SLOT_TAKEN', message: 'Ese horario ya está ocupado para este profesional.' },
-      };
-    }
+    const [slotH, slotM] = horaHHMM.split(':').map(Number);
+    const slotMin = slotH * 60 + slotM;
 
-    // 2) Profesional + tiempo_consulta (para validar contra slots de disponibilidad).
+    // 2) Profesional + tiempo_consulta (duración del slot).
     const profRows = await postgresService.query(
       `SELECT id, tiempo_consulta FROM profesionales
          WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
@@ -893,12 +896,24 @@ class CalendarioService {
     if (profRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
     }
+    // Duración del slot: la del profesional; para médico legacy sin ficha, 30 min.
+    const tiempoConsulta = profRows.length > 0 ? Number(profRows[0].tiempo_consulta) || 30 : 30;
+
+    // Anti doble-reserva por SOLAPAMIENTO: rechaza si el slot pedido se cruza con
+    // una cita existente del profesional (aunque no coincida la hora exacta).
+    if (ocupadasMin.some((o) => Math.abs(slotMin - o) < tiempoConsulta)) {
+      return {
+        ok: false,
+        status: 409,
+        error: { code: 'SLOT_TAKEN', message: 'Ese horario ya está ocupado para este profesional.' },
+      };
+    }
+
     if (profRows.length === 0) {
-      // Médico legacy sin ficha de profesional → sólo anti doble-reserva.
+      // Médico legacy sin ficha de profesional → ya se validó anti doble-reserva.
       return { ok: true, status: 200, data: { disponible: true } };
     }
     const profesionalId = Number(profRows[0].id);
-    const tiempoConsulta = Number(profRows[0].tiempo_consulta) || 30;
 
     // Día de la semana (0-6) en Colombia — mismo cálculo que getHorariosDisponibles.
     const diaSemana = new Date(new Date(range.startUtc).getTime() + 1000).getUTCDay();

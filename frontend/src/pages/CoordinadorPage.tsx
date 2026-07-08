@@ -192,9 +192,8 @@ export function CoordinadorPage() {
             <NavItem
               icon={<LineChart className="w-[15px] h-[15px]" />}
               label="Indicadores"
-              active={view === 'indicadores'}
-              onClick={() => setView('indicadores')}
-              badge={badges.indicadores}
+              disabled
+              tooltip="Próximamente"
             />
             <NavItem
               icon={<ShieldCheck className="w-[15px] h-[15px]" />}

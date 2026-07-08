@@ -100,12 +100,11 @@ export function buildReportHtml(d: ReportData): string {
       <!-- Global -->
       <div style="background:#f7f6f3;border:1px solid #ecebe6;border-radius:12px;padding:14px 16px;margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">
-          <span style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#8a867e">GLOBAL</span>
+          <span style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#8a867e">GLOBAL <span style="font-weight:600;letter-spacing:0;color:#4b4842;font-variant-numeric:tabular-nums">(${d.agendadas} agendadas)</span></span>
           <span style="font-size:14px;color:#6b6862">Ejecución <b style="color:#1f3a8a;font-size:17px;font-variant-numeric:tabular-nums">${ejecGlobal}</b></span>
         </div>
         ${bar(d.atendidas, pendGlobal, d.noContactadas)}
         <div style="margin-top:8px;display:flex;gap:18px;font-size:13px;color:#4b4842;font-variant-numeric:tabular-nums">
-          <span><b style="font-size:16px;color:#12100e">${d.agendadas}</b> agendadas</span>
           <span style="color:#1fa855"><b style="font-size:16px">${d.atendidas}</b> atendidas</span>
           <span style="color:#c2410c"><b style="font-size:16px">${d.noContactadas}</b> no contactó</span>
         </div>

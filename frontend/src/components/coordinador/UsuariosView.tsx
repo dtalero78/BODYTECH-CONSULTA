@@ -32,6 +32,7 @@ interface FormState {
   id: number | null; // null = crear
   email: string;
   nombre: string;
+  celular: string;
   password: string;
   rol: Role;
   esGlobal: boolean;
@@ -44,6 +45,7 @@ const EMPTY_FORM: FormState = {
   id: null,
   email: '',
   nombre: '',
+  celular: '',
   password: '',
   rol: 'medico',
   esGlobal: false,
@@ -115,6 +117,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
       id: u.id,
       email: u.email,
       nombre: u.nombre,
+      celular: u.celular ?? '',
       password: '',
       rol: u.rol,
       esGlobal: u.esGlobal,
@@ -153,6 +156,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
           password: form.password,
           nombre: form.nombre.trim(),
           rol: form.rol,
+          celular: form.celular.trim() || null,
           esGlobal: form.esGlobal,
           sedes: form.esGlobal ? [] : form.sedes,
           profesionalId: ROLES_CLINICOS.includes(form.rol) ? form.profesionalId : null,
@@ -163,6 +167,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
           nombre: form.nombre.trim(),
           rol: form.rol,
           activo: form.activo,
+          celular: form.celular.trim() || null,
           esGlobal: form.esGlobal,
           sedes: form.esGlobal ? [] : form.sedes,
         });
@@ -241,6 +246,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
               <tr>
                 <th className="text-left font-semibold px-4 py-2.5">Nombre</th>
                 <th className="text-left font-semibold px-4 py-2.5">Email</th>
+                <th className="text-left font-semibold px-4 py-2.5">Celular</th>
                 <th className="text-left font-semibold px-4 py-2.5">Rol</th>
                 <th className="text-left font-semibold px-4 py-2.5">Sedes</th>
                 <th className="text-left font-semibold px-4 py-2.5">Estado</th>
@@ -252,6 +258,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
                 <tr key={u.id} className={u.activo ? '' : 'opacity-50'}>
                   <td className="px-4 py-2.5 font-medium">{u.nombre}</td>
                   <td className="px-4 py-2.5 text-zinc-600">{u.email}</td>
+                  <td className="px-4 py-2.5 text-zinc-600">{u.celular || '—'}</td>
                   <td className="px-4 py-2.5">{ROLE_LABEL[u.rol]}</td>
                   <td className="px-4 py-2.5 text-zinc-600">
                     {u.esGlobal ? 'Todas' : u.sedes.map(sedeName).join(', ') || '—'}
@@ -317,6 +324,15 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className={`${INPUT} ${form.id !== null ? 'bg-zinc-100 text-zinc-500' : ''}`}
                 placeholder="usuario@bodytech.com"
+              />
+            </Field>
+            <Field label="Celular (opcional)">
+              <input
+                type="tel"
+                value={form.celular}
+                onChange={(e) => setForm({ ...form, celular: e.target.value })}
+                className={INPUT}
+                placeholder="+57 300 123 4567"
               />
             </Field>
             {form.id === null && (

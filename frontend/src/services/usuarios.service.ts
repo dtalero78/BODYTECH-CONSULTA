@@ -16,6 +16,7 @@ export interface UsuarioItem {
   esGlobal: boolean;
   activo: boolean;
   profesionalId: number | null;
+  celular: string | null;
   sedes: string[];
 }
 
@@ -24,6 +25,7 @@ export interface CreateUsuarioInput {
   password: string;
   nombre: string;
   rol: Role;
+  celular?: string | null;
   sedes: string[];
   esGlobal: boolean;
   profesionalId?: number | null;
@@ -43,6 +45,7 @@ export interface UpdateUsuarioInput {
   nombre?: string;
   rol?: Role;
   activo?: boolean;
+  celular?: string | null;
   sedes?: string[];
   esGlobal?: boolean;
 }

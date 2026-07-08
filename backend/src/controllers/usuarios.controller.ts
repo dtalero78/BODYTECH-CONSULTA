@@ -20,11 +20,18 @@ import { SessionPayload } from '../services/auth.service';
 const ALL_ROLES = ['admin', 'coordinador', 'medico', 'coach', 'auxiliar', 'torre'] as const;
 const ROLES_GESTIONABLES_COORD: Rol[] = ['medico', 'coach', 'auxiliar'];
 
+// Celular opcional: cadena vacía o solo espacios → null.
+const celularSchema = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().max(30).nullable().optional()
+);
+
 const createSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
   nombre: z.string().min(1).max(200),
   rol: z.enum(ALL_ROLES),
+  celular: celularSchema,
   sedes: z.array(z.string().min(1)).optional().default([]),
   esGlobal: z.boolean().optional().default(false),
   profesionalId: z.number().int().positive().nullable().optional(),
@@ -35,6 +42,7 @@ const updateSchema = z
     nombre: z.string().min(1).max(200).optional(),
     rol: z.enum(ALL_ROLES).optional(),
     activo: z.boolean().optional(),
+    celular: celularSchema,
     sedes: z.array(z.string().min(1)).optional(),
     esGlobal: z.boolean().optional(),
     profesionalId: z.number().int().positive().nullable().optional(),
@@ -142,6 +150,7 @@ class UsuariosController {
         rol: input.rol,
         esGlobal: input.esGlobal,
         profesionalId: input.profesionalId ?? null,
+        celular: input.celular ?? null,
         sedes,
       });
       if (!result.ok) {
@@ -204,6 +213,7 @@ class UsuariosController {
           activo: fields.activo,
           esGlobal: fields.esGlobal,
           profesionalId: fields.profesionalId,
+          celular: fields.celular,
         },
         fields.sedes
       );

@@ -638,6 +638,12 @@ class PostgresService {
         CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email_lower
           ON usuarios (LOWER(email))
       `);
+      // Celular de contacto del usuario (opcional). Mismo tipo que
+      // profesionales.celular para consistencia.
+      await this.query(`
+        ALTER TABLE usuarios
+          ADD COLUMN IF NOT EXISTS celular VARCHAR(30)
+      `);
 
       // Puente usuario↔sedes: 1..N sedes por usuario (coordinador regional).
       // Para es_global=true la lista se ignora (cubre todas). Para clínicos y

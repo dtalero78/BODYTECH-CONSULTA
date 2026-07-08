@@ -36,6 +36,7 @@ export interface UsuarioRow {
   profesional_id: number | null;
   es_global: boolean;
   activo: boolean;
+  celular: string | null;
 }
 
 /** Usuario resuelto para sesión: sin hash, con la lista de sedes ya cargada. */
@@ -62,6 +63,7 @@ interface UsuarioRowWithSedes {
   es_global: boolean;
   activo: boolean;
   profesional_id: number | null;
+  celular: string | null;
   sedes: string[];
 }
 
@@ -74,6 +76,7 @@ export interface UsuarioListItem {
   esGlobal: boolean;
   activo: boolean;
   profesionalId: number | null;
+  celular: string | null;
   sedes: string[];
 }
 
@@ -85,6 +88,7 @@ export interface CreateUsuarioInput {
   rol: Rol;
   esGlobal: boolean;
   profesionalId?: number | null;
+  celular?: string | null;
   sedes: string[];
 }
 
@@ -105,7 +109,7 @@ class UsuariosService {
   /** Busca un usuario ACTIVO por email (para login). null si no existe / DB error. */
   async findActiveByEmail(email: string): Promise<UsuarioRow | null> {
     const rows = await postgresService.query(
-      `SELECT id, email, password_hash, nombre, rol, profesional_id, es_global, activo
+      `SELECT id, email, password_hash, nombre, rol, profesional_id, es_global, activo, celular
          FROM usuarios
         WHERE LOWER(email) = $1 AND activo = TRUE
         LIMIT 1`,
@@ -118,7 +122,7 @@ class UsuariosService {
   /** Busca un usuario ACTIVO por id (incluye hash — para verificar tokens de reset). */
   async findActiveById(id: number): Promise<UsuarioRow | null> {
     const rows = await postgresService.query(
-      `SELECT id, email, password_hash, nombre, rol, profesional_id, es_global, activo
+      `SELECT id, email, password_hash, nombre, rol, profesional_id, es_global, activo, celular
          FROM usuarios
         WHERE id = $1 AND activo = TRUE
         LIMIT 1`,
@@ -192,6 +196,7 @@ class UsuariosService {
       esGlobal: row.es_global,
       activo: row.activo,
       profesionalId: row.profesional_id,
+      celular: row.celular ?? null,
       sedes: Array.isArray(row.sedes) ? row.sedes : [],
     };
   }
@@ -216,7 +221,7 @@ class UsuariosService {
     }
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const rows = await postgresService.query(
-      `SELECT u.id, u.email, u.nombre, u.rol, u.es_global, u.activo, u.profesional_id,
+      `SELECT u.id, u.email, u.nombre, u.rol, u.es_global, u.activo, u.profesional_id, u.celular,
               COALESCE(array_agg(us.sede_id) FILTER (WHERE us.sede_id IS NOT NULL), '{}') AS sedes
          FROM usuarios u
          LEFT JOIN usuario_sedes us ON us.usuario_id = u.id
@@ -231,7 +236,7 @@ class UsuariosService {
 
   async getById(id: number): Promise<UsuarioListItem | null> {
     const rows = await postgresService.query(
-      `SELECT u.id, u.email, u.nombre, u.rol, u.es_global, u.activo, u.profesional_id,
+      `SELECT u.id, u.email, u.nombre, u.rol, u.es_global, u.activo, u.profesional_id, u.celular,
               COALESCE(array_agg(us.sede_id) FILTER (WHERE us.sede_id IS NOT NULL), '{}') AS sedes
          FROM usuarios u
          LEFT JOIN usuario_sedes us ON us.usuario_id = u.id
@@ -260,8 +265,8 @@ class UsuariosService {
     try {
       await client.query('BEGIN');
       const ins = await client.query(
-        `INSERT INTO usuarios (email, password_hash, nombre, rol, profesional_id, es_global, activo)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id`,
+        `INSERT INTO usuarios (email, password_hash, nombre, rol, profesional_id, es_global, celular, activo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE) RETURNING id`,
         [
           this.normalizeEmail(input.email),
           input.passwordHash,
@@ -269,6 +274,7 @@ class UsuariosService {
           input.rol,
           input.profesionalId ?? null,
           input.esGlobal,
+          input.celular ?? null,
         ]
       );
       const id = ins.rows[0].id as number;
@@ -297,6 +303,7 @@ class UsuariosService {
       activo?: boolean;
       esGlobal?: boolean;
       profesionalId?: number | null;
+      celular?: string | null;
     },
     sedes?: string[]
   ): Promise<{ ok: boolean; error?: string }> {
@@ -312,6 +319,7 @@ class UsuariosService {
       if (fields.activo !== undefined) { sets.push(`activo = $${i++}`); params.push(fields.activo); }
       if (fields.esGlobal !== undefined) { sets.push(`es_global = $${i++}`); params.push(fields.esGlobal); }
       if (fields.profesionalId !== undefined) { sets.push(`profesional_id = $${i++}`); params.push(fields.profesionalId); }
+      if (fields.celular !== undefined) { sets.push(`celular = $${i++}`); params.push(fields.celular); }
       sets.push(`updated_at = NOW()`);
       params.push(id);
       const r = await client.query(

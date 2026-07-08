@@ -23,6 +23,8 @@ import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
 import whatsappLeadsService from './services/whatsapp-leads.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
+import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
+import gestionReportService from './services/gestion-report.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
@@ -164,6 +166,7 @@ app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // Admin del outbox del webhook BSL → Trepsi (contiene PHI). RBAC: solo
 // admin/coordinador (antes usaba el token legacy code+sede → cualquier médico).
 app.use('/api/admin/trepsi-webhook', requireRole('admin', 'coordinador'), trepsiWebhookAdminRoutes);
+app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
 // la API Key se rota por ambiente (TREPSI_API_KEY).
 // El middleware `trepsiMonitorMiddleware` registra CADA request en
@@ -224,6 +227,22 @@ if (process.env.NODE_ENV !== 'test') {
     });
   }, WHATSAPP_LEADS_INTERVAL_MS);
   console.log(`🟢 [WhatsApp-Leads] Worker iniciado (cada ${WHATSAPP_LEADS_INTERVAL_MS / 1000}s)`);
+}
+
+// Worker del Informe de Gestión: cada 5 min chequea si ya pasó la hora objetivo
+// (Colombia) y, de ser así, envía UNA vez al día el resumen a los admins con
+// celular. La idempotencia (at-most-once por día, aun con reinicios) la garantiza
+// `gestion_report_log` con INSERT ON CONFLICT DO NOTHING. Si la plantilla
+// (TWILIO_WHATSAPP_GESTION_TEMPLATE_SID) no está configurada, el worker no-op.
+const GESTION_REPORT_INTERVAL_MS = 5 * 60_000;
+const GESTION_REPORT_HORA = process.env.GESTION_REPORT_HORA || '19:00'; // HH:MM Colombia
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    gestionReportService.maybeSendDaily(GESTION_REPORT_HORA).catch((e) => {
+      console.error('[gestion-report] worker error:', e?.message ?? e);
+    });
+  }, GESTION_REPORT_INTERVAL_MS);
+  console.log(`📊 [Gestión] Worker iniciado (envío diario ~${GESTION_REPORT_HORA} COT)`);
 }
 
 // Start server

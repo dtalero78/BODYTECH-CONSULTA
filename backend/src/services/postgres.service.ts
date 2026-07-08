@@ -772,6 +772,20 @@ class PostgresService {
           WHERE sid_twilio IS NOT NULL AND sid_twilio <> ''
       `);
 
+      // ===== Control de envío del Informe de Gestión (WhatsApp a admins) =====
+      // Una fila por día (fecha Colombia, PK). El worker reclama el día con
+      // INSERT ... ON CONFLICT DO NOTHING → at-most-once por día, aunque el
+      // proceso reinicie o corran varias instancias.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS gestion_report_log (
+          fecha       DATE PRIMARY KEY,
+          intentos    INTEGER NOT NULL DEFAULT 0,
+          enviados    INTEGER NOT NULL DEFAULT 0,
+          enviado_at  TIMESTAMPTZ,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

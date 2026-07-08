@@ -362,6 +362,8 @@ TWILIO_API_KEY_SID=SKxxxx
 TWILIO_API_KEY_SECRET=xxxx
 TWILIO_WHATSAPP_FROM=whatsapp:+5716284820
 TWILIO_WHATSAPP_TEMPLATE_SID=HXb3cafc049dcc310e2cfbfffb6e943c4e
+TWILIO_WHATSAPP_GESTION_TEMPLATE_SID=HXxxxx   # Informe de Gestión diario a admins (barras estilo encuesta). Sin él, el worker no-op.
+GESTION_REPORT_HORA=19:00                      # hora Colombia del envío diario del informe (default 19:00)
 
 # PostgreSQL (Digital Ocean managed)
 POSTGRES_HOST=...db.ondigitalocean.com

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { useClarity } from '../hooks/useClarity';
 
 const API = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -254,6 +255,8 @@ function ProgressLog({ pasos, estado }: { pasos: EvaluacionRow['pasos']; estado:
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function CalidadPage() {
+  useClarity();
+
   const historiaId = new URLSearchParams(window.location.search).get('historiaId') ?? '';
 
   // Session info

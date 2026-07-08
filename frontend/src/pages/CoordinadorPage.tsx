@@ -21,6 +21,7 @@ import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
+import { useClarity } from '../hooks/useClarity';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
 type View = 'profesionales' | 'calendario' | 'ordenes' | 'indicadores' | 'usuarios';
@@ -31,6 +32,8 @@ interface NavBadge {
 }
 
 export function CoordinadorPage() {
+  useClarity();
+
   const navigate = useNavigate();
   const [toast, setToast] = useState<Toast>(null);
   const [view, setView] = useState<View>('profesionales');

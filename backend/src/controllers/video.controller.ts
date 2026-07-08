@@ -388,6 +388,20 @@ class VideoController {
       }
 
       if (result.success) {
+        // Marcar la cita como "link enviado" — alimenta el Informe de Gestión
+        // (distingue "No contactó" = sin link, de "Pendiente" = con link). Solo
+        // el primer envío (link_enviado_at IS NULL). Fire-and-forget: no bloquea
+        // ni rompe la respuesta si falla.
+        postgresService
+          .query(
+            `UPDATE "HistoriaClinica" SET "link_enviado_at" = NOW()
+               WHERE "_id" = $1 AND "link_enviado_at" IS NULL`,
+            [historiaId]
+          )
+          .catch((e) =>
+            console.error('⚠️ Error marcando link_enviado_at:', e?.message ?? e)
+          );
+
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
         try {
           const baseUrl = process.env.BASE_URL || 'https://bodytech.app';

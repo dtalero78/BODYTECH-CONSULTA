@@ -194,7 +194,10 @@ export interface IndicadorMedico {
   rol: 'medico' | 'coach' | null;
   agendadas: number;
   atendidas: number;
+  /** Estado NO CONTESTA (el paciente no respondió). Etiqueta: "No contesta". */
   noContactadas: number;
+  /** Sin resolver y SIN link enviado (nunca se le contactó). Etiqueta: "No contactó". */
+  noContacto: number;
 }
 
 export interface IndicadoresResumen {
@@ -203,6 +206,7 @@ export interface IndicadoresResumen {
   agendadas: number;
   atendidas: number;
   noContactadas: number;
+  noContacto: number;
   porMedico: IndicadorMedico[];
 }
 
@@ -545,11 +549,20 @@ class CalendarioService {
       medicoFilter = `AND "medico" = $${params.length}`;
     }
 
-    // Agregado por (medico, estado) en todo el rango.
+    // Agregado por (medico, clase) en todo el rango. Clasificación de 4 vías:
+    //   ATENDIDA   = atendido ATENDIDO
+    //   NOCONTESTA = atendido NO CONTESTA (paciente no respondió)
+    //   NOCONTACTO = sin resolver y SIN link enviado (nunca se le contactó)
+    //   PENDIENTE  = sin resolver pero CON link enviado (en gestión)
     const sql = `
       SELECT
         COALESCE("medico", '__SIN_ASIGNAR__') AS medico_codigo,
-        UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
+        CASE
+          WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
+          WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
+          WHEN "link_enviado_at" IS NULL THEN 'NOCONTACTO'
+          ELSE 'PENDIENTE'
+        END AS clase,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
@@ -558,7 +571,7 @@ class CalendarioService {
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
         ${medicoFilter}
-      GROUP BY medico_codigo, estado
+      GROUP BY medico_codigo, clase
     `;
 
     const rows = await postgresService.query(sql, params);
@@ -569,30 +582,35 @@ class CalendarioService {
     let agendadas = 0;
     let atendidas = 0;
     let noContactadas = 0;
+    let noContacto = 0;
     const porMedicoMap = new Map<
       string,
-      { agendadas: number; atendidas: number; noContactadas: number }
+      { agendadas: number; atendidas: number; noContactadas: number; noContacto: number }
     >();
 
     for (const row of rows) {
       const codigo = String(row.medico_codigo);
-      const estado = String(row.estado);
+      const clase = String(row.clase);
       const total = Number(row.total);
 
       let entry = porMedicoMap.get(codigo);
       if (!entry) {
-        entry = { agendadas: 0, atendidas: 0, noContactadas: 0 };
+        entry = { agendadas: 0, atendidas: 0, noContactadas: 0, noContacto: 0 };
         porMedicoMap.set(codigo, entry);
       }
       entry.agendadas += total;
       agendadas += total;
-      if (estado === 'ATENDIDO') {
+      if (clase === 'ATENDIDA') {
         entry.atendidas += total;
         atendidas += total;
-      } else if (estado === 'NO CONTESTA') {
+      } else if (clase === 'NOCONTESTA') {
         entry.noContactadas += total;
         noContactadas += total;
+      } else if (clase === 'NOCONTACTO') {
+        entry.noContacto += total;
+        noContacto += total;
       }
+      // 'PENDIENTE' (link enviado, sin resolver) solo suma a agendadas → pendientes se deriva.
     }
 
     // Enriquecer con nombre y rol del profesional (si existe en tabla profesionales).
@@ -627,6 +645,7 @@ class CalendarioService {
         agendadas: v.agendadas,
         atendidas: v.atendidas,
         noContactadas: v.noContactadas,
+        noContacto: v.noContacto,
       };
     });
 
@@ -636,7 +655,7 @@ class CalendarioService {
     return {
       ok: true,
       status: 200,
-      data: { from, to, agendadas, atendidas, noContactadas, porMedico },
+      data: { from, to, agendadas, atendidas, noContactadas, noContacto, porMedico },
     };
   }
 

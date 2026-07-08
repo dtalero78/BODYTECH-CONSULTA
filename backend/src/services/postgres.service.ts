@@ -796,6 +796,15 @@ class PostgresService {
         )
       `);
 
+      // Marca de "link de conexión enviado al paciente". La setea el endpoint
+      // POST /api/video/whatsapp/send al enviar el link con éxito (primer envío).
+      // Distingue en el Informe de Gestión "No contactó" (cita sin resolver y SIN
+      // link enviado) de "Pendiente" (link enviado, aún sin resolver).
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "link_enviado_at" TIMESTAMPTZ
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

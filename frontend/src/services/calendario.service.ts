@@ -76,7 +76,10 @@ export interface IndicadorMedico {
   rol: 'medico' | 'coach' | null;
   agendadas: number;
   atendidas: number;
+  /** Estado NO CONTESTA (el paciente no respondió). Etiqueta: "No contesta". */
   noContactadas: number;
+  /** Sin resolver y SIN link enviado (nunca se le contactó). Etiqueta: "No contactó". */
+  noContacto: number;
 }
 
 export interface IndicadoresResumen {
@@ -85,6 +88,7 @@ export interface IndicadoresResumen {
   agendadas: number;
   atendidas: number;
   noContactadas: number;
+  noContacto: number;
   porMedico: IndicadorMedico[];
 }
 

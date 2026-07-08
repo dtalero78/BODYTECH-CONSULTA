@@ -86,6 +86,7 @@ class GestionReportService {
       agendadas: m.agendadas,
       atendidas: m.atendidas,
       noContactadas: m.noContactadas,
+      noContacto: m.noContacto,
     }));
 
     return {
@@ -95,6 +96,7 @@ class GestionReportService {
       agendadas: d.agendadas,
       atendidas: d.atendidas,
       noContactadas: d.noContactadas,
+      noContacto: d.noContacto,
       coaches,
       restantes: Math.max(0, todos.length - mostrados.length),
     };

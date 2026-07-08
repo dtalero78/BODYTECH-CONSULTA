@@ -126,32 +126,26 @@ class TwilioService {
   }
 
   /**
-   * Finalizar una sala de video y opcionalmente crear la composición MP4.
+   * Finalizar una sala de video (status=completed).
+   *
+   * NO crea la composición: el ÚNICO creador es el webhook `room-completed`
+   * (ver VideoController.roomCompletedWebhook). Antes endRoom también la creaba
+   * y competía con el webhook — por la consistencia eventual del listado de
+   * Twilio, ambos terminaban creando una composición → se generaban DOS por
+   * llamada (doble facturación). Al cerrar el room aquí, Twilio dispara el
+   * webhook, que crea una sola.
+   *
    * @param roomSidOrUniqueName - SID o nombre único de la sala
-   * @param createComposition - Si true, crea la composición inmediatamente tras cerrar
    */
-  async endRoom(roomSidOrUniqueName: string, createComposition = false) {
+  async endRoom(roomSidOrUniqueName: string) {
     try {
       const room = await this.client.video.v1
         .rooms(roomSidOrUniqueName)
         .update({ status: 'completed' });
 
-      let compositionSid: string | undefined;
-
-      if (createComposition) {
-        try {
-          const comp = await this.createComposition(room.sid);
-          compositionSid = comp.sid;
-          console.log(`[Twilio] Composition created: ${comp.sid} for room ${room.sid}`);
-        } catch (err: any) {
-          console.error(`[Twilio] Error creating composition for room ${room.sid}:`, err.message);
-        }
-      }
-
       return {
         sid: room.sid,
         status: room.status,
-        compositionSid,
       };
     } catch (error) {
       console.error('Error ending room:', error);

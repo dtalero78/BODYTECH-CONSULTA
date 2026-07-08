@@ -123,6 +123,15 @@ function validationResponse(res: Response, err: ZodError): void {
   });
 }
 
+/**
+ * Lock en memoria de los room_sids cuya composición se está creando ahora mismo.
+ * El backend corre en UN solo contenedor, así que este Set basta para evitar que
+ * dos invocaciones concurrentes del webhook room-completed (p.ej. reintentos de
+ * Twilio) creen dos composiciones antes de que la primera aparezca en el listado
+ * de Twilio (consistencia eventual). Se libera al terminar (finally).
+ */
+const composingRooms = new Set<string>();
+
 class VideoController {
   /**
    * Generar token de acceso para una sala de video
@@ -221,32 +230,11 @@ class VideoController {
     try {
       const { roomName } = req.params;
 
-      const result = await twilioService.endRoom(roomName, true);
-
-      // Guardar composition_sid en HistoriaClinica si hay historia vinculada
-      if (result.compositionSid) {
-        (async () => {
-          try {
-            const rows = await postgresService.query(
-              `SELECT historia_id FROM room_historia_map WHERE room_name = $1 LIMIT 1`,
-              [roomName]
-            );
-            const historiaId: string | undefined = rows?.[0]?.historia_id;
-            if (historiaId) {
-              await postgresService.query(
-                `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
-                [result.compositionSid, historiaId]
-              );
-              console.log(
-                `[EndRoom] Composition ${result.compositionSid} guardada para historia ${historiaId}`
-              );
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } catch (err: any) {
-            console.error(`[EndRoom] Error guardando composition_sid:`, err.message);
-          }
-        })();
-      }
+      // Solo cerramos la sala. La composición (y el guardado del composition_sid
+      // en la HistoriaClinica) los hace EXCLUSIVAMENTE el webhook room-completed,
+      // que Twilio dispara al pasar el room a 'completed'. Así hay un único creador
+      // y no se duplican composiciones.
+      const result = await twilioService.endRoom(roomName);
 
       res.status(200).json({
         success: true,
@@ -1201,25 +1189,40 @@ class VideoController {
             return;
           }
 
-          // Si endRoom ya creó la composición directamente, no duplicar
-          const alreadyHasComposition = await twilioService.roomHasComposition(RoomSid);
-          if (alreadyHasComposition) {
+          // Dedup entre invocaciones concurrentes del propio webhook: reclamamos el
+          // room de forma síncrona (has + add, sin await entre medio → atómico en el
+          // event loop). Si ya está reclamado, salimos sin crear otra composición.
+          if (composingRooms.has(RoomSid)) {
             console.log(
-              `[Webhook room-completed] Room ${RoomName} ya tiene composition — ignorando`
+              `[Webhook room-completed] Room ${RoomName} — composición ya en curso, ignorando`
             );
             return;
           }
+          composingRooms.add(RoomSid);
+          try {
+            // Cross-restart / disparos separados: si Twilio ya tiene una composición
+            // para el room, no duplicar.
+            const alreadyHasComposition = await twilioService.roomHasComposition(RoomSid);
+            if (alreadyHasComposition) {
+              console.log(
+                `[Webhook room-completed] Room ${RoomName} ya tiene composition — ignorando`
+              );
+              return;
+            }
 
-          const comp = await twilioService.createComposition(RoomSid);
+            const comp = await twilioService.createComposition(RoomSid);
 
-          await postgresService.query(
-            `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
-            [comp.sid, historiaId]
-          );
+            await postgresService.query(
+              `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+              [comp.sid, historiaId]
+            );
 
-          console.log(
-            `[Webhook room-completed] Composition ${comp.sid} (status: ${comp.status}) creada para historia ${historiaId}`
-          );
+            console.log(
+              `[Webhook room-completed] Composition ${comp.sid} (status: ${comp.status}) creada para historia ${historiaId}`
+            );
+          } finally {
+            composingRooms.delete(RoomSid);
+          }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[Webhook room-completed] Error en background:`, msg);

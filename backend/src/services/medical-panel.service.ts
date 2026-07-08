@@ -246,7 +246,14 @@ class MedicalPanelService {
       const limitIdx = whereParams.length + 1;
       const offsetIdx = whereParams.length + 2;
 
-      // Query para obtener pacientes pendientes
+      // Query para obtener pacientes pendientes.
+      // ORDER cronológico por hora de la cita: la tarjeta muestra la fecha/hora
+      // derivada de `new Date(fechaAtencion)`, así que se ordena por el INSTANTE
+      // (`fechaAtencion::timestamptz`) y no por el texto crudo. `fechaAtencion` es
+      // TEXT con formatos mezclados (UTC 'Z' vs offset '-05:00'), cuyo orden
+      // lexicográfico NO coincide con el cronológico — de ahí que las citas
+      // aparecieran "en distintos ordenes". El cast va con la misma guarda regex
+      // que usa la Agenda; `horaAtencion` desempata cuando el instante no parsea.
       const patientsResult = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "atendido", "pvEstado", "codEmpresa", "empresa",
@@ -259,7 +266,10 @@ class MedicalPanelService {
          AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
          AND COALESCE("pvEstado", '') <> 'No Contesta'
          AND "numeroId" NOT IN ('TEST', 'test')${sf}
-         ORDER BY "fechaAtencion" ASC
+         ORDER BY (CASE WHEN "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                        THEN "fechaAtencion"::timestamptz ELSE NULL END) ASC NULLS LAST,
+                  "horaAtencion" ASC NULLS LAST,
+                  "_id" ASC
          LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
         [...whereParams, pageSize, offset]
       );

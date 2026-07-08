@@ -106,6 +106,7 @@ export function buildReportHtml(d: ReportData): string {
         ${bar(d.atendidas, pendGlobal, d.noContactadas)}
         <div style="margin-top:8px;display:flex;gap:18px;font-size:13px;color:#4b4842;font-variant-numeric:tabular-nums">
           <span style="color:#1fa855"><b style="font-size:16px">${d.atendidas}</b> atendidas</span>
+          <span style="color:#6b6862"><b style="font-size:16px">${pendGlobal}</b> pendientes</span>
           <span style="color:#c2410c"><b style="font-size:16px">${d.noContactadas}</b> no contactó</span>
         </div>
       </div>

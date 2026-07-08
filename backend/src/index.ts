@@ -24,6 +24,7 @@ import whatsappLeadsService from './services/whatsapp-leads.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
+import gestionReportImageRoutes from './routes/gestion-report-image.routes';
 import gestionReportService from './services/gestion-report.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -167,6 +168,8 @@ app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // admin/coordinador (antes usaba el token legacy code+sede → cualquier médico).
 app.use('/api/admin/trepsi-webhook', requireRole('admin', 'coordinador'), trepsiWebhookAdminRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
+// Público (sin auth): Twilio toma el PNG del tablero de aquí como media.
+app.use('/api/public/gestion-report-image', gestionReportImageRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
 // la API Key se rota por ambiente (TREPSI_API_KEY).
 // El middleware `trepsiMonitorMiddleware` registra CADA request en

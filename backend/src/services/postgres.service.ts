@@ -786,6 +786,16 @@ class PostgresService {
         )
       `);
 
+      // PNG del tablero de gestión, servido por URL pública a Twilio (header de
+      // media de la plantilla). Token aleatorio; se purga a las 24 h.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS gestion_report_image (
+          token       TEXT PRIMARY KEY,
+          png         BYTEA NOT NULL,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

@@ -11,7 +11,7 @@
 //   noContactadas = estado NO CONTESTA
 // ============================================================================
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, X, Download, LineChart, Users } from 'lucide-react';
 import calendarioService, { IndicadoresResumen } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
@@ -53,19 +53,6 @@ function addDaysIso(iso: string, n: number): string {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + n, 12, 0, 0));
   return isoOf(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
-}
-
-const MESES = [
-  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-  'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-];
-
-/** "2026-07-06" → "6 jul 2026" */
-function formatFechaCorta(iso: string): string {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return iso;
-  const [, y, mo, d] = m;
-  return `${Number(d)} ${MESES[Number(mo) - 1]} ${y}`;
 }
 
 function pct(part: number, total: number): string {
@@ -110,8 +97,8 @@ function presetRange(preset: Preset): { from: string; to: string } {
 // ---------------------------------------------------------------------------
 
 export function IndicadoresView({ showToast }: Props) {
-  const [{ from, to }, setRange] = useState(() => presetRange('mes'));
-  const [activePreset, setActivePreset] = useState<Preset | null>('mes');
+  const [{ from, to }, setRange] = useState(() => presetRange('hoy'));
+  const [activePreset, setActivePreset] = useState<Preset | null>('hoy');
   const [data, setData] = useState<IndicadoresResumen | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -173,22 +160,22 @@ export function IndicadoresView({ showToast }: Props) {
     setActivePreset(p);
   }
 
+  // Solo se permiten fechas de HOY en adelante (los datos previos al tracking de
+  // link no son fiables). El date picker usa min=todayIso; aquí se acota además
+  // por si el usuario teclea una fecha anterior.
+  const todayIso = todayInBogota().iso;
   function setFrom(v: string) {
     if (!v) return;
-    setRange((r) => ({ from: v, to: v > r.to ? v : r.to }));
+    const nv = v < todayIso ? todayIso : v;
+    setRange((r) => ({ from: nv, to: nv > r.to ? nv : r.to }));
     setActivePreset(null);
   }
   function setTo(v: string) {
     if (!v) return;
-    setRange((r) => ({ from: v < r.from ? v : r.from, to: v }));
+    const nv = v < todayIso ? todayIso : v;
+    setRange((r) => ({ from: nv < r.from ? nv : r.from, to: nv }));
     setActivePreset(null);
   }
-
-  const medicoNombre = useMemo(() => {
-    if (!filterMedico) return null;
-    const p = profesionales.find((x) => x.codigo === filterMedico);
-    return p ? p.alias || `${p.primerNombre} ${p.primerApellido}` : filterMedico;
-  }, [filterMedico, profesionales]);
 
   // Foto real del profesional (si la tiene); si no, cae al pool placeholder.
   const fotoDe = useCallback(
@@ -230,10 +217,6 @@ export function IndicadoresView({ showToast }: Props) {
 
   const PRESETS: { key: Preset; label: string }[] = [
     { key: 'hoy', label: 'Hoy' },
-    { key: '7d', label: 'Últimos 7 días' },
-    { key: '30d', label: 'Últimos 30 días' },
-    { key: 'mes', label: 'Este mes' },
-    { key: 'mesPasado', label: 'Mes pasado' },
   ];
 
   return (
@@ -245,10 +228,6 @@ export function IndicadoresView({ showToast }: Props) {
             <LineChart className="w-5 h-5 text-[#1f3a8a]" />
             Indicadores
           </h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">
-            Personas agendadas, atendidas y no contactadas · {formatFechaCorta(from)} — {formatFechaCorta(to)}
-            {medicoNombre ? ` · ${medicoNombre}` : ''}
-          </p>
         </div>
         <button
           type="button"
@@ -281,7 +260,7 @@ export function IndicadoresView({ showToast }: Props) {
             onClear={() => setFilterMedico('')}
           />
           <div className="flex items-center gap-2">
-            <DateField label="Desde" value={from} max={to} onChange={setFrom} />
+            <DateField label="Desde" value={from} min={todayIso} max={to} onChange={setFrom} />
             <DateField label="Hasta" value={to} min={from} onChange={setTo} />
           </div>
         </div>

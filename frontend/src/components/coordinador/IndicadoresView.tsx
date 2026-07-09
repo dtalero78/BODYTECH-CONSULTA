@@ -70,6 +70,16 @@ function pendientesDe(x: {
   return Math.max(0, x.agendadas - x.atendidas - x.noContactadas - x.noContacto);
 }
 
+/** Número + su porcentaje (sobre `base`) en gris tenue, para las celdas de la tabla. */
+function numPct(value: number, base: number) {
+  return (
+    <>
+      {value}
+      <span className="text-zinc-400 text-[11px] ml-1">({pct(value, base)})</span>
+    </>
+  );
+}
+
 // Presets de rango relativos a hoy (Colombia).
 type Preset = 'hoy' | '7d' | '30d' | 'mes' | 'mesPasado';
 
@@ -383,16 +393,16 @@ export function IndicadoresView({ showToast }: Props) {
                         {m.agendadas}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-green-700" style={{ fontFamily: FONT_MONO }}>
-                        {m.atendidas}
+                        {numPct(m.atendidas, m.agendadas)}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
-                        {pendientesDe(m)}
+                        {numPct(pendientesDe(m), m.agendadas)}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>
-                        {m.noContactadas}
+                        {numPct(m.noContactadas, m.agendadas)}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>
-                        {m.noContacto}
+                        {numPct(m.noContacto, m.agendadas)}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
                         {pct(m.atendidas, m.agendadas)}
@@ -407,10 +417,10 @@ export function IndicadoresView({ showToast }: Props) {
                 <tr className="bg-zinc-50 border-t border-zinc-200 font-semibold text-zinc-800">
                   <td className="px-4 py-2.5">Total</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.agendadas}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-green-700" style={{ fontFamily: FONT_MONO }}>{data.atendidas}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>{pendientesDe(data)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>{data.noContactadas}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.noContacto}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-green-700" style={{ fontFamily: FONT_MONO }}>{numPct(data.atendidas, data.agendadas)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>{numPct(pendientesDe(data), data.agendadas)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>{numPct(data.noContactadas, data.agendadas)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{numPct(data.noContacto, data.agendadas)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{pct(data.atendidas, data.agendadas)}</td>
                 </tr>
               </tfoot>

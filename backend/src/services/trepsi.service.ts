@@ -88,6 +88,7 @@ export interface CreateAppointmentInput {
   tipoConsulta?: string;
   sede?: string;
   observaciones?: string;
+  empresa?: string;
   // Datos nutricionales que el paciente diligencia en la app Trepsi.
   vasosDeAguaBebidos?: string;
   perimetros?: TrepsiPatientMedidas | null;
@@ -506,11 +507,12 @@ class TrepsiService {
          "peso",
          "talla",
          "horaAtencion",
+         "codEmpresa",
          "atendido",
          "sede_id"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 'PENDIENTE', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'PENDIENTE', 'trepsi'
        ) RETURNING "_id"`,
       [
         historiaId,
@@ -535,6 +537,7 @@ class TrepsiService {
         pesoVal != null ? String(pesoVal) : null,
         tallaVal != null ? String(tallaVal) : null,
         horaAtencion,
+        input.empresa ? input.empresa.trim().toUpperCase() : null,
       ]
     );
 

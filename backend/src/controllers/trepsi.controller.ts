@@ -108,6 +108,11 @@ const createSchema = z.object({
   tipoConsulta: z.string().optional(),
   sede: z.string().optional(),
   observaciones: z.string().max(1000).optional(),
+  // Empresa que patrocina la consulta (ej. "athletic"). Trepsi lo añade
+  // para segmentar sus reportes. Se persiste en HistoriaClinica.codEmpresa
+  // en mayúsculas para consistencia con las empresas legacy (PARTICULAR,
+  // SANITHELP-JJ, etc.).
+  empresa: z.string().max(50).optional(),
   // Datos nutricionales que el paciente diligencia en la app Trepsi.
   vasosDeAguaBebidos: z.string().optional(),
   perimetros: patientMedidasSchema.nullable().optional(),

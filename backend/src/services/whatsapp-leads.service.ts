@@ -28,15 +28,20 @@ import postgresService from './postgres.service';
 // con WHATSAPP_ENTIDAD_PATTERNS (lista separada por comas).
 const DEFAULT_PATTERNS = [
   // entidad
+  // 'q entidad' captura la abreviatura "q" con cualquier preposición delante:
+  // "para q entidad", "a q entidad", "de q entidad"... (el asesor cambió la
+  // frase de "Para q entidad?" a "A q entidad lo vas a presentar?" — 2026-07-08).
+  'q entidad',
   'para q entidad',
   'para que entidad',
-  'que entidad',
+  'que entidad', // palabra completa: cubre "a que entidad", "para que entidad", etc.
   'cual entidad',
   'cual es la entidad',
   'para cual entidad',
   'de que entidad',
   'nombre de la entidad',
   // empresa (el asesor a veces dice "empresa" en vez de "entidad")
+  'q empresa',
   'para q empresa',
   'para que empresa',
   'que empresa',

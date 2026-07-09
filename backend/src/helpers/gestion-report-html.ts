@@ -101,7 +101,7 @@ export function buildReportHtml(d: ReportData): string {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
         <span style="width:26px;height:26px;border-radius:7px;background:#1f3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">B</span>
         <span style="font-size:21px;font-weight:750;letter-spacing:-.02em;color:#12100e">${esc(d.titulo)}</span>
-        <img src="${GIRAR_ICON}" alt="Girar celular" style="width:26px;height:26px;object-fit:contain;margin-left:4px" />
+        <img src="${GIRAR_ICON}" alt="Girar celular" style="width:52px;height:52px;object-fit:contain;margin-left:8px" />
       </div>
       <div style="font-size:13px;color:#8a867e;margin-bottom:16px;padding-left:36px">${esc(d.fecha)} · ${esc(d.scopeLabel)}</div>
 

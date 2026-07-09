@@ -70,7 +70,7 @@ function coachRowHtml(c: CoachRow): string {
   return `
     <div style="padding:11px 0;border-bottom:1px solid #eceae5">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <span style="font-size:15px;font-weight:600;color:#1c1b19">${esc(c.nombre)}</span>
+        <span style="font-size:15px;font-weight:600;color:#1c1b19">${esc(c.nombre)} <span style="font-weight:500;color:#8a867e;font-size:13px">(${c.agendadas})</span></span>
         <span style="font-size:13px;font-weight:700;color:#12100e;font-variant-numeric:tabular-nums">${ejec}</span>
       </div>
       ${bar(c.atendidas, pend, c.noContactadas, c.noContacto)}
@@ -103,7 +103,7 @@ export function buildReportHtml(d: ReportData): string {
         <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${GREEN}"></span>Atendida</span>
         <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${GREY}"></span>Pendiente</span>
         <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${AMBER}"></span>No contesta</span>
-        <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${RED}"></span>No contactó</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${RED}"></span>Coach No contactó</span>
       </div>
 
       <!-- Global -->
@@ -122,7 +122,10 @@ export function buildReportHtml(d: ReportData): string {
       </div>
 
       <!-- Coaches -->
-      <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#8a867e;margin-bottom:2px">POR COACH</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;letter-spacing:.08em;color:#8a867e;margin-bottom:2px">
+        <span>POR COACH</span>
+        <span>EFECTIVIDAD</span>
+      </div>
       ${coachesHtml || '<div style="padding:16px 0;color:#8a867e;font-size:14px">Sin citas en el rango.</div>'}
       ${d.restantes && d.restantes > 0 ? `<div style="padding:11px 0 2px;font-size:13px;color:#8a867e">…y ${d.restantes} coach${d.restantes === 1 ? '' : 'es'} más</div>` : ''}
 

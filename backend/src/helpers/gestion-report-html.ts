@@ -49,11 +49,6 @@ function esc(s: string): string {
   );
 }
 
-function pctNum(part: number, total: number): number {
-  if (total <= 0) return 0;
-  return (part / total) * 100;
-}
-
 function pctStr(part: number, total: number): string {
   if (total <= 0) return '—';
   return `${((part / total) * 100).toFixed(1)}%`;
@@ -72,13 +67,11 @@ function bar(atendidas: number, pendientes: number, noContesta: number, noContac
 function coachRowHtml(c: CoachRow): string {
   const pend = Math.max(0, c.agendadas - c.atendidas - c.noContactadas - c.noContacto);
   const ejec = pctStr(c.atendidas, c.agendadas);
-  const ejecNum = pctNum(c.atendidas, c.agendadas);
-  const ejecColor = ejecNum >= 50 ? GREEN : ejecNum >= 25 ? '#b9821f' : '#c2410c';
   return `
     <div style="padding:11px 0;border-bottom:1px solid #eceae5">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
         <span style="font-size:15px;font-weight:600;color:#1c1b19">${esc(c.nombre)}</span>
-        <span style="font-size:13px;font-weight:700;color:${ejecColor};font-variant-numeric:tabular-nums">${ejec}</span>
+        <span style="font-size:13px;font-weight:700;color:#12100e;font-variant-numeric:tabular-nums">${ejec}</span>
       </div>
       ${bar(c.atendidas, pend, c.noContactadas, c.noContacto)}
       <div style="margin-top:5px;font-size:12px;color:${T_GREY};font-variant-numeric:tabular-nums">

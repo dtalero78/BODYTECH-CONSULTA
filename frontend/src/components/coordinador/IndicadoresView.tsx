@@ -441,7 +441,7 @@ export function IndicadoresView({ showToast }: Props) {
                       <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>
                         {numPct(m.noContacto, m.agendadas)}
                       </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-zinc-900" style={{ fontFamily: FONT_MONO }}>
                         {pct(m.atendidas, m.agendadas)}
                       </td>
                     </tr>

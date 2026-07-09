@@ -664,8 +664,13 @@ class CalendarioService {
       };
     });
 
-    // Orden: más agendadas primero, luego alfabético.
-    porMedico.sort((a, b) => b.agendadas - a.agendadas || a.nombre.localeCompare(b.nombre));
+    // Orden: mejor calificado primero (mayor % de ejecución = atendidas/agendadas).
+    // Coaches sin agendadas van al final; empate → más agendadas, luego alfabético.
+    porMedico.sort((a, b) => {
+      const ea = a.agendadas > 0 ? a.atendidas / a.agendadas : -1;
+      const eb = b.agendadas > 0 ? b.atendidas / b.agendadas : -1;
+      return eb - ea || b.agendadas - a.agendadas || a.nombre.localeCompare(b.nombre);
+    });
 
     return {
       ok: true,

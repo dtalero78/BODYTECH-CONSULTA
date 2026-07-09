@@ -117,10 +117,10 @@ export function buildReportHtml(d: ReportData): string {
         </div>
         ${bar(d.atendidas, pendGlobal, d.noContactadas, d.noContacto)}
         <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#4b4842;font-variant-numeric:tabular-nums">
-          <span style="color:${T_GREEN}"><b style="font-size:16px">${d.atendidas}</b> atendidas</span>
-          <span style="color:${T_GREY}"><b style="font-size:16px">${pendGlobal}</b> pendientes</span>
-          <span style="color:${T_AMBER}"><b style="font-size:16px">${d.noContactadas}</b> no contesta</span>
-          <span style="color:${T_RED}"><b style="font-size:16px">${d.noContacto}</b> no contactó</span>
+          <span style="color:${T_GREEN}"><b style="font-size:16px">${d.atendidas}</b> atendidas <span style="opacity:.65">(${pctStr(d.atendidas, d.agendadas)})</span></span>
+          <span style="color:${T_GREY}"><b style="font-size:16px">${pendGlobal}</b> pendientes <span style="opacity:.65">(${pctStr(pendGlobal, d.agendadas)})</span></span>
+          <span style="color:${T_AMBER}"><b style="font-size:16px">${d.noContactadas}</b> no contesta <span style="opacity:.65">(${pctStr(d.noContactadas, d.agendadas)})</span></span>
+          <span style="color:${T_RED}"><b style="font-size:16px">${d.noContacto}</b> no contactó <span style="opacity:.65">(${pctStr(d.noContacto, d.agendadas)})</span></span>
         </div>
       </div>
 

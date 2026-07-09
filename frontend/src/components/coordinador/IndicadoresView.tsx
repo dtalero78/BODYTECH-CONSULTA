@@ -73,6 +73,16 @@ function pct(part: number, total: number): string {
   return `${((part / total) * 100).toFixed(1)}%`;
 }
 
+/** Pendientes = agendadas − atendidas − no contesta − no contactó (link enviado, sin resolver). */
+function pendientesDe(x: {
+  agendadas: number;
+  atendidas: number;
+  noContactadas: number;
+  noContacto: number;
+}): number {
+  return Math.max(0, x.agendadas - x.atendidas - x.noContactadas - x.noContacto);
+}
+
 // Presets de rango relativos a hoy (Colombia).
 type Preset = 'hoy' | '7d' | '30d' | 'mes' | 'mesPasado';
 
@@ -192,17 +202,19 @@ export function IndicadoresView({ showToast }: Props) {
   function exportCsv() {
     if (!data) return;
     const rows: string[][] = [
-      ['Profesional', 'Código', 'Rol', 'Agendadas', 'Atendidas', 'No contactadas', '% Atención'],
+      ['Profesional', 'Código', 'Rol', 'Agendadas', 'Atendidas', 'Pendientes', 'No contesta', 'No contactó', '% Atención'],
       ...data.porMedico.map((m) => [
         m.nombre,
         m.medicoCodigo === '__SIN_ASIGNAR__' ? '' : m.medicoCodigo,
         m.rol ?? '',
         String(m.agendadas),
         String(m.atendidas),
+        String(pendientesDe(m)),
         String(m.noContactadas),
+        String(m.noContacto),
         pct(m.atendidas, m.agendadas),
       ]),
-      ['TOTAL', '', '', String(data.agendadas), String(data.atendidas), String(data.noContactadas), pct(data.atendidas, data.agendadas)],
+      ['TOTAL', '', '', String(data.agendadas), String(data.atendidas), String(pendientesDe(data)), String(data.noContactadas), String(data.noContacto), pct(data.atendidas, data.agendadas)],
     ];
     const csv = rows
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
@@ -296,7 +308,7 @@ export function IndicadoresView({ showToast }: Props) {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
           <KpiCard
             label="Personas agendadas"
             value={data?.agendadas ?? 0}
@@ -311,11 +323,25 @@ export function IndicadoresView({ showToast }: Props) {
             accent="green"
           />
           <KpiCard
-            label="No contactadas"
+            label="Pendientes"
+            value={data ? pendientesDe(data) : 0}
+            caption={data ? `${pct(pendientesDe(data), data.agendadas)} de agendadas` : undefined}
+            loading={loading}
+            accent="zinc"
+          />
+          <KpiCard
+            label="No contesta"
             value={data?.noContactadas ?? 0}
             caption={data ? `${pct(data.noContactadas, data.agendadas)} de agendadas` : undefined}
             loading={loading}
             accent="amber"
+          />
+          <KpiCard
+            label="No contactó"
+            value={data?.noContacto ?? 0}
+            caption={data ? `${pct(data.noContacto, data.agendadas)} de agendadas` : undefined}
+            loading={loading}
+            accent="red"
           />
         </div>
       </div>
@@ -333,20 +359,22 @@ export function IndicadoresView({ showToast }: Props) {
                 <th className="text-left font-semibold px-4 py-2.5">Profesional</th>
                 <th className="text-right font-semibold px-4 py-2.5">Agendadas</th>
                 <th className="text-right font-semibold px-4 py-2.5">Atendidas</th>
-                <th className="text-right font-semibold px-4 py-2.5">No contactadas</th>
+                <th className="text-right font-semibold px-4 py-2.5">Pendientes</th>
+                <th className="text-right font-semibold px-4 py-2.5">No contesta</th>
+                <th className="text-right font-semibold px-4 py-2.5">No contactó</th>
                 <th className="text-right font-semibold px-4 py-2.5">% Atención</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                     Cargando…
                   </td>
                 </tr>
               ) : !data || data.porMedico.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                     No hay citas en el rango seleccionado.
                   </td>
                 </tr>
@@ -378,8 +406,14 @@ export function IndicadoresView({ showToast }: Props) {
                       <td className="px-4 py-2.5 text-right tabular-nums text-green-700" style={{ fontFamily: FONT_MONO }}>
                         {m.atendidas}
                       </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
+                        {pendientesDe(m)}
+                      </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>
                         {m.noContactadas}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>
+                        {m.noContacto}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
                         {pct(m.atendidas, m.agendadas)}
@@ -395,7 +429,9 @@ export function IndicadoresView({ showToast }: Props) {
                   <td className="px-4 py-2.5">Total</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.agendadas}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-green-700" style={{ fontFamily: FONT_MONO }}>{data.atendidas}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>{pendientesDe(data)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>{data.noContactadas}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.noContacto}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{pct(data.atendidas, data.agendadas)}</td>
                 </tr>
               </tfoot>
@@ -422,12 +458,28 @@ function KpiCard({
   value: number;
   caption?: string;
   loading: boolean;
-  accent: 'ink' | 'green' | 'amber';
+  accent: 'ink' | 'green' | 'amber' | 'red' | 'zinc';
 }) {
   const dot =
-    accent === 'green' ? 'bg-green-500' : accent === 'amber' ? 'bg-amber-500' : 'bg-[#1f3a8a]';
+    accent === 'green'
+      ? 'bg-green-500'
+      : accent === 'amber'
+        ? 'bg-amber-500'
+        : accent === 'red'
+          ? 'bg-red-500'
+          : accent === 'zinc'
+            ? 'bg-zinc-400'
+            : 'bg-[#1f3a8a]';
   const valCls =
-    accent === 'green' ? 'text-green-700' : accent === 'amber' ? 'text-amber-700' : 'text-zinc-900';
+    accent === 'green'
+      ? 'text-green-700'
+      : accent === 'amber'
+        ? 'text-amber-700'
+        : accent === 'red'
+          ? 'text-red-700'
+          : accent === 'zinc'
+            ? 'text-zinc-700'
+            : 'text-zinc-900';
   return (
     <div className="px-6 py-5" style={{ fontFamily: FONT_INTER }}>
       <div className="flex items-center gap-1.5">

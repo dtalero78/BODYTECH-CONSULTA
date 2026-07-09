@@ -552,15 +552,20 @@ class CalendarioService {
     // Agregado por (medico, clase) en todo el rango. Clasificación de 4 vías:
     //   ATENDIDA   = atendido ATENDIDO
     //   NOCONTESTA = atendido NO CONTESTA (paciente no respondió)
-    //   NOCONTACTO = sin resolver y SIN link enviado (nunca se le contactó)
-    //   PENDIENTE  = sin resolver pero CON link enviado (en gestión)
+    //   NOCONTACTO = sin resolver, SIN link enviado y cuya hora YA PASÓ
+    //                (el coach dejó vencer la cita sin contactar)
+    //   PENDIENTE  = el resto sin resolver: cita aún por venir (hora futura),
+    //                o ya con link enviado (en gestión)
+    // La comparación con NOW() evita marcar como "no contactó" citas cuya hora
+    // aún no llega. `fechaAtencion` ya viene filtrada por el regex del WHERE, así
+    // que el cast a timestamptz es seguro.
     const sql = `
       SELECT
         COALESCE("medico", '__SIN_ASIGNAR__') AS medico_codigo,
         CASE
           WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
           WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
-          WHEN "link_enviado_at" IS NULL THEN 'NOCONTACTO'
+          WHEN "link_enviado_at" IS NULL AND "fechaAtencion"::timestamptz < NOW() THEN 'NOCONTACTO'
           ELSE 'PENDIENTE'
         END AS clase,
         COUNT(*)::int AS total

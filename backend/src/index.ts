@@ -238,7 +238,7 @@ if (process.env.NODE_ENV !== 'test') {
 // `gestion_report_log` con INSERT ON CONFLICT DO NOTHING. Si la plantilla
 // (TWILIO_WHATSAPP_GESTION_TEMPLATE_SID) no está configurada, el worker no-op.
 const GESTION_REPORT_INTERVAL_MS = 5 * 60_000;
-const GESTION_REPORT_HORA = process.env.GESTION_REPORT_HORA || '19:00'; // HH:MM Colombia
+const GESTION_REPORT_HORA = process.env.GESTION_REPORT_HORA || '19:30'; // HH:MM Colombia
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => {
     gestionReportService.maybeSendDaily(GESTION_REPORT_HORA).catch((e) => {

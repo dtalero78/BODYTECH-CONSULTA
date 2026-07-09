@@ -30,6 +30,7 @@ const horarios = requireRole('coordinador', 'admin', 'auxiliar', 'medico', 'coac
 router.get('/mes', operativo, calendarioController.getMes);
 router.get('/dia', operativo, calendarioController.getDia);
 router.get('/indicadores', operativo, calendarioController.getIndicadores);
+router.get('/no-contacto', operativo, calendarioController.getNoContacto);
 router.get('/horarios-disponibles', horarios, calendarioController.getHorariosDisponibles);
 router.get('/disponibilidad-dia', operativo, calendarioController.getDisponibilidadDia);
 router.get('/disponibilidad-mes', operativo, calendarioController.getDisponibilidadMes);

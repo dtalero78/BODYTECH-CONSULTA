@@ -210,6 +210,16 @@ export interface IndicadoresResumen {
   porMedico: IndicadorMedico[];
 }
 
+/** Una persona del listado "No contactó" (cita sin resolver, sin link, hora vencida). */
+export interface NoContactoItem {
+  id: string;
+  nombre: string;
+  numeroId: string;
+  celular: string | null;
+  hora: string | null; // "HH:MM" Colombia
+  fechaAtencion: string | null;
+}
+
 export interface SlotHora {
   hora: string; // "HH:MM"
   disponible: boolean;
@@ -662,6 +672,70 @@ class CalendarioService {
       status: 200,
       data: { from, to, agendadas, atendidas, noContactadas, noContacto, porMedico },
     };
+  }
+
+  /**
+   * Listado de personas "No contactó" de UN profesional en un rango: citas sin
+   * resolver (≠ ATENDIDO/NO CONTESTA), SIN link enviado y con la hora YA vencida
+   * — misma definición que la clase NOCONTACTO de getIndicadores. Alimenta la
+   * fila expandible del panel Indicadores.
+   */
+  async getNoContactoDetalle(
+    from: string,
+    to: string,
+    sedeIds: string[],
+    medicoCodigo: string
+  ): Promise<ServiceResult<{ items: NoContactoItem[] }>> {
+    let range;
+    try {
+      range = getRangeUtc(from, to);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, status: 400, error: { code: 'INVALID_DATE', message: msg } };
+    }
+
+    const params: unknown[] = [sedeIds, range.startUtc, range.endUtc];
+    let medicoCond: string;
+    if (medicoCodigo === '__SIN_ASIGNAR__') {
+      medicoCond = `AND "medico" IS NULL`;
+    } else {
+      params.push(medicoCodigo);
+      medicoCond = `AND "medico" = $${params.length}`;
+    }
+
+    const sql = `
+      SELECT
+        "_id" AS id,
+        TRIM(CONCAT_WS(' ', "primerNombre", "segundoNombre", "primerApellido", "segundoApellido")) AS nombre,
+        "numeroId", "celular",
+        to_char("fechaAtencion"::timestamptz AT TIME ZONE '${TZ}', 'HH24:MI') AS hora,
+        "fechaAtencion"
+      FROM "HistoriaClinica"
+      WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
+        AND "fechaAtencion" IS NOT NULL
+        AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND "fechaAtencion"::timestamptz >= $2::timestamptz
+        AND "fechaAtencion"::timestamptz < $3::timestamptz
+        ${medicoCond}
+        AND UPPER(COALESCE("atendido", 'PENDIENTE')) NOT IN ('ATENDIDO', 'NO CONTESTA')
+        AND "link_enviado_at" IS NULL
+        AND "fechaAtencion"::timestamptz < NOW()
+      ORDER BY "fechaAtencion"
+    `;
+
+    const rows = await postgresService.query(sql, params);
+    if (rows === null) {
+      return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando el detalle.' } };
+    }
+    const items: NoContactoItem[] = rows.map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      nombre: (r.nombre ? String(r.nombre) : '').trim() || '(sin nombre)',
+      numeroId: r.numeroId ? String(r.numeroId) : '',
+      celular: r.celular ? String(r.celular) : null,
+      hora: r.hora ? String(r.hora) : null,
+      fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
+    }));
+    return { ok: true, status: 200, data: { items } };
   }
 
   /**

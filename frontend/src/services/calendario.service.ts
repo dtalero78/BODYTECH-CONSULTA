@@ -92,6 +92,15 @@ export interface IndicadoresResumen {
   porMedico: IndicadorMedico[];
 }
 
+export interface NoContactoItem {
+  id: string;
+  nombre: string;
+  numeroId: string;
+  celular: string | null;
+  hora: string | null;
+  fechaAtencion: string | null;
+}
+
 export interface SlotHora {
   hora: string;
   disponible: boolean;
@@ -170,6 +179,21 @@ class CalendarioService {
       { headers: authHeaders() }
     );
     return res.data?.data;
+  }
+
+  async getNoContacto(
+    from: string,
+    to: string,
+    medico: string,
+    sedes?: string[]
+  ): Promise<NoContactoItem[]> {
+    const params = new URLSearchParams({ from, to, medico });
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/no-contacto?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data?.items ?? [];
   }
 
   async getHorariosDisponibles(

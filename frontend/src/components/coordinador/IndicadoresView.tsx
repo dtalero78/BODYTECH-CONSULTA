@@ -11,9 +11,9 @@
 //   noContactadas = estado NO CONTESTA
 // ============================================================================
 
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, X, Download, LineChart, Users } from 'lucide-react';
-import calendarioService, { IndicadoresResumen } from '../../services/calendario.service';
+import { useState, useEffect, useCallback, Fragment } from 'react';
+import { ChevronDown, ChevronRight, X, Download, LineChart, Users } from 'lucide-react';
+import calendarioService, { IndicadoresResumen, NoContactoItem } from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import authService, { Sede } from '../../services/auth.service';
 import {
@@ -111,6 +111,11 @@ export function IndicadoresView({ showToast }: Props) {
   const [activePreset, setActivePreset] = useState<Preset | null>('hoy');
   const [data, setData] = useState<IndicadoresResumen | null>(null);
   const [loading, setLoading] = useState(true);
+  // Filas expandidas (por código de profesional) + caché del detalle "No contactó".
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [detalle, setDetalle] = useState<
+    Record<string, { loading: boolean; items: NoContactoItem[] }>
+  >({});
 
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [filterMedico, setFilterMedico] = useState<string>('');
@@ -148,6 +153,8 @@ export function IndicadoresView({ showToast }: Props) {
   const reload = useCallback(async () => {
     if (sedesSel.length === 0) return;
     setLoading(true);
+    setExpanded(new Set());
+    setDetalle({});
     try {
       const res = await calendarioService.getIndicadores(from, to, filterMedico || undefined, sedesSel);
       setData(res);
@@ -164,6 +171,27 @@ export function IndicadoresView({ showToast }: Props) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  async function fetchDetalle(codigo: string) {
+    setDetalle((d) => ({ ...d, [codigo]: { loading: true, items: [] } }));
+    try {
+      const items = await calendarioService.getNoContacto(from, to, codigo, sedesSel);
+      setDetalle((d) => ({ ...d, [codigo]: { loading: false, items } }));
+    } catch {
+      setDetalle((d) => ({ ...d, [codigo]: { loading: false, items: [] } }));
+    }
+  }
+
+  function toggleRow(codigo: string) {
+    const isOpen = expanded.has(codigo);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(codigo)) next.delete(codigo);
+      else next.add(codigo);
+      return next;
+    });
+    if (!isOpen && !detalle[codigo]) fetchDetalle(codigo);
+  }
 
   function applyPreset(p: Preset) {
     setRange(presetRange(p));
@@ -370,10 +398,19 @@ export function IndicadoresView({ showToast }: Props) {
               ) : (
                 data.porMedico.map((m) => {
                   const sinAsignar = m.medicoCodigo === '__SIN_ASIGNAR__';
+                  const isOpen = expanded.has(m.medicoCodigo);
+                  const det = detalle[m.medicoCodigo];
                   return (
-                    <tr key={m.medicoCodigo} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/60">
+                    <Fragment key={m.medicoCodigo}>
+                    <tr
+                      onClick={() => toggleRow(m.medicoCodigo)}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/60 cursor-pointer"
+                    >
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
+                          <ChevronRight
+                            className={`w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                          />
                           <MonoAvatar
                             initials={sinAsignar ? '··' : initialsOf(m.nombre)}
                             src={sinAsignar ? null : fotoDe(m.medicoCodigo)}
@@ -408,6 +445,18 @@ export function IndicadoresView({ showToast }: Props) {
                         {pct(m.atendidas, m.agendadas)}
                       </td>
                     </tr>
+                    {isOpen && (
+                      <tr className="bg-zinc-50/70">
+                        <td colSpan={7} className="px-4 pb-3 pt-1">
+                          <NoContactoDetail
+                            loading={det?.loading ?? true}
+                            items={det?.items ?? []}
+                            count={m.noContacto}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               )}
@@ -428,6 +477,61 @@ export function IndicadoresView({ showToast }: Props) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NoContactoDetail — listado expandible de personas no contactadas de un coach
+// ---------------------------------------------------------------------------
+
+function NoContactoDetail({
+  loading,
+  items,
+  count,
+}: {
+  loading: boolean;
+  items: NoContactoItem[];
+  count: number;
+}) {
+  return (
+    <div className="rounded-lg border border-red-100 bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 bg-red-50/60 border-b border-red-100">
+        <span className="w-2 h-2 rounded-full bg-red-500" />
+        <span className="text-[11px] uppercase tracking-[0.06em] font-semibold text-red-700">
+          No contactó · {count}
+        </span>
+      </div>
+      {loading ? (
+        <div className="px-3 py-3 text-[13px] text-zinc-400">Cargando…</div>
+      ) : items.length === 0 ? (
+        <div className="px-3 py-3 text-[13px] text-zinc-400">
+          Sin personas no contactadas en el rango.
+        </div>
+      ) : (
+        <div>
+          {items.map((it, i) => (
+            <div
+              key={it.id}
+              className={`flex items-center gap-3 px-3 py-2 text-[13px] ${i > 0 ? 'border-t border-zinc-100' : ''}`}
+            >
+              <span className="w-12 shrink-0 tabular-nums text-zinc-500" style={{ fontFamily: FONT_MONO }}>
+                {it.hora ?? '—'}
+              </span>
+              <span className="flex-1 min-w-0 truncate text-zinc-800">{it.nombre}</span>
+              <span className="shrink-0 tabular-nums text-[12px] text-zinc-400" style={{ fontFamily: FONT_MONO }}>
+                {it.numeroId}
+              </span>
+              <span
+                className="w-36 shrink-0 text-right tabular-nums text-[12px] text-zinc-500"
+                style={{ fontFamily: FONT_MONO }}
+              >
+                {it.celular ?? ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

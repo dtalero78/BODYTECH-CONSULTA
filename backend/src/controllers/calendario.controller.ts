@@ -166,6 +166,32 @@ class CalendarioController {
     }
   };
 
+  getNoContacto = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedes = await resolveSedes(req);
+      const from = typeof req.query.from === 'string' ? req.query.from : '';
+      const to = typeof req.query.to === 'string' ? req.query.to : '';
+      const medico = typeof req.query.medico === 'string' ? req.query.medico : '';
+
+      if (!from || !to || !medico) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'from, to y medico son requeridos.' },
+        });
+        return;
+      }
+
+      const result = await calendarioService.getNoContactoDetalle(from, to, sedes, medico);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   getHorariosDisponibles = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const sedeId = getSedeId(req);

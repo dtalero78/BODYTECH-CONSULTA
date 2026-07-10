@@ -119,9 +119,13 @@ class TorniqueteService {
    * jornada de HOY (Colombia). Lista TODOS los profesionales activos (aunque no
    * se hayan conectado) para que el coordinador vea ausencias.
    */
-  async getBoard(sedeIds: string[]): Promise<BoardResult | null> {
+  async getBoard(sedeIds: string[], fechaParam?: string | null): Promise<BoardResult | null> {
+    // `fechaParam` (YYYY-MM-DD) permite consultar un día pasado; null → hoy
+    // (Colombia). Para días pasados `en_linea` cae naturalmente a false (los
+    // latidos son viejos), así que la misma query sirve para hoy y para historial.
+    const fecha = fechaParam && /^\d{4}-\d{2}-\d{2}$/.test(fechaParam) ? fechaParam : null;
     if (!sedeIds || sedeIds.length === 0) {
-      return { fecha: '', sedeIds: [], ahoraEnLinea: 0, profesionales: [] };
+      return { fecha: fecha ?? '', sedeIds: [], ahoraEnLinea: 0, profesionales: [] };
     }
 
     const rows = await postgresService.query(
@@ -138,7 +142,7 @@ class TorniqueteService {
           j.en_linea_desde,
           j.total_seg,
           j.jornadas,
-          (NOW() AT TIME ZONE 'America/Bogota')::date AS hoy
+          COALESCE($3::date, (NOW() AT TIME ZONE 'America/Bogota')::date) AS fecha_ref
         FROM profesionales p
         LEFT JOIN LATERAL (
           SELECT
@@ -153,14 +157,14 @@ class TorniqueteService {
           FROM torniquete_jornadas t
           WHERE t.codigo = p.codigo
             AND t.sede_id = p.sede_id
-            AND t.fecha = (NOW() AT TIME ZONE 'America/Bogota')::date
+            AND t.fecha = COALESCE($3::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
         ) j ON TRUE
         WHERE p.sede_id = ANY($1::text[]) AND p.activo = TRUE`,
-      [sedeIds, String(VENTANA_INACTIVIDAD_MIN)]
+      [sedeIds, String(VENTANA_INACTIVIDAD_MIN), fecha]
     );
     if (rows === null) return null;
 
-    const fecha = rows.length > 0 ? this.dateToIso(rows[0].hoy) : '';
+    const fechaRef = rows.length > 0 ? this.dateToIso(rows[0].fecha_ref) : (fecha ?? '');
 
     const profesionales: BoardProfesional[] = rows.map((r: Record<string, unknown>) => {
       const nombre =
@@ -197,7 +201,7 @@ class TorniqueteService {
     });
 
     const ahoraEnLinea = profesionales.filter((p) => p.enLinea).length;
-    return { fecha, sedeIds, ahoraEnLinea, profesionales };
+    return { fecha: fechaRef, sedeIds, ahoraEnLinea, profesionales };
   }
 
   /** Normaliza un timestamp de pg (Date o string) a ISO. */

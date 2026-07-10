@@ -22,6 +22,14 @@ interface Props {
 
 const REFRESH_MS = 25_000;
 
+/** Hoy en Colombia (UTC-5) como YYYY-MM-DD. */
+function todayBogotaIso(): string {
+  const d = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    d.getUTCDate()
+  ).padStart(2, '0')}`;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers de formato (Colombia UTC-5)
 // ---------------------------------------------------------------------------
@@ -68,6 +76,9 @@ export function TorniqueteView({ showToast }: Props) {
   const [board, setBoard] = useState<BoardResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fecha, setFecha] = useState<string>(() => todayBogotaIso());
+  const todayIso = todayBogotaIso();
+  const esHoy = fecha === todayIso;
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [sedesSel, setSedesSel] = useState<string[]>(() => {
     const user = authService.getUser();
@@ -97,7 +108,7 @@ export function TorniqueteView({ showToast }: Props) {
       if (silent) setRefreshing(true);
       else setLoading(true);
       try {
-        const res = await torniqueteService.getBoard(sedesSel.length > 0 ? sedesSel : undefined);
+        const res = await torniqueteService.getBoard(sedesSel.length > 0 ? sedesSel : undefined, fecha);
         setBoard(res);
       } catch (err: unknown) {
         const e = err as { response?: { data?: { error?: { message?: string } } } };
@@ -110,12 +121,14 @@ export function TorniqueteView({ showToast }: Props) {
         setRefreshing(false);
       }
     },
-    [sedesSel, showToast]
+    [sedesSel, fecha, showToast]
   );
 
-  // Recarga al cambiar de sede + polling en vivo + refresco al enfocar la ventana.
+  // Recarga al cambiar de sede/fecha. Polling en vivo + refresco al enfocar SOLO
+  // para el día de hoy; un día pasado es estático (no tiene sentido refrescarlo).
   useEffect(() => {
     reload(false);
+    if (!esHoy) return;
     const interval = window.setInterval(() => reload(true), REFRESH_MS);
     const onFocus = () => reload(true);
     window.addEventListener('focus', onFocus);
@@ -123,7 +136,7 @@ export function TorniqueteView({ showToast }: Props) {
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
     };
-  }, [reload]);
+  }, [reload, esHoy]);
 
   const profs = board?.profesionales ?? [];
   const enLinea = board?.ahoraEnLinea ?? 0;
@@ -150,19 +163,43 @@ export function TorniqueteView({ showToast }: Props) {
       </div>
       <p className="text-[13px] text-zinc-500 mb-5">
         Entrada y salida de los profesionales en la plataforma
-        {board?.fecha ? <span className="text-zinc-400"> · {fechaLarga(board.fecha)}</span> : null}
+        <span className="text-zinc-400"> · {fechaLarga(fecha)}</span>
+        {esHoy ? (
+          <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-green-700 align-middle">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            en vivo
+          </span>
+        ) : (
+          <span className="ml-2 text-[11px] font-medium text-zinc-400 align-middle">histórico</span>
+        )}
       </p>
 
-      {/* Filtro de sede */}
-      <div className="mb-4">
+      {/* Filtros: sede + día */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
         <SedeMultiSelect sedes={sedes} value={sedesSel} onChange={setSedesSel} />
+        <DateField value={fecha} max={todayIso} onChange={setFecha} />
+        {!esHoy && (
+          <button
+            type="button"
+            onClick={() => setFecha(todayIso)}
+            className="h-[30px] px-3 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-[#1e3a8a] hover:bg-zinc-50"
+          >
+            Volver a hoy
+          </button>
+        )}
       </div>
 
       {/* Resumen */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 border border-zinc-200 rounded-xl bg-white overflow-hidden divide-x divide-y sm:divide-y-0 divide-zinc-200 mb-6">
-        <Stat label="En línea ahora" value={enLinea} accent="green" pulse={enLinea > 0} loading={loading} />
-        <Stat label="Se conectaron hoy" value={conectadosHoy} accent="ink" loading={loading} />
-        <Stat label="No se han conectado" value={noConectados} accent="red" loading={loading} />
+      <div
+        className={`grid grid-cols-2 ${
+          esHoy ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
+        } border border-zinc-200 rounded-xl bg-white overflow-hidden divide-x divide-y sm:divide-y-0 divide-zinc-200 mb-6`}
+      >
+        {esHoy && (
+          <Stat label="En línea ahora" value={enLinea} accent="green" pulse={enLinea > 0} loading={loading} />
+        )}
+        <Stat label="Se conectaron" value={conectadosHoy} accent="ink" loading={loading} />
+        <Stat label="No se conectaron" value={noConectados} accent="red" loading={loading} />
         <Stat label="Profesionales" value={profs.length} accent="zinc" loading={loading} />
       </div>
 
@@ -193,7 +230,7 @@ export function TorniqueteView({ showToast }: Props) {
                   </td>
                 </tr>
               ) : (
-                profs.map((p) => <FilaProfesional key={`${p.sedeId}-${p.codigo}`} p={p} />)
+                profs.map((p) => <FilaProfesional key={`${p.sedeId}-${p.codigo}`} p={p} esHoy={esHoy} />)
               )}
             </tbody>
           </table>
@@ -207,7 +244,7 @@ export function TorniqueteView({ showToast }: Props) {
 // FilaProfesional
 // ---------------------------------------------------------------------------
 
-function FilaProfesional({ p }: { p: BoardProfesional }) {
+function FilaProfesional({ p, esHoy }: { p: BoardProfesional; esHoy: boolean }) {
   const seConecto = p.jornadas > 0;
   return (
     <tr className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/60">
@@ -229,7 +266,7 @@ function FilaProfesional({ p }: { p: BoardProfesional }) {
         </div>
       </td>
       <td className="px-4 py-2.5">
-        {p.enLinea ? (
+        {esHoy && p.enLinea ? (
           <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-green-700">
             <span className="relative flex w-2 h-2">
               <span className="absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-75 animate-ping" />
@@ -241,14 +278,18 @@ function FilaProfesional({ p }: { p: BoardProfesional }) {
             ) : null}
           </span>
         ) : seConecto ? (
+          // Hoy y ya desconectado → "Desconectado"; día pasado → "Trabajó".
           <span className="inline-flex items-center gap-1.5 text-[12.5px] text-zinc-500">
-            <span className="w-2 h-2 rounded-full bg-zinc-300" />
-            Desconectado
+            <span className={`w-2 h-2 rounded-full ${esHoy ? 'bg-zinc-300' : 'bg-emerald-400'}`} />
+            {esHoy ? 'Desconectado' : 'Trabajó'}
+            {!esHoy && p.jornadas > 1 ? (
+              <span className="text-zinc-400 font-normal">· {p.jornadas} tramos</span>
+            ) : null}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-[12.5px] text-red-600/80">
             <span className="w-2 h-2 rounded-full border border-red-300" />
-            No se ha conectado
+            {esHoy ? 'No se ha conectado' : 'No se conectó'}
           </span>
         )}
       </td>
@@ -256,7 +297,13 @@ function FilaProfesional({ p }: { p: BoardProfesional }) {
         {seConecto ? horaCO(p.primeraEntrada) : '—'}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums text-zinc-700" style={{ fontFamily: FONT_MONO }}>
-        {p.enLinea ? <span className="text-zinc-300">en curso</span> : seConecto ? horaCO(p.ultimaSalida) : '—'}
+        {esHoy && p.enLinea ? (
+          <span className="text-zinc-300">en curso</span>
+        ) : seConecto ? (
+          horaCO(p.ultimaSalida)
+        ) : (
+          '—'
+        )}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-zinc-900" style={{ fontFamily: FONT_MONO }}>
         {duracion(p.minutosConectado)}
@@ -295,6 +342,40 @@ function Stat({
       <div className={`mt-1.5 text-[30px] font-semibold tabular-nums leading-none ${valCls}`}>
         {loading ? '—' : value.toLocaleString('es-CO')}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DateField — selector de UN día (no rango: las horas de entrada/salida son
+// por día). `max` = hoy para no permitir fechas futuras.
+// ---------------------------------------------------------------------------
+
+function DateField({
+  value,
+  max,
+  onChange,
+}: {
+  value: string;
+  max?: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div
+      className="relative inline-flex items-center h-[30px] rounded-md border border-zinc-300 bg-white text-[12.5px] font-medium"
+      style={{ fontFamily: FONT_INTER }}
+    >
+      <span className="pl-[11px] pr-1 font-normal text-zinc-500">Día:</span>
+      <input
+        type="date"
+        value={value}
+        max={max}
+        onChange={(e) => {
+          if (e.target.value) onChange(e.target.value);
+        }}
+        className="appearance-none bg-transparent pr-2.5 h-[30px] outline-none text-[12.5px] font-medium cursor-pointer text-zinc-800"
+        style={{ fontFamily: FONT_INTER }}
+      />
     </div>
   );
 }

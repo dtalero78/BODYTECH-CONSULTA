@@ -57,12 +57,17 @@ class TorniqueteService {
     }
   }
 
-  /** Tablero del día (coordinador). `sedes` opcional (CSV constreñido en backend). */
-  async getBoard(sedes?: string[]): Promise<BoardResult> {
-    const params = sedes && sedes.length > 0 ? { sedes: sedes.join(',') } : undefined;
+  /**
+   * Tablero del coordinador. `sedes` opcional (CSV constreñido en backend).
+   * `fecha` (YYYY-MM-DD) opcional para consultar un día pasado; sin ella → hoy.
+   */
+  async getBoard(sedes?: string[], fecha?: string): Promise<BoardResult> {
+    const params: Record<string, string> = {};
+    if (sedes && sedes.length > 0) params.sedes = sedes.join(',');
+    if (fecha) params.fecha = fecha;
     const res = await axios.get(`${API_BASE_URL}/api/torniquete/board`, {
       headers: authHeader(),
-      params,
+      params: Object.keys(params).length > 0 ? params : undefined,
     });
     return res.data?.data as BoardResult;
   }

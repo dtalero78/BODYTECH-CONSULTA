@@ -121,7 +121,10 @@ class TorniqueteController {
   getBoard = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const sedes = await resolveSedes(req);
-      const board = await torniqueteService.getBoard(sedes);
+      // `fecha` (YYYY-MM-DD, día Colombia) opcional: consulta un día pasado.
+      // Sin ella → hoy. Se valida el formato en el servicio.
+      const fecha = typeof req.query.fecha === 'string' && req.query.fecha ? req.query.fecha : null;
+      const board = await torniqueteService.getBoard(sedes, fecha);
       if (board === null) {
         res.status(500).json({ success: false, error: { code: 'DB_ERROR', message: 'Error consultando el tablero.' } });
         return;

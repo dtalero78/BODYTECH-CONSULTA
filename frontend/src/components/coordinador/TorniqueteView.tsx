@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, Fingerprint, RefreshCw } from 'lucide-react';
 import torniqueteService, { BoardProfesional, BoardResult } from '../../services/torniquete.service';
+import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import authService, { Sede } from '../../services/auth.service';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, MonoAvatar, initialsOf, avatarFotoFor } from './_tokens';
 
@@ -100,6 +101,27 @@ export function TorniqueteView({ showToast }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  // Fotos reales de los profesionales: se traen APARTE (una vez por sede), no
+  // en el poll del tablero, para mantener el board liviano (ver por qué se quitó
+  // `foto` del payload en torniquete.service). Se cruzan por código en la fila.
+  const [profesionales, setProfesionales] = useState<Profesional[]>([]);
+  useEffect(() => {
+    if (sedesSel.length === 0) return;
+    profesionalesService
+      .list({ activo: true, sedes: sedesSel })
+      .then(setProfesionales)
+      .catch(() => {});
+  }, [sedesSel]);
+
+  // Foto real del profesional (si la tiene); si no, cae al pool placeholder.
+  const fotoDe = useCallback(
+    (codigo: string): string | null => {
+      const p = profesionales.find((x) => x.codigo === codigo);
+      return p?.foto || avatarFotoFor(codigo);
+    },
+    [profesionales]
+  );
 
   const reload = useCallback(
     async (silent = false) => {
@@ -230,7 +252,14 @@ export function TorniqueteView({ showToast }: Props) {
                   </td>
                 </tr>
               ) : (
-                profs.map((p) => <FilaProfesional key={`${p.sedeId}-${p.codigo}`} p={p} esHoy={esHoy} />)
+                profs.map((p) => (
+                  <FilaProfesional
+                    key={`${p.sedeId}-${p.codigo}`}
+                    p={p}
+                    esHoy={esHoy}
+                    foto={fotoDe(p.codigo)}
+                  />
+                ))
               )}
             </tbody>
           </table>
@@ -244,7 +273,15 @@ export function TorniqueteView({ showToast }: Props) {
 // FilaProfesional
 // ---------------------------------------------------------------------------
 
-function FilaProfesional({ p, esHoy }: { p: BoardProfesional; esHoy: boolean }) {
+function FilaProfesional({
+  p,
+  esHoy,
+  foto,
+}: {
+  p: BoardProfesional;
+  esHoy: boolean;
+  foto: string | null;
+}) {
   const seConecto = p.jornadas > 0;
   return (
     <tr className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/60">
@@ -252,7 +289,7 @@ function FilaProfesional({ p, esHoy }: { p: BoardProfesional; esHoy: boolean }) 
         <div className="flex items-center gap-2.5">
           <MonoAvatar
             initials={initialsOf(p.nombre)}
-            src={avatarFotoFor(p.codigo)}
+            src={foto}
             size={30}
             variant="default"
           />

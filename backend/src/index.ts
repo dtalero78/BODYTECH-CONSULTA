@@ -37,6 +37,7 @@ import { errorHandler } from './middleware/error.middleware';
 import { sedeMiddleware } from './middleware/sede.middleware';
 import { optionalAuthMiddleware } from './middleware/auth.middleware';
 import { sessionContextMiddleware, requireRole } from './middleware/rbac.middleware';
+import { torniquetePresenceMiddleware } from './middleware/torniquete-presence.middleware';
 
 const app: Application = express();
 // Detrás del proxy de DigitalOcean App Platform: confiar en X-Forwarded-For
@@ -124,6 +125,11 @@ app.use(sessionContextMiddleware);
 // y lo deja en `(req as any).sedeId` con default `'bsl'`. Debe ir DESPUÉS de
 // CORS / body parser y ANTES de cualquier `app.use('/api/...', ...)`.
 app.use(sedeMiddleware);
+
+// Torniquete de jornada: cualquier acción autenticada de un médico/coach cuenta
+// como presencia (además del heartbeat del frontend). No bloquea, fire-and-forget
+// con throttle. Va después de optionalAuth/session/sede para tener la identidad.
+app.use(torniquetePresenceMiddleware);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

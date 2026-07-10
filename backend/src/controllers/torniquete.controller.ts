@@ -15,44 +15,21 @@
 // ============================================================================
 
 import { Request, Response, NextFunction } from 'express';
-import torniqueteService, { TorniqueteRol } from '../services/torniquete.service';
+import torniqueteService from '../services/torniquete.service';
 import postgresService from '../services/postgres.service';
 import { getSession, effectiveSedes } from '../middleware/rbac.middleware';
-
-interface Identidad {
-  codigo: string;
-  sedeId: string;
-  rol: TorniqueteRol | null;
-}
+import { resolveProfesionalIdentity, ProfesionalIdentity } from '../helpers/profesional-identity';
 
 /**
  * Resuelve la identidad del profesional logueado desde el token.
  * - `null`         → no hay auth válida (responder 401).
  * - `{ skip: true}`→ hay sesión pero NO es un profesional rastreable (no-op 204).
  */
-function resolveIdentidad(req: Request): Identidad | null | { skip: true } {
-  const session = getSession(req);
-  if (session) {
-    // Solo médico/coach con código vinculado tienen jornada. El resto (admin,
-    // coordinador, auxiliar, torre) usa la plataforma pero no ficha torniquete.
-    if ((session.role === 'medico' || session.role === 'coach') && session.codigo) {
-      const sedeId = Array.isArray(session.sedes) && session.sedes.length > 0 ? session.sedes[0] : 'bsl';
-      return { codigo: session.codigo, sedeId, rol: session.role };
-    }
-    return { skip: true };
-  }
-  // Legacy token (code+sede) inyectado por optionalAuthMiddleware.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const medicoCode = (req as any).medicoCode;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sedeId = (req as any).sedeId;
-  if (typeof medicoCode === 'string' && medicoCode.length > 0) {
-    return {
-      codigo: medicoCode,
-      sedeId: typeof sedeId === 'string' && sedeId.length > 0 ? sedeId : 'bsl',
-      rol: null,
-    };
-  }
+function resolveIdentidad(req: Request): ProfesionalIdentity | null | { skip: true } {
+  const ident = resolveProfesionalIdentity(req);
+  if (ident) return ident;
+  // Sin identidad de profesional: distinguir "logueado pero no ficha" de "sin auth".
+  if (getSession(req)) return { skip: true };
   return null;
 }
 

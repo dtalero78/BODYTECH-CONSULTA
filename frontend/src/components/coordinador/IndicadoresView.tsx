@@ -81,7 +81,12 @@ function numPct(value: number, base: number) {
 }
 
 // Presets de rango relativos a hoy (Colombia).
-type Preset = 'hoy' | '7d' | '30d' | 'mes' | 'mesPasado';
+type Preset = 'hoy' | 'ayer' | '7d' | '30d' | 'mes' | 'mesPasado';
+
+// Fecha mínima seleccionable en el filtro: desde que el tracking de
+// link_enviado_at es fiable. Antes de esta fecha "No contactó" sale inflado
+// (no hay backfill), así que no se permite consultar rangos anteriores.
+const FECHA_MIN = '2026-07-09';
 
 function presetRange(preset: Preset): { from: string; to: string } {
   const t = todayInBogota();
@@ -89,6 +94,10 @@ function presetRange(preset: Preset): { from: string; to: string } {
   switch (preset) {
     case 'hoy':
       return { from: hoy, to: hoy };
+    case 'ayer': {
+      const y = addDaysIso(hoy, -1);
+      return { from: y, to: y };
+    }
     case '7d':
       return { from: addDaysIso(hoy, -6), to: hoy };
     case '30d':
@@ -198,19 +207,18 @@ export function IndicadoresView({ showToast }: Props) {
     setActivePreset(p);
   }
 
-  // Solo se permiten fechas de HOY en adelante (los datos previos al tracking de
-  // link no son fiables). El date picker usa min=todayIso; aquí se acota además
-  // por si el usuario teclea una fecha anterior.
-  const todayIso = todayInBogota().iso;
+  // El filtro no permite fechas anteriores a FECHA_MIN (datos sin tracking de
+  // link fiable). El date picker usa min=FECHA_MIN; aquí se acota además por si
+  // el usuario teclea una fecha anterior.
   function setFrom(v: string) {
     if (!v) return;
-    const nv = v < todayIso ? todayIso : v;
+    const nv = v < FECHA_MIN ? FECHA_MIN : v;
     setRange((r) => ({ from: nv, to: nv > r.to ? nv : r.to }));
     setActivePreset(null);
   }
   function setTo(v: string) {
     if (!v) return;
-    const nv = v < todayIso ? todayIso : v;
+    const nv = v < FECHA_MIN ? FECHA_MIN : v;
     setRange((r) => ({ from: nv < r.from ? nv : r.from, to: nv }));
     setActivePreset(null);
   }
@@ -255,6 +263,7 @@ export function IndicadoresView({ showToast }: Props) {
 
   const PRESETS: { key: Preset; label: string }[] = [
     { key: 'hoy', label: 'Hoy' },
+    { key: 'ayer', label: 'Ayer' },
   ];
 
   return (
@@ -298,7 +307,7 @@ export function IndicadoresView({ showToast }: Props) {
             onClear={() => setFilterMedico('')}
           />
           <div className="flex items-center gap-2">
-            <DateField label="Desde" value={from} min={todayIso} max={to} onChange={setFrom} />
+            <DateField label="Desde" value={from} min={FECHA_MIN} max={to} onChange={setFrom} />
             <DateField label="Hasta" value={to} min={from} onChange={setTo} />
           </div>
         </div>

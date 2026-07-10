@@ -188,10 +188,24 @@ class AuthService {
   }
 
   /**
-   * Cierra sesión local — sólo limpia localStorage. No hay endpoint server
-   * de logout (el JWT es stateless y vence por TTL).
+   * Cierra sesión local — limpia localStorage. Antes de borrar el token, avisa
+   * al torniquete de jornada (deslogue = fin de jornada) con fetch keepalive.
+   * Si el usuario no es un profesional, el backend lo trata como no-op.
    */
   logout(): void {
+    // Fin de jornada (best-effort). Lee el token ANTES de limpiar localStorage.
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      try {
+        fetch(`${API_BASE_URL}/api/torniquete/logout`, {
+          method: 'POST',
+          keepalive: true,
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      } catch {
+        // no-op
+      }
+    }
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(MEDICO_KEY);
     localStorage.removeItem(SEDE_KEY);

@@ -18,6 +18,7 @@ import { TerminosPage } from './pages/TerminosPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
 import { RequireRole } from './components/RequireRole';
+import { useTorniquete } from './hooks/useTorniquete';
 import { queryClient } from './lib/queryClient';
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
@@ -48,10 +49,20 @@ function SinAcceso() {
   );
 }
 
+/**
+ * Heartbeat del torniquete de jornada. Montado una sola vez dentro del Router
+ * para que persista entre navegaciones. No renderiza nada.
+ */
+function TorniqueteHeartbeat() {
+  useTorniquete();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <TorniqueteHeartbeat />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           {/* Login unificado (RBAC). Las páginas de login viejas redirigen aquí. */}

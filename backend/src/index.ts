@@ -15,6 +15,8 @@ import calidadRoutes from './routes/calidad.routes';
 import trepsiRoutes from './routes/trepsi.routes';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
+import torniqueteRoutes from './routes/torniquete.routes';
+import torniqueteService from './services/torniquete.service';
 import usuariosRoutes from './routes/usuarios.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
@@ -149,6 +151,9 @@ app.use('/api/medical-panel', medicalPanelRoutes);
 // desde /panel-medico (ver profesionales.routes.ts y calendario.routes.ts).
 app.use('/api/profesionales', profesionalesRoutes);
 app.use('/api/calendario', calendarioRoutes);
+// Torniquete de jornada: heartbeat/logout (identidad derivada del token en el
+// controller) + tablero del día (RBAC operativo dentro del router).
+app.use('/api/torniquete', torniqueteRoutes);
 // Gestión de usuarios — admin + coordinador (límites P7 en el controller).
 app.use('/api/usuarios', requireRole('admin', 'coordinador'), usuariosRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
@@ -246,6 +251,20 @@ if (process.env.NODE_ENV !== 'test') {
     });
   }, GESTION_REPORT_INTERVAL_MS);
   console.log(`📊 [Gestión] Worker iniciado (envío diario ~${GESTION_REPORT_HORA} COT)`);
+}
+
+// Worker del Torniquete: cada 60s cierra las jornadas cuyo último latido superó
+// la ventana de inactividad (cierre de pestaña / equipo suspendido / caída de
+// internet). La "salida efectiva" queda en el último latido conocido. Persistido
+// en Postgres → sobrevive a reinicios del contenedor.
+const TORNIQUETE_SWEEP_INTERVAL_MS = 60_000;
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    torniqueteService.cerrarInactivas().catch((e) => {
+      console.error('[torniquete] sweeper error:', e?.message ?? e);
+    });
+  }, TORNIQUETE_SWEEP_INTERVAL_MS);
+  console.log(`⏱️  [Torniquete] Worker iniciado (cierre de jornadas inactivas cada ${TORNIQUETE_SWEEP_INTERVAL_MS / 1000}s)`);
 }
 
 // Start server

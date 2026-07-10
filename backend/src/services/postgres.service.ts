@@ -660,6 +660,59 @@ class PostgresService {
           ON usuario_sedes (sede_id)
       `);
 
+      // ===== Torniquete de jornada laboral (control de entrada/salida) =====
+      // Registro persistente de cuándo un profesional (médico/coach) está activo
+      // en la plataforma durante su jornada. Cada fila es UNA sesión de jornada
+      // (entrada → salida). El torniquete NO es la videollamada: mide "el coach
+      // está logueado y activo", no "está en consulta con un paciente".
+      //
+      // Cómo se llena:
+      //   - HEARTBEAT: el frontend late cada ~90s mientras el profesional tiene
+      //     la plataforma abierta. El primer latido sin jornada abierta reciente
+      //     ABRE una fila (entrada_at = NOW). Los latidos siguientes extienden
+      //     `ultimo_latido_at`. Un corte > VENTANA de inactividad abre una nueva
+      //     fila al reconectar (refleja pausas reales, ej. almuerzo).
+      //   - LOGOUT explícito: fija `salida_at` y `cerrada = true`.
+      //   - SWEEPER (worker cada 60s): cierra jornadas cuyo último latido superó
+      //     la ventana de inactividad (cierre por cierre de pestaña / suspensión).
+      //
+      // Identidad: (codigo, sede_id) — misma llave que `profesionales`. `fecha`
+      // es el día CALENDARIO en Colombia (UTC-5), calculado con AT TIME ZONE
+      // 'America/Bogota' para agrupar la jornada sin depender del TZ del server.
+      //
+      // "Salida efectiva" = COALESCE(salida_at, ultimo_latido_at): si nunca hubo
+      // logout, la salida es el último latido conocido.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS torniquete_jornadas (
+          id                SERIAL PRIMARY KEY,
+          codigo            VARCHAR(80) NOT NULL,
+          sede_id           VARCHAR(50) NOT NULL,
+          rol               VARCHAR(20),
+          fecha             DATE NOT NULL,
+          entrada_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ultimo_latido_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          salida_at         TIMESTAMPTZ,
+          cerrada           BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      // Consulta del tablero (por sede + día) y del heartbeat (jornada abierta
+      // por codigo+sede). Índice parcial para localizar rápido las jornadas abiertas.
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_torniquete_sede_fecha
+          ON torniquete_jornadas (sede_id, fecha)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_torniquete_codigo_fecha
+          ON torniquete_jornadas (codigo, sede_id, fecha)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_torniquete_abiertas
+          ON torniquete_jornadas (codigo, sede_id)
+          WHERE cerrada = FALSE
+      `);
+
       // ===== Monitor de integración Trepsi (observabilidad) =====
       // Registro de TODOS los eventos de la integración para mostrarlos en
       // /monitor-integracion en tiempo real. Incluye tanto inbound (Trepsi

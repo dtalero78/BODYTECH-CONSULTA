@@ -252,6 +252,25 @@ class TwilioService {
     const completed = list.find((c) => c.status === 'completed');
     return (completed ?? list[0]).sid;
   }
+
+  /**
+   * Resuelve el SID (RMxxx) de una sala a partir de su uniqueName (room_name).
+   * La API de Twilio acepta el uniqueName donde espera un roomSid.
+   */
+  async getRoomSidByName(roomName: string): Promise<string> {
+    const room = await this.client.video.v1.rooms(roomName).fetch();
+    return room.sid;
+  }
+
+  /**
+   * Estado actual de una composición ('enqueued' | 'processing' | 'completed'
+   * | 'failed' | 'deleted'). Usado por Calidad para saber si el MP4 ya está
+   * listo para reproducir/evaluar (composición on-demand).
+   */
+  async getCompositionStatus(compositionSid: string): Promise<string> {
+    const comp = await this.client.video.v1.compositions(compositionSid).fetch();
+    return comp.status;
+  }
 }
 
 export default new TwilioService();

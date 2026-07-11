@@ -123,15 +123,6 @@ function validationResponse(res: Response, err: ZodError): void {
   });
 }
 
-/**
- * Lock en memoria de los room_sids cuya composición se está creando ahora mismo.
- * El backend corre en UN solo contenedor, así que este Set basta para evitar que
- * dos invocaciones concurrentes del webhook room-completed (p.ej. reintentos de
- * Twilio) creen dos composiciones antes de que la primera aparezca en el listado
- * de Twilio (consistencia eventual). Se libera al terminar (finally).
- */
-const composingRooms = new Set<string>();
-
 class VideoController {
   /**
    * Generar token de acceso para una sala de video
@@ -1184,64 +1175,30 @@ class VideoController {
 
       if (RoomStatus !== 'completed') return;
 
-      console.log(`[Webhook room-completed] ${RoomName} (${RoomSid})`);
+      // La composición YA NO se crea aquí. Se genera ON-DEMAND la primera vez que
+      // se abre Calidad para la historia (ver calidad.service.ensureComposition):
+      // así solo se compone lo que realmente se evalúa, no todas las llamadas
+      // (la composición es el grueso del costo de video). La grabación por
+      // participante sí se sigue creando en cada llamada — la transcripción
+      // depende de ella, y deja las grabaciones listas para componer bajo demanda.
+      console.log(
+        `[Webhook room-completed] ${RoomName} (${RoomSid}) — composición diferida a on-demand (Calidad)`
+      );
 
-      // Procesar en background — errores solo se loguean para no afectar al webhook
-      (async () => {
-        try {
-          // Buscar la historia clínica vinculada al room
-          const rows = await postgresService.query(
-            `SELECT historia_id FROM room_historia_map WHERE room_name = $1 LIMIT 1`,
-            [RoomName]
-          );
-          const historiaId: string | undefined = rows?.[0]?.historia_id;
-
-          if (!historiaId) {
-            console.log(
-              `[Webhook room-completed] Sin historia vinculada para ${RoomName} — ignorando`
-            );
-            return;
-          }
-
-          // Dedup entre invocaciones concurrentes del propio webhook: reclamamos el
-          // room de forma síncrona (has + add, sin await entre medio → atómico en el
-          // event loop). Si ya está reclamado, salimos sin crear otra composición.
-          if (composingRooms.has(RoomSid)) {
-            console.log(
-              `[Webhook room-completed] Room ${RoomName} — composición ya en curso, ignorando`
-            );
-            return;
-          }
-          composingRooms.add(RoomSid);
-          try {
-            // Cross-restart / disparos separados: si Twilio ya tiene una composición
-            // para el room, no duplicar.
-            const alreadyHasComposition = await twilioService.roomHasComposition(RoomSid);
-            if (alreadyHasComposition) {
-              console.log(
-                `[Webhook room-completed] Room ${RoomName} ya tiene composition — ignorando`
-              );
-              return;
-            }
-
-            const comp = await twilioService.createComposition(RoomSid);
-
-            await postgresService.query(
-              `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
-              [comp.sid, historiaId]
-            );
-
-            console.log(
-              `[Webhook room-completed] Composition ${comp.sid} (status: ${comp.status}) creada para historia ${historiaId}`
-            );
-          } finally {
-            composingRooms.delete(RoomSid);
-          }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[Webhook room-completed] Error en background:`, msg);
-        }
-      })();
+      // Respaldo: asegurar que quede guardado el room_sid (el payload lo trae).
+      // Necesario para componer on-demand — un room completado no se resuelve por
+      // nombre. Best-effort en background, no afecta la respuesta 200.
+      if (RoomSid && RoomName) {
+        postgresService
+          .query(
+            `UPDATE room_historia_map SET room_sid = $1 WHERE room_name = $2 AND (room_sid IS NULL OR room_sid = '')`,
+            [RoomSid, RoomName]
+          )
+          .catch((e: unknown) => {
+            const m = e instanceof Error ? e.message : String(e);
+            console.warn(`[Webhook room-completed] No se pudo guardar room_sid: ${m}`);
+          });
+      }
     } catch (error) {
       console.error('[Webhook room-completed] Error inesperado:', error);
       if (!res.headersSent) {

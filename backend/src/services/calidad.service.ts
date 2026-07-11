@@ -14,6 +14,7 @@
 
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
+import twilioService from './twilio.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
 import { evaluarConsultaOpenAI } from './openai-calidad.service';
 import { openai } from './openai.service';
@@ -334,6 +335,79 @@ class CalidadService {
    */
   async getVideoUrl(compositionSid: string): Promise<string> {
     return obtenerUrlMediaTwilio(compositionSid);
+  }
+
+  /**
+   * Composición ON-DEMAND. Las composiciones ya NO se crean automáticamente al
+   * cerrar la llamada (eso costaba componer TODAS las llamadas aunque casi
+   * ninguna se evalúe). En cambio, se crean acá, la primera vez que se abre
+   * Calidad para una historia.
+   *
+   * Idempotente: si la historia ya tiene `composition_sid`, o el room ya tiene
+   * una composición en Twilio, se reutiliza. Devuelve el sid y su estado actual
+   * (`enqueued` → `processing` → `completed`); el frontend hace polling hasta
+   * `completed` para reproducir/evaluar.
+   *
+   * Nota: la grabación por participante SÍ se sigue creando en cada llamada
+   * (la transcripción depende de ella), así que las grabaciones existen para
+   * componer bajo demanda.
+   */
+  async ensureComposition(
+    historiaId: string
+  ): Promise<{ compositionSid: string | null; status: string }> {
+    // 1) ¿la historia ya tiene composición? → devolver su estado actual.
+    const session = await this.getSession(historiaId);
+    if (!session.found) {
+      throw Object.assign(new Error('Historia clínica no encontrada'), { statusCode: 404 });
+    }
+    if (session.compositionSid) {
+      const status = await twilioService.getCompositionStatus(session.compositionSid);
+      return { compositionSid: session.compositionSid, status };
+    }
+
+    // 2) Resolver el room de la historia (el más reciente si hubo reconexiones).
+    const rows = await postgresService.query(
+      `SELECT room_name, room_sid FROM room_historia_map WHERE historia_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [historiaId]
+    );
+    const row = rows?.[0] as { room_name?: string; room_sid?: string } | undefined;
+    if (!row || (!row.room_name && !row.room_sid)) {
+      throw Object.assign(
+        new Error('Esta historia no tiene una sala de video asociada (no se puede generar el video).'),
+        { statusCode: 409 }
+      );
+    }
+
+    // Preferir el room_sid guardado: un room COMPLETADO no se resuelve por nombre
+    // (Twilio 404). Si falta (filas viejas), intentar por nombre — solo funciona
+    // si la sala aún está activa.
+    let roomSid = row.room_sid || '';
+    if (!roomSid) {
+      try {
+        roomSid = await twilioService.getRoomSidByName(row.room_name as string);
+      } catch {
+        throw Object.assign(
+          new Error('No se pudo generar el video: la sala de esta consulta ya finalizó y no quedó registrada.'),
+          { statusCode: 409 }
+        );
+      }
+    }
+
+    // 3) Reutilizar si el room ya tiene composición; si no, crearla.
+    let compositionSid = await twilioService.getLatestCompositionSid(roomSid);
+    if (!compositionSid) {
+      const comp = await twilioService.createComposition(roomSid);
+      compositionSid = comp.sid;
+    }
+
+    // 4) Guardar el sid en la historia para no volver a crearla.
+    await postgresService.query(
+      `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+      [compositionSid, historiaId]
+    );
+
+    const status = await twilioService.getCompositionStatus(compositionSid);
+    return { compositionSid, status };
   }
 
   /**

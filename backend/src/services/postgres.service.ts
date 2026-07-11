@@ -421,6 +421,10 @@ class PostgresService {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `);
+      // room_sid (RMxxx): se guarda al iniciar la sesión (room activo) para poder
+      // componer on-demand después — un room COMPLETADO ya no se puede resolver por
+      // uniqueName (Twilio devuelve 404), solo por SID.
+      await this.query(`ALTER TABLE room_historia_map ADD COLUMN IF NOT EXISTS room_sid TEXT`);
 
       // ===== Módulo de evaluación de calidad de consultas =====
       await this.query(`

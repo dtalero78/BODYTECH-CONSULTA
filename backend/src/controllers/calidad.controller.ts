@@ -61,6 +61,33 @@ export const getVideoUrl = async (req: Request, res: Response): Promise<void> =>
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/calidad/preparar/:historiaId
+// Crea la composición on-demand (si falta) y devuelve su estado. El frontend
+// hace polling hasta status === 'completed'.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const prepararComposicion = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { historiaId } = req.params;
+    if (!historiaId) {
+      res.status(400).json({ success: false, message: 'historiaId es requerido' });
+      return;
+    }
+
+    const result = await calidadService.ensureComposition(historiaId);
+    res.json({ success: true, ...result });
+  } catch (err: unknown) {
+    const statusCode =
+      err instanceof Error && 'statusCode' in err
+        ? (err as Error & { statusCode: number }).statusCode
+        : 502;
+    const msg = err instanceof Error ? err.message : 'Error desconocido';
+    console.error('[calidad] POST /preparar error:', msg);
+    res.status(statusCode).json({ success: false, message: msg });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/calidad/evaluar/:historiaId
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -137,6 +164,7 @@ export const getHistorial = async (req: Request, res: Response): Promise<void> =
 export default {
   getSession,
   getVideoUrl,
+  prepararComposicion,
   dispararEvaluacion,
   getEvaluacion,
   getHistorial,

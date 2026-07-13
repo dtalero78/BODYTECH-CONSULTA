@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Clock } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
@@ -657,18 +657,8 @@ export function MedicalPanelPage() {
                   )}
                 </p>
               </div>
-              <img
-                src="/mediconectaLogo.png"
-                alt="Mediconecta"
-                className="h-8 md:h-10 w-auto ml-auto md:hidden shrink-0"
-              />
             </div>
             <div className="flex items-center gap-2 md:gap-4 flex-wrap">
-              <img
-                src="/mediconectaLogo.png"
-                alt="Mediconecta"
-                className="hidden md:block h-10 w-auto"
-              />
               <div className="flex rounded-lg overflow-hidden border border-gray-600">
                 <button
                   onClick={() => setPanelView('hoy')}
@@ -698,14 +688,6 @@ export function MedicalPanelPage() {
                 <Plus size={16} />
                 <span className="hidden sm:inline">Agendar Cita</span>
                 <span className="sm:hidden">Agendar</span>
-              </button>
-              <button
-                onClick={() => setShowHorarioModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg transition-colors"
-                title="Fijar mi disponibilidad semanal"
-              >
-                <Clock size={16} />
-                <span className="hidden sm:inline">Horario</span>
               </button>
               <button
                 onClick={handleRefresh}

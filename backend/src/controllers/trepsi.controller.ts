@@ -12,6 +12,7 @@ import { z, ZodError } from 'zod';
 import trepsiService from '../services/trepsi.service';
 import profesionalesService from '../services/profesionales.service';
 import calendarioService from '../services/calendario.service';
+import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
 
 // ---------------------------------------------------------------------------
 // Zod schemas (espejo de la spec)
@@ -475,6 +476,29 @@ class TrepsiController {
             code: 'MEDICO_NOT_FOUND',
             message: `No se encontró profesional activo con código '${medicoCodigo}'.`,
           },
+        });
+        return;
+      }
+
+      // Domingos y festivos de Colombia: la agenda para Trepsi está cerrada.
+      // Devolvemos el mismo shape pero con `horariosDisponibles: []` para que
+      // la app Trepsi muestre el día como no disponible sin agendar encima.
+      const motivoBloqueo = diaNoLaborable(fecha);
+      if (motivoBloqueo) {
+        res.status(200).json({
+          ok: true,
+          fecha,
+          medico: {
+            codigo: prof.codigo,
+            nombre:
+              prof.alias ||
+              [prof.primerNombre, prof.primerApellido].filter(Boolean).join(' '),
+            rol: prof.rol,
+          },
+          modalidad,
+          tiempoConsultaMinutos: prof.tiempoConsulta ?? null,
+          horariosDisponibles: [],
+          motivoBloqueo, // 'domingo' | 'festivo'
         });
         return;
       }

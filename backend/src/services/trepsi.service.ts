@@ -705,16 +705,19 @@ class TrepsiService {
     const hcParams: unknown[] = [];
     let j = 1;
     if (input.fechaAtencion) {
-      hcSets.push(`"fechaAtencion" = $${j}`);
+      hcSets.push(`"fechaAtencion" = $${j++}`);
+      hcParams.push(input.fechaAtencion);
       // horaAtencion (texto HH:MM que muestra la Agenda) se RE-DERIVA de la
       // nueva fechaAtencion. Si no, al reprogramar quedaría congelada en la
       // hora previa y la Agenda mostraría una hora distinta a la real de la
       // cita (mientras "Afiliados Pendientes" —que ordena por fechaAtencion—
       // muestra la correcta). Ambas vistas deben coincidir con Trepsi.
+      // Va en un parámetro APARTE (no reusar el de fechaAtencion): el mismo $N
+      // no puede deducirse a la vez como text (en la asignación) y timestamptz
+      // (en el cast) → "inconsistent types deduced for parameter".
       hcSets.push(
-        `"horaAtencion" = to_char($${j}::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI')`
+        `"horaAtencion" = to_char($${j++}::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI')`
       );
-      j++;
       hcParams.push(input.fechaAtencion);
     }
     if (input.medico?.codigo) {

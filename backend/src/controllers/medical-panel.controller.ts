@@ -445,7 +445,15 @@ class MedicalPanelController {
     const fields = bodyParsed.data as OrdenUpdateInput;
 
     try {
-      const updated = await medicalPanelService.updateOrden(id, fields);
+      // Médico/coach pueden editar SOLO sus propias citas y NO reasignarlas a otro
+      // profesional. Operativo (coordinador/admin/auxiliar) puede editar cualquiera.
+      const s = getSession(req);
+      let restrictMedico: string | undefined;
+      if (s && (s.role === 'medico' || s.role === 'coach') && s.codigo) {
+        restrictMedico = s.codigo;
+        delete fields.medico;
+      }
+      const updated = await medicalPanelService.updateOrden(id, fields, restrictMedico);
 
       if (!updated) {
         res.status(404).json({ error: 'Orden no encontrada' });

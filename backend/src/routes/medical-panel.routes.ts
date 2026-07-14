@@ -43,11 +43,13 @@ router.post('/mi-disponibilidad', clinico, medicalPanelController.replaceMiDispo
 
 // CRUD de Órdenes.
 // El LISTADO (agenda) es `clinico`: médico/coach ven SU propia agenda — el
-// controller fuerza su código (ownCodeOrParam) cerrando el IDOR. Las
-// escrituras siguen `operativo` (coordinador/admin/auxiliar).
+// controller fuerza su código (ownCodeOrParam) cerrando el IDOR.
+// CREAR y EDITAR: médico/coach pueden agendar/reprogramar SUS propias citas
+// (el controller restringe por su código → no tocan las de otros ni reasignan).
+// BORRAR sigue siendo `operativo` (coordinador/admin/auxiliar).
 router.get('/ordenes', agendaLista, medicalPanelController.listOrdenes);
 router.post('/ordenes', crearOrden, medicalPanelController.createOrden);
-router.patch('/ordenes/:id', operativo, medicalPanelController.updateOrden);
+router.patch('/ordenes/:id', crearOrden, medicalPanelController.updateOrden);
 router.delete('/ordenes/:id', operativo, medicalPanelController.deleteOrden);
 
 export default router;

@@ -719,7 +719,11 @@ class MedicalPanelService {
   /**
    * Actualiza campos arbitrarios de una orden existente.
    */
-  async updateOrden(id: string, fields: OrdenUpdateInput): Promise<boolean> {
+  async updateOrden(
+    id: string,
+    fields: OrdenUpdateInput,
+    restrictMedicoCodigo?: string
+  ): Promise<boolean> {
     try {
       const ALLOWED_DIRECT: Array<keyof OrdenUpdateInput> = [
         'primerNombre',
@@ -760,10 +764,17 @@ class MedicalPanelService {
       }
 
       vals.push(id);
+      // Si viene restrictMedicoCodigo, el UPDATE solo afecta la cita cuando es de
+      // ese profesional → médico/coach solo editan LAS SUYAS (cierra el IDOR).
+      let whereClause = `"_id" = $${paramIndex}`;
+      if (restrictMedicoCodigo) {
+        vals.push(restrictMedicoCodigo);
+        whereClause += ` AND "medico" = $${paramIndex + 1}`;
+      }
       const result = await postgresService.query(
         `UPDATE "HistoriaClinica"
          SET ${sets.join(', ')}
-         WHERE "_id" = $${paramIndex}
+         WHERE ${whereClause}
          RETURNING "_id"`,
         vals
       );

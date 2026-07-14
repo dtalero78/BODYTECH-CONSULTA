@@ -93,9 +93,18 @@ class HistoriaClinicaPostgresService {
           "medico" = EXCLUDED."medico",
           "ciudad" = EXCLUDED."ciudad",
           "examenes" = EXCLUDED."examenes",
-          -- No borrar la hora si el guardado no la trae (p. ej. al atender);
-          -- se preserva la existente cuando el nuevo valor es null.
-          "horaAtencion" = COALESCE(EXCLUDED."horaAtencion", "HistoriaClinica"."horaAtencion"),
+          -- horaAtencion (texto HH:MM de la Agenda):
+          --  1) si el guardado la trae explícita, se usa;
+          --  2) si no pero trae una fechaAtencion parseable (p. ej. una
+          --     reprogramación), se re-deriva de ella para que no quede
+          --     congelada en la hora anterior;
+          --  3) si no trae ninguna (p. ej. al atender), se preserva la actual.
+          "horaAtencion" = COALESCE(
+            EXCLUDED."horaAtencion",
+            CASE WHEN EXCLUDED."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                 THEN to_char(EXCLUDED."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI')
+                 ELSE "HistoriaClinica"."horaAtencion" END
+          ),
           "datosNutricionales" = EXCLUDED."datosNutricionales",
           "_updatedDate" = NOW()
         RETURNING "_id";

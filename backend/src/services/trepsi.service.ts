@@ -705,7 +705,16 @@ class TrepsiService {
     const hcParams: unknown[] = [];
     let j = 1;
     if (input.fechaAtencion) {
-      hcSets.push(`"fechaAtencion" = $${j++}`);
+      hcSets.push(`"fechaAtencion" = $${j}`);
+      // horaAtencion (texto HH:MM que muestra la Agenda) se RE-DERIVA de la
+      // nueva fechaAtencion. Si no, al reprogramar quedaría congelada en la
+      // hora previa y la Agenda mostraría una hora distinta a la real de la
+      // cita (mientras "Afiliados Pendientes" —que ordena por fechaAtencion—
+      // muestra la correcta). Ambas vistas deben coincidir con Trepsi.
+      hcSets.push(
+        `"horaAtencion" = to_char($${j}::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI')`
+      );
+      j++;
       hcParams.push(input.fechaAtencion);
     }
     if (input.medico?.codigo) {

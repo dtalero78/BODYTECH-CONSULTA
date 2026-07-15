@@ -86,7 +86,10 @@ export interface OrdenListFilters {
  * Mantiene los nombres camelCase que ya usa el resto del panel.
  */
 export interface OrdenRow {
-  id: number;
+  // El backend (`listOrdenes`) devuelve el identificador como `_id` (UUID string
+  // de HistoriaClinica), NO `id`. Leerlo como `id` numérico dejaba `orden.id`
+  // undefined → PATCH/DELETE /ordenes/undefined → 404 "Orden no encontrada".
+  _id: string;
   primerNombre: string;
   segundoNombre?: string;
   primerApellido: string;
@@ -327,8 +330,8 @@ class MedicalPanelService {
    * backend acepta `Partial<...>`).
    */
   async updateOrden(
-    id: number,
-    data: Partial<Omit<OrdenRow, 'id' | 'createdAt' | 'medico'>>
+    id: string,
+    data: Partial<Omit<OrdenRow, '_id' | 'createdAt' | 'medico'>>
   ): Promise<{ success: boolean }> {
     const res = await this.client.patch<{ success: boolean }>(
       `/api/medical-panel/ordenes/${id}`,
@@ -340,7 +343,7 @@ class MedicalPanelService {
   /**
    * Elimina una orden / cita por id.
    */
-  async deleteOrden(id: number): Promise<{ success: boolean }> {
+  async deleteOrden(id: string): Promise<{ success: boolean }> {
     const res = await this.client.delete<{ success: boolean }>(
       `/api/medical-panel/ordenes/${id}`
     );

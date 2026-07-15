@@ -130,7 +130,7 @@ function EditModal({ orden, medicoCode, onClose }: EditModalProps) {
     setError(null);
     setSaving(true);
     try {
-      await medicalPanelService.updateOrden(orden.id, {
+      await medicalPanelService.updateOrden(orden._id, {
         fechaAtencion: form.fechaAtencion,
         horaAtencion: form.horaAtencion,
         tipoExamen: form.tipoExamen || undefined,
@@ -305,7 +305,7 @@ function DeleteConfirm({ orden, medicoCode, onClose }: DeleteConfirmProps) {
     setError(null);
     setDeleting(true);
     try {
-      await medicalPanelService.deleteOrden(orden.id);
+      await medicalPanelService.deleteOrden(orden._id);
       queryClient.invalidateQueries({ queryKey: ['ordenes', medicoCode] });
       onClose();
     } catch (err: any) {
@@ -379,7 +379,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
   const [debouncedBusqueda, setDebouncedBusqueda] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [editingOrden, setEditingOrden] = useState<OrdenRow | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [chatOrden, setChatOrden] = useState<OrdenRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<boolean>(false);
 
@@ -427,7 +427,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
   const rows: OrdenRow[] = data?.ordenes ?? [];
 
   const deletingOrden =
-    deletingId !== null ? rows.find((r) => r.id === deletingId) ?? null : null;
+    deletingId !== null ? rows.find((r) => r._id === deletingId) ?? null : null;
 
   return (
     <div className="bg-[#1f2c34] rounded-2xl shadow-xl p-6">
@@ -522,7 +522,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
             ) : (
               rows.map((row) => (
                 <tr
-                  key={row.id}
+                  key={row._id}
                   className="border-b border-gray-700/50 hover:bg-[#2a3942]/60 transition"
                 >
                   <td className="px-3 py-2 text-white whitespace-nowrap">
@@ -568,7 +568,7 @@ export function AgendaView({ medicoCode }: AgendaViewProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          setDeletingId(row.id);
+                          setDeletingId(row._id);
                           setDeleteConfirm(true);
                         }}
                         className="text-red-400 hover:text-red-300 transition"

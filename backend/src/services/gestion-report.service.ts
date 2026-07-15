@@ -69,6 +69,16 @@ function formatFechaCorta(iso: string): string {
 // Festivos y domingos: compartido con listHorariosDisponibles (Trepsi) y otros
 // callers. Ver ../helpers/festivos-colombia.helper.ts.
 
+/**
+ * ¿El celular es enviable por WhatsApp? Réplica de la validación de
+ * whatsapp.service.formatPhoneNumber: al limpiar separadores debe quedar un
+ * número de 10-15 dígitos. Un "0" o vacío se descarta (evita el error 21211).
+ */
+function celularEnviable(cel: string): boolean {
+  const clean = cel.replace(/[\s()\-+]/g, '');
+  return /^\d{10,15}$/.test(clean);
+}
+
 class GestionReportService {
   /**
    * Construye el ReportData (datos del tablero) para un alcance de sedes y fecha.
@@ -179,7 +189,9 @@ class GestionReportService {
     for (const a of admins) {
       if (!a.activo) continue;
       const celular = (a.celular || '').trim();
-      if (!celular) {
+      if (!celular || !celularEnviable(celular)) {
+        // Sin celular o número inválido (p. ej. "0") → no se intenta el envío
+        // (evita el error 21211 diario). No se modifican los datos del usuario.
         resumen.sinCelular++;
         continue;
       }

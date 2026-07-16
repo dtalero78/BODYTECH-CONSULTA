@@ -27,6 +27,7 @@ import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
+import auditRoutes from './routes/audit.routes';
 import gestionReportService from './services/gestion-report.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -38,6 +39,7 @@ import { sedeMiddleware } from './middleware/sede.middleware';
 import { optionalAuthMiddleware } from './middleware/auth.middleware';
 import { sessionContextMiddleware, requireRole } from './middleware/rbac.middleware';
 import { torniquetePresenceMiddleware } from './middleware/torniquete-presence.middleware';
+import { auditMiddleware } from './middleware/audit.middleware';
 
 const app: Application = express();
 // Detrás del proxy de DigitalOcean App Platform: confiar en X-Forwarded-For
@@ -131,6 +133,11 @@ app.use(sedeMiddleware);
 // con throttle. Va después de optionalAuth/session/sede para tener la identidad.
 app.use(torniquetePresenceMiddleware);
 
+// Audit log global: registra en `audit_log` cada mutación /api relevante con el
+// actor del token/sesión. Fire-and-forget (res.on('finish')); nunca bloquea ni
+// rompe el request. Va después de optionalAuth/session/sede para tener identidad.
+app.use(auditMiddleware);
+
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -178,6 +185,8 @@ app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 // Admin del outbox del webhook BSL → Trepsi (contiene PHI). RBAC: solo
 // admin/coordinador (antes usaba el token legacy code+sede → cualquier médico).
 app.use('/api/admin/trepsi-webhook', requireRole('admin', 'coordinador'), trepsiWebhookAdminRoutes);
+// Bitácora de auditoría global (audit_log) — solo admin/coordinador.
+app.use('/api/admin/audit', requireRole('admin', 'coordinador'), auditRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
 // Público (sin auth): Twilio toma el PNG del tablero de aquí como media.
 app.use('/api/public/gestion-report-image', gestionReportImageRoutes);

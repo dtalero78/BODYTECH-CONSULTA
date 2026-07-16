@@ -717,6 +717,45 @@ class PostgresService {
           WHERE cerrada = FALSE
       `);
 
+      // ===== Audit log global =====
+      // Bitácora transversal de acciones de usuarios (quién + qué + cuándo). La
+      // alimenta `auditMiddleware` (global, fire-and-forget) en CADA mutación
+      // /api relevante: No Contesta, crear/editar/eliminar cita, editar historia,
+      // reasignar, gestión de profesionales/usuarios, login, etc. A diferencia
+      // del torniquete (que solo audita la jornada), esta tabla cubre todo.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id            BIGSERIAL PRIMARY KEY,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          actor_user_id INTEGER,
+          actor_email   TEXT,
+          actor_nombre  TEXT,
+          actor_codigo  VARCHAR(80),
+          actor_rol     VARCHAR(30),
+          actor_sede    VARCHAR(50),
+          metodo        VARCHAR(10) NOT NULL,
+          ruta          TEXT NOT NULL,
+          accion        VARCHAR(60),
+          entidad       VARCHAR(40),
+          entidad_id    TEXT,
+          status_code   INTEGER,
+          ip            VARCHAR(64),
+          detalle       JSONB
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at DESC)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log (actor_codigo, created_at DESC)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_log_entidad ON audit_log (entidad, entidad_id)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_log_accion ON audit_log (accion, created_at DESC)
+      `);
+
       // ===== Monitor de integración Trepsi (observabilidad) =====
       // Registro de TODOS los eventos de la integración para mostrarlos en
       // /monitor-integracion en tiempo real. Incluye tanto inbound (Trepsi

@@ -39,6 +39,15 @@ export interface SessionUser {
   especialidad?: string | null;
 }
 
+/**
+ * Resultado del login unificado. `consulta` = usuario de esta app (sesión ya
+ * persistida). `prepagadas` = usuario de la app hermana; el caller redirige a
+ * `redirectUrl` entregando `token` en el fragmento (#).
+ */
+export type PasswordLoginOutcome =
+  | { program: 'consulta'; user: SessionUser }
+  | { program: 'prepagadas'; token: string; redirectUrl: string };
+
 /** Mensaje legible para errores del login por email+contraseña. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function passwordLoginErrorMessage(err: any): string {
@@ -142,23 +151,42 @@ class AuthService {
   }
 
   /**
-   * RBAC — Login por email + contraseña. Persiste el token de sesión en la
-   * MISMA key `bsl_auth_token` (para que los interceptores lo inyecten) y el
-   * usuario completo en `bsl_user`. `remember` extiende la sesión a 30 días.
+   * RBAC — Login por email + contraseña. Puerta única para las dos apps
+   * hermanas:
+   *  - Usuario de consulta → persiste el token en `bsl_auth_token` + `bsl_user`
+   *    y devuelve `{ program: 'consulta', user }`.
+   *  - Usuario de prepagadas → el backend lo detecta y devuelve un token de
+   *    prepagadas; aquí NO se persiste nada de consulta, se devuelve
+   *    `{ program: 'prepagadas', token, redirectUrl }` para el handoff.
+   * `remember` extiende la sesión de consulta a 30 días.
    */
-  async passwordLogin(email: string, password: string, remember: boolean): Promise<SessionUser> {
+  async passwordLogin(
+    email: string,
+    password: string,
+    remember: boolean
+  ): Promise<PasswordLoginOutcome> {
     const res = await axios.post(`${API_BASE_URL}/api/auth/password-login`, {
       email,
       password,
       remember,
     });
-    const { token, user } = res.data || {};
+    const data = res.data || {};
+
+    // Usuario de la app hermana: handoff SSO (no toca el localStorage de consulta).
+    if (data.program === 'prepagadas') {
+      if (!data.token || !data.redirectUrl) {
+        throw new Error('Login prepagadas inválido');
+      }
+      return { program: 'prepagadas', token: data.token, redirectUrl: data.redirectUrl };
+    }
+
+    const { token, user } = data;
     if (!token || !user) {
       throw new Error('Login response inválido');
     }
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    return user as SessionUser;
+    return { program: 'consulta', user: user as SessionUser };
   }
 
   /** Solicita el enlace de reset de contraseña por email (Resend). */

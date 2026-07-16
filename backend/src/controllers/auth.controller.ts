@@ -89,17 +89,33 @@ class AuthController {
 
       const { email, password, remember } = parsed.data;
       const result = await authService.loginWithPassword(email, password, remember ?? false);
-      if (!result.ok) {
-        const status = result.error === 'DB_ERROR' ? 500 : 401;
-        res.status(status).json({ success: false, error: result.error ?? 'UNKNOWN' });
+      if (result.ok) {
+        res.status(200).json({
+          success: true,
+          token: result.token,
+          user: result.user,
+        });
         return;
       }
 
-      res.status(200).json({
-        success: true,
-        token: result.token,
-        user: result.user,
-      });
+      // Puerta única: si no es un usuario de consulta (credenciales inválidas
+      // aquí), probar contra la app hermana "prepagadas". Si autentica, el
+      // frontend redirige a prepagadas con el token en el fragmento (#…).
+      if (result.error === 'INVALID_CREDENTIALS') {
+        const prepa = await authService.loginPrepagadas(email, password);
+        if (prepa.ok) {
+          res.status(200).json({
+            success: true,
+            program: 'prepagadas',
+            token: prepa.token,
+            redirectUrl: prepa.redirectUrl,
+          });
+          return;
+        }
+      }
+
+      const status = result.error === 'DB_ERROR' ? 500 : 401;
+      res.status(status).json({ success: false, error: result.error ?? 'UNKNOWN' });
     } catch (err) {
       next(err);
     }

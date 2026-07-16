@@ -30,8 +30,14 @@ export function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const user = await authService.passwordLogin(email.trim(), password, remember);
-      navigate(homePathForRole(user.role), { replace: true });
+      const outcome = await authService.passwordLogin(email.trim(), password, remember);
+      if (outcome.program === 'prepagadas') {
+        // Handoff a la app hermana: el token va en el fragmento (# no viaja al
+        // servidor ni a los logs). prepagadas.bodytech.app/sso lo consume.
+        window.location.href = `${outcome.redirectUrl}#t=${encodeURIComponent(outcome.token)}`;
+        return;
+      }
+      navigate(homePathForRole(outcome.user.role), { replace: true });
     } catch (err) {
       setError(passwordLoginErrorMessage(err));
     } finally {

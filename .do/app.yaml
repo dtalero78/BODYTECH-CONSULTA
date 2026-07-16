@@ -43,6 +43,10 @@ services:
         value: "${APP_URL}"
       - key: WIX_FUNCTIONS_URL
         value: "https://www.bsl.com.co/_functions"
+      # App hermana: el login de bodytech.app reenvía a esta API las
+      # credenciales que no son de un usuario de consulta (SSO por handoff).
+      - key: PREPAGADAS_URL
+        value: "https://prepagadas.bodytech.app"
       - key: WHAPI_TOKEN
         scope: RUN_TIME
         type: SECRET

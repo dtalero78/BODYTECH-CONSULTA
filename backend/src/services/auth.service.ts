@@ -21,6 +21,15 @@ const JWT_TTL = '24h';
 const SESSION_TTL = '12h';
 const SESSION_TTL_REMEMBER = '30d';
 
+// App hermana "prepagadas" (prepagadas.bodytech.app). El login de bodytech.app
+// es la puerta única: si las credenciales no son de un usuario de consulta, se
+// reenvían a la API de prepagadas (SSO por handoff). No comparten JWT_SECRET —
+// cada app sigue firmando/validando sus propios tokens.
+const PREPAGADAS_URL = (process.env.PREPAGADAS_URL || 'https://prepagadas.bodytech.app').replace(
+  /\/+$/,
+  ''
+);
+
 export interface AuthPayload {
   medicoCode: string;
   sedeId: string;
@@ -53,6 +62,15 @@ export interface PasswordLoginResult {
   token?: string;
   user?: Omit<SessionPayload, 'kind'>;
   error?: PasswordLoginError;
+}
+
+/** Resultado del puente de login hacia la app hermana "prepagadas". */
+export interface PrepagadasLoginResult {
+  ok: boolean;
+  /** Token firmado por prepagadas (con su propio secreto) para el handoff SSO. */
+  token?: string;
+  /** URL /sso de prepagadas donde el frontend entrega el token. */
+  redirectUrl?: string;
 }
 
 export type LoginErrorCode = 'SEDE_NOT_FOUND' | 'CODIGO_NOT_FOUND' | 'DB_ERROR';
@@ -189,6 +207,30 @@ class AuthService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { kind: _kind, ...user } = payload;
     return { ok: true, token, user };
+  }
+
+  /**
+   * Puente hacia la app hermana "prepagadas". Reenvía las credenciales a su API
+   * de login (server-to-server, mismo cluster). Si autentican, devuelve el token
+   * que prepagadas firmó (con su propio JWT_SECRET) y la URL /sso donde el
+   * frontend lo entrega vía fragmento. Cualquier fallo (credenciales inválidas,
+   * red, timeout) → `ok:false` para que el caller responda como login normal.
+   */
+  async loginPrepagadas(email: string, password: string): Promise<PrepagadasLoginResult> {
+    try {
+      const resp = await fetch(`${PREPAGADAS_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) return { ok: false };
+      const data = (await resp.json()) as { token?: string };
+      if (!data?.token) return { ok: false };
+      return { ok: true, token: data.token, redirectUrl: `${PREPAGADAS_URL}/sso` };
+    } catch {
+      return { ok: false };
+    }
   }
 
   // ==========================================================================

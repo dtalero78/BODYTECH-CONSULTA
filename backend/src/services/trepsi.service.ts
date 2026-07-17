@@ -707,6 +707,10 @@ class TrepsiService {
     if (input.fechaAtencion) {
       hcSets.push(`"fechaAtencion" = $${j++}`);
       hcParams.push(input.fechaAtencion);
+      // Reagendar deja la cita otra vez por atender: se limpia el "No Contesta"
+      // de un intento previo, que si no se arrastra a la fecha nueva y el panel
+      // del coach la oculta (mismo motivo que en medical-panel.updateOrden).
+      hcSets.push(`"pvEstado" = NULL`);
       // horaAtencion (texto HH:MM que muestra la Agenda) se RE-DERIVA de la
       // nueva fechaAtencion. Si no, al reprogramar quedaría congelada en la
       // hora previa y la Agenda mostraría una hora distinta a la real de la

@@ -6,6 +6,9 @@ export interface PatientStats {
   programadosHoy: number;
   atendidosHoy: number;
   restantesHoy: number;
+  /** Citas de hoy en "No Contesta" (ocultas de la lista). Cuadra la cuenta:
+   *  programados = atendidos + restantes + noContesta. */
+  noContestaHoy: number;
 }
 
 export interface Patient {

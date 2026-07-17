@@ -13,6 +13,14 @@ interface PatientStats {
   programadosHoy: number;
   atendidosHoy: number;
   restantesHoy: number;
+  /**
+   * Citas de hoy marcadas "No Contesta" (ocultas de la lista del coach). Se
+   * expone para que la cuenta CUADRE a la vista:
+   *   programados = atendidos + restantes + noContesta
+   * Sin este contador los coaches veían 21 programados / 2 atendidos / 16
+   * restantes y no les daban las cuentas (las "No Contesta" quedaban invisibles).
+   */
+  noContestaHoy: number;
 }
 
 interface Patient {
@@ -203,17 +211,33 @@ class MedicalPanelService {
         params
       );
 
+      // Query para "No Contesta" de hoy (sin atender). Es el complemento exacto
+      // de `restantes`: juntos cubren todo lo que no tiene fechaConsulta, de modo
+      // que programados = atendidos + restantes + noContesta.
+      const noContestaResult = await postgresService.query(
+        `SELECT COUNT(*) as count FROM "HistoriaClinica"
+         WHERE "medico" = $1
+         AND "fechaAtencion" >= $2
+         AND "fechaAtencion" <= $3
+         AND "fechaConsulta" IS NULL
+         AND (UPPER(COALESCE("atendido", '')) = 'NO CONTESTA'
+              OR COALESCE("pvEstado", '') = 'No Contesta')${sf}`,
+        params
+      );
+
       return {
         programadosHoy: parseInt(programadosResult?.[0]?.count || '0'),
         atendidosHoy: parseInt(atendidosResult?.[0]?.count || '0'),
-        restantesHoy: parseInt(restantesResult?.[0]?.count || '0')
+        restantesHoy: parseInt(restantesResult?.[0]?.count || '0'),
+        noContestaHoy: parseInt(noContestaResult?.[0]?.count || '0')
       };
     } catch (error) {
       console.error('❌ Error obteniendo estadísticas de PostgreSQL:', error);
       return {
         programadosHoy: 0,
         atendidosHoy: 0,
-        restantesHoy: 0
+        restantesHoy: 0,
+        noContestaHoy: 0
       };
     }
   }
@@ -757,6 +781,12 @@ class MedicalPanelService {
         const fechaTs = new Date(Date.UTC(y, mo - 1, d, h + 5, min, 0));
         sets.push(`"fechaAtencion" = $${paramIndex++}`);
         vals.push(fechaTs);
+        // Reagendar deja la cita OTRA VEZ por atender → se limpia el "No
+        // Contesta" de un intento anterior. Sin esto el estado viejo se arrastra
+        // a la nueva fecha y el filtro del panel (que oculta pvEstado='No
+        // Contesta') deja la cita INVISIBLE para el coach aunque esté reagendada
+        // → pacientes que nadie llama (pasó con 15 citas).
+        sets.push(`"pvEstado" = NULL`);
       }
 
       if (sets.length === 0) {

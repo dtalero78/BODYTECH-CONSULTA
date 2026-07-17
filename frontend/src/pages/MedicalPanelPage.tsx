@@ -707,9 +707,13 @@ export function MedicalPanelPage() {
             </div>
           </div>
 
-          {/* Estadísticas */}
+          {/* Estadísticas — 4 contadores para que la cuenta CUADRE a la vista:
+              programados = atendidos + restantes + no contesta. Sin el de "No
+              contesta" los coaches veían 21 / 2 / 16 y no les daban las cuentas
+              (las "No Contesta" se ocultan de la lista pero sí cuentan como
+              programadas). */}
           {panelView === 'hoy' && stats && (
-            <div className="grid grid-cols-3 gap-2 md:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
               <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
                 <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">Programados</div>
                 <div className="text-2xl md:text-3xl font-bold text-white">{stats.programadosHoy}</div>
@@ -721,6 +725,10 @@ export function MedicalPanelPage() {
               <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
                 <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">Restantes</div>
                 <div className="text-2xl md:text-3xl font-bold text-yellow-500">{stats.restantesHoy}</div>
+              </div>
+              <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
+                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">No contesta</div>
+                <div className="text-2xl md:text-3xl font-bold text-red-400">{stats.noContestaHoy ?? 0}</div>
               </div>
             </div>
           )}

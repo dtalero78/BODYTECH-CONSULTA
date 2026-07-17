@@ -19,6 +19,12 @@ import { SessionPayload } from '../services/auth.service';
 
 const ALL_ROLES = ['admin', 'coordinador', 'medico', 'coach', 'auxiliar', 'torre'] as const;
 const ROLES_GESTIONABLES_COORD: Rol[] = ['medico', 'coach', 'auxiliar'];
+// Roles cuyo panel se filtra por el CÓDIGO del profesional vinculado
+// (`getPendingPatients` → `WHERE medico = <codigo>`). Si un médico/coach se crea
+// sin `profesional_id`, su sesión no lleva código y el panel le sale VACÍO sin
+// ningún aviso — pasó de verdad con coaches del onboarding. Por eso el vínculo
+// es OBLIGATORIO para estos roles al crear y al editar.
+const ROLES_CLINICOS: Rol[] = ['medico', 'coach'];
 
 // Celular opcional: cadena vacía o solo espacios → null.
 const celularSchema = z.preprocess(
@@ -63,6 +69,15 @@ function validation(res: Response, err: ZodError): void {
 
 function forbidden(res: Response, msg = 'No tienes permiso para esta acción.'): void {
   res.status(403).json({ success: false, error: 'FORBIDDEN', message: msg });
+}
+
+function profesionalRequerido(res: Response): void {
+  res.status(400).json({
+    success: false,
+    error: 'PROFESIONAL_REQUERIDO',
+    message:
+      'Un usuario médico o coach debe estar vinculado a un profesional; si no, su panel queda vacío.',
+  });
 }
 
 // --- Reglas de privilegio (P7) ---
@@ -119,6 +134,10 @@ class UsuariosController {
       // Rol asignable.
       if (!puedeAsignarRol(actor, input.rol)) {
         return forbidden(res, 'No puedes crear usuarios con ese rol.');
+      }
+      // Médico/coach SIN profesional → panel vacío. Se exige el vínculo.
+      if (ROLES_CLINICOS.includes(input.rol) && input.profesionalId == null) {
+        return profesionalRequerido(res);
       }
       // Sedes (cuando no es global) dentro del alcance y al menos una.
       const sedes = input.esGlobal ? [] : input.sedes;
@@ -203,6 +222,20 @@ class UsuariosController {
       // Cambios de sedes → dentro del alcance del actor.
       if (fields.sedes !== undefined && !fields.esGlobal && !puedeUsarSedes(actor, fields.sedes)) {
         return forbidden(res, 'No puedes asignar sedes fuera de tu alcance.');
+      }
+      // Solo si el update toca el rol o el vínculo, se valida el estado
+      // RESULTANTE: un médico/coach debe quedar con profesional. Cubre pasar a
+      // rol clínico sin vínculo y desvincular a un clínico existente.
+      // NO se valida cuando el update no toca ninguno de los dos, para no
+      // bloquear ediciones ajenas (renombrar, desactivar) de usuarios legacy que
+      // quedaron sin vincular y aún no tienen profesional que asignarles.
+      if (fields.rol !== undefined || fields.profesionalId !== undefined) {
+        const rolFinal = fields.rol ?? target.rol;
+        const profesionalFinal =
+          fields.profesionalId !== undefined ? fields.profesionalId : target.profesionalId;
+        if (ROLES_CLINICOS.includes(rolFinal) && profesionalFinal == null) {
+          return profesionalRequerido(res);
+        }
       }
 
       const result = await usuariosService.update(

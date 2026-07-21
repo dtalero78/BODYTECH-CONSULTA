@@ -15,9 +15,20 @@ import { getSession, canActOnSede } from '../middleware/rbac.middleware';
 // otros códigos. NOTA: el acceso clínico a pacientes (búsqueda por cédula,
 // historia, atender) es GLOBAL por decisión de negocio — cualquier clínico
 // puede atender a cualquier paciente que busque por documento, sin filtro de sede.
+// Centinela para un clínico SIN profesional vinculado: un valor que no puede
+// coincidir con ningún `medico` real, de modo que la consulta devuelva 0 filas
+// (FALLA CERRADO). Antes, un médico/coach sin código se caía a `paramCode`, y
+// como `listOrdenes` OMITE el filtro cuando `medico` es falsy, la agenda le
+// mostraba las citas de TODOS los coaches (fuga de datos de pacientes); además
+// podía pedir `?medico=<otro>` y ver la agenda ajena (IDOR).
+export const SIN_PROFESIONAL = '__SIN_PROFESIONAL__';
+
 function ownCodeOrParam(req: Request, paramCode: string): string {
   const s = getSession(req);
-  if (s && (s.role === 'medico' || s.role === 'coach') && s.codigo) return s.codigo;
+  // Clínicos: SIEMPRE su propio código; nunca el parámetro del cliente.
+  if (s && (s.role === 'medico' || s.role === 'coach')) {
+    return s.codigo || SIN_PROFESIONAL;
+  }
   return paramCode;
 }
 
@@ -389,6 +400,18 @@ class MedicalPanelController {
     // el IDOR de agendar bajo otro profesional vía body manipulado). Coordinador/
     // admin/auxiliar conservan el médico elegido en el formulario.
     data.medico = ownCodeOrParam(req, data.medico);
+
+    // Un clínico sin profesional vinculado no puede autoagendar: guardaríamos el
+    // centinela como `medico` y la cita quedaría huérfana (invisible para todos).
+    if (data.medico === SIN_PROFESIONAL) {
+      res.status(400).json({
+        success: false,
+        error: 'SIN_PROFESIONAL',
+        message:
+          'Tu usuario no tiene un profesional vinculado; pide que lo asocien para poder agendar.',
+      });
+      return;
+    }
 
     // Sede de la orden, acotada al alcance del usuario (RBAC): un `?sede`
     // explícito solo si está en su alcance; si no, su (primera) sede. Sin

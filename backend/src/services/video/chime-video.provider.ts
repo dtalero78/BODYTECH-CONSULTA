@@ -238,19 +238,23 @@ export class ChimeVideoProvider implements IVideoProvider {
    */
   async endRoom(roomName: string, opts?: { completed?: boolean }): Promise<{ id: string; status: string }> {
     const markCompleted = opts?.completed !== false;
-    // Resolver desde memoria O BD: tras un reinicio la memoria está vacía y sin
-    // esto la grabación nunca se cerraría (MP4 nunca producido, pipeline
-    // facturando). Ver §5.1.b del playbook.
-    const meeting = await this.resolveMeeting(roomName);
 
-    if (meeting?.MeetingId) {
-      const meetingId = meeting.MeetingId;
-      // Idempotente: se sacan del mapa y de la BD ANTES de los await, para que una
-      // segunda llamada (colgar + beforeunload) resuelva null y no vuelva a
-      // concatenar ni a borrar el meeting. El claim atómico en stopAndConcatenate
-      // es la última barrera contra MP4 duplicados.
-      this.meetings.delete(roomName);
-      await this.forgetMeetingId(roomName);
+    // Resolver el meetingId SIN exigir que la reunión siga viva en Chime: si ya
+    // expiró, igual hay que concatenar la grabación. (Usar resolveMeeting aquí
+    // era un error: verifica liveness y devolvía null para reuniones muertas →
+    // la captura quedaba en 'capturing' para siempre y el MP4 nunca salía.)
+    // Cadena de respaldo: memoria → tabla persistida → grabación aún capturando.
+    let meetingId = this.meetings.get(roomName)?.MeetingId || null;
+    if (!meetingId) meetingId = await this.recallMeetingId(roomName);
+    if (!meetingId) meetingId = await chimeRecordingService.getCapturingMeetingId(roomName);
+
+    // Idempotente: se limpia el estado ANTES de los await, para que una segunda
+    // llamada (colgar + beforeunload) no repita el trabajo. La concatenación
+    // además tiene su propio claim atómico en BD.
+    this.meetings.delete(roomName);
+    await this.forgetMeetingId(roomName);
+
+    if (meetingId) {
       await chimeRecordingService.stopAndConcatenate(meetingId);
       try {
         await this.client.send(new DeleteMeetingCommand({ MeetingId: meetingId }));
@@ -260,7 +264,7 @@ export class ChimeVideoProvider implements IVideoProvider {
     }
 
     if (markCompleted) this.ended.set(roomName, Date.now());
-    return { id: meeting?.MeetingId || roomName, status: markCompleted ? 'completed' : 'disconnected' };
+    return { id: meetingId || roomName, status: markCompleted ? 'completed' : 'disconnected' };
   }
 
   async listParticipants(roomName: string): Promise<ParticipantInfo[]> {

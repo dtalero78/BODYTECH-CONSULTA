@@ -394,7 +394,12 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
           />
         )}
         {role === 'patient' && sessionActive && (
-          <PosturalAnalysisPatient onPoseData={sendPoseData} isActive={sessionActive} />
+          <PosturalAnalysisPatient
+            onPoseData={sendPoseData}
+            isActive={sessionActive}
+            // Reusa la cámara de la llamada: pedir una segunda fallaba en móvil.
+            sharedStream={room?.getLocalVideoStream() ?? null}
+          />
         )}
       </div>
     );

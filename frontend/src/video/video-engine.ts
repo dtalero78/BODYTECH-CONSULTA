@@ -151,6 +151,17 @@ export interface VideoEngine {
   /** Handle for `useBackgroundEffects` to apply blur/virtual-background to the local video. */
   getLocalVideoHandle(): LocalVideoHandle | null;
 
+  /**
+   * Stream de la cámara local que ya está publicando la llamada.
+   *
+   * Quien necesite la cámara (p. ej. el análisis postural) DEBE reusar este
+   * stream en vez de pedir otro `getUserMedia`: en móvil la cámara suele
+   * admitir un solo stream a la vez, así que el segundo falla ("No se pudo
+   * acceder a la cámara") o le roba la cámara a la videollamada.
+   * OJO: es prestado — NO llamar `.stop()` sobre sus tracks, cortaría la llamada.
+   */
+  getLocalVideoStream(): MediaStream | null;
+
   /** Raw local microphone track(s), for the consultation recorder. */
   getLocalAudioTracks(): MediaStreamTrack[];
   /** Raw remote audio track(s) (all participants), for the consultation recorder. */

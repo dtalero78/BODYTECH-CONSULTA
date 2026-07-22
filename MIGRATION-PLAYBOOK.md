@@ -335,6 +335,14 @@ Las dos cosas son falsas hoy. Copiar el archivo copia la desinformación.
 | El remoto no reproduce en móvil | `<video muted>` (el audio va aparte) + `.play()` tras enlazar |
 | MP4 duplicados: colgar dispara `endRoom` 3 veces (botón + cleanup + `beforeunload`) | claim atómico en SQL antes de concatenar |
 | Arrancar la captura al crear la reunión satura la señalización y el video no renderiza | arrancarla **al llegar a 2 participantes** |
+| **Un segundo `getUserMedia` mata la cámara** (análisis postural): con Twilio el navegador toleraba compartirla, con Chime **no**, y en móvil la cámara admite un solo stream → *"No se pudo acceder a la cámara"* | reusar el stream que la llamada ya publica (`VideoEngine.getLocalVideoStream()`); `getUserMedia` sólo como respaldo |
+| Detener el stream **prestado** en el cleanup corta la videollamada entera | marcar el stream como prestado y hacer `.stop()` **sólo** sobre el que abrió el propio módulo |
+| `endRoom` exigía que la reunión siguiera **viva** para concatenar → si ya expiró, la captura queda en `capturing` para siempre y el MP4 nunca sale | resolver el `meetingId` **sin verificar liveness**: memoria → tabla persistida → fila de grabación aún capturando |
+
+> **Lección transversal (salió en producción, dos veces):** con Chime, *cualquier* módulo que
+> también quiera la cámara o el micrófono debe **pedírselo al motor de video**, no al navegador.
+> Chime toma el dispositivo en exclusiva. Antes de migrar, inventariar quién más llama a
+> `getUserMedia`: `grep -rn "getUserMedia" frontend/src`.
 
 ### Observabilidad, desde el día uno
 

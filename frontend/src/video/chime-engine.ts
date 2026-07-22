@@ -423,16 +423,21 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     if (!this.session || !this.chosenVideoDeviceId) return;
     const logger = new ConsoleLogger('bsl-chime-bg', LogLevel.WARN);
     // Procesar el fondo a RESOLUCIÓN REDUCIDA (640x360 @ 15fps). El filtro corre
-    // por frame (canvas + TFLite) y a 720p satura el hilo principal → Chime cree
-    // que la conexión se cayó y reconecta (AudioJoinedFromAnotherDevice), tumbando
-    // la llamada. A 640x360 la carga es ~1/4 y la llamada se mantiene estable.
+    // por frame (canvas + TFLite) y a más resolución satura el hilo principal →
+    // Chime cree que la conexión se cayó y reconecta (AudioJoinedFromAnotherDevice),
+    // tumbando la llamada.
+    //
+    // OJO con `ideal`: es una SUGERENCIA que el navegador puede ignorar, y la
+    // ignoraba. En producción (22-jul) el procesador corrió a 960x540 —2,25× la
+    // carga prevista— y las llamadas se caían con reingresos. `max` es un tope
+    // DURO: el navegador debe elegir un modo que no lo exceda.
     const innerDevice: Device =
       typeof this.chosenVideoDeviceId === 'string'
         ? {
             deviceId: { exact: this.chosenVideoDeviceId },
-            width: { ideal: 640 },
-            height: { ideal: 360 },
-            frameRate: { ideal: 15 },
+            width: { ideal: 640, max: 640 },
+            height: { ideal: 360, max: 360 },
+            frameRate: { ideal: 15, max: 15 },
           }
         : this.chosenVideoDeviceId;
     const transformDevice = new DefaultVideoTransformDevice(logger, innerDevice, processors);

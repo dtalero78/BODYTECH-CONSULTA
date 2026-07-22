@@ -39,6 +39,42 @@ class ChimeRecordingService {
     return ENABLED;
   }
 
+  get bucket(): string {
+    return BUCKET;
+  }
+
+  get region(): string {
+    return REGION;
+  }
+
+  /**
+   * Ubicación en S3 del MP4 de una sala, para alimentar a Amazon Transcribe
+   * (necesita el URI s3://, no una URL firmada). Devuelve el estado de la fila
+   * y el s3Uri cuando el MP4 ya existe. `null` si no hay grabación registrada.
+   */
+  async getRecordingS3Uri(
+    roomName: string
+  ): Promise<{ status: string; s3Uri: string | null; key: string | null } | null> {
+    if (!ENABLED) return null;
+    await this.ensureTable();
+    const rows = await postgresService.query(
+      `SELECT s3_recording_prefix, status FROM chime_recordings
+       WHERE room_name = $1 ORDER BY id DESC LIMIT 1`,
+      [roomName]
+    );
+    if (!rows || rows.length === 0) return null;
+    const prefix = rows[0].s3_recording_prefix;
+    const status = rows[0].status;
+    if (!prefix) return { status, s3Uri: null, key: null };
+
+    const listed = await this.s3.send(
+      new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `${prefix}/` })
+    );
+    const mp4 = (listed.Contents || []).find((o) => o.Key?.toLowerCase().endsWith('.mp4'));
+    if (!mp4?.Key) return { status, s3Uri: null, key: null }; // aún procesando
+    return { status: 'ready', s3Uri: `s3://${BUCKET}/${mp4.Key}`, key: mp4.Key };
+  }
+
   /** Crea la tabla de grabaciones si no existe (aditiva, idempotente). */
   private async ensureTable(): Promise<void> {
     if (this.tableReady) return;

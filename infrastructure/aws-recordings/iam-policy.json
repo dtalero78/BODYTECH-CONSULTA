@@ -37,6 +37,15 @@
         "arn:aws:s3:::bodytech-consulta-recordings-448962739796",
         "arn:aws:s3:::bodytech-consulta-recordings-448962739796/*"
       ]
+    },
+    {
+      "Sid": "Transcribe",
+      "Effect": "Allow",
+      "Action": [
+        "transcribe:StartTranscriptionJob",
+        "transcribe:GetTranscriptionJob"
+      ],
+      "Resource": "*"
     }
   ]
 }

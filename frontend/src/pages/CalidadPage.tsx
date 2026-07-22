@@ -343,10 +343,17 @@ export function CalidadPage() {
       // devuelve true cuando ya no hay que seguir haciendo polling
       try {
         const res = await axios.post(`${API}/api/calidad/preparar/${historiaId}`);
-        const sid: string | null = res.data.compositionSid ?? null;
         const status: string = res.data.status ?? '';
-        if (sid && status === 'completed') {
-          setSession((prev) => (prev ? { ...prev, compositionSid: sid } : prev));
+        const url: string | null = res.data.videoUrl ?? null;
+        const sid: string | null = res.data.compositionSid ?? null;
+        if (status === 'completed') {
+          if (url) {
+            // Chime: el backend ya devuelve el link firmado del MP4 en S3.
+            setVideoUrl(url);
+          } else if (sid) {
+            // Twilio: fijar el sid dispara el fetch del video-url.
+            setSession((prev) => (prev ? { ...prev, compositionSid: sid } : prev));
+          }
           setPreparing(false);
           return true;
         }
@@ -355,7 +362,7 @@ export function CalidadPage() {
           setPreparing(false);
           return true;
         }
-        return false; // enqueued / processing → seguir esperando
+        return false; // processing → seguir esperando
       } catch (err: unknown) {
         const e = err as { response?: { data?: { message?: string } }; message?: string };
         setPrepareError(e.response?.data?.message || e.message || 'Error preparando el video.');
@@ -452,11 +459,12 @@ export function CalidadPage() {
   useEffect(() => {
     if (session?.compositionSid) {
       fetchVideoUrl(session.compositionSid);
-    } else if (session && !session.compositionSid && !preparing && !prepareError) {
-      // Sesión encontrada pero sin composición → crearla on-demand y esperar.
+    } else if (session && !session.compositionSid && !videoUrl && !preparing && !prepareError) {
+      // Sesión sin composición Twilio → preparar la grabación (Chime S3 o Twilio
+      // on-demand). El guard `!videoUrl` evita re-preparar una vez Chime resolvió.
       prepareVideo();
     }
-  }, [session, fetchVideoUrl, prepareVideo, preparing, prepareError]);
+  }, [session, fetchVideoUrl, prepareVideo, preparing, prepareError, videoUrl]);
 
   // Limpiar el intervalo de preparación al desmontar.
   useEffect(() => {
@@ -574,33 +582,6 @@ export function CalidadPage() {
           <div className="p-4">
             {sessionLoading ? (
               <div className="aspect-video bg-gray-100 rounded-lg animate-pulse" />
-            ) : !session?.compositionSid ? (
-              preparing ? (
-                <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-500">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-                  <p className="text-sm font-medium">Preparando video de la consulta…</p>
-                  <p className="text-xs text-gray-400">Se genera al abrir Calidad. Puede tardar 1–3 min.</p>
-                </div>
-              ) : prepareError ? (
-                <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400">
-                  <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  </svg>
-                  <p className="text-sm font-medium">{prepareError}</p>
-                </div>
-              ) : (
-                <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-400">
-                  <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2zM3 3l18 18" />
-                  </svg>
-                  <p className="text-sm font-medium">Sin grabación disponible</p>
-                  <p className="text-xs">Esta consulta no tiene un video compuesto asociado.</p>
-                </div>
-              )
-            ) : videoLoading ? (
-              <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-              </div>
             ) : videoUrl ? (
               <video
                 src={videoUrl}
@@ -608,12 +589,26 @@ export function CalidadPage() {
                 className="w-full rounded-lg aspect-video bg-black"
                 preload="metadata"
               />
-            ) : (
+            ) : preparing || videoLoading ? (
+              <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                <p className="text-sm font-medium">Preparando video de la consulta…</p>
+                <p className="text-xs text-gray-400">Se genera al abrir Calidad. Puede tardar un momento.</p>
+              </div>
+            ) : prepareError ? (
               <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-400">
                 <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 </svg>
-                <p className="text-sm font-medium">No se pudo cargar el video</p>
+                <p className="text-sm font-medium">{prepareError}</p>
+              </div>
+            ) : (
+              <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-400">
+                <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2zM3 3l18 18" />
+                </svg>
+                <p className="text-sm font-medium">Sin grabación disponible</p>
+                <p className="text-xs">Esta consulta no tiene un video asociado.</p>
               </div>
             )}
           </div>
@@ -630,10 +625,10 @@ export function CalidadPage() {
             </div>
             <button
               onClick={handleTrigger}
-              disabled={triggering || isInProgress || !session || !session.compositionSid || preparing}
+              disabled={triggering || isInProgress || !session || !(videoUrl || session.compositionSid) || preparing}
               title={
-                !session?.compositionSid
-                  ? (preparing ? 'Preparando el video de la consulta…' : 'Aún no hay video compuesto para esta consulta')
+                !(videoUrl || session?.compositionSid)
+                  ? (preparing ? 'Preparando el video de la consulta…' : 'Aún no hay grabación lista para esta consulta')
                   : undefined
               }
               className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors shadow-sm"

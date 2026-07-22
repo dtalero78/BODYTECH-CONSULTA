@@ -23,6 +23,41 @@ import {
   descargarMp4ComoBuffer,
   extraerAudio,
 } from './twilio-media.service';
+import { chimeRecordingService } from './video/chime-recording.service';
+import { transcribeService } from './video/transcribe.service';
+
+/** Origen de la grabación de una consulta. */
+type Grabacion =
+  | { kind: 'twilio'; compositionSid: string }
+  | { kind: 'chime'; roomName: string }
+  | { kind: 'none' };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** roomName más reciente vinculado a una historia (para resolver grabación Chime). */
+async function roomNameForHistoria(historiaId: string): Promise<string | null> {
+  const rows = await postgresService.query(
+    `SELECT room_name FROM room_historia_map WHERE historia_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [historiaId]
+  );
+  return (rows?.[0]?.room_name as string) || null;
+}
+
+/**
+ * Decide de dónde sale la grabación de una consulta:
+ * - `composition_sid` presente → Twilio (flujo de composición de siempre).
+ * - si no, hay fila en `chime_recordings` para la sala → Chime (MP4 en S3).
+ * - si no → ninguna.
+ */
+async function resolverGrabacion(historiaId: string, compositionSid: string | null): Promise<Grabacion> {
+  if (compositionSid) return { kind: 'twilio', compositionSid };
+  const roomName = await roomNameForHistoria(historiaId);
+  if (roomName) {
+    const rec = await chimeRecordingService.getRecordingUrl(roomName);
+    if (rec) return { kind: 'chime', roomName };
+  }
+  return { kind: 'none' };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -140,7 +175,7 @@ async function buscarFormulario(
 
 async function procesarEvaluacion(
   evaluacionId: number,
-  compositionSid: string,
+  source: Grabacion,
   historiaId: string,
   numeroId: string | null,
   medico: string | null
@@ -151,9 +186,8 @@ async function procesarEvaluacion(
     let transcript = '';
 
     // 0. Reutilizar el transcript ya generado por el pipeline de transcripción
-    //    (audio client-side de la consulta, o composición como fallback). Evita
-    //    re-descargar el MP4 + ffmpeg + Whisper de nuevo — doble costo y latencia.
-    //    Si no hay transcript guardado, caemos al flujo clásico desde la composición.
+    //    (audio client-side de la consulta). Independiente del proveedor de video
+    //    (Twilio o Chime): si existe, evita re-transcribir (doble costo y latencia).
     const cached = await postgresService.query(
       `SELECT "transcription_text" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
       [historiaId]
@@ -169,11 +203,48 @@ async function procesarEvaluacion(
       );
       // Estado → evaluando + guardar transcript en la evaluación
       await setEstado(evaluacionId, 'evaluando', { transcript });
-    } else {
+    } else if (source.kind === 'chime') {
+      // Sin transcript guardado y grabación en Chime → Amazon Transcribe lee el
+      // MP4 de S3 directo (sin ffmpeg) y separa hablantes. Es asíncrono: sondeamos.
+      await setEstado(evaluacionId, 'transcribiendo');
+      await agregarPaso(
+        evaluacionId,
+        'Transcribiendo la grabación con Amazon Transcribe (separando médico/paciente)...'
+      );
+      const MAX_INTENTOS = 72; // ~6 min a 5s
+      let intentos = 0;
+      let motivo = '';
+      while (intentos < MAX_INTENTOS) {
+        const r = await transcribeService.getOrStartTranscription(source.roomName);
+        if (r.status === 'completed') {
+          transcript = (r.transcript || '').trim();
+          break;
+        }
+        if (r.status === 'failed') {
+          motivo = r.reason || 'Transcribe falló';
+          break;
+        }
+        // no_recording (MP4 aún concatenando) | in_progress → esperar
+        await sleep(5000);
+        intentos++;
+      }
+      if (!transcript) {
+        await setEstado(evaluacionId, 'error', {
+          error_msg: motivo || 'La transcripción no terminó a tiempo. Intenta de nuevo en un momento.',
+        });
+        return;
+      }
+      console.log(`${tag} Transcript de Transcribe (${transcript.length} chars)`);
+      await agregarPaso(
+        evaluacionId,
+        `Transcripción completada (${transcript.length} caracteres). Enviando al agente de IA...`
+      );
+      await setEstado(evaluacionId, 'evaluando', { transcript });
+    } else if (source.kind === 'twilio') {
       // 1. Obtener URL pre-firmada de Twilio
       await agregarPaso(evaluacionId, 'Solicitando URL de la grabación a Twilio...');
-      console.log(`${tag} Resolviendo URL del MP4 (composition ${compositionSid})...`);
-      const mp4Url = await obtenerUrlMediaTwilio(compositionSid);
+      console.log(`${tag} Resolviendo URL del MP4 (composition ${source.compositionSid})...`);
+      const mp4Url = await obtenerUrlMediaTwilio(source.compositionSid);
       await agregarPaso(evaluacionId, 'URL obtenida. Descargando grabación...');
 
       // 2. Descargar MP4 como buffer (sin disco)
@@ -218,6 +289,16 @@ async function procesarEvaluacion(
 
       // 5. Estado → evaluando + guardar transcript
       await setEstado(evaluacionId, 'evaluando', { transcript });
+    }
+
+    // Guarda: sin transcript no hay nada que evaluar (p. ej. sin grabación ni
+    // transcripción previa). dispararEvaluacion ya lo bloquea antes, pero por si
+    // acaso no llamamos al agente con texto vacío.
+    if (!transcript) {
+      await setEstado(evaluacionId, 'error', {
+        error_msg: 'No hay grabación ni transcripción disponible para evaluar esta consulta.',
+      });
+      return;
     }
 
     // 6. Formulario pre-consulta para contexto del agente
@@ -352,20 +433,40 @@ class CalidadService {
    * (la transcripción depende de ella), así que las grabaciones existen para
    * componer bajo demanda.
    */
-  async ensureComposition(
-    historiaId: string
-  ): Promise<{ compositionSid: string | null; status: string }> {
-    // 1) ¿la historia ya tiene composición? → devolver su estado actual.
+  async ensureComposition(historiaId: string): Promise<{
+    recordingKind: 'twilio' | 'chime' | null;
+    status: string;
+    videoUrl: string | null;
+    compositionSid: string | null;
+  }> {
+    // 1) ¿la historia ya tiene composición Twilio? → estado + URL si está lista.
     const session = await this.getSession(historiaId);
     if (!session.found) {
       throw Object.assign(new Error('Historia clínica no encontrada'), { statusCode: 404 });
     }
     if (session.compositionSid) {
       const status = await twilioService.getCompositionStatus(session.compositionSid);
-      return { compositionSid: session.compositionSid, status };
+      const videoUrl = status === 'completed' ? await this.getVideoUrl(session.compositionSid) : null;
+      return { recordingKind: 'twilio', status, videoUrl, compositionSid: session.compositionSid };
     }
 
-    // 2) Resolver el room de la historia (el más reciente si hubo reconexiones).
+    // 1-bis) ¿grabación en Chime (MP4 en S3)? → servir el link firmado, sin
+    // composición Twilio. El estado refleja la concatenación: processing → completed.
+    const roomNameChime = await roomNameForHistoria(historiaId);
+    if (roomNameChime) {
+      const rec = await chimeRecordingService.getRecordingUrl(roomNameChime);
+      if (rec) {
+        if (rec.status === 'ready' && rec.url) {
+          return { recordingKind: 'chime', status: 'completed', videoUrl: rec.url, compositionSid: null };
+        }
+        if (rec.status === 'error') {
+          return { recordingKind: 'chime', status: 'failed', videoUrl: null, compositionSid: null };
+        }
+        return { recordingKind: 'chime', status: 'processing', videoUrl: null, compositionSid: null };
+      }
+    }
+
+    // 2) Twilio legacy on-demand: rooms Twilio sin composición todavía.
     const rows = await postgresService.query(
       `SELECT room_name, room_sid FROM room_historia_map WHERE historia_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [historiaId]
@@ -407,7 +508,8 @@ class CalidadService {
     );
 
     const status = await twilioService.getCompositionStatus(compositionSid);
-    return { compositionSid, status };
+    const videoUrl = status === 'completed' ? await this.getVideoUrl(compositionSid) : null;
+    return { recordingKind: 'twilio', status, videoUrl, compositionSid };
   }
 
   /**
@@ -421,11 +523,25 @@ class CalidadService {
       throw Object.assign(new Error('Historia clínica no encontrada'), { statusCode: 404 });
     }
 
-    if (!session.compositionSid) {
-      throw Object.assign(
-        new Error('La historia clínica no tiene grabación asociada (composition_sid).'),
-        { statusCode: 409 }
+    // Resolver el origen de la grabación (Twilio composición vs Chime S3). Ya no
+    // exigimos composition_sid: una consulta Chime no tiene composición, pero sí
+    // grabación en S3 (o un transcript del navegador). Se puede evaluar mientras
+    // exista un transcript o una grabación de la que sacarlo.
+    const source = await resolverGrabacion(historiaId, session.compositionSid);
+    if (source.kind === 'none') {
+      const cached = await postgresService.query(
+        `SELECT "transcription_text" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
       );
+      const hasTranscript =
+        typeof cached?.[0]?.transcription_text === 'string' &&
+        cached[0].transcription_text.trim().length > 0;
+      if (!hasTranscript) {
+        throw Object.assign(
+          new Error('Esta consulta no tiene grabación ni transcripción para evaluar.'),
+          { statusCode: 409 }
+        );
+      }
     }
 
     // INSERT → retornar id
@@ -446,7 +562,7 @@ class CalidadService {
     // Fire-and-forget — el catch evita unhandledRejection
     procesarEvaluacion(
       evaluacionId,
-      session.compositionSid,
+      source,
       historiaId,
       session.numeroId,
       session.doctorName

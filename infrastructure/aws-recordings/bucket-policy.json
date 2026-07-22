@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AmazonChimeMediaPipelinesAccess",
+      "Effect": "Allow",
+      "Principal": { "Service": "mediapipelines.chime.amazonaws.com" },
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetObject",
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::bodytech-consulta-recordings-448962739796",
+        "arn:aws:s3:::bodytech-consulta-recordings-448962739796/*"
+      ],
+      "Condition": {
+        "StringEquals": { "aws:SourceAccount": "448962739796" }
+      }
+    }
+  ]
+}

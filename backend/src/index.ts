@@ -221,6 +221,7 @@ app.use(errorHandler);
 // Run database migrations, luego sembrar el admin inicial (idempotente).
 import postgresService from './services/postgres.service';
 import usuariosService from './services/usuarios.service';
+import { chimeRecordingService } from './services/video/chime-recording.service';
 postgresService
   .runMigrations()
   .then(() => usuariosService.seedBootstrapAdmin())
@@ -280,6 +281,21 @@ if (process.env.NODE_ENV !== 'test') {
     });
   }, TORNIQUETE_SWEEP_INTERVAL_MS);
   console.log(`⏱️  [Torniquete] Worker iniciado (cierre de jornadas inactivas cada ${TORNIQUETE_SWEEP_INTERVAL_MS / 1000}s)`);
+}
+
+// Worker de grabaciones Chime: cada 30 min cierra las capturas que quedaron en
+// 'capturing' (p. ej. el contenedor se reinició a mitad de una consulta y endRoom
+// nunca corrió). Sin esto, el Media Capture Pipeline sigue corriendo y FACTURANDO.
+// Solo se arma si la grabación está activa (RECORDINGS_ENABLED + bucket): mientras
+// esté apagada (fase 1/2), no hay worker.
+const CHIME_SWEEP_INTERVAL_MS = 30 * 60_000;
+if (process.env.NODE_ENV !== 'test' && chimeRecordingService.enabled) {
+  setInterval(() => {
+    chimeRecordingService.sweepOrphanCaptures().catch((e) => {
+      console.error('[chime-recording] sweep error:', e?.message ?? e);
+    });
+  }, CHIME_SWEEP_INTERVAL_MS);
+  console.log(`🎥 [ChimeRecording] Barrido de capturas huérfanas iniciado (cada ${CHIME_SWEEP_INTERVAL_MS / 60000}min)`);
 }
 
 // Start server

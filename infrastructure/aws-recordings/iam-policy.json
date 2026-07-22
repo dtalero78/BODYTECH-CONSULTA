@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ChimeMeetings",
+      "Effect": "Allow",
+      "Action": [
+        "chime:CreateMeeting",
+        "chime:GetMeeting",
+        "chime:DeleteMeeting",
+        "chime:CreateAttendee",
+        "chime:GetAttendee",
+        "chime:DeleteAttendee",
+        "chime:ListAttendees"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ChimeMediaPipelines",
+      "Effect": "Allow",
+      "Action": [
+        "chime:CreateMediaCapturePipeline",
+        "chime:DeleteMediaCapturePipeline",
+        "chime:GetMediaCapturePipeline",
+        "chime:CreateMediaConcatenationPipeline",
+        "chime:GetMediaPipeline",
+        "chime:ListMediaCapturePipelines",
+        "chime:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3RecordingsBucketOnly",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::bodytech-consulta-recordings-448962739796",
+        "arn:aws:s3:::bodytech-consulta-recordings-448962739796/*"
+      ]
+    }
+  ]
+}

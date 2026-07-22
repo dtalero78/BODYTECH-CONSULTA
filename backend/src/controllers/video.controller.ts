@@ -3,6 +3,7 @@ import axios from 'axios';
 import twilio from 'twilio';
 import { z, ZodError } from 'zod';
 import twilioService from '../services/twilio.service';
+import { videoProvider, RoomCompletedError } from '../services/video';
 import { sessionTracker } from '../services/session-tracker.service';
 import whatsappService from '../services/whatsapp.service';
 import medicalHistoryService from '../services/medical-history.service';
@@ -29,6 +30,10 @@ import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
 const generateTokenSchema = z.object({
   identity: z.string().min(1),
   roomName: z.string().min(1),
+  // `role` decide el reingreso a una sala finalizada (el médico reabre, el
+  // paciente queda bloqueado). Opcional para no romper a quien no lo envíe;
+  // hoy el frontend no lo manda y el proveedor Twilio lo ignora.
+  role: z.enum(['doctor', 'patient']).optional(),
 });
 
 const sessionStartSchema = z.object({
@@ -134,35 +139,27 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { identity, roomName } = parsed.data;
+    const { identity, roomName, role } = parsed.data;
 
     try {
-      // Pre-crear el room como 'group' con recordParticipantsOnConnect=true.
-      // group-small fue deprecado por Twilio (error 53126).
-      try {
-        await twilioService.createRoom(roomName);
-        console.log(`Room created (group with recording): ${roomName}`);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (error: any) {
-        // Si la sala ya existe, continuar (error code 53113)
-        if (error.code === 53113) {
-          console.log(`Room already exists: ${roomName}`);
-        } else {
-          // Otro error, pero no bloqueamos la generación del token
-          console.warn(`Could not create room, will use existing: ${error.message}`);
-        }
-      }
-
-      const tokenData = twilioService.generateVideoToken({
-        identity,
-        roomName,
-      });
+      // El proveedor (Twilio/Chime según VIDEO_PROVIDER) asegura la sala y
+      // devuelve las credenciales de ingreso. Con Twilio, `data` incluye
+      // `{ provider:'twilio', token, ... }` — el frontend sigue leyendo `.token`.
+      const joinInfo = await videoProvider.join({ identity, roomName, role });
 
       res.status(200).json({
         success: true,
-        data: tokenData,
+        data: joinInfo,
       });
     } catch (error) {
+      // Sala finalizada sin derecho a reingreso (paciente) → 403.
+      if (error instanceof RoomCompletedError) {
+        res.status(403).json({
+          error: 'Room has been completed',
+          message: 'Esta videollamada ya finalizó y no se puede volver a ingresar.',
+        });
+        return;
+      }
       next(error);
     }
   }
@@ -174,7 +171,7 @@ class VideoController {
    */
   async createRoom(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { roomName, type } = req.body;
+      const { roomName } = req.body;
 
       if (!roomName) {
         res.status(400).json({
@@ -183,7 +180,9 @@ class VideoController {
         return;
       }
 
-      const room = await twilioService.createRoom(roomName, type);
+      // El `type` (group/peer-to-peer) del body ya no se usa: BODYTECH siempre
+      // usa salas group. El proveedor decide el tipo internamente.
+      const room = await videoProvider.createRoom(roomName);
 
       res.status(201).json({
         success: true,
@@ -202,7 +201,11 @@ class VideoController {
     try {
       const { roomName } = req.params;
 
-      const room = await twilioService.getRoom(roomName);
+      const room = await videoProvider.getRoom(roomName);
+      if (!room) {
+        res.status(404).json({ success: false, error: 'Room not found' });
+        return;
+      }
 
       res.status(200).json({
         success: true,
@@ -221,11 +224,11 @@ class VideoController {
     try {
       const { roomName } = req.params;
 
-      // Solo cerramos la sala. La composición (y el guardado del composition_sid
-      // en la HistoriaClinica) los hace EXCLUSIVAMENTE el webhook room-completed,
-      // que Twilio dispara al pasar el room a 'completed'. Así hay un único creador
-      // y no se duplican composiciones.
-      const result = await twilioService.endRoom(roomName);
+      // Cierre EXPLÍCITO (botón de colgar) → sala finalizada. Con Twilio la
+      // composición (y el composition_sid) los crea el webhook room-completed que
+      // dispara el `status: completed`. Con Chime, endRoom cierra la grabación
+      // (concatena el MP4) y borra el meeting.
+      const result = await videoProvider.endRoom(roomName);
 
       res.status(200).json({
         success: true,
@@ -244,7 +247,7 @@ class VideoController {
     try {
       const { roomName } = req.params;
 
-      const participants = await twilioService.listParticipants(roomName);
+      const participants = await videoProvider.listParticipants(roomName);
 
       res.status(200).json({
         success: true,
@@ -263,7 +266,7 @@ class VideoController {
     try {
       const { roomName, participantSid } = req.params;
 
-      const result = await twilioService.disconnectParticipant(roomName, participantSid);
+      const result = await videoProvider.disconnectParticipant(roomName, participantSid);
 
       res.status(200).json({
         success: true,

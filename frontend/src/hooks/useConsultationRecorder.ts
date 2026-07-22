@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Room, LocalAudioTrack, RemoteAudioTrack, RemoteTrack } from 'twilio-video';
+import type { VideoEngine } from '../video/video-engine';
 import apiService from '../services/api.service';
 
 interface UseConsultationRecorderOptions {
@@ -44,7 +44,7 @@ interface UseConsultationRecorderReturn {
  * participantes publican sus tracks (`trackSubscribed`).
  */
 export function useConsultationRecorder(
-  room: Room | null,
+  room: VideoEngine | null,
   { historiaId, active, variant }: UseConsultationRecorderOptions
 ): UseConsultationRecorderReturn {
   const [isRecording, setIsRecording] = useState(false);
@@ -56,7 +56,11 @@ export function useConsultationRecorder(
   const audioCtxRef = useRef<AudioContext | null>(null);
   const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const connectedTrackIds = useRef<Set<string>>(new Set());
-  const trackSubscribedRef = useRef<((track: RemoteTrack) => void) | null>(null);
+  // El motor de video es provider-agnostic y no expone un evento "track nuevo".
+  // En vez de escuchar 'trackSubscribed' (API de Twilio), poleamos los tracks de
+  // audio (local + remoto) cada 2s y los agregamos de forma idempotente: así
+  // entra el audio del paciente cuando se conecta o reconecta, con Twilio o Chime.
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resumeHandlerRef = useRef<(() => void) | null>(null);
   const mimeRef = useRef<string>('audio/webm');
   const startedRef = useRef(false);
@@ -108,25 +112,15 @@ export function useConsultationRecorder(
       destRef.current = dest;
       connectedTrackIds.current = new Set();
 
-      // Mic local (desde el inicio).
-      room.localParticipant.audioTracks.forEach((pub) => {
-        addAudioTrack((pub.track as LocalAudioTrack | null)?.mediaStreamTrack);
-      });
-      // Audio remoto ya presente.
-      room.participants.forEach((p) => {
-        p.audioTracks.forEach((pub) => {
-          addAudioTrack((pub.track as RemoteAudioTrack | null)?.mediaStreamTrack);
-        });
-      });
-
-      // Audio remoto que llegue después (paciente que se conecta o reconecta).
-      const onTrackSubscribed = (track: RemoteTrack) => {
-        if (track.kind === 'audio') {
-          addAudioTrack((track as RemoteAudioTrack).mediaStreamTrack);
-        }
+      // Agrega el audio disponible ahora mismo (mic local + remotos presentes) y
+      // deja un poll que capta lo que llegue después (paciente que se conecta o
+      // reconecta). addAudioTrack es idempotente por id de track.
+      const addCurrentTracks = () => {
+        room.getLocalAudioTracks().forEach((t) => addAudioTrack(t));
+        room.getRemoteAudioTracks().forEach((t) => addAudioTrack(t));
       };
-      trackSubscribedRef.current = onTrackSubscribed;
-      room.on('trackSubscribed', onTrackSubscribed);
+      addCurrentTracks();
+      pollRef.current = setInterval(addCurrentTracks, 2000);
 
       const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
       const supported = candidates.find(
@@ -152,30 +146,24 @@ export function useConsultationRecorder(
     }
   }, [room, addAudioTrack]);
 
-  /** Libera AudioContext y listeners (no toca el recorder ni los chunks). */
+  /** Libera AudioContext, el poll y listeners (no toca el recorder ni los chunks). */
   const teardownAudio = useCallback(() => {
     if (resumeHandlerRef.current) {
       window.removeEventListener('pointerdown', resumeHandlerRef.current);
       window.removeEventListener('keydown', resumeHandlerRef.current);
       resumeHandlerRef.current = null;
     }
-    if (room && trackSubscribedRef.current) {
-      // Los typings de Room heredan un EventEmitter sin removeListener/off,
-      // pero existe en runtime (Twilio usa un EventEmitter real).
-      (
-        room as unknown as {
-          removeListener(event: string, listener: (...args: unknown[]) => void): void;
-        }
-      ).removeListener('trackSubscribed', trackSubscribedRef.current as (...args: unknown[]) => void);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
-    trackSubscribedRef.current = null;
     if (audioCtxRef.current) {
       audioCtxRef.current.close().catch(() => undefined);
       audioCtxRef.current = null;
     }
     destRef.current = null;
     connectedTrackIds.current.clear();
-  }, [room]);
+  }, []);
 
   const stopAndUpload = useCallback(async (): Promise<void> => {
     const recorder = recorderRef.current;

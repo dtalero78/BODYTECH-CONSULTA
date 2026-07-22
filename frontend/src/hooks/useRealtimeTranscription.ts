@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Room, LocalAudioTrack, RemoteAudioTrack, RemoteTrack } from 'twilio-video';
+import type { VideoEngine } from '../video/video-engine';
 import apiService from '../services/api.service';
 
 /**
@@ -29,7 +29,7 @@ function floatToPCM16Base64(float32: Float32Array): string {
   return btoa(binary);
 }
 
-export function useRealtimeTranscription(room: Room | null) {
+export function useRealtimeTranscription(room: VideoEngine | null) {
   const supported =
     typeof window !== 'undefined' &&
     'WebSocket' in window &&
@@ -46,7 +46,9 @@ export function useRealtimeTranscription(room: Room | null) {
   const muteRef = useRef<GainNode | null>(null);
   const sourcesRef = useRef<MediaStreamAudioSourceNode[]>([]);
   const connectedTrackIds = useRef<Set<string>>(new Set());
-  const trackSubRef = useRef<((t: RemoteTrack) => void) | null>(null);
+  // El motor es provider-agnostic: en vez de escuchar 'trackSubscribed' (Twilio),
+  // poleamos los tracks de audio y los agregamos idempotentemente (ver recorder).
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldRunRef = useRef(false);
 
   const getTranscript = useCallback(() => transcriptRef.current.trim(), []);
@@ -74,34 +76,22 @@ export function useRealtimeTranscription(room: Room | null) {
 
   const wireAudio = useCallback(() => {
     if (!room) return;
-    // Mic local (coach)
-    room.localParticipant.audioTracks.forEach((pub) =>
-      attachTrack((pub.track as LocalAudioTrack | null)?.mediaStreamTrack)
-    );
-    // Audio remoto ya presente (paciente)
-    room.participants.forEach((p) =>
-      p.audioTracks.forEach((pub) =>
-        attachTrack((pub.track as RemoteAudioTrack | null)?.mediaStreamTrack)
-      )
-    );
-    // Audio remoto que llegue luego
-    const onSub = (track: RemoteTrack) => {
-      if (track.kind === 'audio') attachTrack((track as RemoteAudioTrack).mediaStreamTrack);
+    // Agrega el audio disponible ahora (mic local + remotos) y deja un poll que
+    // capta lo que llegue después. attachTrack es idempotente por id.
+    const attachCurrent = () => {
+      room.getLocalAudioTracks().forEach((t) => attachTrack(t));
+      room.getRemoteAudioTracks().forEach((t) => attachTrack(t));
     };
-    trackSubRef.current = onSub;
-    room.on('trackSubscribed', onSub);
+    attachCurrent();
+    pollRef.current = setInterval(attachCurrent, 2000);
   }, [room, attachTrack]);
 
   const stop = useCallback(() => {
     shouldRunRef.current = false;
-    if (room && trackSubRef.current) {
-      (
-        room as unknown as {
-          removeListener(event: string, listener: (...args: unknown[]) => void): void;
-        }
-      ).removeListener('trackSubscribed', trackSubRef.current as (...args: unknown[]) => void);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
-    trackSubRef.current = null;
     connectedTrackIds.current.clear();
     try {
       sourcesRef.current.forEach((s) => s.disconnect());

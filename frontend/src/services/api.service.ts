@@ -34,6 +34,24 @@ export interface WaMensaje {
   createdAt: string;
 }
 
+/**
+ * Credenciales de ingreso a la videollamada devueltas por POST /api/video/token.
+ * El backend decide el provider (Twilio o Amazon Chime) vía VIDEO_PROVIDER; el
+ * campo `provider` le dice al frontend qué SDK/motor usar.
+ * - Twilio: { provider: 'twilio', identity, roomName, token }
+ * - Chime:  { provider: 'chime', identity, roomName, meeting, attendee }
+ *   (`meeting`/`attendee` son las respuestas crudas PascalCase del AWS SDK v3,
+ *   tal como las espera MeetingSessionConfiguration de amazon-chime-sdk-js.)
+ */
+export interface VideoJoinInfo {
+  provider: 'twilio' | 'chime';
+  identity: string;
+  roomName: string;
+  token?: string;
+  meeting?: unknown;
+  attendee?: unknown;
+}
+
 class ApiService {
   private client: AxiosInstance;
 
@@ -59,15 +77,34 @@ class ApiService {
   }
 
   /**
-   * Obtener token de acceso para Twilio Video
+   * Obtener las credenciales de ingreso a la videollamada (Twilio o Chime, según
+   * decida el backend). `role` viaja para que el backend permita al médico
+   * reingresar a una sala marcada como finalizada (recarga, caída de red).
    */
-  async getVideoToken(identity: string, roomName: string): Promise<string> {
+  async getVideoJoinInfo(
+    identity: string,
+    roomName: string,
+    role?: 'doctor' | 'patient'
+  ): Promise<VideoJoinInfo> {
     const response = await this.client.post('/api/video/token', {
       identity,
       roomName,
+      role,
     });
 
-    return response.data.data.token;
+    return response.data.data;
+  }
+
+  /**
+   * @deprecated Usa `getVideoJoinInfo`. Se mantiene por compatibilidad; lanza si
+   * el backend sirve el provider Chime (que no devuelve `token`).
+   */
+  async getVideoToken(identity: string, roomName: string): Promise<string> {
+    const joinInfo = await this.getVideoJoinInfo(identity, roomName);
+    if (!joinInfo.token) {
+      throw new Error('getVideoToken() no soporta el provider "chime"; usa getVideoJoinInfo().');
+    }
+    return joinInfo.token;
   }
 
   /**

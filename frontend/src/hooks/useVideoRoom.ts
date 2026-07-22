@@ -1,12 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import Video, {
-  Room,
-  LocalParticipant,
-  RemoteParticipant,
-  LocalVideoTrack,
-  LocalAudioTrack,
-} from 'twilio-video';
 import apiService from '../services/api.service';
+import type { VideoEngine, NormalizedParticipant, LocalVideoHandle } from '../video/video-engine';
 
 interface UseVideoRoomOptions {
   identity: string;
@@ -15,19 +9,19 @@ interface UseVideoRoomOptions {
   documento?: string;
   medicoCode?: string;
   /**
-   * Phase 3 — id de la HistoriaClinica activa.
-   * Cuando role==='doctor' y se pasa historiaId, useVideoRoom dispara un
-   * fire-and-forget POST a /api/video/events/session-start para vincular el
-   * roomName con la historia. Necesario para que el webhook de Twilio sepa
-   * a qué historia llenar con la transcripción.
+   * Id de la HistoriaClinica activa. Cuando role==='doctor' y se pasa historiaId,
+   * useVideoRoom dispara un fire-and-forget POST a /api/video/events/session-start
+   * para vincular el roomName con la historia (lo usa el webhook de transcripción).
    */
   historiaId?: string;
 }
 
 interface UseVideoRoomReturn {
-  room: Room | null;
-  localParticipant: LocalParticipant | null;
-  remoteParticipants: Map<string, RemoteParticipant>;
+  /** Motor de video provider-agnostic (Twilio o Chime). También lo consumen
+   *  directamente MedicalHistoryPanel / useConsultationRecorder para el audio. */
+  room: VideoEngine | null;
+  localParticipant: NormalizedParticipant | null;
+  remoteParticipants: Map<string, NormalizedParticipant>;
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
@@ -38,7 +32,8 @@ interface UseVideoRoomReturn {
   toggleVideo: () => void;
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
-  localVideoTrack: LocalVideoTrack | null;
+  /** Handle del video local para efectos de fondo (Twilio track o motor Chime). */
+  localVideoTrack: LocalVideoHandle | null;
 }
 
 // Helper function para reproducir sonido de notificación
@@ -110,9 +105,9 @@ export const useVideoRoom = ({
   medicoCode,
   historiaId,
 }: UseVideoRoomOptions): UseVideoRoomReturn => {
-  const [room, setRoom] = useState<Room | null>(null);
-  const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null);
-  const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(
+  const [room, setRoom] = useState<VideoEngine | null>(null);
+  const [localParticipant, setLocalParticipant] = useState<NormalizedParticipant | null>(null);
+  const [remoteParticipants, setRemoteParticipants] = useState<Map<string, NormalizedParticipant>>(
     new Map()
   );
   const [isConnecting, setIsConnecting] = useState(false);
@@ -120,7 +115,7 @@ export const useVideoRoom = ({
   const [error, setError] = useState<string | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
-  const [localVideoTrack, setLocalVideoTrack] = useState<LocalVideoTrack | null>(null);
+  const [localVideoTrack, setLocalVideoTrack] = useState<LocalVideoHandle | null>(null);
   const [cameraWarning, setCameraWarning] = useState<string | null>(null);
 
   const connectToRoom = useCallback(async () => {
@@ -128,41 +123,36 @@ export const useVideoRoom = ({
       setIsConnecting(true);
       setError(null);
 
-      // Pre-crear el room con recordParticipantsOnConnect=true y statusCallback.
-      // Si ya existe Twilio devuelve 53113 y el backend lo ignora silenciosamente.
-      try {
-        await apiService.createRoom(roomName, 'group');
-      } catch {
-        // ignorar — el room puede ya existir o el backend ya lo manejó
-      }
+      // El backend decide el provider (Twilio o Chime) vía VIDEO_PROVIDER y, de
+      // paso, asegura la sala (no hace falta un createRoom aparte).
+      const joinInfo = await apiService.getVideoJoinInfo(identity, roomName, role);
 
-      // Obtener token del backend
-      const token = await apiService.getVideoToken(identity, roomName);
+      // Cargar el motor correspondiente de forma dinámica: así el bundle solo
+      // descarga el SDK que se usa (Twilio o el pesado amazon-chime-sdk-js).
+      const engine: VideoEngine =
+        joinInfo.provider === 'chime'
+          ? new (await import('../video/chime-engine')).ChimeVideoEngine()
+          : new (await import('../video/twilio-engine')).TwilioVideoEngine();
 
-      // Conectar a la sala
-      const connectedRoom = await Video.connect(token, {
-        name: roomName,
-        audio: true,
-        video: { width: 640, height: 480 },
-        networkQuality: {
-          local: 1,
-          remote: 1,
-        },
-      });
+      const { localParticipant: lp, remoteParticipants: initialRemotes } = await engine.connect(
+        joinInfo
+      );
 
-      setRoom(connectedRoom);
-      setLocalParticipant(connectedRoom.localParticipant);
+      setRoom(engine);
+      setLocalParticipant(lp);
       setIsConnected(true);
 
-      // Guardar referencia al video track local para efectos de fondo
-      const videoTrack = Array.from(connectedRoom.localParticipant.videoTracks.values())[0]?.track as LocalVideoTrack;
-      if (videoTrack) {
-        setLocalVideoTrack(videoTrack);
-      } else {
-        // SDK conectó pero sin cámara: permiso denegado o cámara en uso por otra app/tab.
-        console.warn('[VideoRoom] Conectado sin track de video. Permiso denegado o cámara ocupada.');
-        setCameraWarning('Tu cámara no está disponible. Verifica que ninguna otra aplicación o pestaña la esté usando y que el navegador tenga permiso de cámara.');
+      const handle = engine.getLocalVideoHandle();
+      setLocalVideoTrack(handle);
+      if (!handle) {
+        // Motor conectado pero sin cámara: permiso denegado o cámara en uso.
+        console.warn('[VideoRoom] Conectado sin video local. Permiso denegado o cámara ocupada.');
+        setCameraWarning(
+          'Tu cámara no está disponible. Verifica que ninguna otra aplicación o pestaña la esté usando y que el navegador tenga permiso de cámara.'
+        );
       }
+
+      setRemoteParticipants(new Map(initialRemotes.map((p) => [p.sid, p])));
 
       // Registrar conexión para reportes (si se proporcionó rol)
       if (role) {
@@ -172,10 +162,8 @@ export const useVideoRoom = ({
           console.error('Error tracking participant connection:', err);
         }
 
-        // Phase 3 — vincular el room con la historia clínica activa cuando
-        // el doctor entra. El webhook de Twilio usará este mapping al
-        // terminar el recording. Fire-and-forget: si falla no rompemos la
-        // llamada.
+        // Vincular el room con la historia clínica activa cuando el doctor entra.
+        // Fire-and-forget: si falla no rompemos la llamada.
         if (role === 'doctor' && historiaId) {
           apiService
             .sessionStart(roomName, historiaId)
@@ -188,34 +176,28 @@ export const useVideoRoom = ({
         }
       }
 
-      // Agregar participantes remotos existentes
-      connectedRoom.participants.forEach((participant) => {
-        setRemoteParticipants((prev) => new Map(prev).set(participant.sid, participant));
-      });
-
       // Escuchar eventos de participantes
-      connectedRoom.on('participantConnected', (participant: RemoteParticipant) => {
+      engine.onParticipantConnected((participant) => {
         console.log(`Participant connected: ${participant.identity}`);
         setRemoteParticipants((prev) => new Map(prev).set(participant.sid, participant));
 
         // Anunciar con voz cuando un paciente se conecta (solo para doctores)
         if (role === 'doctor') {
-          const participantName = participant.identity;
-          speakText(`Afiliado ${participantName} conectado`);
+          speakText(`Afiliado ${participant.identity} conectado`);
         }
       });
 
-      connectedRoom.on('participantDisconnected', (participant: RemoteParticipant) => {
-        console.log(`Participant disconnected: ${participant.identity}`);
+      engine.onParticipantDisconnected((sid) => {
+        console.log(`Participant disconnected: ${sid}`);
         setRemoteParticipants((prev) => {
           const newMap = new Map(prev);
-          newMap.delete(participant.sid);
+          newMap.delete(sid);
           return newMap;
         });
       });
 
-      // Escuchar desconexión
-      connectedRoom.on('disconnected', () => {
+      // Escuchar desconexión de la sesión local
+      engine.onDisconnected(() => {
         console.log('Disconnected from room');
         setIsConnected(false);
         setRoom(null);
@@ -224,9 +206,17 @@ export const useVideoRoom = ({
       });
 
       console.log(`Successfully connected to room: ${roomName}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error connecting to room:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect to room');
+      // Sala finalizada sin derecho a reingreso → 403.
+      if (err?.response?.status === 403) {
+        setError(
+          err.response.data?.message ||
+            'Esta videollamada ya finalizó y no se puede volver a ingresar.'
+        );
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to connect to room');
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -252,59 +242,36 @@ export const useVideoRoom = ({
   }, [room, role, roomName, identity]);
 
   const toggleAudio = useCallback(() => {
-    if (localParticipant) {
-      localParticipant.audioTracks.forEach((publication) => {
-        const track = publication.track as LocalAudioTrack;
-        if (track.isEnabled) {
-          track.disable();
-          setIsAudioEnabled(false);
-        } else {
-          track.enable();
-          setIsAudioEnabled(true);
-        }
-      });
+    if (room) {
+      setIsAudioEnabled(room.toggleAudio());
     }
-  }, [localParticipant]);
+  }, [room]);
 
   const toggleVideo = useCallback(() => {
-    if (localParticipant) {
-      localParticipant.videoTracks.forEach((publication) => {
-        const track = publication.track as LocalVideoTrack;
-        if (track.isEnabled) {
-          track.disable();
-          setIsVideoEnabled(false);
-        } else {
-          track.enable();
-          setIsVideoEnabled(true);
-        }
-      });
+    if (room) {
+      setIsVideoEnabled(room.toggleVideo());
     }
-  }, [localParticipant]);
+  }, [room]);
 
   // Cleanup on unmount or window close
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (room && role) {
-        // Usar sendBeacon para asegurar que la solicitud se envíe incluso si la ventana se cierra
+        // sendBeacon garantiza el envío incluso si la ventana se cierra
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
         const url = `${apiBaseUrl}/api/video/events/participant-disconnected`;
         const data = JSON.stringify({ roomName, identity });
-
-        // sendBeacon es síncrono y garantiza que se envíe
         navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
-
         room.disconnect();
       }
     };
 
-    // Agregar listener para cierre de ventana
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
 
       if (room) {
-        // Registrar desconexión para reportes (si se proporcionó rol)
         if (role) {
           try {
             apiService.trackParticipantDisconnected(roomName, identity);

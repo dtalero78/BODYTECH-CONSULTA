@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Room } from 'twilio-video';
+import type { VideoEngine } from '../video/video-engine';
 import apiService from '../services/api.service';
 import { PatientHistoryModal } from './PatientHistoryModal';
 import { GuidedNutricion, GuidedNutricionFields } from './GuidedNutricion';
@@ -90,7 +90,7 @@ interface MedicalHistoryPanelProps {
   historiaId: string;
   onAppendToObservaciones?: (text: string) => void;
   /** Sala de Twilio — para la transcripción en vivo del audio del paciente. */
-  room?: Room | null;
+  room?: VideoEngine | null;
 }
 
 const LABS = [

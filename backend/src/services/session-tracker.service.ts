@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import { videoProvider } from './video';
 
 interface SessionParticipant {
   identity: string;
@@ -140,6 +141,16 @@ class SessionTrackerService {
 
     console.log(`[SessionTracker] Current participants in ${roomName}: ${session.participants.size}`);
 
+    // Grabación: arrancar la captura SOLO cuando ambos ya están conectados. Si el
+    // Media Capture Pipeline se une mientras los clientes establecen su video,
+    // satura la señalización y el video no renderiza. Fire-and-forget e
+    // idempotente. No-op con Twilio (graba al conectar); trabajo real con Chime.
+    if (session.participants.size >= 2) {
+      videoProvider
+        .startRecording(roomName)
+        .catch((err: any) => console.error(`[SessionTracker] Error arrancando grabación: ${err.message}`));
+    }
+
     // Emitir evento Socket.io cuando un paciente se conecta - SOLO a la Room del médico específico
     if (role === 'patient' && this.io && documento && session.medicoCode) {
       const roomToEmit = `doctor-${session.medicoCode}`;
@@ -167,6 +178,15 @@ class SessionTrackerService {
     }
 
     const participant = session.participants.get(identity);
+
+    // Idempotencia: colgar + beforeunload + cleanup del componente disparan esto
+    // 2-3 veces para el mismo participante. Sin el guard se re-emite el evento de
+    // socket y (con Chime) se cerraría la sala dos veces.
+    if (participant?.disconnectedAt) {
+      console.log(`[SessionTracker] Desconexión duplicada de ${identity} en ${roomName}, ignorada`);
+      return;
+    }
+
     if (participant) {
       participant.disconnectedAt = new Date();
 
@@ -180,6 +200,21 @@ class SessionTrackerService {
           identity,
           disconnectedAt: new Date().toISOString(),
         });
+      }
+
+      // Ciclo de vida de la sala: si el MÉDICO se desconecta y NO queda nadie más
+      // conectado, cerrar la sala SIN finalizarla (`completed: false`) → deja el
+      // link reutilizable y, con Chime, detiene la grabación. Si el paciente sigue
+      // dentro, NO se toca (borrarla lo expulsaría). No-op con Twilio.
+      if (participant.role === 'doctor') {
+        const quedaAlguien = Array.from(session.participants.values()).some(
+          (p) => p.identity !== identity && !p.disconnectedAt
+        );
+        if (!quedaAlguien) {
+          videoProvider
+            .endRoom(roomName, { completed: false })
+            .catch((err: any) => console.error(`[SessionTracker] Error cerrando sala ${roomName}: ${err.message}`));
+        }
       }
     }
 

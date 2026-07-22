@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Compass, X, Mic, Sparkles } from 'lucide-react';
-import type { Room } from 'twilio-video';
+import type { VideoEngine } from '../video/video-engine';
 import { useRealtimeTranscription } from '../hooks/useRealtimeTranscription';
 
 /**
@@ -154,7 +154,7 @@ interface GuidedNutricionProps {
   getValue: (key: string) => string;
   setValue: (key: string, value: string) => void;
   /** Sala de Twilio — fuente del audio (coach + paciente) para la transcripción. */
-  room?: Room | null;
+  room?: VideoEngine | null;
   /** Procesa el transcript completo con IA y guarda la historia. */
   onFinalize: (transcript: string) => Promise<void>;
   /** True mientras la IA procesa + guarda. */

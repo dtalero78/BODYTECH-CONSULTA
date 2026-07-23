@@ -286,6 +286,16 @@ export function MedicalPanelPage() {
         return updated;
       });
 
+      // Guardar la sala REAL donde está el paciente. El nombre de sala vivía
+      // solo en la memoria de este navegador (patientRooms), así que si el link
+      // lo mandó el sistema (Trepsi), o el coach recargó la página o cambió de
+      // equipo, al "Atender" se generaba una sala NUEVA y coach y paciente
+      // quedaban en videollamadas distintas ("lo veo conectado pero no en la
+      // reunión"). Como el socket ya nos dice dónde está el paciente, usamos ESA.
+      if (data.roomName && data.documento) {
+        setPatientRooms((prev) => ({ ...prev, [data.documento]: data.roomName }));
+      }
+
       // Solo anunciar por voz si el paciente está en la lista de ESTE coach.
       // Evita que suene el aviso por pacientes de otro código o que no están
       // en la lista visible (mismo código, otra página / pool de médicos).

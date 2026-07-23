@@ -56,6 +56,8 @@ export interface VideoJoinInfo {
    * equipos lentos puede tumbar la llamada. Ausente = tratar como habilitado.
    */
   coachBackground?: boolean;
+  /** Rol resuelto por el backend; el motor lo usa para etiquetar su telemetría. */
+  role?: 'doctor' | 'patient';
 }
 
 class ApiService {
@@ -197,7 +199,12 @@ class ApiService {
    */
   reportClientDiag(
     roomName: string,
-    evento: 'background-applied' | 'background-slow' | 'background-disabled',
+    evento:
+      | 'background-applied'
+      | 'background-slow'
+      | 'background-disabled'
+      | 'session-info'
+      | 'connection-poor',
     datos?: Record<string, string | number | boolean>,
     identity?: string,
     role?: 'doctor' | 'patient'

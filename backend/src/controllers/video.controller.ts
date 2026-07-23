@@ -60,7 +60,13 @@ const clientDiagSchema = z.object({
   roomName: z.string().min(1).max(120),
   identity: z.string().max(120).optional(),
   role: z.enum(['doctor', 'patient']).optional(),
-  evento: z.enum(['background-applied', 'background-slow', 'background-disabled']),
+  evento: z.enum([
+    'background-applied',
+    'background-slow',
+    'background-disabled',
+    'session-info',
+    'connection-poor',
+  ]),
   datos: z.record(z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
 });
 
@@ -166,7 +172,9 @@ class VideoController {
 
       res.status(200).json({
         success: true,
-        data: { ...joinInfo, coachBackground },
+        // `role` se devuelve para que el motor pueda etiquetar su telemetría
+        // (saber si un problema es del coach o del paciente cambia el diagnóstico).
+        data: { ...joinInfo, coachBackground, role },
       });
     } catch (error) {
       // Sala finalizada sin derecho a reingreso (paciente) → 403.

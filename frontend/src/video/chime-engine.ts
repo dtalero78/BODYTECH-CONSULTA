@@ -75,6 +75,36 @@ import {
 const VIDEO_CAPTURE = { width: 640, height: 360, fps: 15 } as const;
 
 /**
+ * Foto del equipo y la conexión de quien entra a la llamada.
+ *
+ * Cuando un coach reporta "se ve mal" o "se cayó", lo primero que hace falta es
+ * saber CON QUÉ está atendiendo. Esto viaja una vez al conectar y queda en el
+ * log, así el diagnóstico no depende de que la persona sepa describir su equipo.
+ *
+ * `navigator.connection` es la estimación del navegador (solo Chrome). La medida
+ * de verdad la da Chime durante la llamada — ver `connection-poor`.
+ */
+function infoDelEquipo(): Record<string, string | number> {
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    connection?: { effectiveType?: string; downlink?: number; rtt?: number };
+  };
+  const out: Record<string, string | number> = {
+    nucleos: nav.hardwareConcurrency ?? 0,
+    ramGb: nav.deviceMemory ?? 0,
+    pantalla: `${window.screen?.width ?? 0}x${window.screen?.height ?? 0}`,
+    navegador: (navigator.userAgent || '').slice(0, 120),
+  };
+  const con = nav.connection;
+  if (con) {
+    if (con.effectiveType) out.red = String(con.effectiveType);
+    if (typeof con.downlink === 'number') out.downlinkMbps = con.downlink;
+    if (typeof con.rtt === 'number') out.rttMs = con.rtt;
+  }
+  return out;
+}
+
+/**
  * El pipeline de GRABACIÓN (Media Capture Pipeline) se une al meeting como un
  * attendee "fantasma" con ExternalUserId tipo "aws:MediaPipeline-...". No es una
  * persona: no debe renderizarse como participante (si no, aparece un avatar
@@ -157,6 +187,11 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   // Para poder etiquetar la telemetría con la consulta a la que pertenece.
   private roomName = '';
   private identity = '';
+  private role: 'doctor' | 'patient' = 'doctor';
+  // Últimas métricas de red que reporta Chime (se refrescan ~1/s; NO se envían
+  // todas: solo acompañan a un evento de conexión pobre).
+  private ultimasMetricas: Record<string, number> = {};
+  private ultimoAvisoConexion = 0;
 
   // `connect()` awaits several steps (device selection, bindAudioElement) after
   // subscribing to presence/tile events. Chime can deliver those events on the
@@ -179,6 +214,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.pendingInitialRemotes = [];
     this.roomName = config.roomName;
     this.identity = config.identity;
+    this.role = config.role === 'patient' ? 'patient' : 'doctor';
 
     const logger = new ConsoleLogger('bsl-chime', LogLevel.WARN);
     const deviceController = new DefaultDeviceController(logger);
@@ -198,6 +234,20 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
       videoTileDidUpdate: (tileState: VideoTileState) => this.handleTileUpdate(tileState),
       videoTileWasRemoved: (tileId: number) => this.handleTileRemoved(tileId),
       audioVideoDidStop: () => this.disconnected.emit(),
+      // Métricas reales de la llamada. Llegan ~1/s: se guardan y solo se envían
+      // acompañando un aviso de conexión pobre (si no, inundarían el log).
+      metricsDidReceive: (report: { getObservableMetrics?: () => Record<string, number> }) => {
+        try {
+          this.ultimasMetricas = report.getObservableMetrics?.() || {};
+        } catch {
+          /* métricas, nunca crítico */
+        }
+      },
+      // Chime avisa cuando la conexión se degrada. Es la señal que distingue
+      // "el equipo no da" de "la red no da" — dos problemas con arreglos opuestos.
+      connectionDidBecomePoor: () => this.reportarConexionPobre('conexión pobre'),
+      connectionDidSuggestStopVideo: () =>
+        this.reportarConexionPobre('Chime sugiere apagar el video'),
     };
     session.audioVideo.addObserver(observer);
     this.observer = observer;
@@ -316,6 +366,9 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.joining = false;
     const remoteParticipants = this.pendingInitialRemotes;
     this.pendingInitialRemotes = [];
+
+    // Foto del equipo y la red con que entra esta persona. Una sola vez.
+    this.reportar('session-info', infoDelEquipo());
 
     return { localParticipant, remoteParticipants };
   }
@@ -461,13 +514,40 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
 
   /** Telemetría al servidor. Nunca lanza (import diferido para no acoplar el bundle). */
   private reportar(
-    evento: 'background-applied' | 'background-slow' | 'background-disabled',
+    evento:
+      | 'background-applied'
+      | 'background-slow'
+      | 'background-disabled'
+      | 'session-info'
+      | 'connection-poor',
     datos: Record<string, string | number | boolean>
   ): void {
     if (!this.roomName) return;
     void import('../services/api.service')
-      .then((m) => m.default.reportClientDiag(this.roomName, evento, datos, this.identity, 'doctor'))
+      .then((m) => m.default.reportClientDiag(this.roomName, evento, datos, this.identity, this.role))
       .catch(() => undefined);
+  }
+
+  /**
+   * Avisa que la conexión se degradó, con las métricas reales de la llamada.
+   * Throttle de 30s: Chime puede repetir la señal muchas veces seguidas.
+   */
+  private reportarConexionPobre(motivo: string): void {
+    const ahora = Date.now();
+    if (ahora - this.ultimoAvisoConexion < 30_000) return;
+    this.ultimoAvisoConexion = ahora;
+    const m = this.ultimasMetricas || {};
+    const datos: Record<string, string | number> = { motivo };
+    // Solo las que Chime realmente expone (ver ClientMetricReport).
+    if (typeof m.availableOutgoingBitrate === 'number')
+      datos.subidaKbps = Math.round(m.availableOutgoingBitrate / 1000);
+    if (typeof m.availableIncomingBitrate === 'number')
+      datos.bajadaKbps = Math.round(m.availableIncomingBitrate / 1000);
+    if (typeof m.currentRoundTripTime === 'number')
+      datos.rttMs = Math.round(m.currentRoundTripTime * 1000);
+    if (typeof m.nackCount === 'number') datos.nack = Math.round(m.nackCount);
+    console.warn(`[Chime] Conexión degradada: ${motivo}`);
+    this.reportar('connection-poor', datos);
   }
 
   /**

@@ -93,9 +93,21 @@ const VIDEO_CAPTURE = NIVELES_CAPTURA[0];
  * antes de tocar nada: rescatamos al que de verdad se está ahogando, sin
  * castigar al que solo tuvo un pico.
  */
-const FILTRO_CPU_MAX = 50;
-/** Avisos seguidos antes de bajar un escalón (~1/s por cada callback). */
-const AVISOS_PARA_BAJAR = 10;
+const FILTRO_CPU_MAX = 40;
+
+/**
+ * Dos acciones de gravedad muy distinta piden evidencia muy distinta:
+ *
+ *  - BAJAR un escalón (15→10 fps) es barato, casi imperceptible y CONSERVA el
+ *    fondo. Se hace pronto: si con eso alcanza, la coach ni se entera.
+ *  - QUITAR el fondo es lo que ella reclama. Solo con presión fuerte y sostenida,
+ *    y únicamente cuando ya no quedan escalones.
+ *
+ * Antes ambas usaban el mismo umbral, así que un pico de un segundo podía costar
+ * el fondo.
+ */
+const AVISOS_PARA_BAJAR = 3;
+const AVISOS_PARA_QUITAR = 15;
 
 /**
  * Foto del equipo y la conexión de quien entra a la llamada.
@@ -515,23 +527,30 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   private attachDegradationObserver(processor: {
     addObserver: (o: Record<string, unknown>) => void;
   }): void {
-    const MAX_AVISOS = AVISOS_PARA_BAJAR;
-    const revisar = (detalle: string, datos: Record<string, number>) => {
+    const revisar = (detalle: string, datos: Record<string, number>, peso = 1) => {
       if (this.ajustandoNivel || this.degrading) return;
-      this.avisosFiltro++;
-      console.warn(`[Chime] Filtro de fondo lento (${detalle}) — aviso ${this.avisosFiltro}/${MAX_AVISOS}`);
+      this.avisosFiltro += peso;
+      // Mientras queden escalones, la acción es barata → poca evidencia basta.
+      // En el último, la acción es quitar el fondo → se exige mucha más.
+      const puedeBajar = this.nivelCaptura < NIVELES_CAPTURA.length - 1;
+      const limite = puedeBajar ? AVISOS_PARA_BAJAR : AVISOS_PARA_QUITAR;
+      console.warn(`[Chime] Filtro de fondo lento (${detalle}) — ${this.avisosFiltro}/${limite}`);
       this.reportar('background-slow', { ...datos, aviso: this.avisosFiltro, nivel: this.nivelCaptura });
-      if (this.avisosFiltro >= MAX_AVISOS) void this.manejarFiltroLento();
+      if (this.avisosFiltro >= limite) void this.manejarFiltroLento();
     };
     processor.addObserver({
-      filterFrameDurationHigh: (e: { avgFilterDurationMillis?: number; framesDropped?: number }) =>
+      filterFrameDurationHigh: (e: { avgFilterDurationMillis?: number; framesDropped?: number }) => {
+        // Esta señal es la más honesta: mide justo lo que tumba la llamada —
+        // frames que no alcanzan a procesarse dentro de su presupuesto. Si
+        // DOBLA el presupuesto del nivel actual, cuenta por dos.
+        const ms = Math.round(e?.avgFilterDurationMillis ?? 0);
+        const presupuesto = 1000 / NIVELES_CAPTURA[this.nivelCaptura].fps;
         revisar(
-          `${Math.round(e?.avgFilterDurationMillis ?? 0)}ms/frame, ${e?.framesDropped ?? 0} frames perdidos`,
-          {
-            msPorFrame: Math.round(e?.avgFilterDurationMillis ?? 0),
-            framesPerdidos: e?.framesDropped ?? 0,
-          }
-        ),
+          `${ms}ms/frame (presupuesto ${Math.round(presupuesto)}ms), ${e?.framesDropped ?? 0} frames perdidos`,
+          { msPorFrame: ms, framesPerdidos: e?.framesDropped ?? 0 },
+          ms > presupuesto * 2 ? 2 : 1
+        );
+      },
       filterCPUUtilizationHigh: (e: { cpuUtilization?: number }) =>
         revisar(`CPU ${Math.round(e?.cpuUtilization ?? 0)}%`, {
           cpu: Math.round(e?.cpuUtilization ?? 0),

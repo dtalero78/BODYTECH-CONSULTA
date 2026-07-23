@@ -591,8 +591,14 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
       const nuevo = this.currentVideoTransformDevice.chooseNewInnerDevice(
         this.chosenVideoDeviceId as Device
       );
-      await this.session.audioVideo.stopVideoInput();
+      // NO usar stopVideoInput: apagaba el tile local y a veces no volvía a
+      // encender → cámara del coach en negro a mitad de consulta (caso reportado
+      // 23-jul, sala t7-ybgo4). startVideoInput por sí solo CAMBIA la fuente sin
+      // apagar el tile — es el mismo patrón de removeVideoEffect, que nunca falló.
       await this.session.audioVideo.startVideoInput(nuevo);
+      // Cinturón y tirantes: si por lo que sea el tile quedó detenido, esto lo
+      // republica; si ya estaba activo, es no-op (Chime lo ignora).
+      this.session.audioVideo.startLocalVideoTile();
       this.currentVideoTransformDevice = nuevo;
 
       this.reportar('background-downgraded', {

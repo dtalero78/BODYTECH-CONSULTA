@@ -139,6 +139,9 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   // se quita el efecto y se avisa (mejor perder el fondo que la llamada).
   private backgroundDegraded = createEmitter<[string]>();
   private degrading = false;
+  // Para poder etiquetar la telemetría con la consulta a la que pertenece.
+  private roomName = '';
+  private identity = '';
 
   // `connect()` awaits several steps (device selection, bindAudioElement) after
   // subscribing to presence/tile events. Chime can deliver those events on the
@@ -159,6 +162,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
 
     this.joining = true;
     this.pendingInitialRemotes = [];
+    this.roomName = config.roomName;
+    this.identity = config.identity;
 
     const logger = new ConsoleLogger('bsl-chime', LogLevel.WARN);
     const deviceController = new DefaultDeviceController(logger);
@@ -405,19 +410,65 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   }): void {
     const MAX_AVISOS = 3;
     let avisos = 0;
-    const revisar = (detalle: string) => {
+    const revisar = (detalle: string, datos: Record<string, number>) => {
       avisos++;
       console.warn(`[Chime] Filtro de fondo lento (${detalle}) — aviso ${avisos}/${MAX_AVISOS}`);
+      this.reportar('background-slow', { ...datos, aviso: avisos });
       if (avisos >= MAX_AVISOS) {
         void this.degradeBackground('el equipo no alcanza a procesar el fondo');
       }
     };
     processor.addObserver({
       filterFrameDurationHigh: (e: { avgFilterDurationMillis?: number; framesDropped?: number }) =>
-        revisar(`${Math.round(e?.avgFilterDurationMillis ?? 0)}ms/frame, ${e?.framesDropped ?? 0} frames perdidos`),
+        revisar(
+          `${Math.round(e?.avgFilterDurationMillis ?? 0)}ms/frame, ${e?.framesDropped ?? 0} frames perdidos`,
+          {
+            msPorFrame: Math.round(e?.avgFilterDurationMillis ?? 0),
+            framesPerdidos: e?.framesDropped ?? 0,
+          }
+        ),
       filterCPUUtilizationHigh: (e: { cpuUtilization?: number }) =>
-        revisar(`CPU ${Math.round(e?.cpuUtilization ?? 0)}%`),
+        revisar(`CPU ${Math.round(e?.cpuUtilization ?? 0)}%`, {
+          cpu: Math.round(e?.cpuUtilization ?? 0),
+        }),
     });
+  }
+
+  /** Telemetría al servidor. Nunca lanza (import diferido para no acoplar el bundle). */
+  private reportar(
+    evento: 'background-applied' | 'background-slow' | 'background-disabled',
+    datos: Record<string, string | number | boolean>
+  ): void {
+    if (!this.roomName) return;
+    void import('../services/api.service')
+      .then((m) => m.default.reportClientDiag(this.roomName, evento, datos, this.identity, 'doctor'))
+      .catch(() => undefined);
+  }
+
+  /**
+   * Reporta la resolución REAL a la que quedó corriendo el filtro, leída del
+   * track publicado — no del texto que imprime el SDK, que puede cambiar entre
+   * versiones. Es la respuesta a "¿el tope de 640x360 funcionó?". Se lee con un
+   * respiro para darle tiempo al tile a asentarse.
+   */
+  private reportarResolucionFondo(): void {
+    setTimeout(() => {
+      try {
+        const track = this.streamByAttendee.get(this.localAttendeeId)?.getVideoTracks()?.[0];
+        const s = track?.getSettings?.();
+        if (!s) return;
+        console.log(`[Chime] Fondo corriendo a ${s.width}x${s.height}@${Math.round(s.frameRate ?? 0)}`);
+        this.reportar('background-applied', {
+          ancho: s.width ?? 0,
+          alto: s.height ?? 0,
+          fps: Math.round(s.frameRate ?? 0),
+          nucleos: navigator.hardwareConcurrency ?? 0,
+          navegador: (navigator.userAgent || '').slice(0, 120),
+        });
+      } catch {
+        /* telemetría, nunca crítico */
+      }
+    }, 4000);
   }
 
   /** Quita el fondo y devuelve la cámara sin efecto. Idempotente. */
@@ -430,6 +481,11 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     } catch (err: any) {
       console.error(`[Chime] Error quitando el fondo degradado: ${err?.message}`);
     }
+    this.reportar('background-disabled', {
+      motivo: reason,
+      nucleos: navigator.hardwareConcurrency ?? 0,
+      navegador: (navigator.userAgent || '').slice(0, 120),
+    });
     this.backgroundDegraded.emit(reason);
   }
 
@@ -496,6 +552,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     const transformDevice = new DefaultVideoTransformDevice(logger, innerDevice, processors);
     await this.session.audioVideo.startVideoInput(transformDevice);
     this.currentVideoTransformDevice = transformDevice;
+    // ¿Quedó realmente en 640x360? Es la pregunta que costó la caída del 22-jul.
+    this.reportarResolucionFondo();
   }
 
   private async disposeVideoTransform(): Promise<void> {

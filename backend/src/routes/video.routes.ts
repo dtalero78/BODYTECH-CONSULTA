@@ -29,6 +29,12 @@ router.post('/events/participant-connected', videoController.trackParticipantCon
 router.post('/events/participant-disconnected', videoController.trackParticipantDisconnected);
 router.get('/events/connected-patients', videoController.getConnectedPatients);
 
+// Diagnóstico del cliente: el navegador reporta señales técnicas de la llamada
+// (resolución real del filtro de fondo, si va lento, si se auto-degradó). Sin
+// esto la única fuente sería la consola del navegador del coach — y los coaches
+// no son técnicos. Público, igual que el resto de /events (lo llama el paciente).
+router.post('/events/client-diag', videoController.trackClientDiag);
+
 // Transcripción EN VIVO — token efímero de OpenAI Realtime (protegido).
 router.post('/realtime-token', clinico, videoController.createRealtimeToken);
 // Extracción de campos desde el transcript acumulado en vivo (IA al finalizar).

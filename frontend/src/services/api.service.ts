@@ -186,6 +186,32 @@ class ApiService {
   }
 
   /**
+   * Diagnóstico técnico de la llamada → log del servidor.
+   *
+   * Los coaches no son técnicos y no van a abrir la consola del navegador, así
+   * que las señales que importan (resolución real del filtro de fondo, si va
+   * lento, si se auto-degradó) se mandan acá para poder buscarlas con grep.
+   *
+   * Fire-and-forget y a prueba de todo: nunca lanza. Un fallo de telemetría no
+   * puede tumbar una videollamada.
+   */
+  reportClientDiag(
+    roomName: string,
+    evento: 'background-applied' | 'background-slow' | 'background-disabled',
+    datos?: Record<string, string | number | boolean>,
+    identity?: string,
+    role?: 'doctor' | 'patient'
+  ): void {
+    try {
+      void this.client
+        .post('/api/video/events/client-diag', { roomName, identity, role, evento, datos })
+        .catch(() => undefined);
+    } catch {
+      /* jamás romper la llamada por telemetría */
+    }
+  }
+
+  /**
    * Registrar que un participante se desconectó (para reportes)
    */
   async trackParticipantDisconnected(roomName: string, identity: string): Promise<void> {

@@ -54,6 +54,16 @@ const trackParticipantDisconnectedSchema = z.object({
   identity: z.string().min(1),
 });
 
+// Diagnóstico del cliente. Lista blanca de eventos + payload acotado: esto es un
+// endpoint público, así que no se acepta texto libre ni objetos grandes.
+const clientDiagSchema = z.object({
+  roomName: z.string().min(1).max(120),
+  identity: z.string().max(120).optional(),
+  role: z.enum(['doctor', 'patient']).optional(),
+  evento: z.enum(['background-applied', 'background-slow', 'background-disabled']),
+  datos: z.record(z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
+});
+
 const sendWhatsAppSchema = z.object({
   phone: z.string().min(1),
   roomNameWithParams: z.string().min(1),
@@ -338,6 +348,39 @@ class VideoController {
     } catch (error) {
       next(error);
     }
+  }
+
+  /**
+   * Diagnóstico del cliente (navegador) → log del servidor.
+   * POST /api/video/events/client-diag
+   *
+   * Los coaches no son técnicos: no se les puede pedir que abran la consola. Esto
+   * trae las señales que importan al log de la app, donde se buscan con grep:
+   *   [ClientDiag] sala=... role=doctor background-applied 640x360@15 cores=8
+   *
+   * Nunca falla hacia el cliente: si algo sale mal, responde 204 igual — un
+   * problema de telemetría jamás debe romper una videollamada.
+   */
+  async trackClientDiag(req: Request, res: Response): Promise<void> {
+    try {
+      const parsed = clientDiagSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(204).end();
+        return;
+      }
+      const { roomName, identity, role, evento, datos } = parsed.data;
+      const detalle = datos
+        ? Object.entries(datos)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+        : '';
+      console.log(
+        `[ClientDiag] sala=${roomName} role=${role ?? '?'} identity=${identity ?? '?'} ${evento} ${detalle}`.trim()
+      );
+    } catch {
+      /* la telemetría nunca rompe nada */
+    }
+    res.status(204).end();
   }
 
   /**

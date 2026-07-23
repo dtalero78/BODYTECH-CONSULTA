@@ -80,6 +80,24 @@ const NIVELES_CAPTURA = [
 const VIDEO_CAPTURE = NIVELES_CAPTURA[0];
 
 /**
+ * Cuánta CPU puede usar el filtro antes de que Chime avise (0-100).
+ *
+ * El default del SDK es 30, el más conservador que existe, y con él le
+ * quitábamos el fondo a coaches cuya llamada probablemente habría aguantado:
+ * pasar de 30% es una ADVERTENCIA, no una llamada a punto de morir — la propia
+ * doc de AWS dice que el desarrollador *puede* usarla para desactivar el filtro.
+ *
+ * La evidencia: BSL corre el mismo SDK, el mismo procesador y a MÁS resolución
+ * (960x540) sin auto-degradación de ningún tipo, y sus llamadas no se caen. O
+ * sea, esos niveles de CPU se toleran. Subimos a 50 y exigimos presión SOSTENIDA
+ * antes de tocar nada: rescatamos al que de verdad se está ahogando, sin
+ * castigar al que solo tuvo un pico.
+ */
+const FILTRO_CPU_MAX = 50;
+/** Avisos seguidos antes de bajar un escalón (~1/s por cada callback). */
+const AVISOS_PARA_BAJAR = 10;
+
+/**
  * Foto del equipo y la conexión de quien entra a la llamada.
  *
  * Cuando un coach reporta "se ve mal" o "se cayó", lo primero que hace falta es
@@ -497,7 +515,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   private attachDegradationObserver(processor: {
     addObserver: (o: Record<string, unknown>) => void;
   }): void {
-    const MAX_AVISOS = 3;
+    const MAX_AVISOS = AVISOS_PARA_BAJAR;
     const revisar = (detalle: string, datos: Record<string, number>) => {
       if (this.ajustandoNivel || this.degrading) return;
       this.avisosFiltro++;
@@ -669,7 +687,9 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     if (!this.session) return;
     await this.disposeVideoTransform();
     this.reiniciarEscalera();
-    const processor = await BackgroundBlurVideoFrameProcessor.create();
+    const processor = await BackgroundBlurVideoFrameProcessor.create(undefined, {
+      filterCPUUtilization: FILTRO_CPU_MAX,
+    });
     if (!processor) throw new Error('El desenfoque de fondo no está soportado en este navegador.');
     this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
     await this.startVideoTransform([processor]);
@@ -681,7 +701,10 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.reiniciarEscalera();
     try {
       const imageBlob = await (await fetch(imageUrl)).blob();
-      const processor = await BackgroundReplacementVideoFrameProcessor.create(undefined, { imageBlob });
+      const processor = await BackgroundReplacementVideoFrameProcessor.create(undefined, {
+        imageBlob,
+        filterCPUUtilization: FILTRO_CPU_MAX,
+      });
       if (!processor) throw new Error('El fondo virtual no está soportado en este navegador.');
       this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
       await this.startVideoTransform([processor]);

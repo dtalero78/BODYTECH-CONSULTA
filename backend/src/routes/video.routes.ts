@@ -35,6 +35,14 @@ router.get('/events/connected-patients', videoController.getConnectedPatients);
 // no son técnicos. Público, igual que el resto de /events (lo llama el paciente).
 router.post('/events/client-diag', videoController.trackClientDiag);
 
+// Resumen del diagnóstico (qué equipo usa cada quien, a quién se le degrada el
+// fondo, de quién es el problema de red). Protegido: es información operativa.
+router.get(
+  '/events/client-diag/resumen',
+  requireRole('coordinador', 'admin'),
+  videoController.getClientDiagResumen
+);
+
 // Transcripción EN VIVO — token efímero de OpenAI Realtime (protegido).
 router.post('/realtime-token', clinico, videoController.createRealtimeToken);
 // Extracción de campos desde el transcript acumulado en vivo (IA al finalizar).

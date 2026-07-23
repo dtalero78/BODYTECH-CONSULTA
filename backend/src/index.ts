@@ -283,6 +283,17 @@ if (process.env.NODE_ENV !== 'test') {
   console.log(`⏱️  [Torniquete] Worker iniciado (cierre de jornadas inactivas cada ${TORNIQUETE_SWEEP_INTERVAL_MS / 1000}s)`);
 }
 
+// Retención del diagnóstico de video: se conservan 30 días. Es telemetría
+// operativa, no historia clínica — pasado ese punto solo ocuparía espacio.
+const DIAG_RETENCION_INTERVAL_MS = 6 * 60 * 60_000; // cada 6 h
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    postgresService
+      .query(`DELETE FROM client_diag WHERE created_at < NOW() - INTERVAL '30 days'`)
+      .catch((e) => console.error('[client-diag] limpieza falló:', e?.message ?? e));
+  }, DIAG_RETENCION_INTERVAL_MS);
+}
+
 // Worker de grabaciones Chime: cada 30 min cierra las capturas que quedaron en
 // 'capturing' (p. ej. el contenedor se reinició a mitad de una consulta y endRoom
 // nunca corrió). Sin esto, el Media Capture Pipeline sigue corriendo y FACTURANDO.

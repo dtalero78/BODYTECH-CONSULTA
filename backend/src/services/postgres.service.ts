@@ -426,6 +426,29 @@ class PostgresService {
       // uniqueName (Twilio devuelve 404), solo por SID.
       await this.query(`ALTER TABLE room_historia_map ADD COLUMN IF NOT EXISTS room_sid TEXT`);
 
+      // ===== Diagnóstico técnico del cliente (video) =====
+      // El navegador reporta cómo le fue a la llamada (equipo, red, si el filtro
+      // de fondo se degradó). Antes esto vivía SOLO en el log de la app, y el log
+      // se borra en CADA despliegue —incluso uno ajeno—, así que la evidencia se
+      // evaporaba justo cuando servía para saber si un arreglo funcionó.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS client_diag (
+          id SERIAL PRIMARY KEY,
+          room_name TEXT NOT NULL,
+          identity TEXT,
+          role TEXT,
+          evento TEXT NOT NULL,
+          datos JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_client_diag_created ON client_diag (created_at DESC)`
+      );
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_client_diag_identity ON client_diag (identity, created_at DESC)`
+      );
+
       // ===== Módulo de evaluación de calidad de consultas =====
       await this.query(`
         CREATE TABLE IF NOT EXISTS consulta_evaluaciones (

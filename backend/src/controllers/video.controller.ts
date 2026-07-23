@@ -386,10 +386,110 @@ class VideoController {
       console.log(
         `[ClientDiag] sala=${roomName} role=${role ?? '?'} identity=${identity ?? '?'} ${evento} ${detalle}`.trim()
       );
+
+      // Persistir además del log: el log se borra en CADA despliegue (incluso uno
+      // ajeno al video), y esto es justo la evidencia que sirve para saber si un
+      // arreglo funcionó. Fire-and-forget: si la BD falla, la telemetría se pierde
+      // pero la llamada NO se entera.
+      postgresService
+        .query(
+          `INSERT INTO client_diag (room_name, identity, role, evento, datos)
+           VALUES ($1, $2, $3, $4, $5::jsonb)`,
+          [roomName, identity ?? null, role ?? null, evento, JSON.stringify(datos ?? {})]
+        )
+        .catch((e: any) => console.warn(`[ClientDiag] no se pudo guardar: ${e?.message}`));
     } catch {
       /* la telemetría nunca rompe nada */
     }
     res.status(204).end();
+  }
+
+  /**
+   * Resumen del diagnóstico técnico de las llamadas.
+   * GET /api/video/events/client-diag/resumen?dias=N   (protegido)
+   *
+   * Responde las preguntas que hoy solo se podían contestar leyendo logs crudos
+   * —y solo si nadie había desplegado desde entonces—: qué equipo usa cada coach,
+   * a quién se le degrada el fondo, y de quién es el problema de red.
+   */
+  async getClientDiagResumen(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const dias = Math.min(Math.max(parseInt(String(req.query.dias ?? '1'), 10) || 1, 1), 30);
+      const rows = (await postgresService.query(
+        `SELECT room_name, identity, role, evento, datos, created_at
+           FROM client_diag
+          WHERE created_at > NOW() - ($1 || ' days')::interval
+          ORDER BY created_at ASC`,
+        [String(dias)]
+      )) as Array<{
+        room_name: string;
+        identity: string | null;
+        role: string | null;
+        evento: string;
+        datos: Record<string, unknown> | null;
+      }>;
+
+      const porPersona = new Map<string, any>();
+      for (const r of rows || []) {
+        const clave = `${r.role ?? '?'}|${r.identity ?? '?'}`;
+        if (!porPersona.has(clave)) {
+          porPersona.set(clave, {
+            identity: r.identity,
+            role: r.role,
+            equipo: null as string | null,
+            nucleos: null as number | null,
+            consultas: new Set<string>(),
+            eventos: {} as Record<string, number>,
+            nivelMax: 0,
+            perdioFondo: 0,
+            redPobre: 0,
+          });
+        }
+        const p = porPersona.get(clave);
+        p.consultas.add(r.room_name);
+        p.eventos[r.evento] = (p.eventos[r.evento] ?? 0) + 1;
+        const d = r.datos ?? {};
+        if (r.evento === 'session-info') {
+          const ua = String(d.navegador ?? '');
+          p.equipo = ua.includes('Macintosh')
+            ? 'Mac'
+            : ua.includes('Windows')
+            ? 'Windows'
+            : ua.includes('Android')
+            ? 'Android'
+            : ua.includes('iPhone')
+            ? 'iPhone'
+            : 'otro';
+          if (typeof d.nucleos === 'number') p.nucleos = d.nucleos;
+        }
+        if (typeof d.nivel === 'number' && d.nivel > p.nivelMax) p.nivelMax = d.nivel;
+        if (r.evento === 'background-disabled') p.perdioFondo++;
+        if (r.evento === 'connection-poor') p.redPobre++;
+      }
+
+      const personas = Array.from(porPersona.values())
+        .map((p) => ({
+          identity: p.identity,
+          role: p.role,
+          equipo: p.equipo,
+          nucleos: p.nucleos,
+          consultas: p.consultas.size,
+          nivelMax: p.nivelMax,
+          perdioFondo: p.perdioFondo,
+          redPobre: p.redPobre,
+          eventos: p.eventos,
+        }))
+        .sort((a, b) => b.perdioFondo - a.perdioFondo || b.nivelMax - a.nivelMax);
+
+      res.status(200).json({
+        success: true,
+        dias,
+        totalEventos: rows?.length ?? 0,
+        personas,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

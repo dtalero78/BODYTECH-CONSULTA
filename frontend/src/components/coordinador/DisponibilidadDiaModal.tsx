@@ -7,14 +7,15 @@
 // si no hay, el patrón semanal pre-cargado). El coordinador puede:
 //   - filtrar por SEDE (dropdown) y por rol (médico/coach),
 //   - ajustar las franjas horarias del día (individual),
-//   - marcar al profesional como "No disponible este día" (bloqueo),
+//   - BLOQUEAR una franja puntual (se resta de las franjas disponibles),
+//   - marcar al profesional como "No disponible este día" (bloqueo total),
 //   - restablecer al patrón semanal (borra el override),
 //   - SELECCIONAR varios y aplicar en BULK un horario / bloqueo / restablecer.
 // Guarda sólo los profesionales modificados.
 // ============================================================================
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Plus, Trash2, Search, RotateCcw, CalendarOff, ChevronDown, Clock } from 'lucide-react';
+import { X, Plus, Trash2, Search, RotateCcw, CalendarOff, ChevronDown, Clock, Ban } from 'lucide-react';
 import calendarioService, {
   DiaResumenProfesional,
   Modalidad,
@@ -32,6 +33,7 @@ interface Props {
 }
 
 const NEW_RANGE: Rango = { horaInicio: '08:00', horaFin: '17:00' };
+const NEW_BLOCK: Rango = { horaInicio: '12:00', horaFin: '13:00' };
 type RolFiltro = 'todos' | 'medico' | 'coach';
 
 // Estado editable por profesional.
@@ -54,6 +56,30 @@ function rangosEqual(a: Rango[], b: Rango[]): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Resta una franja de bloqueo a las franjas disponibles.
+ * El modelo de disponibilidad es positivo (sólo existe lo que está en un rango),
+ * así que "bloquear" = recortar / partir los rangos que se solapan con el bloqueo.
+ *   09:00-17:00  −  12:00-13:00  →  09:00-12:00 + 13:00-17:00
+ * Las horas son "HH:MM", comparables como string.
+ */
+function restarFranja(rangos: Rango[], bloqueo: Rango): Rango[] {
+  const bIni = hhmm(bloqueo.horaInicio);
+  const bFin = hhmm(bloqueo.horaFin);
+  const out: Rango[] = [];
+  for (const r of rangos) {
+    const ini = hhmm(r.horaInicio);
+    const fin = hhmm(r.horaFin);
+    if (bFin <= ini || bIni >= fin) {
+      out.push({ horaInicio: ini, horaFin: fin }); // sin solape
+      continue;
+    }
+    if (bIni > ini) out.push({ horaInicio: ini, horaFin: bIni }); // trozo previo
+    if (bFin < fin) out.push({ horaInicio: bFin, horaFin: fin }); // trozo posterior
+  }
+  return out.sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 }
 
 // ¿El estado editado difiere de lo que hay en servidor?
@@ -79,6 +105,9 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkRangos, setBulkRangos] = useState<Rango[]>([{ ...NEW_RANGE }]);
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Formulario inline de "bloquear franja" por profesional (presencia = abierto).
+  const [blockForm, setBlockForm] = useState<Record<number, Rango>>({});
 
   // Cargar lista de sedes una vez.
   useEffect(() => {
@@ -182,6 +211,54 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
     });
   }
 
+  // --- bloquear una franja puntual (resta sobre las franjas del profesional) ---
+  function toggleBlockForm(id: number) {
+    setBlockForm((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = { ...NEW_BLOCK };
+      return next;
+    });
+  }
+
+  function updateBlockForm(id: number, key: keyof Rango, value: string) {
+    setBlockForm((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
+  }
+
+  function bloquearFranja(id: number) {
+    const bloqueo = blockForm[id];
+    const cur = edits[id];
+    if (!bloqueo || !cur) return;
+    if (hhmm(bloqueo.horaInicio) >= hhmm(bloqueo.horaFin)) {
+      showToast({ type: 'error', message: 'La hora de inicio del bloqueo debe ser anterior a la de fin.' });
+      return;
+    }
+    if (cur.rangos.length === 0) {
+      showToast({ type: 'error', message: `${cur.base.nombre} no tiene franjas disponibles este día.` });
+      return;
+    }
+    const rangos = restarFranja(cur.rangos, bloqueo);
+    if (rangosEqual(rangos, cur.rangos)) {
+      showToast({ type: 'error', message: 'Ese bloqueo no se cruza con ninguna franja disponible.' });
+      return;
+    }
+    // Si el bloqueo se comió toda la disponibilidad, es un día no disponible.
+    // (Guardar con 0 rangos y sin bloqueo borraría el override y volvería al patrón semanal.)
+    const sinDisponibilidad = rangos.length === 0;
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], bloqueado: sinDisponibilidad, rangos } }));
+    setBlockForm((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    showToast({
+      type: 'success',
+      message: sinDisponibilidad
+        ? `${cur.base.nombre} queda sin disponibilidad este día. Revisa y guarda.`
+        : `Franja ${hhmm(bloqueo.horaInicio)}–${hhmm(bloqueo.horaFin)} bloqueada. Revisa y guarda.`,
+    });
+  }
+
   function removeRango(id: number, idx: number) {
     setEdits((prev) => {
       const cur = prev[id];
@@ -239,6 +316,41 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
     showToast({ type: 'success', message: `Horario aplicado a ${selected.size} profesional(es). Revisa y guarda.` });
   }
 
+  // Resta las franjas del editor masivo a cada profesional seleccionado.
+  function bloquearFranjaBulk() {
+    const err = validarRangos(bulkRangos);
+    if (err) {
+      showToast({ type: 'error', message: err });
+      return;
+    }
+    let afectados = 0;
+    let sinDisponibilidad = 0;
+    setEdits((prev) => {
+      const next = { ...prev };
+      for (const id of selected) {
+        const cur = next[id];
+        if (!cur || cur.bloqueado || cur.rangos.length === 0) continue;
+        let rangos = cur.rangos;
+        for (const b of bulkRangos) rangos = restarFranja(rangos, b);
+        if (rangosEqual(rangos, cur.rangos)) continue;
+        afectados++;
+        if (rangos.length === 0) sinDisponibilidad++;
+        next[id] = { ...cur, bloqueado: rangos.length === 0, rangos };
+      }
+      return next;
+    });
+    showToast(
+      afectados === 0
+        ? { type: 'error', message: 'El bloqueo no se cruza con las franjas de los seleccionados.' }
+        : {
+            type: 'success',
+            message: `Franja bloqueada en ${afectados} profesional(es)${
+              sinDisponibilidad > 0 ? ` · ${sinDisponibilidad} queda(n) sin disponibilidad` : ''
+            }. Revisa y guarda.`,
+          }
+    );
+  }
+
   function aplicarBloqueoBulk() {
     setEdits((prev) => {
       const next = { ...prev };
@@ -284,6 +396,14 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
   }
 
   // --- validación + guardado ---
+  // Quedarse sin franjas equivale a "no disponible": si se enviara
+  // bloqueado=false con 0 rangos, el backend borra el override y el día
+  // volvería al patrón semanal (justo lo contrario de lo que se pidió).
+  function payloadDe(p: ProfEdit): { bloqueado: boolean; rangos: Rango[] } {
+    const bloqueado = p.bloqueado || p.rangos.length === 0;
+    return { bloqueado, rangos: bloqueado ? [] : p.rangos };
+  }
+
   function validate(p: ProfEdit): string | null {
     if (p.bloqueado) return null;
     for (const r of p.rangos) {
@@ -306,8 +426,7 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
       const saved = await profesionalesService.replaceDisponibilidadFecha(id, {
         fecha,
         modalidad,
-        bloqueado: p.bloqueado,
-        rangos: p.bloqueado ? [] : p.rangos,
+        ...payloadDe(p),
         sede,
       });
       setEdits((prev) => ({
@@ -362,8 +481,7 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
         await profesionalesService.replaceDisponibilidadFecha(p.base.profesionalId, {
           fecha,
           modalidad,
-          bloqueado: p.bloqueado,
-          rangos: p.bloqueado ? [] : p.rangos,
+          ...payloadDe(p),
           sede,
         });
         okCount++;
@@ -544,11 +662,19 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
                 Aplicar horario a seleccionados
               </button>
               <button
+                onClick={bloquearFranjaBulk}
+                className="text-xs font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-md inline-flex items-center gap-1"
+                title="Resta estas franjas de la disponibilidad de los seleccionados"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                Bloquear estas franjas
+              </button>
+              <button
                 onClick={aplicarBloqueoBulk}
                 className="text-xs font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-md inline-flex items-center gap-1"
               >
                 <CalendarOff className="w-3.5 h-3.5" />
-                No disponible
+                No disponible todo el día
               </button>
               <button
                 onClick={restablecerBulk}
@@ -560,7 +686,9 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
               </button>
             </div>
             <p className="text-[10.5px] text-zinc-500">
-              "Aplicar horario" y "No disponible" se guardan al presionar <b>Guardar cambios</b>. "Restablecer" se aplica de inmediato.
+              "Aplicar horario" define las franjas; "Bloquear estas franjas" las <b>resta</b> de la disponibilidad
+              actual. Ambas y "No disponible" se guardan al presionar <b>Guardar cambios</b>; "Restablecer" se
+              aplica de inmediato.
             </p>
           </div>
         )}
@@ -627,7 +755,7 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
                           className="w-3.5 h-3.5 rounded text-red-600 focus:ring-red-500"
                         />
                         <CalendarOff className="w-3.5 h-3.5" />
-                        No disponible
+                        No disponible todo el día
                       </label>
                     </div>
                   </div>
@@ -661,14 +789,61 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
                           </button>
                         </div>
                       ))}
+                      {/* Bloquear una franja puntual: se resta de los rangos de arriba */}
+                      {blockForm[p.base.profesionalId] && (
+                        <div className="flex items-center gap-2 flex-wrap p-2 rounded-md border border-amber-300 bg-amber-50">
+                          <span className="text-[11px] font-medium text-amber-800 inline-flex items-center gap-1">
+                            <Ban className="w-3.5 h-3.5" />
+                            Bloquear de
+                          </span>
+                          <input
+                            type="time"
+                            value={blockForm[p.base.profesionalId].horaInicio}
+                            onChange={(e) => updateBlockForm(p.base.profesionalId, 'horaInicio', e.target.value)}
+                            className="px-2 py-1.5 border border-amber-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                          <span className="text-xs text-zinc-500">a</span>
+                          <input
+                            type="time"
+                            value={blockForm[p.base.profesionalId].horaFin}
+                            onChange={(e) => updateBlockForm(p.base.profesionalId, 'horaFin', e.target.value)}
+                            className="px-2 py-1.5 border border-amber-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                          <button
+                            onClick={() => bloquearFranja(p.base.profesionalId)}
+                            className="text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-md"
+                          >
+                            Bloquear
+                          </button>
+                          <button
+                            onClick={() => toggleBlockForm(p.base.profesionalId)}
+                            className="text-xs text-zinc-500 hover:text-zinc-700 px-2 py-1.5"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between">
-                        <button
-                          onClick={() => addRango(p.base.profesionalId)}
-                          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-1"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Agregar rango
-                        </button>
+                        <div className="flex items-center gap-3 mt-1">
+                          <button
+                            onClick={() => addRango(p.base.profesionalId)}
+                            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Agregar rango
+                          </button>
+                          {!blockForm[p.base.profesionalId] && p.rangos.length > 0 && (
+                            <button
+                              onClick={() => toggleBlockForm(p.base.profesionalId)}
+                              className="text-xs text-amber-700 hover:text-amber-800 flex items-center gap-1"
+                              title="Bloquear una franja: se recorta de las franjas disponibles"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              Bloquear franja
+                            </button>
+                          )}
+                        </div>
                         {dirty && (
                           <button
                             onClick={() => guardarUno(p.base.profesionalId)}

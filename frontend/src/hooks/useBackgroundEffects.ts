@@ -11,6 +11,12 @@ interface UseBackgroundEffectsReturn {
   applyBlur: (handle: LocalVideoHandle) => Promise<void>;
   applyVirtualBackground: (handle: LocalVideoHandle, imageUrl: string) => Promise<void>;
   removeEffect: (handle: LocalVideoHandle) => Promise<void>;
+  /**
+   * Sincroniza el estado cuando el efecto lo quitó el MOTOR por su cuenta
+   * (auto-degradación por rendimiento). No toca el dispositivo: el motor ya
+   * devolvió la cámara sin efecto; esto sólo pone la UI de acuerdo.
+   */
+  markEffectRemoved: () => void;
 }
 
 /**
@@ -141,11 +147,18 @@ export const useBackgroundEffects = (): UseBackgroundEffectsReturn => {
     }
   }, [processor]);
 
+  const markEffectRemoved = useCallback(() => {
+    setProcessor(null);
+    setCurrentEffect('none');
+    setIsProcessing(false);
+  }, []);
+
   return {
     currentEffect,
     isProcessing,
     applyBlur,
     applyVirtualBackground,
     removeEffect,
+    markEffectRemoved,
   };
 };

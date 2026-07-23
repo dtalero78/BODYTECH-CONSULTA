@@ -34,6 +34,11 @@ interface UseVideoRoomReturn {
   isVideoEnabled: boolean;
   /** Handle del video local para efectos de fondo (Twilio track o motor Chime). */
   localVideoTrack: LocalVideoHandle | null;
+  /**
+   * Interruptor del fondo automático del coach, decidido por el backend
+   * (COACH_BACKGROUND). Default true si el backend no lo manda.
+   */
+  coachBackgroundEnabled: boolean;
 }
 
 // Helper function para reproducir sonido de notificación
@@ -117,6 +122,8 @@ export const useVideoRoom = ({
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [localVideoTrack, setLocalVideoTrack] = useState<LocalVideoHandle | null>(null);
   const [cameraWarning, setCameraWarning] = useState<string | null>(null);
+  // Lo decide el backend (COACH_BACKGROUND). Default true si no viene.
+  const [coachBackgroundEnabled, setCoachBackgroundEnabled] = useState(true);
 
   const connectToRoom = useCallback(async () => {
     try {
@@ -137,6 +144,8 @@ export const useVideoRoom = ({
       const { localParticipant: lp, remoteParticipants: initialRemotes } = await engine.connect(
         joinInfo
       );
+
+      setCoachBackgroundEnabled(joinInfo.coachBackground !== false);
 
       setRoom(engine);
       setLocalParticipant(lp);
@@ -299,5 +308,6 @@ export const useVideoRoom = ({
     isAudioEnabled,
     isVideoEnabled,
     localVideoTrack,
+    coachBackgroundEnabled,
   };
 };

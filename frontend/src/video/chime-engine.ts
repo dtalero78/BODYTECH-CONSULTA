@@ -135,6 +135,10 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   private participantConnected = createEmitter<[NormalizedParticipant]>();
   private participantDisconnected = createEmitter<[string]>();
   private disconnected = createEmitter<[]>();
+  // Auto-degradación del fondo: si el equipo no alcanza a procesar el filtro,
+  // se quita el efecto y se avisa (mejor perder el fondo que la llamada).
+  private backgroundDegraded = createEmitter<[string]>();
+  private degrading = false;
 
   // `connect()` awaits several steps (device selection, bindAudioElement) after
   // subscribing to presence/tile events. Chime can deliver those events on the
@@ -384,21 +388,70 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
 
   // ---- ChimeVideoEngineLike: background effects (see useBackgroundEffects.ts) ----
 
+  /** Avisa cuando el motor tuvo que quitar el fondo por rendimiento del equipo. */
+  onBackgroundDegraded(cb: (reason: string) => void): () => void {
+    return this.backgroundDegraded.subscribe(cb);
+  }
+
+  /**
+   * Escucha la telemetría del filtro. La propia documentación de Chime propone
+   * usar `filterFrameDurationHigh` como disparador para desactivarlo: si el
+   * equipo no alcanza, el hilo principal se bloquea, Chime cree que se cayó la
+   * red y tumba la llamada. Se toleran algunos avisos (un pico aislado es
+   * normal) y al tercero se quita el efecto.
+   */
+  private attachDegradationObserver(processor: {
+    addObserver: (o: Record<string, unknown>) => void;
+  }): void {
+    const MAX_AVISOS = 3;
+    let avisos = 0;
+    const revisar = (detalle: string) => {
+      avisos++;
+      console.warn(`[Chime] Filtro de fondo lento (${detalle}) — aviso ${avisos}/${MAX_AVISOS}`);
+      if (avisos >= MAX_AVISOS) {
+        void this.degradeBackground('el equipo no alcanza a procesar el fondo');
+      }
+    };
+    processor.addObserver({
+      filterFrameDurationHigh: (e: { avgFilterDurationMillis?: number; framesDropped?: number }) =>
+        revisar(`${Math.round(e?.avgFilterDurationMillis ?? 0)}ms/frame, ${e?.framesDropped ?? 0} frames perdidos`),
+      filterCPUUtilizationHigh: (e: { cpuUtilization?: number }) =>
+        revisar(`CPU ${Math.round(e?.cpuUtilization ?? 0)}%`),
+    });
+  }
+
+  /** Quita el fondo y devuelve la cámara sin efecto. Idempotente. */
+  private async degradeBackground(reason: string): Promise<void> {
+    if (this.degrading) return;
+    this.degrading = true;
+    console.warn(`[Chime] Quitando el fondo automáticamente: ${reason}`);
+    try {
+      await this.removeVideoEffect();
+    } catch (err: any) {
+      console.error(`[Chime] Error quitando el fondo degradado: ${err?.message}`);
+    }
+    this.backgroundDegraded.emit(reason);
+  }
+
   async applyBackgroundBlur(): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
+    this.degrading = false;
     const processor = await BackgroundBlurVideoFrameProcessor.create();
     if (!processor) throw new Error('El desenfoque de fondo no está soportado en este navegador.');
+    this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
     await this.startVideoTransform([processor]);
   }
 
   async applyVirtualBackground(imageUrl: string): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
+    this.degrading = false;
     try {
       const imageBlob = await (await fetch(imageUrl)).blob();
       const processor = await BackgroundReplacementVideoFrameProcessor.create(undefined, { imageBlob });
       if (!processor) throw new Error('El fondo virtual no está soportado en este navegador.');
+      this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
       await this.startVideoTransform([processor]);
     } catch (err) {
       // Si el procesador falla (navegador sin soporte, WASM que no carga, equipo

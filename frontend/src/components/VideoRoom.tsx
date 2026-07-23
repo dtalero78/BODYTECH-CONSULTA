@@ -48,7 +48,13 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     isAudioEnabled,
     isVideoEnabled,
     localVideoTrack,
+    coachBackgroundEnabled,
   } = useVideoRoom({ identity, roomName, role, documento, medicoCode, historiaId });
+
+  // El fondo se desactivó solo porque el equipo no lo aguantaba. Latch: una vez
+  // degradado NO se vuelve a aplicar en esta sesión (si no, entraría en un ciclo
+  // de aplicar → ahogarse → quitar → aplicar).
+  const [bgAutoDisabled, setBgAutoDisabled] = useState(false);
 
   // Grabación de audio de la consulta (entrada principal de transcripción).
   // Solo el médico con historia activa graba; arranca apenas la sala conecta.
@@ -64,7 +70,20 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     applyBlur,
     applyVirtualBackground,
     removeEffect,
+    markEffectRemoved,
   } = useBackgroundEffects();
+
+  // Auto-degradación: si el motor (Chime) quita el fondo porque el equipo no
+  // alcanza, sincronizamos la UI y no lo volvemos a poner. Se pierde el efecto,
+  // NO la llamada — que es justo lo que pasaba antes.
+  useEffect(() => {
+    if (!room?.onBackgroundDegraded) return;
+    return room.onBackgroundDegraded((reason) => {
+      console.warn(`[VideoRoom] Fondo desactivado automáticamente: ${reason}`);
+      setBgAutoDisabled(true);
+      markEffectRemoved();
+    });
+  }, [room, markEffectRemoved]);
 
   // Initialize postural analysis
   // El hook siempre está enabled para que Socket.io esté listo
@@ -138,11 +157,14 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
   // nutricional): negro con el logo Trepsi Bodytech. Se aplica una sola vez al
   // quedar lista la cámara; si lo cambia/quita manualmente, no se vuelve a forzar.
   useEffect(() => {
+    // No aplicar si el interruptor global está en off (COACH_BACKGROUND=off) ni
+    // si ya se degradó en este equipo.
+    if (!coachBackgroundEnabled || bgAutoDisabled) return;
     if (role === 'doctor' && localVideoTrack && currentEffect === 'none') {
       applyVirtualBackground(localVideoTrack, '/fondoVideoCoach.png');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localVideoTrack, role]);
+  }, [localVideoTrack, role, coachBackgroundEnabled, bgAutoDisabled]);
 
   const handleOpenPosturalAnalysis = () => {
     // Validar que Socket.io esté conectado antes de abrir el modal

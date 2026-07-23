@@ -344,6 +344,27 @@ Las dos cosas son falsas hoy. Copiar el archivo copia la desinformación.
 > Chime toma el dispositivo en exclusiva. Antes de migrar, inventariar quién más llama a
 > `getUserMedia`: `grep -rn "getUserMedia" frontend/src`.
 
+### El fondo virtual: la causa de la caída del 22-jul
+
+El fondo del coach **no es decorativo, oculta su habitación** — así que la segmentación por
+frame (red neuronal) es obligatoria y no hay forma de hacerla gratis. Lo que sí se puede es
+acotar su costo y no dejar que tumbe la llamada. Tres defensas, en orden:
+
+1. **Tope DURO de resolución.** `ideal` es una sugerencia que el navegador ignora: pedimos
+   640×360 y corrió a **960×540** (2,25× la carga). Usar `max`. El costo escala con los píxeles
+   de entrada, no con el modelo.
+2. **`COACH_BACKGROUND=off`** — interruptor global, leído en runtime desde el backend (viaja en
+   la respuesta del token). Apaga el fondo para todos sin tocar código. Es la salida de
+   emergencia si vuelve a haber caídas.
+3. **Auto-degradación por equipo.** Chime expone `filterFrameDurationHigh` /
+   `filterCPUUtilizationHigh` y su propia doc dice usarlos *"como disparador para desactivar el
+   filtro"*. Tras 3 avisos se quita el efecto en ESE equipo: se pierde el fondo, no la llamada.
+
+> **No busques "un modelo más potente".** En ML más potente = más grande = más lento, justo lo
+> contrario de lo que hace falta. Chime ya carga el ligero (`selfie_segmentation_landscape.tflite`).
+> Ningún modelo hace gratis correr una red neuronal por frame en un equipo flojo: la robustez
+> viene de la auto-degradación, no del modelo.
+
 ### Observabilidad, desde el día uno
 
 Loguear cada rechazo de ingreso **con el rol**:

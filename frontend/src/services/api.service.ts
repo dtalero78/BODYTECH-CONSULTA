@@ -50,6 +50,12 @@ export interface VideoJoinInfo {
   token?: string;
   meeting?: unknown;
   attendee?: unknown;
+  /**
+   * Interruptor del fondo virtual automático del coach (env COACH_BACKGROUND).
+   * Si viene false, no se aplica el fondo: el filtro por frame es caro y en
+   * equipos lentos puede tumbar la llamada. Ausente = tratar como habilitado.
+   */
+  coachBackground?: boolean;
 }
 
 class ApiService {

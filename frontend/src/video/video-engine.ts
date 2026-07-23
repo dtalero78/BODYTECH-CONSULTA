@@ -85,6 +85,8 @@ export interface ChimeVideoEngineLike {
   applyBackgroundBlur(): Promise<void>;
   applyVirtualBackground(imageUrl: string): Promise<void>;
   removeVideoEffect(): Promise<void>;
+  /** Avisa si el motor quitó el fondo solo, por rendimiento del equipo. */
+  onBackgroundDegraded?(cb: (reason: string) => void): () => void;
 }
 
 /**
@@ -161,6 +163,12 @@ export interface VideoEngine {
    * OJO: es prestado — NO llamar `.stop()` sobre sus tracks, cortaría la llamada.
    */
   getLocalVideoStream(): MediaStream | null;
+
+  /**
+   * Avisa si el motor tuvo que quitar el fondo por rendimiento del equipo
+   * (auto-degradación). Sólo lo implementa Chime; en Twilio no existe.
+   */
+  onBackgroundDegraded?(cb: (reason: string) => void): () => void;
 
   /** Raw local microphone track(s), for the consultation recorder. */
   getLocalAudioTracks(): MediaStreamTrack[];

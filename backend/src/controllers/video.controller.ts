@@ -147,9 +147,16 @@ class VideoController {
       // `{ provider:'twilio', token, ... }` — el frontend sigue leyendo `.token`.
       const joinInfo = await videoProvider.join({ identity, roomName, role });
 
+      // Interruptor del fondo virtual del coach. Es un filtro por frame (red
+      // neuronal) y en equipos lentos satura el hilo principal → Chime cree que
+      // se cayó la red y tumba la llamada. Con COACH_BACKGROUND=off se apaga
+      // para todos sin tocar código. Se resuelve aquí (runtime) y no en el build
+      // del frontend, para poder volverlo por sede más adelante.
+      const coachBackground = (process.env.COACH_BACKGROUND ?? 'on').toLowerCase() !== 'off';
+
       res.status(200).json({
         success: true,
-        data: joinInfo,
+        data: { ...joinInfo, coachBackground },
       });
     } catch (error) {
       // Sala finalizada sin derecho a reingreso (paciente) → 403.

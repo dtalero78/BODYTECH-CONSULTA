@@ -194,18 +194,10 @@ async function procesarEvaluacion(
     );
     const cachedText = cached?.[0]?.transcription_text;
 
-    if (typeof cachedText === 'string' && cachedText.trim().length > 0) {
-      transcript = cachedText.trim();
-      console.log(`${tag} Reutilizando transcript existente (${transcript.length} chars) — no re-transcribo`);
-      await agregarPaso(
-        evaluacionId,
-        `Reutilizando transcripción de la consulta (${transcript.length} caracteres)...`
-      );
-      // Estado → evaluando + guardar transcript en la evaluación
-      await setEstado(evaluacionId, 'evaluando', { transcript });
-    } else if (source.kind === 'chime') {
-      // Sin transcript guardado y grabación en Chime → Amazon Transcribe lee el
-      // MP4 de S3 directo (sin ffmpeg) y separa hablantes. Es asíncrono: sondeamos.
+    if (source.kind === 'chime') {
+      // Chime → SIEMPRE Amazon Transcribe: lee el MP4 de S3 directo (sin ffmpeg)
+      // y SEPARA HABLANTES (médico/paciente), que mejora la evaluación. Es
+      // asíncrono: sondeamos. El transcript del navegador queda solo de RESPALDO.
       await setEstado(evaluacionId, 'transcribiendo');
       await agregarPaso(
         evaluacionId,
@@ -228,16 +220,36 @@ async function procesarEvaluacion(
         await sleep(5000);
         intentos++;
       }
-      if (!transcript) {
+      if (transcript) {
+        console.log(`${tag} Transcript de Transcribe (${transcript.length} chars, con hablantes)`);
+        await agregarPaso(
+          evaluacionId,
+          `Transcripción completada con hablantes (${transcript.length} caracteres). Enviando al agente de IA...`
+        );
+        await setEstado(evaluacionId, 'evaluando', { transcript });
+      } else if (typeof cachedText === 'string' && cachedText.trim().length > 0) {
+        // Respaldo: Transcribe no quedó listo (falló o la grabación aún concatena)
+        // → usar el transcript del navegador (sin separación de hablantes).
+        transcript = cachedText.trim();
+        console.log(`${tag} Transcribe no disponible (${motivo || 'timeout'}) → transcript del navegador (${transcript.length} chars)`);
+        await agregarPaso(
+          evaluacionId,
+          `Amazon Transcribe no quedó listo; se usa la transcripción del navegador (${transcript.length} caracteres)...`
+        );
+        await setEstado(evaluacionId, 'evaluando', { transcript });
+      } else {
         await setEstado(evaluacionId, 'error', {
           error_msg: motivo || 'La transcripción no terminó a tiempo. Intenta de nuevo en un momento.',
         });
         return;
       }
-      console.log(`${tag} Transcript de Transcribe (${transcript.length} chars)`);
+    } else if (typeof cachedText === 'string' && cachedText.trim().length > 0) {
+      // Twilio (u otro): reusar el transcript del navegador si existe.
+      transcript = cachedText.trim();
+      console.log(`${tag} Reutilizando transcript existente (${transcript.length} chars) — no re-transcribo`);
       await agregarPaso(
         evaluacionId,
-        `Transcripción completada (${transcript.length} caracteres). Enviando al agente de IA...`
+        `Reutilizando transcripción de la consulta (${transcript.length} caracteres)...`
       );
       await setEstado(evaluacionId, 'evaluando', { transcript });
     } else if (source.kind === 'twilio') {

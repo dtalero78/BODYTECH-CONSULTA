@@ -476,9 +476,15 @@ export function MedicalPanelPage() {
   const handleAtender = async (patient: Patient) => {
     setAttendingPatient(patient._id);
     try {
-      // Usar la sala guardada si existe (si ya se contactó al paciente)
-      // Si no existe, generar una nueva sala
-      let roomName = patientRooms[patient._id];
+      // Sala a usar, por orden de confianza:
+      //  1. La guardada al Contactar (clave = _id de la historia).
+      //  2. La sala REAL donde el paciente ya está conectado, que llega por el
+      //     socket patient-connected (clave = numeroId/cédula, porque el paciente
+      //     entra con documento=numeroId). Sin esto, cuando el link lo mandó el
+      //     sistema (Trepsi) o tras recargar la página, se generaba una sala
+      //     nueva y quedaban en videollamadas distintas.
+      //  3. Solo si no hay ninguna, se genera una nueva.
+      let roomName = patientRooms[patient._id] || patientRooms[patient.numeroId];
       if (!roomName) {
         roomName = medicalPanelService.generateRoomName();
         setPatientRooms(prev => ({ ...prev, [patient._id]: roomName }));

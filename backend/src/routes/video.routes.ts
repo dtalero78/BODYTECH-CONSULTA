@@ -12,6 +12,9 @@ const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
 // Generar token de acceso
 router.post('/token', videoController.generateToken);
 
+// Sala guardada de una historia (para que "Atender" entre a la misma del paciente)
+router.get('/room/:historiaId', videoController.getStoredRoom);
+
 // Gestión de salas
 router.post('/rooms', videoController.createRoom);
 router.get('/rooms/:roomName', videoController.getRoom);

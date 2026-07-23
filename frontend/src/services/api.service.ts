@@ -128,6 +128,20 @@ class ApiService {
   }
 
   /**
+   * Sala guardada en el servidor para una historia (la que se envió al paciente
+   * al Contactar). "Atender" la usa cuando la memoria del navegador está vacía
+   * (tras recargar). Devuelve null si no hay ninguna guardada.
+   */
+  async getStoredRoom(historiaId: string): Promise<string | null> {
+    try {
+      const res = await this.client.get(`/api/video/room/${historiaId}`);
+      return res.data?.roomName ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Obtener información de una sala
    */
   async getRoom(roomName: string) {

@@ -360,6 +360,32 @@ class VideoController {
   }
 
   /**
+   * Sala de la videollamada guardada para una historia (la que se envió al
+   * paciente al Contactar). "Atender" la usa cuando su memoria del navegador
+   * está vacía (tras recargar), para entrar a la MISMA sala del paciente.
+   * GET /api/video/room/:historiaId
+   */
+  async getStoredRoom(req: Request, res: Response): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+      if (!historiaId) {
+        res.status(400).json({ success: false, roomName: null });
+        return;
+      }
+      const rows = await postgresService.query(
+        `SELECT "video_room_name" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+        [historiaId]
+      );
+      const roomName = (rows?.[0]?.video_room_name as string | null) || null;
+      res.status(200).json({ success: true, roomName });
+    } catch (error) {
+      // No romper el flujo del panel por esto: sin sala, "Atender" genera una.
+      console.error('[video] getStoredRoom error:', error);
+      res.status(200).json({ success: false, roomName: null });
+    }
+  }
+
+  /**
    * Diagnóstico del cliente (navegador) → log del servidor.
    * POST /api/video/events/client-diag
    *
@@ -554,6 +580,22 @@ class VideoController {
           .catch((e) =>
             console.error('⚠️ Error marcando link_enviado_at:', e?.message ?? e)
           );
+
+        // Guardar la SALA de la videollamada en el servidor. Es la fuente de
+        // verdad: el nombre de sala vivía solo en la memoria del navegador del
+        // coach, así que al recargar la página "Atender" generaba una sala nueva
+        // distinta a la del paciente. Con esto, "Atender" siempre puede leer la
+        // MISMA sala que se le envió al paciente. `roomNameWithParams` es
+        // "consulta-xxx?nombre=...": la sala es lo de antes del '?'.
+        const videoRoomName = roomNameWithParams.split('?')[0];
+        if (videoRoomName) {
+          postgresService
+            .query(`UPDATE "HistoriaClinica" SET "video_room_name" = $1 WHERE "_id" = $2`, [
+              videoRoomName,
+              historiaId,
+            ])
+            .catch((e) => console.error('⚠️ Error guardando video_room_name:', e?.message ?? e));
+        }
 
         // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
         try {

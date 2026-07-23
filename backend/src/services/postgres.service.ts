@@ -924,6 +924,15 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "link_enviado_at" TIMESTAMPTZ
       `);
 
+      // Sala de la videollamada, persistida al enviar el link (Contactar). Fuente
+      // de verdad para que "Atender" entre a la MISMA sala del paciente aunque el
+      // coach haya recargado la página (antes el nombre vivía solo en memoria del
+      // navegador → salas distintas).
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "video_room_name" TEXT
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

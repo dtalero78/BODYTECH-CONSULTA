@@ -485,10 +485,17 @@ export function MedicalPanelPage() {
       //     nueva y quedaban en videollamadas distintas.
       //  3. Solo si no hay ninguna, se genera una nueva.
       let roomName = patientRooms[patient._id] || patientRooms[patient.numeroId];
+      // 3. Si la memoria del navegador no la tiene (recargó, u otra sesión),
+      //    pedirla al SERVIDOR: ahí se guardó al enviar el link. Es la fuente de
+      //    verdad, así entra a la MISMA sala del paciente aunque ya no la recuerde.
+      if (!roomName) {
+        roomName = (await apiService.getStoredRoom(patient._id)) || '';
+      }
+      // 4. Último recurso: no hay ninguna guardada (nunca se contactó). Nueva.
       if (!roomName) {
         roomName = medicalPanelService.generateRoomName();
-        setPatientRooms(prev => ({ ...prev, [patient._id]: roomName }));
       }
+      setPatientRooms(prev => ({ ...prev, [patient._id]: roomName }));
 
       // El panel a abrir depende de la especialidad del profesional logueado:
       // Nutrición Deportiva → panel nutricional (/nutricion); resto → consulta (/doctor).

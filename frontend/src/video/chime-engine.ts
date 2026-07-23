@@ -72,7 +72,12 @@ import {
  * cámara: las MediaTrackConstraints del device NO sirven — Chime arma su propio
  * getUserMedia desde su configuración y las pisa.
  */
-const VIDEO_CAPTURE = { width: 640, height: 360, fps: 15 } as const;
+const NIVELES_CAPTURA = [
+  { width: 640, height: 360, fps: 15 }, // inicial
+  { width: 640, height: 360, fps: 10 }, // -33% de carga, misma nitidez
+  { width: 480, height: 270, fps: 10 }, // -44% de píxeles
+] as const;
+const VIDEO_CAPTURE = NIVELES_CAPTURA[0];
 
 /**
  * Foto del equipo y la conexión de quien entra a la llamada.
@@ -184,6 +189,12 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   // se quita el efecto y se avisa (mejor perder el fondo que la llamada).
   private backgroundDegraded = createEmitter<[string]>();
   private degrading = false;
+  // Escalera de degradación: antes de quitar el fondo se intenta con menos
+  // carga. Perder fluidez es mejor que perder el fondo, y perder el fondo es
+  // mejor que perder la llamada.
+  private nivelCaptura = 0;
+  private avisosFiltro = 0;
+  private ajustandoNivel = false;
   // Para poder etiquetar la telemetría con la consulta a la que pertenece.
   private roomName = '';
   private identity = '';
@@ -487,14 +498,12 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     addObserver: (o: Record<string, unknown>) => void;
   }): void {
     const MAX_AVISOS = 3;
-    let avisos = 0;
     const revisar = (detalle: string, datos: Record<string, number>) => {
-      avisos++;
-      console.warn(`[Chime] Filtro de fondo lento (${detalle}) — aviso ${avisos}/${MAX_AVISOS}`);
-      this.reportar('background-slow', { ...datos, aviso: avisos });
-      if (avisos >= MAX_AVISOS) {
-        void this.degradeBackground('el equipo no alcanza a procesar el fondo');
-      }
+      if (this.ajustandoNivel || this.degrading) return;
+      this.avisosFiltro++;
+      console.warn(`[Chime] Filtro de fondo lento (${detalle}) — aviso ${this.avisosFiltro}/${MAX_AVISOS}`);
+      this.reportar('background-slow', { ...datos, aviso: this.avisosFiltro, nivel: this.nivelCaptura });
+      if (this.avisosFiltro >= MAX_AVISOS) void this.manejarFiltroLento();
     };
     processor.addObserver({
       filterFrameDurationHigh: (e: { avgFilterDurationMillis?: number; framesDropped?: number }) =>
@@ -512,6 +521,59 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     });
   }
 
+  /**
+   * El filtro no alcanza en este equipo. Antes de rendirse, se baja un escalón
+   * de carga (menos fps, luego menos resolución). Solo si ya no quedan escalones
+   * se quita el fondo.
+   */
+  private async manejarFiltroLento(): Promise<void> {
+    if (this.ajustandoNivel || this.degrading) return;
+    this.avisosFiltro = 0;
+    const bajo = await this.bajarUnNivel();
+    if (!bajo) await this.degradeBackground('el equipo no alcanza ni en el nivel más bajo');
+  }
+
+  /**
+   * Baja un escalón la captura reusando los MISMOS procesadores
+   * (`chooseNewInnerDevice` preserva el pipeline, así no se recarga el modelo).
+   * Se para y reinicia la entrada de video para forzar que la cámara se vuelva a
+   * abrir con la calidad nueva — si no, Chime reutiliza el stream que ya tenía.
+   * Devuelve false si ya estaba en el último escalón.
+   */
+  private async bajarUnNivel(): Promise<boolean> {
+    if (!this.session || !this.currentVideoTransformDevice) return false;
+    if (this.nivelCaptura >= NIVELES_CAPTURA.length - 1) return false;
+
+    this.ajustandoNivel = true;
+    try {
+      this.nivelCaptura++;
+      const n = NIVELES_CAPTURA[this.nivelCaptura];
+      console.warn(`[Chime] Bajando el fondo a ${n.width}x${n.height}@${n.fps} (nivel ${this.nivelCaptura})`);
+
+      this.session.audioVideo.chooseVideoInputQuality(n.width, n.height, n.fps);
+      const nuevo = this.currentVideoTransformDevice.chooseNewInnerDevice(
+        this.chosenVideoDeviceId as Device
+      );
+      await this.session.audioVideo.stopVideoInput();
+      await this.session.audioVideo.startVideoInput(nuevo);
+      this.currentVideoTransformDevice = nuevo;
+
+      this.reportar('background-downgraded', {
+        nivel: this.nivelCaptura,
+        ancho: n.width,
+        alto: n.height,
+        fps: n.fps,
+      });
+      this.reportarResolucionFondo();
+      return true;
+    } catch (err: any) {
+      console.error(`[Chime] No se pudo bajar el nivel del fondo: ${err?.message}`);
+      return false;
+    } finally {
+      this.ajustandoNivel = false;
+    }
+  }
+
   /** Telemetría al servidor. Nunca lanza (import diferido para no acoplar el bundle). */
   private reportar(
     evento:
@@ -519,7 +581,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
       | 'background-slow'
       | 'background-disabled'
       | 'session-info'
-      | 'connection-poor',
+      | 'connection-poor'
+      | 'background-downgraded',
     datos: Record<string, string | number | boolean>
   ): void {
     if (!this.roomName) return;
@@ -594,10 +657,18 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.backgroundDegraded.emit(reason);
   }
 
+  /** Vuelve al nivel de carga más alto: un fondo nuevo empieza de cero. */
+  private reiniciarEscalera(): void {
+    this.degrading = false;
+    this.nivelCaptura = 0;
+    this.avisosFiltro = 0;
+    this.ajustandoNivel = false;
+  }
+
   async applyBackgroundBlur(): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
-    this.degrading = false;
+    this.reiniciarEscalera();
     const processor = await BackgroundBlurVideoFrameProcessor.create();
     if (!processor) throw new Error('El desenfoque de fondo no está soportado en este navegador.');
     this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
@@ -607,7 +678,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   async applyVirtualBackground(imageUrl: string): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
-    this.degrading = false;
+    this.reiniciarEscalera();
     try {
       const imageBlob = await (await fetch(imageUrl)).blob();
       const processor = await BackgroundReplacementVideoFrameProcessor.create(undefined, { imageBlob });
@@ -648,11 +719,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     // PISA cualquier width/height que uno le pase en el device. Por eso los intentos
     // con `ideal` y luego con `max` no cambiaron nada: la telemetría del 22-jul y del
     // 23-jul mostró 960x540 las dos veces. Se lo pedimos a Chime y ya.
-    this.session.audioVideo.chooseVideoInputQuality(
-      VIDEO_CAPTURE.width,
-      VIDEO_CAPTURE.height,
-      VIDEO_CAPTURE.fps
-    );
+    const nivel = NIVELES_CAPTURA[this.nivelCaptura];
+    this.session.audioVideo.chooseVideoInputQuality(nivel.width, nivel.height, nivel.fps);
     const innerDevice: Device = this.chosenVideoDeviceId;
     const transformDevice = new DefaultVideoTransformDevice(logger, innerDevice, processors);
     await this.session.audioVideo.startVideoInput(transformDevice);

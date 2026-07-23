@@ -204,7 +204,8 @@ class ApiService {
       | 'background-slow'
       | 'background-disabled'
       | 'session-info'
-      | 'connection-poor',
+      | 'connection-poor'
+      | 'background-downgraded',
     datos?: Record<string, string | number | boolean>,
     identity?: string,
     role?: 'doctor' | 'patient'

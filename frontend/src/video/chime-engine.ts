@@ -60,6 +60,21 @@ import {
 } from './video-engine';
 
 /**
+ * Resolución de captura de la cámara, ÚNICA para toda la sesión.
+ *
+ * El filtro de fondo (TFLite por frame) escala con los píxeles de entrada: a
+ * 960x540 —el default de Chime— satura el hilo principal, Chime cree que se cayó
+ * la red y tumba la llamada (incidente del 22-jul). 640x360 es ~la mitad de carga
+ * y equivale a lo que ya usábamos con Twilio (640x480), así que para el usuario
+ * no es un downgrade.
+ *
+ * Se fija con `chooseVideoInputQuality` (la API del SDK) y ANTES de abrir la
+ * cámara: las MediaTrackConstraints del device NO sirven — Chime arma su propio
+ * getUserMedia desde su configuración y las pisa.
+ */
+const VIDEO_CAPTURE = { width: 640, height: 360, fps: 15 } as const;
+
+/**
  * El pipeline de GRABACIÓN (Media Capture Pipeline) se une al meeting como un
  * attendee "fantasma" con ExternalUserId tipo "aws:MediaPipeline-...". No es una
  * persona: no debe renderizarse como participante (si no, aparece un avatar
@@ -259,6 +274,16 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     }
 
     if (hasVideoPermission) {
+      // Fijar la calidad ANTES de abrir la cámara. Si se pide después, Chime ya
+      // adquirió el stream a su default (960x540) y puede reusarlo en vez de
+      // re-adquirirlo → el tope no se aplicaba nunca. Con esto la cámara nace
+      // en 640x360, que además es lo mismo que usábamos con Twilio (640x480):
+      // no hay pérdida de calidad respecto a lo que los coaches ya veían.
+      session.audioVideo.chooseVideoInputQuality(
+        VIDEO_CAPTURE.width,
+        VIDEO_CAPTURE.height,
+        VIDEO_CAPTURE.fps
+      );
       const videoInputs = await session.audioVideo.listVideoInputDevices();
       const chosenVideoDeviceId = videoInputs.find((d) => d.deviceId)?.deviceId ?? null;
       if (chosenVideoDeviceId) {
@@ -523,10 +548,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   async removeVideoEffect(): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
-    // Sin filtro no hay razón para castigar la resolución: se devuelve la calidad
-    // normal de Chime. Así un equipo que se degradó gana video en alta a cambio
-    // de perder el fondo.
-    this.session.audioVideo.chooseVideoInputQuality(960, 540, 15);
+    // Se mantiene la MISMA resolución con o sin filtro: una sola variable, menos
+    // sorpresas. 640x360 es lo que ya usábamos con Twilio.
     if (this.chosenVideoDeviceId) {
       await this.session.audioVideo.startVideoInput(this.chosenVideoDeviceId);
     }
@@ -545,7 +568,11 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     // PISA cualquier width/height que uno le pase en el device. Por eso los intentos
     // con `ideal` y luego con `max` no cambiaron nada: la telemetría del 22-jul y del
     // 23-jul mostró 960x540 las dos veces. Se lo pedimos a Chime y ya.
-    this.session.audioVideo.chooseVideoInputQuality(640, 360, 15);
+    this.session.audioVideo.chooseVideoInputQuality(
+      VIDEO_CAPTURE.width,
+      VIDEO_CAPTURE.height,
+      VIDEO_CAPTURE.fps
+    );
     const innerDevice: Device = this.chosenVideoDeviceId;
     const transformDevice = new DefaultVideoTransformDevice(logger, innerDevice, processors);
     await this.session.audioVideo.startVideoInput(transformDevice);

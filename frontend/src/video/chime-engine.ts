@@ -523,6 +523,10 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   async removeVideoEffect(): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
+    // Sin filtro no hay razón para castigar la resolución: se devuelve la calidad
+    // normal de Chime. Así un equipo que se degradó gana video en alta a cambio
+    // de perder el fondo.
+    this.session.audioVideo.chooseVideoInputQuality(960, 540, 15);
     if (this.chosenVideoDeviceId) {
       await this.session.audioVideo.startVideoInput(this.chosenVideoDeviceId);
     }
@@ -533,22 +537,16 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     const logger = new ConsoleLogger('bsl-chime-bg', LogLevel.WARN);
     // Procesar el fondo a RESOLUCIÓN REDUCIDA (640x360 @ 15fps). El filtro corre
     // por frame (canvas + TFLite) y a más resolución satura el hilo principal →
-    // Chime cree que la conexión se cayó y reconecta (AudioJoinedFromAnotherDevice),
-    // tumbando la llamada.
+    // Chime cree que la conexión se cayó y reconecta, tumbando la llamada.
     //
-    // OJO con `ideal`: es una SUGERENCIA que el navegador puede ignorar, y la
-    // ignoraba. En producción (22-jul) el procesador corrió a 960x540 —2,25× la
-    // carga prevista— y las llamadas se caían con reingresos. `max` es un tope
-    // DURO: el navegador debe elegir un modo que no lo exceda.
-    const innerDevice: Device =
-      typeof this.chosenVideoDeviceId === 'string'
-        ? {
-            deviceId: { exact: this.chosenVideoDeviceId },
-            width: { ideal: 640, max: 640 },
-            height: { ideal: 360, max: 360 },
-            frameRate: { ideal: 15, max: 15 },
-          }
-        : this.chosenVideoDeviceId;
+    // La perilla correcta es `chooseVideoInputQuality`, NO las MediaTrackConstraints
+    // del device. Chime arma su propio getUserMedia a partir de
+    // `videoInputQualitySettings` (default 960x540, ver DefaultDeviceController) y
+    // PISA cualquier width/height que uno le pase en el device. Por eso los intentos
+    // con `ideal` y luego con `max` no cambiaron nada: la telemetría del 22-jul y del
+    // 23-jul mostró 960x540 las dos veces. Se lo pedimos a Chime y ya.
+    this.session.audioVideo.chooseVideoInputQuality(640, 360, 15);
+    const innerDevice: Device = this.chosenVideoDeviceId;
     const transformDevice = new DefaultVideoTransformDevice(logger, innerDevice, processors);
     await this.session.audioVideo.startVideoInput(transformDevice);
     this.currentVideoTransformDevice = transformDevice;

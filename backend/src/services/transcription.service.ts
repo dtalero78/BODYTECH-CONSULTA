@@ -132,6 +132,31 @@ const NUTRICION_DATOS_SET = new Set<string>(NUTRICION_DATOS_KEYS);
 // Columnas top-level (en EDITABLE_FIELDS) que también extraemos en la variante nutricional.
 const NUTRICION_COLUMN_KEYS = ['peso', 'talla'] as const;
 
+/**
+ * Campos que NO admiten concatenación.
+ *
+ * Cuando el dato de la consulta choca con el que ya había (típicamente el
+ * formulario que Trepsi envía antes de la cita), el texto libre se concatena
+ * —así no se pierde nada—, pero estos NO pueden:
+ *  - listas: pegar dos valores deja algo que no existe en el desplegable y el
+ *    campo queda inservible;
+ *  - medidas: se parsean con parseFloat (IMC, somatocarta) y "70 · 72" rompe
+ *    el cálculo.
+ * En estos gana lo hablado en consulta: es más actual y más confiable que lo
+ * que el paciente diligenció antes.
+ */
+const NUTRICION_ENUM_KEYS = new Set<string>([
+  'objetivoPrincipal', 'realizaActividadFisica', 'tipoEntrenamiento',
+  'intensidadPercibida', 'horarioEjercicio', 'calidadSueno', 'nivelEstres',
+  'consumoAlcohol',
+]);
+const NUTRICION_MEDIDA_KEYS = new Set<string>([
+  'peso', 'talla', 'pesoHabitual', 'porcentajeGrasa', 'masaMuscular',
+  'circunferenciaCintura', 'circunferenciaCadera',
+]);
+/** Marca de origen para que la coach distinga el formulario previo de la consulta. */
+const MARCA_CONSULTA = '— En consulta:';
+
 const NUTRICION_EXTRACTION_PROMPT = `
 Eres un asistente de nutrición que sintetiza la anamnesis nutricional a partir de
 la transcripción completa de una consulta (coach + afiliado) en español.
@@ -819,24 +844,52 @@ class TranscriptionService {
 
       let applied = 0;
 
-      // 4a) Columnas top-level peso/talla (whitelist) — solo si están vacías.
+      // 4a) Columnas top-level peso/talla. Son medidas: si en la consulta se dijo
+      //     un número, gana ese (la coach acaba de pesar/medir al afiliado; el
+      //     dato del formulario previo puede ser de hace semanas).
       for (const col of NUTRICION_COLUMN_KEYS) {
-        if (isFilledStr(flat[col]) && !isFilledStr((current as Record<string, unknown>)[col])) {
-          try {
-            const r = await medicalHistoryService.updateField(historiaId, col, String(flat[col]).trim());
-            if (r.success) applied++;
-          } catch (e: any) {
-            console.warn(`[Transcription][nutri] updateField ${col} falló:`, e?.message || e);
-          }
+        const nuevo = isFilledStr(flat[col]) ? String(flat[col]).trim() : '';
+        if (!nuevo) continue;
+        const previo = isFilledStr((current as Record<string, unknown>)[col])
+          ? String((current as Record<string, unknown>)[col]).trim()
+          : '';
+        if (previo === nuevo) continue;
+        try {
+          const r = await medicalHistoryService.updateField(historiaId, col, nuevo);
+          if (r.success) applied++;
+        } catch (e: any) {
+          console.warn(`[Transcription][nutri] updateField ${col} falló:`, e?.message || e);
         }
       }
 
-      // 4b) Claves del JSONB datosNutricionales — merge en los vacíos.
+      // 4b) Claves del JSONB datosNutricionales.
+      //     Antes solo se escribía en los VACÍOS, y como Trepsi pre-llena este
+      //     JSONB con el formulario previo, casi todo lo hablado en la consulta
+      //     se descartaba en silencio (de 15 campos extraídos entraban 2).
+      //     Ahora: texto libre se CONCATENA (no se pierde ninguno de los dos) y
+      //     listas/medidas las gana la consulta (no se pueden concatenar).
       let mergedCount = 0;
+      let concatenados = 0;
       for (const key of NUTRICION_DATOS_SET) {
-        if (isFilledStr(flat[key]) && !isFilledStr(currentDatos[key])) {
-          currentDatos[key] = String(flat[key]).trim();
+        const nuevo = isFilledStr(flat[key]) ? String(flat[key]).trim() : '';
+        if (!nuevo) continue;
+        const previo = isFilledStr(currentDatos[key]) ? String(currentDatos[key]).trim() : '';
+
+        if (!previo) {
+          currentDatos[key] = nuevo;
           mergedCount++;
+          continue;
+        }
+        // Idempotencia: si se re-procesa el mismo audio, no duplicar el texto.
+        if (previo === nuevo || previo.includes(nuevo)) continue;
+
+        if (NUTRICION_ENUM_KEYS.has(key) || NUTRICION_MEDIDA_KEYS.has(key)) {
+          currentDatos[key] = nuevo;
+          mergedCount++;
+        } else {
+          currentDatos[key] = `${previo}\n${MARCA_CONSULTA} ${nuevo}`;
+          mergedCount++;
+          concatenados++;
         }
       }
       if (mergedCount > 0) {
@@ -848,7 +901,7 @@ class TranscriptionService {
       }
 
       console.log(
-        `[Transcription][nutri] autollenado: ${applied} campos (${mergedCount} en datosNutricionales) historia=${historiaId} ms=${Date.now() - t0}`
+        `[Transcription][nutri] autollenado: ${applied} campos (${mergedCount} en datosNutricionales, ${concatenados} concatenados) historia=${historiaId} ms=${Date.now() - t0}`
       );
 
       // El transcript siempre quedó guardado → done aunque GPT no extrajera nada.

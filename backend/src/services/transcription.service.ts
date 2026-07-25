@@ -273,6 +273,32 @@ class TranscriptionService {
          DO UPDATE SET historia_id = EXCLUDED.historia_id, created_at = NOW()`,
         [roomName, historiaId]
       );
+
+      // Registrar la consulta en video_sessions SIEMPRE — se grabe o no. Es el
+      // único punto que se ejecuta cuando el médico entra con el id de la orden,
+      // así que sirve para contar TODAS las llamadas (chime_recordings solo tiene
+      // las grabadas). Jala paciente/médico/sede de la historia y el meeting de
+      // chime_meetings (null en Twilio). Idempotente por room_name. Best-effort:
+      // no bloquea el vínculo si falla.
+      try {
+        const recordingEnabled =
+          (process.env.RECORDINGS_ENABLED || 'false').toLowerCase() === 'true';
+        await postgresService.query(
+          `INSERT INTO video_sessions
+             (room_name, meeting_id, orden_id, paciente_documento, paciente_nombre, medico, sede, recording_enabled)
+           SELECT $1, cm.meeting_id, h."_id", h."numeroId",
+                  NULLIF(trim(concat_ws(' ', h."primerNombre", h."primerApellido")), ''),
+                  h."medico", h."sede_id", $3
+           FROM "HistoriaClinica" h
+           LEFT JOIN chime_meetings cm ON cm.room_name = $1
+           WHERE h."_id" = $2
+           ON CONFLICT (room_name) DO UPDATE
+             SET meeting_id = COALESCE(EXCLUDED.meeting_id, video_sessions.meeting_id)`,
+          [roomName, historiaId, recordingEnabled]
+        );
+      } catch (vsErr: any) {
+        console.warn(`[VideoSessions] no se pudo registrar la sesión ${roomName}: ${vsErr?.message}`);
+      }
       console.log(`[Transcription] Room linked: ${roomName} → ${historiaId}`);
 
       // Guardar el room_sid AHORA que el room está activo (fetch por uniqueName

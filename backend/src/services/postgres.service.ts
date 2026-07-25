@@ -449,6 +449,35 @@ class PostgresService {
         `CREATE INDEX IF NOT EXISTS idx_client_diag_identity ON client_diag (identity, created_at DESC)`
       );
 
+      // ===== Registro de TODAS las consultas de video (se graben o no) =====
+      // chime_recordings solo guarda las que se GRABARON. Las que no (un solo
+      // participante, tipos sin grabación) no quedaban en ninguna tabla y no se
+      // podían contar ni reportar. Esta fila se inserta SIEMPRE que el médico
+      // entra con el id de la orden (ver transcription.linkRoomToHistoria), con
+      // recording_enabled como simple bandera. created_at + ended_at dan la
+      // duración → minutos por sede sin estimar a ojo.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS video_sessions (
+          id SERIAL PRIMARY KEY,
+          room_name TEXT UNIQUE NOT NULL,
+          meeting_id TEXT,
+          orden_id TEXT,
+          paciente_documento TEXT,
+          paciente_nombre TEXT,
+          medico TEXT,
+          sede TEXT,
+          recording_enabled BOOLEAN DEFAULT false,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ended_at TIMESTAMPTZ
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_video_sessions_created ON video_sessions (created_at DESC)`
+      );
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_video_sessions_orden ON video_sessions (orden_id)`
+      );
+
       // ===== Módulo de evaluación de calidad de consultas =====
       await this.query(`
         CREATE TABLE IF NOT EXISTS consulta_evaluaciones (

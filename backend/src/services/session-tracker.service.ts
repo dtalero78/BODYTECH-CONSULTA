@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { videoProvider } from './video';
+import postgresService from './postgres.service';
 
 interface SessionParticipant {
   identity: string;
@@ -240,6 +241,14 @@ class SessionTrackerService {
    */
   private finalizeSession(session: VideoSession): void {
     console.log(`[SessionTracker] Sesión ${session.roomName} finalizada (reporte de WhatsApp deshabilitado)`);
+    // Sellar la duración de la consulta: created_at (al vincular la orden) +
+    // ended_at (aquí) → minutos exactos por sede. Best-effort, no bloquea nada.
+    postgresService
+      .query(
+        `UPDATE video_sessions SET ended_at = NOW() WHERE room_name = $1 AND ended_at IS NULL`,
+        [session.roomName]
+      )
+      .catch((e: any) => console.warn(`[VideoSessions] no se pudo sellar ended_at: ${e?.message}`));
     this.sessions.delete(session.roomName);
   }
 

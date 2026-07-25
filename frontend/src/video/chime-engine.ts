@@ -108,6 +108,11 @@ const FILTRO_CPU_MAX = 40;
  */
 const AVISOS_PARA_BAJAR = 3;
 const AVISOS_PARA_QUITAR = 15;
+// Ventana de decay: el filtro avisa ~1/s cuando se ahoga. Si pasa más de esto
+// sin un aviso, el equipo se recuperó y el contador se reinicia. Así solo la
+// presión SOSTENIDA quita el fondo; picos aislados a lo largo de una consulta
+// larga (o un pico puntual al silenciar el micrófono) ya no se acumulan.
+const DECAY_AVISOS_MS = 12000;
 
 /**
  * Foto del equipo y la conexión de quien entra a la llamada.
@@ -224,6 +229,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   // mejor que perder la llamada.
   private nivelCaptura = 0;
   private avisosFiltro = 0;
+  private ultimoAvisoFiltro = 0; // marca de tiempo del último aviso, para el decay
   private ajustandoNivel = false;
   // Para poder etiquetar la telemetría con la consulta a la que pertenece.
   private roomName = '';
@@ -529,6 +535,16 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   }): void {
     const revisar = (detalle: string, datos: Record<string, number>, peso = 1) => {
       if (this.ajustandoNivel || this.degrading) return;
+      // DECAY: los avisos solo cuentan si son SOSTENIDOS. El filtro avisa ~1/s
+      // cuando se ahoga; si pasó una ventana sin avisos, el equipo se recuperó y
+      // el contador se reinicia. Sin esto, avisos aislados a lo largo de una
+      // consulta larga se acumulaban hasta quitar el fondo aunque el equipo
+      // estuviera bien la mayor parte del tiempo — y un pico puntual (p. ej. al
+      // silenciar el micrófono) terminaba de desbordarlo. Reportado por un coach
+      // con equipo NO sobrecargado: "al silenciar el micro se quita el fondo".
+      const ahora = Date.now();
+      if (ahora - this.ultimoAvisoFiltro > DECAY_AVISOS_MS) this.avisosFiltro = 0;
+      this.ultimoAvisoFiltro = ahora;
       this.avisosFiltro += peso;
       // Mientras queden escalones, la acción es barata → poca evidencia basta.
       // En el último, la acción es quitar el fondo → se exige mucha más.

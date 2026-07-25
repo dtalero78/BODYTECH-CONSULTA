@@ -171,7 +171,20 @@ class ChimeRecordingService {
             new DeleteMediaCapturePipelineCommand({ MediaPipelineId: rec.capture_pipeline_id })
           );
         } catch (e: any) {
-          console.warn(`[ChimeRecording] No se pudo detener la captura: ${e.message}`);
+          // Cuando el meeting ya terminó (todos salieron, o es una captura huérfana
+          // que el barrido cierra horas después), AWS ya auto-terminó el pipeline y
+          // el Delete devuelve NotFound. Es ESPERADO y no afecta la concatenación
+          // (usa el ARN + los artefactos en S3). Solo lo registramos como info.
+          const notFound =
+            e?.name === 'NotFoundException' ||
+            /not\s*found|find the requested identifier/i.test(e?.message || '');
+          if (notFound) {
+            console.log(
+              `[ChimeRecording] Pipeline de captura ya finalizado en AWS (meeting ${meetingId}); se procede a concatenar.`
+            );
+          } else {
+            console.warn(`[ChimeRecording] No se pudo detener la captura: ${e.message}`);
+          }
         }
       }
 

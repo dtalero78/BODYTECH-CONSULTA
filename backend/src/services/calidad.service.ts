@@ -25,6 +25,7 @@ import {
 } from './twilio-media.service';
 import { chimeRecordingService } from './video/chime-recording.service';
 import { transcribeService } from './video/transcribe.service';
+import { videoProvider } from './video';
 
 /** Origen de la grabación de una consulta. */
 type Grabacion =
@@ -478,50 +479,69 @@ class CalidadService {
       }
     }
 
-    // 2) Twilio legacy on-demand: rooms Twilio sin composición todavía.
-    const rows = await postgresService.query(
-      `SELECT room_name, room_sid FROM room_historia_map WHERE historia_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [historiaId]
-    );
-    const row = rows?.[0] as { room_name?: string; room_sid?: string } | undefined;
-    if (!row || (!row.room_name && !row.room_sid)) {
-      throw Object.assign(
-        new Error('Esta historia no tiene una sala de video asociada (no se puede generar el video).'),
-        { statusCode: 409 }
+    // 2) Fallback de composición Twilio on-demand — SOLO cuando Twilio es el
+    // proveedor activo. Bajo VIDEO_PROVIDER=chime no existen salas en Twilio, así
+    // que este camino siempre daría 404 y lanzaría un error engañoso ("la sala ya
+    // finalizó"): en Chime el video sale del MP4 en S3 (bloque 1-bis), no de una
+    // composición Twilio.
+    if (videoProvider.name === 'twilio') {
+      // Twilio legacy on-demand: rooms Twilio sin composición todavía.
+      const rows = await postgresService.query(
+        `SELECT room_name, room_sid FROM room_historia_map WHERE historia_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [historiaId]
       );
-    }
-
-    // Preferir el room_sid guardado: un room COMPLETADO no se resuelve por nombre
-    // (Twilio 404). Si falta (filas viejas), intentar por nombre — solo funciona
-    // si la sala aún está activa.
-    let roomSid = row.room_sid || '';
-    if (!roomSid) {
-      try {
-        roomSid = await twilioService.getRoomSidByName(row.room_name as string);
-      } catch {
+      const row = rows?.[0] as { room_name?: string; room_sid?: string } | undefined;
+      if (!row || (!row.room_name && !row.room_sid)) {
         throw Object.assign(
-          new Error('No se pudo generar el video: la sala de esta consulta ya finalizó y no quedó registrada.'),
+          new Error('Esta historia no tiene una sala de video asociada (no se puede generar el video).'),
           { statusCode: 409 }
         );
       }
+
+      // Preferir el room_sid guardado: un room COMPLETADO no se resuelve por nombre
+      // (Twilio 404). Si falta (filas viejas), intentar por nombre — solo funciona
+      // si la sala aún está activa.
+      let roomSid = row.room_sid || '';
+      if (!roomSid) {
+        try {
+          roomSid = await twilioService.getRoomSidByName(row.room_name as string);
+        } catch {
+          throw Object.assign(
+            new Error('No se pudo generar el video: la sala de esta consulta ya finalizó y no quedó registrada.'),
+            { statusCode: 409 }
+          );
+        }
+      }
+
+      // 3) Reutilizar si el room ya tiene composición; si no, crearla.
+      let compositionSid = await twilioService.getLatestCompositionSid(roomSid);
+      if (!compositionSid) {
+        const comp = await twilioService.createComposition(roomSid);
+        compositionSid = comp.sid;
+      }
+
+      // 4) Guardar el sid en la historia para no volver a crearla.
+      await postgresService.query(
+        `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
+        [compositionSid, historiaId]
+      );
+
+      const status = await twilioService.getCompositionStatus(compositionSid);
+      const videoUrl = status === 'completed' ? await this.getVideoUrl(compositionSid) : null;
+      return { recordingKind: 'twilio', status, videoUrl, compositionSid };
     }
 
-    // 3) Reutilizar si el room ya tiene composición; si no, crearla.
-    let compositionSid = await twilioService.getLatestCompositionSid(roomSid);
-    if (!compositionSid) {
-      const comp = await twilioService.createComposition(roomSid);
-      compositionSid = comp.sid;
+    // 5) Chime: llegamos aquí si hay sala pero la grabación aún no está lista
+    // (capturando/concatenando) o si nunca hubo grabación para la sala.
+    //  - Con sala → 'processing': el MP4 sigue en camino; el front hace polling.
+    //  - Sin sala → error claro (consulta sin video, p. ej. historia manual).
+    if (roomNameChime) {
+      return { recordingKind: 'chime', status: 'processing', videoUrl: null, compositionSid: null };
     }
-
-    // 4) Guardar el sid en la historia para no volver a crearla.
-    await postgresService.query(
-      `UPDATE "HistoriaClinica" SET "composition_sid" = $1 WHERE "_id" = $2`,
-      [compositionSid, historiaId]
+    throw Object.assign(
+      new Error('Esta historia no tiene una sala de video asociada (no se puede generar el video).'),
+      { statusCode: 409 }
     );
-
-    const status = await twilioService.getCompositionStatus(compositionSid);
-    const videoUrl = status === 'completed' ? await this.getVideoUrl(compositionSid) : null;
-    return { recordingKind: 'twilio', status, videoUrl, compositionSid };
   }
 
   /**

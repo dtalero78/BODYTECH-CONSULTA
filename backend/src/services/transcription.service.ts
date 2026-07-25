@@ -2,6 +2,7 @@ import axios from 'axios';
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
 import twilioService from './twilio.service';
+import { videoProvider } from './video';
 import medicalHistoryService, { EDITABLE_FIELDS } from './medical-history.service';
 import { openai } from './openai.service';
 import {
@@ -277,15 +278,22 @@ class TranscriptionService {
       // Guardar el room_sid AHORA que el room está activo (fetch por uniqueName
       // funciona). Necesario para componer on-demand después: un room completado
       // ya no se resuelve por nombre. Best-effort — no bloquea el link.
-      try {
-        const roomSid = await twilioService.getRoomSidByName(roomName);
-        await postgresService.query(
-          `UPDATE room_historia_map SET room_sid = $1 WHERE room_name = $2`,
-          [roomSid, roomName]
-        );
-      } catch (sidErr: unknown) {
-        const m = sidErr instanceof Error ? sidErr.message : String(sidErr);
-        console.warn(`[Transcription] No se pudo guardar room_sid para ${roomName}: ${m}`);
+      //
+      // SOLO aplica a Twilio: `room_sid` (RMxxx) es un concepto de Twilio Video.
+      // Con VIDEO_PROVIDER=chime no hay sala en Twilio, así que el fetch daría 404
+      // en CADA llamada; la grabación Chime se resuelve por `room_name` vía
+      // `chime_recordings`, no por room_sid.
+      if (videoProvider.name === 'twilio') {
+        try {
+          const roomSid = await twilioService.getRoomSidByName(roomName);
+          await postgresService.query(
+            `UPDATE room_historia_map SET room_sid = $1 WHERE room_name = $2`,
+            [roomSid, roomName]
+          );
+        } catch (sidErr: unknown) {
+          const m = sidErr instanceof Error ? sidErr.message : String(sidErr);
+          console.warn(`[Transcription] No se pudo guardar room_sid para ${roomName}: ${m}`);
+        }
       }
 
       const r = await medicalHistoryService.updateField(historiaId, 'transcription_status', 'pending');

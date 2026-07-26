@@ -256,12 +256,15 @@ class ChimeRecordingService {
 
   /**
    * Detiene la captura de meetings huérfanos: filas que quedaron en 'capturing'
-   * más de `olderThanMinutes` (p. ej. porque el contenedor se reinició a mitad de
-   * una consulta y endRoom nunca corrió). Sin esto, el Media Capture Pipeline
-   * sigue corriendo y FACTURANDO indefinidamente. Pensado para un barrido
-   * periódico (fase 2, cuando la grabación esté encendida).
+   * más de `olderThanMinutes` (p. ej. porque el paciente cerró la pestaña sin
+   * colgar y quedó "colgado", o el contenedor se reinició a mitad de consulta y
+   * endRoom nunca corrió). Sin esto, el Media Capture Pipeline sigue corriendo y
+   * FACTURANDO indefinidamente — y encima come el cupo de Chime que compartimos
+   * con BSL (misma cuenta AWS). Como una consulta real no pasa de ~20 min, el
+   * default es 30 (20 + margen): a los 30 min una sala ya está claramente colgada.
+   * Solo borra el pipeline de GRABACIÓN; NO desconecta a nadie ni corta la llamada.
    */
-  async sweepOrphanCaptures(olderThanMinutes = 180): Promise<number> {
+  async sweepOrphanCaptures(olderThanMinutes = 30): Promise<number> {
     if (!ENABLED) return 0;
     try {
       await this.ensureTable();

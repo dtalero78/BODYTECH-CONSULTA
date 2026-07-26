@@ -299,14 +299,21 @@ if (process.env.NODE_ENV !== 'test') {
 // nunca corrió). Sin esto, el Media Capture Pipeline sigue corriendo y FACTURANDO.
 // Solo se arma si la grabación está activa (RECORDINGS_ENABLED + bucket): mientras
 // esté apagada (fase 1/2), no hay worker.
-const CHIME_SWEEP_INTERVAL_MS = 30 * 60_000;
+// Barrido cada 10 min (antes 30): con un tope bajo, entre más seguido corra,
+// más pronto se corta una sala colgada. Tope de duración configurable por env
+// (default 30 min) para poder afinarlo sin redeploy — una consulta real no pasa
+// de ~20 min. Solo corta la GRABACIÓN, nunca la llamada viva.
+const CHIME_SWEEP_INTERVAL_MS = 10 * 60_000;
+const CHIME_MAX_RECORDING_MIN = Number(process.env.CHIME_MAX_RECORDING_MINUTES) || 30;
 if (process.env.NODE_ENV !== 'test' && chimeRecordingService.enabled) {
   setInterval(() => {
-    chimeRecordingService.sweepOrphanCaptures().catch((e) => {
+    chimeRecordingService.sweepOrphanCaptures(CHIME_MAX_RECORDING_MIN).catch((e) => {
       console.error('[chime-recording] sweep error:', e?.message ?? e);
     });
   }, CHIME_SWEEP_INTERVAL_MS);
-  console.log(`🎥 [ChimeRecording] Barrido de capturas huérfanas iniciado (cada ${CHIME_SWEEP_INTERVAL_MS / 60000}min)`);
+  console.log(
+    `🎥 [ChimeRecording] Barrido de capturas huérfanas iniciado (cada ${CHIME_SWEEP_INTERVAL_MS / 60000}min, tope ${CHIME_MAX_RECORDING_MIN}min)`
+  );
 }
 
 // Start server

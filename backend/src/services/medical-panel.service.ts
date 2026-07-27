@@ -787,6 +787,15 @@ class MedicalPanelService {
         // Contesta') deja la cita INVISIBLE para el coach aunque esté reagendada
         // → pacientes que nadie llama (pasó con 15 citas).
         sets.push(`"pvEstado" = NULL`);
+        // El panel oculta por DOS campos: pvEstado Y atendido='NO CONTESTA'.
+        // Si el caller no manda `atendido` explícito (p. ej. el "Editar Cita"
+        // del panel/coordinador que solo cambia fecha), reseteamos el NO
+        // CONTESTA aquí; si lo manda, ya se asignó arriba (no duplicar columna).
+        if (fields.atendido === undefined) {
+          sets.push(
+            `"atendido" = CASE WHEN UPPER(COALESCE("atendido", '')) = 'NO CONTESTA' THEN 'REPROGRAMADA' ELSE "atendido" END`
+          );
+        }
       }
 
       if (sets.length === 0) {

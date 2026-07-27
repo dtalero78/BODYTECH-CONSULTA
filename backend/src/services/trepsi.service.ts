@@ -710,7 +710,14 @@ class TrepsiService {
       // Reagendar deja la cita otra vez por atender: se limpia el "No Contesta"
       // de un intento previo, que si no se arrastra a la fecha nueva y el panel
       // del coach la oculta (mismo motivo que en medical-panel.updateOrden).
+      // OJO: el panel oculta por DOS campos (atendido='NO CONTESTA' Y pvEstado=
+      // 'No Contesta'). Limpiar solo pvEstado no basta — hay que resetear también
+      // `atendido`, si no el afiliado sigue invisible aunque haya reprogramado
+      // (pasó: reagendó por Trepsi tras marcarlo "no asistió" → desapareció).
       hcSets.push(`"pvEstado" = NULL`);
+      hcSets.push(
+        `"atendido" = CASE WHEN UPPER(COALESCE("atendido", '')) = 'NO CONTESTA' THEN 'REPROGRAMADA' ELSE "atendido" END`
+      );
       // horaAtencion (texto HH:MM que muestra la Agenda) se RE-DERIVA de la
       // nueva fechaAtencion. Si no, al reprogramar quedaría congelada en la
       // hora previa y la Agenda mostraría una hora distinta a la real de la

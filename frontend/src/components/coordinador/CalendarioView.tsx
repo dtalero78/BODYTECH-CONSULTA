@@ -86,6 +86,12 @@ function densityBg(level: 0 | 1 | 2 | 3): string {
   }
 }
 
+// Pie de cada KPI: en modo mes se compara contra el mes anterior; con un día
+// seleccionado se muestra qué fracción del mes representa ese día.
+type KpiCompare =
+  | { kind: 'delta'; prev: number | null; label: string }
+  | { kind: 'share'; total: number; label: string };
+
 // Formato delta: "+8.4%", "−4.4%", "±0"
 function formatDelta(current: number, previous: number | null): { text: string; tone: 'up' | 'down' | 'flat' } {
   if (previous === null || previous === 0) {
@@ -328,6 +334,40 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   // para marcarlo en la UI y ofrecer un atajo que devuelva al total del mes.
   const todasLasSedes = sedes.length > 0 && sedes.every((s) => sedesSel.includes(s.sedeId));
   const filtrosActivos = !!filterMedico || (sedes.length > 0 && !todasLasSedes);
+  const hayFiltro = filtrosActivos || !!selectedDay;
+
+  // El día seleccionado también filtra los KPIs. No hace falta pedir nada: el
+  // resumen por día ya viene en `mesData.porDia` y sale de la MISMA consulta,
+  // así que respeta sede y médico. Un día sin citas existe pero no trae fila →
+  // ceros, que es la lectura correcta.
+  const diaKpis = useMemo(() => {
+    if (!selectedDay) return null;
+    const d = mesData?.porDia[selectedDay];
+    if (!d) return { total: 0, atendidos: 0, pendientes: 0, medicos: 0 };
+    const medicos = Object.keys(d.porMedico).filter((c) => c !== '__SIN_ASIGNAR__').length;
+    return { total: d.total, atendidos: d.atendidos, pendientes: d.pendientes, medicos };
+  }, [selectedDay, mesData]);
+
+  // Etiqueta corta del día para las tarjetas: "mar 28 jul".
+  const selectedDayLabel = useMemo(() => {
+    if (!selectedDay) return '';
+    const [y, m, d] = selectedDay.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d))
+      .toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+      .replace(/\./g, '');
+  }, [selectedDay]);
+
+  const mesLabel = MESES[month - 1].toLowerCase();
+  const prevMesLabel = MESES[prevMonthOf(year, month).month - 1].toLowerCase();
+
+  // Cada tarjeta: en modo mes compara contra el mes anterior; en modo día
+  // muestra qué parte del mes representa (y así queda explícito a qué total se
+  // vuelve al soltar el día).
+  function compareFor(mesValue: number, prevValue: number | null): KpiCompare {
+    return selectedDay
+      ? { kind: 'share', total: mesValue, label: mesLabel }
+      : { kind: 'delta', prev: prevValue, label: prevMesLabel };
+  }
 
   function limpiarFiltros() {
     setSedesSel(sedes.map((s) => s.sedeId));
@@ -455,37 +495,37 @@ export function CalendarioView({ showToast, reportCount }: Props) {
         {/* KPI strip — 4 cards estilo Stripe */}
         <div className="grid grid-cols-4 border-b border-zinc-200">
           <KpiCard
-            label="Citas del mes"
-            value={mesData?.totalCitas ?? 0}
-            prev={prevMesData?.totalCitas ?? null}
-            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            label={selectedDay ? 'Citas del día' : 'Citas del mes'}
+            value={diaKpis ? diaKpis.total : (mesData?.totalCitas ?? 0)}
+            compare={compareFor(mesData?.totalCitas ?? 0, prevMesData?.totalCitas ?? null)}
             loading={loadingMes}
             filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
             isFirst
           />
           <KpiCard
             label="Atendidas"
-            value={mesData?.totalAtendidos ?? 0}
-            prev={prevMesData?.totalAtendidos ?? null}
-            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            value={diaKpis ? diaKpis.atendidos : (mesData?.totalAtendidos ?? 0)}
+            compare={compareFor(mesData?.totalAtendidos ?? 0, prevMesData?.totalAtendidos ?? null)}
             loading={loadingMes}
             filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
           />
           <KpiCard
             label="Pendientes"
-            value={mesData?.totalPendientes ?? 0}
-            prev={prevMesData?.totalPendientes ?? null}
-            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            value={diaKpis ? diaKpis.pendientes : (mesData?.totalPendientes ?? 0)}
+            compare={compareFor(mesData?.totalPendientes ?? 0, prevMesData?.totalPendientes ?? null)}
             loading={loadingMes}
             filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
           />
           <KpiCard
             label="Profesionales activos"
-            value={mesData?.medicosActivos ?? 0}
-            prev={prevMesData?.medicosActivos ?? null}
-            prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
+            value={diaKpis ? diaKpis.medicos : (mesData?.medicosActivos ?? 0)}
+            compare={compareFor(mesData?.medicosActivos ?? 0, prevMesData?.medicosActivos ?? null)}
             loading={loadingMes}
             filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
             isLast
           />
         </div>
@@ -519,12 +559,12 @@ export function CalendarioView({ showToast, reportCount }: Props) {
               active={!!filterMedico}
               onClear={() => setFilterMedico('')}
             />
-            {filtrosActivos && (
+            {hayFiltro && (
               <button
                 type="button"
                 onClick={limpiarFiltros}
                 className="inline-flex items-center gap-1 h-[30px] px-2.5 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-zinc-600 hover:text-zinc-900 hover:border-zinc-300"
-                title="Volver al total del mes (todas las sedes y profesionales)"
+                title="Volver al total del mes (todas las sedes, profesionales y días)"
               >
                 <X className="w-3 h-3" />
                 Limpiar filtros
@@ -630,7 +670,13 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                   return (
                     <button
                       key={cell.iso}
-                      onClick={() => (isDispo ? setDispoDia(cell.iso) : setSelectedDay(cell.iso))}
+                      onClick={() =>
+                        isDispo
+                          ? setDispoDia(cell.iso)
+                          : // Segundo clic sobre el mismo día lo suelta y las
+                            // tarjetas vuelven al total del mes.
+                            setSelectedDay((cur) => (cur === cell.iso ? null : cell.iso))
+                      }
                       className={`h-[118px] border-r border-b border-zinc-200 p-2.5 text-left relative cursor-pointer hover:bg-zinc-50 transition-colors ${bgCell}`}
                       style={ringStyle}
                     >
@@ -825,31 +871,37 @@ export function CalendarioView({ showToast, reportCount }: Props) {
 function KpiCard({
   label,
   value,
-  prev,
-  prevMonthLabel,
+  compare,
   loading,
   filtered = false,
+  dayLabel = '',
   isFirst = false,
   isLast = false,
 }: {
   label: string;
   value: number;
-  prev: number | null;
-  prevMonthLabel: string;
+  compare: KpiCompare;
   loading: boolean;
   /** Hay filtro de sede/médico activo: el número es el subtotal, no el del mes completo. */
   filtered?: boolean;
+  /** Día seleccionado ("mar 28 jul"): el número es el de ese día, no el del mes. */
+  dayLabel?: string;
   isFirst?: boolean;
   isLast?: boolean;
 }) {
   void isFirst;
-  const delta = formatDelta(value, prev);
+  const delta = compare.kind === 'delta' ? formatDelta(value, compare.prev) : null;
   const toneCls =
-    delta.tone === 'up'
+    delta?.tone === 'up'
       ? 'text-green-700'
-      : delta.tone === 'down'
+      : delta?.tone === 'down'
         ? 'text-red-700'
         : 'text-zinc-500';
+  // Modo día: en vez del delta vs. mes anterior, qué parte del mes es este día.
+  const share =
+    compare.kind === 'share' && compare.total > 0
+      ? `${((value / compare.total) * 100).toFixed(1)}%`
+      : '—';
   return (
     <div
       className={`py-3 px-6 ${isLast ? '' : 'border-r border-zinc-200'}`}
@@ -857,6 +909,15 @@ function KpiCard({
     >
       <div className="flex items-center gap-1.5">
         <span className={SECTION_LABEL}>{label}</span>
+        {dayLabel && (
+          <span
+            className="inline-flex items-center h-[15px] px-1.5 rounded-full bg-[#eef2ff] text-[9.5px] font-medium tracking-wide text-[#1e3a8a] whitespace-nowrap"
+            style={{ fontFamily: FONT_MONO }}
+            title="Total del día seleccionado en el calendario"
+          >
+            {dayLabel.toUpperCase()}
+          </span>
+        )}
         {filtered && (
           <span
             className="inline-flex items-center h-[15px] px-1.5 rounded-full bg-[#eef2ff] text-[9.5px] font-medium tracking-wide text-[#1e3a8a]"
@@ -874,19 +935,39 @@ function KpiCard({
         {loading ? '—' : value.toLocaleString('es-CO')}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <span className={`text-[12px] tabular-nums ${toneCls}`} style={{ fontFamily: FONT_MONO }}>
-          {delta.text}
-        </span>
-        <span className="text-[11px] text-zinc-400">
-          vs. {prevMonthLabel}{' '}
-          {prev !== null ? (
-            <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
-              ({prev})
+        {compare.kind === 'delta' ? (
+          <>
+            <span
+              className={`text-[12px] tabular-nums ${toneCls}`}
+              style={{ fontFamily: FONT_MONO }}
+            >
+              {delta?.text}
             </span>
-          ) : (
-            '(—)'
-          )}
-        </span>
+            <span className="text-[11px] text-zinc-400">
+              vs. {compare.label}{' '}
+              {compare.prev !== null ? (
+                <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                  ({compare.prev})
+                </span>
+              ) : (
+                '(—)'
+              )}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[12px] tabular-nums text-zinc-500" style={{ fontFamily: FONT_MONO }}>
+              {share}
+            </span>
+            <span className="text-[11px] text-zinc-400">
+              de{' '}
+              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                {compare.total.toLocaleString('es-CO')}
+              </span>{' '}
+              en {compare.label}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

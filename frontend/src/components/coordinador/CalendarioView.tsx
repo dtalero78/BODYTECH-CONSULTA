@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import calendarioService, {
   MesResumen,
+  DiaResumen,
   DiaDetalle,
   CitaListItem,
   DisponibilidadMes,
@@ -86,11 +87,19 @@ function densityBg(level: 0 | 1 | 2 | 3): string {
   }
 }
 
+// Desde cuándo es fiable `link_enviado_at`. Antes de esta fecha no hubo
+// tracking (ni backfill), así que "No contactó" sale inflado. /indicadores lo
+// resuelve prohibiendo rangos anteriores; el calendario no puede (el mes es el
+// mes), así que lo señala en la tarjeta y no compara contra meses de esa época.
+const LINK_TRACKING_DESDE = '2026-07-09';
+
 // Pie de cada KPI: en modo mes se compara contra el mes anterior; con un día
 // seleccionado se muestra qué fracción del mes representa ese día.
 type KpiCompare =
   | { kind: 'delta'; prev: number | null; label: string }
-  | { kind: 'share'; total: number; label: string };
+  | { kind: 'share'; total: number; label: string }
+  // Capacidad: el pie es "X% ocupada · N de M cupos", no una comparación temporal.
+  | { kind: 'ocupacion'; ocupados: number; capacidad: number | null };
 
 // Formato delta: "+8.4%", "−4.4%", "±0"
 function formatDelta(current: number, previous: number | null): { text: string; tone: 'up' | 'down' | 'flat' } {
@@ -340,12 +349,18 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   // resumen por día ya viene en `mesData.porDia` y sale de la MISMA consulta,
   // así que respeta sede y médico. Un día sin citas existe pero no trae fila →
   // ceros, que es la lectura correcta.
-  const diaKpis = useMemo(() => {
+  const diaKpis: DiaResumen | null = useMemo(() => {
     if (!selectedDay) return null;
-    const d = mesData?.porDia[selectedDay];
-    if (!d) return { total: 0, atendidos: 0, pendientes: 0, medicos: 0 };
-    const medicos = Object.keys(d.porMedico).filter((c) => c !== '__SIN_ASIGNAR__').length;
-    return { total: d.total, atendidos: d.atendidos, pendientes: d.pendientes, medicos };
+    const vacio: DiaResumen = {
+      total: 0,
+      atendidos: 0,
+      pendientes: 0,
+      noContesta: 0,
+      noContacto: 0,
+      capacidad: 0,
+      porMedico: {},
+    };
+    return mesData?.porDia[selectedDay] ?? vacio;
   }, [selectedDay, mesData]);
 
   // Etiqueta corta del día para las tarjetas: "mar 28 jul".
@@ -368,6 +383,23 @@ export function CalendarioView({ showToast, reportCount }: Props) {
       ? { kind: 'share', total: mesValue, label: mesLabel }
       : { kind: 'delta', prev: prevValue, label: prevMesLabel };
   }
+
+  // "No contactó": el mes visible arranca antes de que hubiera tracking → el
+  // número incluye días sin dato fiable. Y el mes anterior, peor, así que ese
+  // delta no se muestra.
+  const inicioMes = fechaIso(year, month, 1);
+  const inicioMesPrev = fechaIso(prevMonthOf(year, month).year, prevMonthOf(year, month).month, 1);
+  const noContactoParcial = inicioMes < LINK_TRACKING_DESDE;
+  const noContactoPrevFiable = inicioMesPrev >= LINK_TRACKING_DESDE;
+  const noContactoHint = noContactoParcial
+    ? `Antes del ${LINK_TRACKING_DESDE} no se registraba el envío del link, así que los días de ese periodo cuentan como "no contactó" sin serlo necesariamente.`
+    : undefined;
+
+  // Capacidad: cupos teóricos (disponibilidad ÷ tiempo de consulta de cada
+  // profesional) contra lo ya agendado. Con día seleccionado, ese día.
+  const capacidad = selectedDay ? (diaKpis?.capacidad ?? null) : (mesData?.capacidad ?? null);
+  const agendadas = selectedDay ? (diaKpis?.total ?? 0) : (mesData?.totalCitas ?? 0);
+  const cuposLibres = capacidad === null ? 0 : Math.max(0, capacidad - agendadas);
 
   function limpiarFiltros() {
     setSedesSel(sedes.map((s) => s.sedeId));
@@ -492,10 +524,11 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           </div>
         </div>
 
-        {/* KPI strip — 4 cards estilo Stripe */}
-        <div className="grid grid-cols-4 border-b border-zinc-200">
+        {/* KPI strip — los MISMOS 5 indicadores (y en el mismo orden) que el
+            tablero /indicadores, más la capacidad de agenda. */}
+        <div className="grid grid-cols-6 border-b border-zinc-200">
           <KpiCard
-            label={selectedDay ? 'Citas del día' : 'Citas del mes'}
+            label="Personas agendadas"
             value={diaKpis ? diaKpis.total : (mesData?.totalCitas ?? 0)}
             compare={compareFor(mesData?.totalCitas ?? 0, prevMesData?.totalCitas ?? null)}
             loading={loadingMes}
@@ -520,12 +553,38 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             dayLabel={selectedDayLabel}
           />
           <KpiCard
-            label="Profesionales activos"
-            value={diaKpis ? diaKpis.medicos : (mesData?.medicosActivos ?? 0)}
-            compare={compareFor(mesData?.medicosActivos ?? 0, prevMesData?.medicosActivos ?? null)}
+            label="No contesta"
+            value={diaKpis ? diaKpis.noContesta : (mesData?.totalNoContesta ?? 0)}
+            compare={compareFor(mesData?.totalNoContesta ?? 0, prevMesData?.totalNoContesta ?? null)}
             loading={loadingMes}
             filtered={filtrosActivos}
             dayLabel={selectedDayLabel}
+          />
+          <KpiCard
+            label="No contactó"
+            value={diaKpis ? diaKpis.noContacto : (mesData?.totalNoContacto ?? 0)}
+            compare={compareFor(
+              mesData?.totalNoContacto ?? 0,
+              noContactoPrevFiable ? (prevMesData?.totalNoContacto ?? null) : null
+            )}
+            loading={loadingMes}
+            filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
+            hint={noContactoHint}
+          />
+          <KpiCard
+            label="Capacidad disponible"
+            value={cuposLibres}
+            unavailable={capacidad === null}
+            compare={{ kind: 'ocupacion', ocupados: agendadas, capacidad }}
+            loading={loadingMes}
+            filtered={filtrosActivos}
+            dayLabel={selectedDayLabel}
+            hint={
+              capacidad === null
+                ? 'No se pudo calcular la capacidad. Revisa la disponibilidad configurada de los profesionales.'
+                : 'Cupos que caben en la disponibilidad configurada (cada franja se trocea con el tiempo de consulta del profesional), menos lo ya agendado. Cuenta el periodo completo, incluidos los días que ya pasaron.'
+            }
             isLast
           />
         </div>
@@ -875,6 +934,8 @@ function KpiCard({
   loading,
   filtered = false,
   dayLabel = '',
+  hint,
+  unavailable = false,
   isFirst = false,
   isLast = false,
 }: {
@@ -882,10 +943,14 @@ function KpiCard({
   value: number;
   compare: KpiCompare;
   loading: boolean;
+  /** El dato no se pudo calcular: se muestra "—" en vez de un cero engañoso. */
+  unavailable?: boolean;
   /** Hay filtro de sede/médico activo: el número es el subtotal, no el del mes completo. */
   filtered?: boolean;
   /** Día seleccionado ("mar 28 jul"): el número es el de ese día, no el del mes. */
   dayLabel?: string;
+  /** Salvedad sobre el dato (marca un ° junto a la etiqueta, con el texto en el tooltip). */
+  hint?: string;
   isFirst?: boolean;
   isLast?: boolean;
 }) {
@@ -902,13 +967,22 @@ function KpiCard({
     compare.kind === 'share' && compare.total > 0
       ? `${((value / compare.total) * 100).toFixed(1)}%`
       : '—';
+  // Modo capacidad: % de cupos ya tomados. Por encima de 100 hay sobrecupo
+  // (más citas que agenda configurada), que conviene que salte a la vista.
+  const ocupacion =
+    compare.kind === 'ocupacion' && compare.capacidad !== null && compare.capacidad > 0
+      ? (compare.ocupados / compare.capacidad) * 100
+      : null;
   return (
     <div
       className={`py-3 px-6 ${isLast ? '' : 'border-r border-zinc-200'}`}
       style={{ fontFamily: FONT_INTER }}
     >
       <div className="flex items-center gap-1.5">
-        <span className={SECTION_LABEL}>{label}</span>
+        <span className={SECTION_LABEL} title={hint}>
+          {label}
+          {hint && <span className="text-zinc-400 cursor-help"> °</span>}
+        </span>
         {dayLabel && (
           <span
             className="inline-flex items-center h-[15px] px-1.5 rounded-full bg-[#eef2ff] text-[9.5px] font-medium tracking-wide text-[#1e3a8a] whitespace-nowrap"
@@ -932,7 +1006,7 @@ function KpiCard({
         className="mt-1.5 text-[28px] font-semibold tabular-nums text-zinc-900 leading-none"
         style={{ fontFamily: FONT_INTER, fontVariantNumeric: 'tabular-nums' }}
       >
-        {loading ? '—' : value.toLocaleString('es-CO')}
+        {loading || unavailable ? '—' : value.toLocaleString('es-CO')}
       </div>
       <div className="mt-2 flex items-center gap-2">
         {compare.kind === 'delta' ? (
@@ -954,7 +1028,7 @@ function KpiCard({
               )}
             </span>
           </>
-        ) : (
+        ) : compare.kind === 'share' ? (
           <>
             <span className="text-[12px] tabular-nums text-zinc-500" style={{ fontFamily: FONT_MONO }}>
               {share}
@@ -965,6 +1039,28 @@ function KpiCard({
                 {compare.total.toLocaleString('es-CO')}
               </span>{' '}
               en {compare.label}
+            </span>
+          </>
+        ) : (
+          <>
+            <span
+              className={`text-[12px] tabular-nums ${
+                ocupacion !== null && ocupacion > 100 ? 'text-red-700' : 'text-zinc-500'
+              }`}
+              style={{ fontFamily: FONT_MONO }}
+            >
+              {ocupacion === null ? '—' : `${ocupacion.toFixed(1)}%`}
+            </span>
+            <span className="text-[11px] text-zinc-400">
+              {ocupacion !== null && ocupacion > 100 ? 'sobrecupo · ' : 'ocupada · '}
+              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                {compare.ocupados.toLocaleString('es-CO')}
+              </span>
+              {' de '}
+              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
+                {compare.capacidad === null ? '—' : compare.capacidad.toLocaleString('es-CO')}
+              </span>{' '}
+              cupos
             </span>
           </>
         )}
@@ -1224,10 +1320,24 @@ function DiaPanel({
           <div className="text-[15px] font-semibold text-zinc-900 capitalize">
             {fechaFormateada}
           </div>
+          {/* Mismo desglose que las tarjetas: las 4 clases suman el total. Las
+              dos últimas solo aparecen si hay, para no ensuciar el día limpio. */}
           <div className="text-[12px] text-zinc-500 mt-0.5">
             <span className="tabular-nums">{detalle.total}</span> citas ·{' '}
             <span className="tabular-nums">{detalle.atendidos}</span> atendidas ·{' '}
             <span className="tabular-nums">{detalle.pendientes}</span> pendientes
+            {detalle.noContesta > 0 && (
+              <>
+                {' · '}
+                <span className="tabular-nums">{detalle.noContesta}</span> no contesta
+              </>
+            )}
+            {detalle.noContacto > 0 && (
+              <>
+                {' · '}
+                <span className="tabular-nums">{detalle.noContacto}</span> no contactó
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

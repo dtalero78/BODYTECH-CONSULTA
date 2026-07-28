@@ -14,22 +14,32 @@ function authHeaders() {
 
 export type Modalidad = 'presencial' | 'virtual';
 
-export interface DiaResumen {
+// Conteo por clase de cita. Mismas 4 vías que /api/calendario/indicadores:
+// atendidos + pendientes + noContesta + noContacto = total.
+export interface ClaseCitaConteo {
   total: number;
   atendidos: number;
-  pendientes: number;
-  porMedico: Record<
-    string,
-    { total: number; atendidos: number; pendientes: number }
-  >;
+  pendientes: number; // estricto: ni atendida, ni no-contesta, ni no-contactó
+  noContesta: number;
+  noContacto: number;
 }
+
+export type DiaResumen = ClaseCitaConteo & {
+  /** Cupos teóricos del día (disponibilidad configurada ÷ tiempo_consulta). */
+  capacidad?: number;
+  porMedico: Record<string, ClaseCitaConteo>;
+};
 
 export interface MesResumen {
   year: number;
   month: number;
-  totalCitas: number;
+  totalCitas: number; // = "personas agendadas" en indicadores
   totalAtendidos: number;
   totalPendientes: number;
+  totalNoContesta: number;
+  totalNoContacto: number;
+  /** Cupos teóricos del mes; null si el cálculo falló (la tarjeta se apaga). */
+  capacidad: number | null;
   medicosActivos: number;
   porDia: Record<string, DiaResumen>;
 }
@@ -59,15 +69,16 @@ export interface DiaDetalle {
   total: number;
   atendidos: number;
   pendientes: number;
+  noContesta: number;
+  noContacto: number;
   citas: CitaListItem[];
-  medicosResumen: Array<{
-    medicoCodigo: string;
-    nombre: string;
-    rol: 'medico' | 'coach' | null;
-    total: number;
-    atendidos: number;
-    pendientes: number;
-  }>;
+  medicosResumen: Array<
+    ClaseCitaConteo & {
+      medicoCodigo: string;
+      nombre: string;
+      rol: 'medico' | 'coach' | null;
+    }
+  >;
 }
 
 export interface IndicadorMedico {

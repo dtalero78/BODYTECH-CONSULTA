@@ -37,6 +37,25 @@ const EFFECTIVE_SEDE_SQL = `
        ELSE "HistoriaClinica"."sede_id"
   END`;
 
+// Clasificación de una cita. ÚNICA para todo el módulo: la usan el calendario
+// (getMes/getDia) y los indicadores (getIndicadores), así que las tarjetas del
+// calendario y el tablero de indicadores nunca pueden discrepar.
+//   ATENDIDA   = atendido ATENDIDO
+//   NOCONTESTA = atendido NO CONTESTA (el afiliado no respondió)
+//   NOCONTACTO = sin resolver, SIN link enviado y con la hora ya vencida
+//                (el profesional dejó pasar la cita sin contactar)
+//   PENDIENTE  = el resto sin resolver: hora aún por venir, o link ya enviado
+// La comparación con NOW() evita marcar como "no contactó" citas futuras.
+// OJO: `link_enviado_at` solo es fiable desde 2026-07-09 (no hay backfill); en
+// meses anteriores NOCONTACTO sale inflado — mismo caveat que /indicadores.
+const CLASE_CITA_SQL = `
+  CASE
+    WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
+    WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
+    WHEN "link_enviado_at" IS NULL AND "fechaAtencion"::timestamptz < NOW() THEN 'NOCONTACTO'
+    ELSE 'PENDIENTE'
+  END`;
+
 export type Modalidad = 'presencial' | 'virtual';
 
 export interface ServiceResult<T> {
@@ -138,19 +157,30 @@ function addDaysIso(fechaIso: string, n: number): { fecha: string; dow: number }
 export interface MesResumen {
   year: number;
   month: number;
-  totalCitas: number;
+  totalCitas: number; // = "personas agendadas" en /indicadores
   totalAtendidos: number;
-  totalPendientes: number;
+  totalPendientes: number; // sentido estricto: ni atendida, ni no-contesta, ni no-contactó
+  totalNoContesta: number;
+  totalNoContacto: number;
+  /** Cupos teóricos del mes según disponibilidad configurada; null si no se pudo calcular. */
+  capacidad: number | null;
   medicosActivos: number;
   porDia: Record<string, DiaResumen>; // YYYY-MM-DD → resumen
 }
 
-export interface DiaResumen {
+export interface ClaseCitaConteo {
   total: number;
   atendidos: number;
   pendientes: number;
-  porMedico: Record<string, { total: number; atendidos: number; pendientes: number }>;
+  noContesta: number;
+  noContacto: number;
 }
+
+export type DiaResumen = ClaseCitaConteo & {
+  /** Cupos teóricos de ese día (disponibilidad ÷ tiempo_consulta). */
+  capacidad?: number;
+  porMedico: Record<string, ClaseCitaConteo>;
+};
 
 export interface CitaListItem {
   id: string;
@@ -176,16 +206,17 @@ export interface DiaDetalle {
   fecha: string; // YYYY-MM-DD
   total: number;
   atendidos: number;
-  pendientes: number;
+  pendientes: number; // estricto, igual que en MesResumen / indicadores
+  noContesta: number;
+  noContacto: number;
   citas: CitaListItem[];
-  medicosResumen: Array<{
-    medicoCodigo: string;
-    nombre: string;
-    rol: 'medico' | 'coach' | null;
-    total: number;
-    atendidos: number;
-    pendientes: number;
-  }>;
+  medicosResumen: Array<
+    ClaseCitaConteo & {
+      medicoCodigo: string;
+      nombre: string;
+      rol: 'medico' | 'coach' | null;
+    }
+  >;
 }
 
 export interface IndicadorMedico {
@@ -236,6 +267,19 @@ export interface HorariosDisponibles {
 // ---------------------------------------------------------------------------
 // Helpers de mapeo
 // ---------------------------------------------------------------------------
+
+function nuevoConteo(): ClaseCitaConteo {
+  return { total: 0, atendidos: 0, pendientes: 0, noContesta: 0, noContacto: 0 };
+}
+
+/** Suma `n` citas de la clase `clase` al acumulador (ver CLASE_CITA_SQL). */
+function acumularClase(acc: ClaseCitaConteo, clase: string, n: number): void {
+  acc.total += n;
+  if (clase === 'ATENDIDA') acc.atendidos += n;
+  else if (clase === 'NOCONTESTA') acc.noContesta += n;
+  else if (clase === 'NOCONTACTO') acc.noContacto += n;
+  else acc.pendientes += n;
+}
 
 function buildNombre(row: Record<string, unknown>): string {
   const parts = [row.primerNombre, row.segundoNombre, row.primerApellido, row.segundoApellido]
@@ -298,12 +342,13 @@ class CalendarioService {
       medicoFilter = `AND "medico" = $${params.length}`;
     }
 
-    // Agregado por (día Colombia, medico, estado).
+    // Agregado por (día Colombia, medico, clase). Misma clasificación que
+    // /indicadores para que las tarjetas del calendario cuadren con ese tablero.
     const sql = `
       SELECT
         TO_CHAR(("fechaAtencion"::timestamptz AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS fecha,
         COALESCE("medico", '__SIN_ASIGNAR__') AS medico_codigo,
-        UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
+        ${CLASE_CITA_SQL} AS clase,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
@@ -312,51 +357,58 @@ class CalendarioService {
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
         ${medicoFilter}
-      GROUP BY fecha, medico_codigo, estado
+      GROUP BY fecha, medico_codigo, clase
       ORDER BY fecha
     `;
 
-    const rows = await postgresService.query(sql, params);
+    // Citas y cupos teóricos en paralelo: son independientes y el segundo no
+    // debe alargar la carga del calendario.
+    const [rows, cuposPorDia] = await Promise.all([
+      postgresService.query(sql, params),
+      this.getCuposPorDia(year, month, sedeIds, medicoCodigo),
+    ]);
     if (rows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando calendario.' } };
     }
 
     const porDia: Record<string, DiaResumen> = {};
-    let totalCitas = 0;
-    let totalAtendidos = 0;
-    let totalPendientes = 0;
+    const totales = nuevoConteo();
     const medicosSet = new Set<string>();
 
     for (const row of rows) {
       const fecha = String(row.fecha);
       const medico = String(row.medico_codigo);
-      const estado = String(row.estado);
+      const clase = String(row.clase);
       const total = Number(row.total);
 
       if (!porDia[fecha]) {
-        porDia[fecha] = { total: 0, atendidos: 0, pendientes: 0, porMedico: {} };
+        porDia[fecha] = { ...nuevoConteo(), porMedico: {} };
       }
       if (!porDia[fecha].porMedico[medico]) {
-        porDia[fecha].porMedico[medico] = { total: 0, atendidos: 0, pendientes: 0 };
+        porDia[fecha].porMedico[medico] = nuevoConteo();
       }
 
-      porDia[fecha].total += total;
-      porDia[fecha].porMedico[medico].total += total;
-      totalCitas += total;
+      acumularClase(porDia[fecha], clase, total);
+      acumularClase(porDia[fecha].porMedico[medico], clase, total);
+      acumularClase(totales, clase, total);
 
-      if (estado === 'ATENDIDO') {
-        porDia[fecha].atendidos += total;
-        porDia[fecha].porMedico[medico].atendidos += total;
-        totalAtendidos += total;
-      } else {
-        // Cualquier estado distinto de ATENDIDO se cuenta como pendiente
-        // (incluye PENDIENTE, EN PROCESO, NO CONTESTA, NULL).
-        porDia[fecha].pendientes += total;
-        porDia[fecha].porMedico[medico].pendientes += total;
-        totalPendientes += total;
-      }
       if (medico !== '__SIN_ASIGNAR__') {
         medicosSet.add(medico);
+      }
+    }
+
+    // Cupos teóricos por día. Se anexan a los días que ya existen y también
+    // crean día si hay agenda abierta sin una sola cita (capacidad ociosa pura,
+    // que es justo lo que interesa ver). null = la consulta falló: la tarjeta de
+    // capacidad se apaga en vez de mentir con ceros.
+    let capacidadTotal: number | null = null;
+    if (cuposPorDia !== null) {
+      capacidadTotal = 0;
+      for (const [fecha, cupos] of Object.entries(cuposPorDia)) {
+        capacidadTotal += cupos;
+        if (cupos === 0 && !porDia[fecha]) continue;
+        if (!porDia[fecha]) porDia[fecha] = { ...nuevoConteo(), porMedico: {} };
+        porDia[fecha].capacidad = cupos;
       }
     }
 
@@ -366,9 +418,12 @@ class CalendarioService {
       data: {
         year,
         month,
-        totalCitas,
-        totalAtendidos,
-        totalPendientes,
+        totalCitas: totales.total,
+        totalAtendidos: totales.atendidos,
+        totalPendientes: totales.pendientes,
+        totalNoContesta: totales.noContesta,
+        totalNoContacto: totales.noContacto,
+        capacidad: capacidadTotal,
         medicosActivos: medicosSet.size,
         porDia,
       },
@@ -404,7 +459,8 @@ class CalendarioService {
         "_id", "numeroId", "primerNombre", "segundoNombre",
         "primerApellido", "segundoApellido",
         "celular", "email", "medico", "horaAtencion", "fechaAtencion",
-        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id"
+        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id",
+        ${CLASE_CITA_SQL} AS clase
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
         AND "fechaAtencion" IS NOT NULL
@@ -427,7 +483,7 @@ class CalendarioService {
     const resumenSql = `
       SELECT
         COALESCE("medico", '__SIN_ASIGNAR__') AS codigo,
-        UPPER(COALESCE("atendido", 'PENDIENTE')) AS estado,
+        ${CLASE_CITA_SQL} AS clase,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
@@ -435,27 +491,20 @@ class CalendarioService {
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
-      GROUP BY codigo, estado
+      GROUP BY codigo, clase
     `;
     const resumenRows = await postgresService.query(resumenSql, [sedeIds, range.startUtc, range.endUtc]);
 
-    const resumenMap = new Map<
-      string,
-      { medicoCodigo: string; total: number; atendidos: number; pendientes: number }
-    >();
+    const resumenMap = new Map<string, ClaseCitaConteo & { medicoCodigo: string }>();
     if (resumenRows !== null) {
       for (const r of resumenRows) {
         const codigo = String(r.codigo);
-        const estado = String(r.estado);
-        const total = Number(r.total);
         let entry = resumenMap.get(codigo);
         if (!entry) {
-          entry = { medicoCodigo: codigo, total: 0, atendidos: 0, pendientes: 0 };
+          entry = { medicoCodigo: codigo, ...nuevoConteo() };
           resumenMap.set(codigo, entry);
         }
-        entry.total += total;
-        if (estado === 'ATENDIDO') entry.atendidos += total;
-        else entry.pendientes += total;
+        acumularClase(entry, String(r.clase), Number(r.total));
       }
     }
 
@@ -495,22 +544,28 @@ class CalendarioService {
         total: entry.total,
         atendidos: entry.atendidos,
         pendientes: entry.pendientes,
+        noContesta: entry.noContesta,
+        noContacto: entry.noContacto,
       };
     });
 
     medicosResumen.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-    const total = citas.length;
-    const atendidos = citas.filter((c) => (c.atendido ?? '').toUpperCase() === 'ATENDIDO').length;
+    // Totales del día (ya filtrados por médico si aplica). La clase la calcula
+    // el propio SELECT de citas, así que coincide exactamente con getMes.
+    const totales = nuevoConteo();
+    for (const r of rows) acumularClase(totales, String(r.clase), 1);
 
     return {
       ok: true,
       status: 200,
       data: {
         fecha,
-        total,
-        atendidos,
-        pendientes: total - atendidos,
+        total: totales.total,
+        atendidos: totales.atendidos,
+        pendientes: totales.pendientes,
+        noContesta: totales.noContesta,
+        noContacto: totales.noContacto,
         citas,
         medicosResumen,
       },
@@ -559,25 +614,14 @@ class CalendarioService {
       medicoFilter = `AND "medico" = $${params.length}`;
     }
 
-    // Agregado por (medico, clase) en todo el rango. Clasificación de 4 vías:
-    //   ATENDIDA   = atendido ATENDIDO
-    //   NOCONTESTA = atendido NO CONTESTA (paciente no respondió)
-    //   NOCONTACTO = sin resolver, SIN link enviado y cuya hora YA PASÓ
-    //                (el coach dejó vencer la cita sin contactar)
-    //   PENDIENTE  = el resto sin resolver: cita aún por venir (hora futura),
-    //                o ya con link enviado (en gestión)
-    // La comparación con NOW() evita marcar como "no contactó" citas cuya hora
-    // aún no llega. `fechaAtencion` ya viene filtrada por el regex del WHERE, así
-    // que el cast a timestamptz es seguro.
+    // Agregado por (medico, clase) en todo el rango, con la clasificación de 4
+    // vías compartida con el calendario (ver CLASE_CITA_SQL). `fechaAtencion` ya
+    // viene filtrada por el regex del WHERE, así que el cast a timestamptz es
+    // seguro.
     const sql = `
       SELECT
         COALESCE("medico", '__SIN_ASIGNAR__') AS medico_codigo,
-        CASE
-          WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
-          WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
-          WHEN "link_enviado_at" IS NULL AND "fechaAtencion"::timestamptz < NOW() THEN 'NOCONTACTO'
-          ELSE 'PENDIENTE'
-        END AS clase,
+        ${CLASE_CITA_SQL} AS clase,
         COUNT(*)::int AS total
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])
@@ -741,6 +785,105 @@ class CalendarioService {
       fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
     }));
     return { ok: true, status: 200, data: { items } };
+  }
+
+  /**
+   * Cupos teóricos por día del mes: cuántas consultas caben en la disponibilidad
+   * configurada de los profesionales de esas sedes.
+   *
+   * Replica en SQL la resolución de `disponibilidad-fecha.getRangosEfectivos()`
+   * (override por fecha > patrón semanal; día bloqueado = 0) y trocea cada rango
+   * con el `tiempo_consulta` de CADA profesional, igual que
+   * `getHorariosDisponibles()` — así el cupo contado es el cupo que el agendador
+   * realmente ofrece. Un solo query en vez del N+1 de `getDiaResumen`.
+   *
+   * Modalidad: se toma el MÁXIMO entre presencial y virtual por (profesional,
+   * día), no la suma. Declarar 8-12 en ambas modalidades son 4 horas de agenda,
+   * no 8. Contrapartida: si alguien parte el día (mañana virtual, tarde
+   * presencial), esto lo subestima.
+   */
+  private async getCuposPorDia(
+    year: number,
+    month: number,
+    sedeIds: string[],
+    medicoCodigo?: string
+  ): Promise<Record<string, number> | null> {
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+    const params: unknown[] = [sedeIds, start, end];
+    let medicoFilter = '';
+    if (medicoCodigo) {
+      params.push(medicoCodigo);
+      medicoFilter = `AND p.codigo = $${params.length}`;
+    }
+
+    const sql = `
+      WITH dias AS (
+        SELECT gs::date AS fecha, EXTRACT(DOW FROM gs)::int AS dow
+          FROM generate_series($2::date, $3::date - 1, interval '1 day') gs
+      ),
+      profs AS (
+        SELECT p.id, p.sede_id,
+               GREATEST(COALESCE(p.tiempo_consulta, 30), 1) AS tc
+          FROM profesionales p
+         WHERE p.sede_id = ANY($1::text[]) AND p.activo = TRUE
+           ${medicoFilter}
+      ),
+      -- Override por (profesional, sede, fecha): gana sobre el patrón semanal.
+      -- Se queda con la modalidad de más minutos (ver nota de MÁXIMO arriba).
+      ovr AS (
+        SELECT profesional_id, sede_id, fecha,
+               BOOL_AND(bloqueado) AS bloqueado,
+               MAX(minutos) AS minutos
+          FROM (
+            SELECT profesional_id, sede_id, fecha, modalidad,
+                   BOOL_OR(bloqueado) AS bloqueado,
+                   COALESCE(SUM(
+                     EXTRACT(EPOCH FROM (hora_fin - hora_inicio)) / 60
+                   ) FILTER (WHERE NOT bloqueado), 0) AS minutos
+              FROM profesionales_disponibilidad_fecha
+             WHERE fecha >= $2::date AND fecha < $3::date
+             GROUP BY profesional_id, sede_id, fecha, modalidad
+          ) x
+         GROUP BY profesional_id, sede_id, fecha
+      ),
+      sem AS (
+        SELECT profesional_id, sede_id, dia_semana, MAX(minutos) AS minutos
+          FROM (
+            SELECT profesional_id, sede_id, dia_semana, modalidad,
+                   SUM(EXTRACT(EPOCH FROM (hora_fin - hora_inicio)) / 60) AS minutos
+              FROM profesionales_disponibilidad
+             WHERE activo = TRUE
+             GROUP BY profesional_id, sede_id, dia_semana, modalidad
+          ) y
+         GROUP BY profesional_id, sede_id, dia_semana
+      )
+      SELECT TO_CHAR(d.fecha, 'YYYY-MM-DD') AS fecha,
+             COALESCE(SUM(FLOOR(
+               CASE
+                 WHEN o.profesional_id IS NOT NULL
+                   THEN CASE WHEN o.bloqueado THEN 0 ELSE o.minutos END
+                 ELSE COALESCE(w.minutos, 0)
+               END / p.tc
+             )), 0)::int AS cupos
+        FROM dias d
+        CROSS JOIN profs p
+        LEFT JOIN ovr o
+          ON o.profesional_id = p.id AND o.sede_id = p.sede_id AND o.fecha = d.fecha
+        LEFT JOIN sem w
+          ON w.profesional_id = p.id AND w.sede_id = p.sede_id AND w.dia_semana = d.dow
+       GROUP BY d.fecha
+    `;
+
+    const rows = await postgresService.query(sql, params);
+    if (rows === null) return null;
+
+    const porDia: Record<string, number> = {};
+    for (const r of rows) porDia[String(r.fecha)] = Number(r.cupos);
+    return porDia;
   }
 
   /**

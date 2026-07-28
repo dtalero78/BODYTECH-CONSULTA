@@ -145,12 +145,21 @@ export interface DisponibilidadMes {
 }
 
 class CalendarioService {
-  async getMes(year: number, month: number, medico?: string, sedes?: string[]): Promise<MesResumen> {
+  // `signal` permite abortar la petición cuando el usuario cambia de filtro
+  // antes de que llegue la respuesta anterior (ver reloadMes en CalendarioView).
+  async getMes(
+    year: number,
+    month: number,
+    medico?: string,
+    sedes?: string[],
+    signal?: AbortSignal
+  ): Promise<MesResumen> {
     const params = new URLSearchParams({ year: String(year), month: String(month) });
     if (medico) params.set('medico', medico);
     if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
     const res = await axios.get(`${API_BASE_URL}/api/calendario/mes?${params.toString()}`, {
       headers: authHeaders(),
+      signal,
     });
     return res.data?.data;
   }

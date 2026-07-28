@@ -147,35 +147,66 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   // los nombres). Si el médico filtrado deja de existir en el nuevo conjunto, se limpia.
   useEffect(() => {
     if (sedesSel.length === 0) return;
+    let cancelled = false;
     profesionalesService
       .list({ activo: true, sedes: sedesSel })
       .then((list) => {
+        if (cancelled) return; // lista obsoleta: limpiaría el filtro de médico sin razón
         setProfesionales(list);
         setFilterMedico((cur) => (cur && !list.some((p) => p.codigo === cur) ? '' : cur));
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [sedesSel]);
 
+  // Guardas contra respuestas obsoletas: los KPIs y el grid se alimentan de
+  // `mesData`, así que una respuesta vieja que llegue tarde los deja mostrando
+  // el total equivocado. Es el caso típico al filtrar: la consulta sin filtro
+  // (todas las sedes) es la más lenta, y si el usuario elige una sede mientras
+  // sigue en vuelo, su respuesta aterriza después y "revierte" las tarjetas al
+  // total sin filtrar. Abortamos la petición anterior y, por si acaso,
+  // descartamos por generación cualquier respuesta que ya no sea la vigente.
+  const mesReqRef = useRef(0);
+  const mesAbortRef = useRef<AbortController | null>(null);
+
   const reloadMes = useCallback(async () => {
+    mesAbortRef.current?.abort();
+    const controller = new AbortController();
+    mesAbortRef.current = controller;
+    const reqId = ++mesReqRef.current;
+
     setLoadingMes(true);
     try {
       const prev = prevMonthOf(year, month);
       // Pedimos en paralelo el mes actual y el anterior (para el delta).
       // Si el anterior falla, mostramos delta neutro.
       const [data, prevData] = await Promise.all([
-        calendarioService.getMes(year, month, filterMedico || undefined, sedesSel),
+        calendarioService.getMes(
+          year,
+          month,
+          filterMedico || undefined,
+          sedesSel,
+          controller.signal
+        ),
         calendarioService
-          .getMes(prev.year, prev.month, filterMedico || undefined, sedesSel)
+          .getMes(prev.year, prev.month, filterMedico || undefined, sedesSel, controller.signal)
           .catch(() => null),
       ]);
+      if (reqId !== mesReqRef.current) return; // superada por un filtro más nuevo
       setMesData(data);
       setPrevMesData(prevData);
     } catch (err: unknown) {
+      // Abortada por el siguiente filtro → no es un error que mostrar.
+      if (controller.signal.aborted || reqId !== mesReqRef.current) return;
       const e = err as { response?: { data?: { error?: { message?: string } } } };
       const msg = e?.response?.data?.error?.message || 'Error cargando el mes.';
       showToast({ type: 'error', message: msg });
     } finally {
-      setLoadingMes(false);
+      // Solo la petición vigente apaga el "Cargando"; si esta fue superada,
+      // el spinner lo cierra la que la reemplazó.
+      if (reqId === mesReqRef.current) setLoadingMes(false);
     }
   }, [year, month, filterMedico, sedesSel, showToast]);
 
@@ -292,6 +323,17 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   }, [diaDetalle]);
 
   const maxHora = useMemo(() => Math.max(1, ...horasDistrib), [horasDistrib]);
+
+  // ¿Hay filtro activo? Los KPIs siempre reflejan lo filtrado; esto solo sirve
+  // para marcarlo en la UI y ofrecer un atajo que devuelva al total del mes.
+  const todasLasSedes = sedes.length > 0 && sedes.every((s) => sedesSel.includes(s.sedeId));
+  const filtrosActivos = !!filterMedico || (sedes.length > 0 && !todasLasSedes);
+
+  function limpiarFiltros() {
+    setSedesSel(sedes.map((s) => s.sedeId));
+    setFilterMedico('');
+    setSelectedDay(null);
+  }
 
   // ----- Render -----
 
@@ -418,6 +460,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             prev={prevMesData?.totalCitas ?? null}
             prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
             loading={loadingMes}
+            filtered={filtrosActivos}
             isFirst
           />
           <KpiCard
@@ -426,6 +469,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             prev={prevMesData?.totalAtendidos ?? null}
             prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
             loading={loadingMes}
+            filtered={filtrosActivos}
           />
           <KpiCard
             label="Pendientes"
@@ -433,6 +477,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             prev={prevMesData?.totalPendientes ?? null}
             prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
             loading={loadingMes}
+            filtered={filtrosActivos}
           />
           <KpiCard
             label="Profesionales activos"
@@ -440,6 +485,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             prev={prevMesData?.medicosActivos ?? null}
             prevMonthLabel={MESES[prevMonthOf(year, month).month - 1].toLowerCase()}
             loading={loadingMes}
+            filtered={filtrosActivos}
             isLast
           />
         </div>
@@ -473,6 +519,17 @@ export function CalendarioView({ showToast, reportCount }: Props) {
               active={!!filterMedico}
               onClear={() => setFilterMedico('')}
             />
+            {filtrosActivos && (
+              <button
+                type="button"
+                onClick={limpiarFiltros}
+                className="inline-flex items-center gap-1 h-[30px] px-2.5 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-zinc-600 hover:text-zinc-900 hover:border-zinc-300"
+                title="Volver al total del mes (todas las sedes y profesionales)"
+              >
+                <X className="w-3 h-3" />
+                Limpiar filtros
+              </button>
+            )}
             <div className="ml-auto flex items-center gap-3 text-[11.5px] text-zinc-500">
               <LegendDot color="bg-green-500" label="Atendido" />
               <LegendDot color="bg-amber-500" label="Pendiente" />
@@ -771,6 +828,7 @@ function KpiCard({
   prev,
   prevMonthLabel,
   loading,
+  filtered = false,
   isFirst = false,
   isLast = false,
 }: {
@@ -779,6 +837,8 @@ function KpiCard({
   prev: number | null;
   prevMonthLabel: string;
   loading: boolean;
+  /** Hay filtro de sede/médico activo: el número es el subtotal, no el del mes completo. */
+  filtered?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
 }) {
@@ -795,7 +855,18 @@ function KpiCard({
       className={`py-3 px-6 ${isLast ? '' : 'border-r border-zinc-200'}`}
       style={{ fontFamily: FONT_INTER }}
     >
-      <div className={SECTION_LABEL}>{label}</div>
+      <div className="flex items-center gap-1.5">
+        <span className={SECTION_LABEL}>{label}</span>
+        {filtered && (
+          <span
+            className="inline-flex items-center h-[15px] px-1.5 rounded-full bg-[#eef2ff] text-[9.5px] font-medium tracking-wide text-[#1e3a8a]"
+            style={{ fontFamily: FONT_MONO }}
+            title="Total según los filtros de sede y profesional aplicados"
+          >
+            FILTRADO
+          </span>
+        )}
+      </div>
       <div
         className="mt-1.5 text-[28px] font-semibold tabular-nums text-zinc-900 leading-none"
         style={{ fontFamily: FONT_INTER, fontVariantNumeric: 'tabular-nums' }}

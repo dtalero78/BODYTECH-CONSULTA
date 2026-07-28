@@ -157,6 +157,13 @@ The module evaluates consultation quality by:
 
 **ffmpeg dependency**: `extraerAudio` writes to a temp file (not a pipe/stdin) to avoid cross-platform stream issues.
 
+**Rúbrica** ([backend/src/helpers/rubrica-calidad.ts](backend/src/helpers/rubrica-calidad.ts)) — la vigente es `RUBRICA_BODYTECH`, la "Auditoría Integral de Calidad": 19 ítems en 6 categorías que suman 100 puntos (Preparación 10, Apertura y conexión 20, Descubrimiento 20, Calidad técnica 20, Gestión comercial 20, Cierre 10). `getRubrica(medico)` la devuelve por defecto; YURI conserva `RUBRICA_PSICOLOGICA` (legacy) y `RUBRICA` (médica ocupacional) quedó fuera de rotación.
+
+- **Escalas.** Cada ítem se califica 1-5. La rúbrica Bodytech usa `escala: 'puntos'` → cada ítem aporta `((puntaje - 1) / 4) × sus puntos`, rango **[0, 100]** (un ítem incumplido vale 0). Las legacy usan `escala: 'x20'` → `suma_ponderada × 20`, rango [20, 100].
+- **El total lo calcula el backend, no el modelo.** `computePuntajeTotal()` recalcula desde los puntajes 1-5 y sobrescribe `evaluacion.puntaje_total` antes de persistir (el JSONB alimenta el gauge del frontend y la columna `puntaje_total` la tarjeta del coordinador — deben coincidir). Si faltan criterios devuelve `null` y `calidad.service` cae al número del modelo.
+- **Contexto objetivo (`ContextoConsulta`).** Dos ítems no son evaluables desde el transcript, así que `calidad.service` los inyecta como datos duros: la **puntualidad** (`fechaAtencion` agendada vs. el `MIN(created_at)` de `room_historia_map` / `video_sessions`, formateada en UTC-5) y el **diligenciamiento de la historia clínica** (cobertura de las 57 columnas de `COLUMNAS_HISTORIA_AUDITORIA` por sección + contenido de los campos narrativos). La cámara encendida no es verificable: el prompt indica no penalizarla sin evidencia en el audio.
+- Al agregar o repesar ítems, mantené `checkPesos`/`checkPuntos` en verde (1.0 y 100) y actualizá `backend/src/helpers/__tests__/rubrica-calidad.test.ts`.
+
 ### Ordenes panel
 
 Route: `/ordenes` → `OrdenesPage.tsx`. Full CRUD for medical orders linked to a `historia_id`. JWT must be injected in every request — `OrdenesPage.tsx` explicitly sets the auth header to avoid 401s. No dedicated ordenes service/routes file; uses the video API layer.

@@ -12,7 +12,11 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { buildAgentDescription, buildGraderRubric } from '../helpers/rubrica-calidad';
+import {
+  buildAgentDescription,
+  buildGraderRubric,
+  type ContextoConsulta,
+} from '../helpers/rubrica-calidad';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -39,6 +43,13 @@ export interface EvaluarConsultaResult {
 }
 
 type OnProgresoFn = (texto: string) => Promise<void>;
+
+/** Opciones comunes a los dos evaluadores (Anthropic y OpenAI). */
+export interface EvaluarConsultaOpts {
+  onProgreso?: OnProgresoFn;
+  /** Datos duros de la sesión y de la historia clínica (puntualidad, diligenciamiento). */
+  contexto?: ContextoConsulta | null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lazy init
@@ -97,10 +108,11 @@ async function enviarOutcome(
   sessionId: string,
   transcript: string,
   formulario: Record<string, unknown> | null,
-  medico: string | null | undefined
+  medico: string | null | undefined,
+  contexto?: ContextoConsulta | null
 ): Promise<void> {
   const client = getAnthropic();
-  const description = buildAgentDescription(transcript, formulario, medico);
+  const description = buildAgentDescription(transcript, formulario, medico, contexto);
   const rubric = buildGraderRubric(medico);
   console.log(
     `[managed-agents-calidad] enviarOutcome — description ${description.length} chars, rubric ${rubric.length} chars, transcript ${(transcript || '').length} chars`
@@ -339,11 +351,11 @@ export async function evaluarConsulta(
   transcript: string,
   formulario: Record<string, unknown> | null,
   medico: string | null | undefined,
-  opts: { onProgreso?: OnProgresoFn } = {}
+  opts: EvaluarConsultaOpts = {}
 ): Promise<EvaluarConsultaResult> {
   const sessionId = await crearSession();
   try {
-    await enviarOutcome(sessionId, transcript, formulario, medico);
+    await enviarOutcome(sessionId, transcript, formulario, medico, opts.contexto);
     await esperarResultado(sessionId, {
       timeoutMs: 600_000,
       pollMs: 6_000,

@@ -23,9 +23,8 @@ import {
 import type {
   EvaluacionResult,
   EvaluarConsultaResult,
+  EvaluarConsultaOpts,
 } from './managed-agents-calidad.service';
-
-type OnProgresoFn = (texto: string) => Promise<void>;
 
 const MODEL = 'gpt-4o-mini';
 
@@ -33,7 +32,7 @@ export async function evaluarConsultaOpenAI(
   transcript: string,
   formulario: Record<string, unknown> | null,
   medico: string | null | undefined,
-  opts: { onProgreso?: OnProgresoFn } = {}
+  opts: EvaluarConsultaOpts = {}
 ): Promise<EvaluarConsultaResult> {
   const emit = async (txt: string): Promise<void> => {
     if (opts.onProgreso) {
@@ -49,12 +48,12 @@ export async function evaluarConsultaOpenAI(
   // pasa Record<string,unknown> directo, así que replicamos el mismo cast
   // implícito para mantener consistencia.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userPrompt = buildAgentDescription(transcript, formulario as any, medico);
+  const userPrompt = buildAgentDescription(transcript, formulario as any, medico, opts.contexto);
   const graderRubric = buildGraderRubric(medico);
 
   // El system prompt anula la instrucción del template de "usar tool write"
   // (que solo aplica en Managed Agents) y obliga a respuesta JSON pura.
-  const systemPrompt = `Eres un evaluador clínico riguroso de consultas médicas ocupacionales.
+  const systemPrompt = `Eres un auditor de calidad riguroso de consultas de salud. Calificas al PROFESIONAL que atiende, siguiendo al pie de la letra la rúbrica que te entrega el usuario.
 
 REGLAS DE FORMATO:
 - Devolvés ÚNICAMENTE JSON válido siguiendo el schema solicitado en el prompt del usuario.
@@ -74,7 +73,9 @@ Si algún criterio no se cumple en tu draft inicial, corregilo antes de responde
     model: MODEL,
     response_format: { type: 'json_object' },
     temperature: 0.1,
-    max_tokens: 4096,
+    // 19 ítems con evidencia + fortalezas + recomendaciones + resumen no caben
+    // en 4096: la respuesta se truncaba a mitad del JSON y el parse fallaba.
+    max_tokens: 8192,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },

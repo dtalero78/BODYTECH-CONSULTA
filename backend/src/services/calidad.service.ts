@@ -26,6 +26,11 @@ import {
 import { chimeRecordingService } from './video/chime-recording.service';
 import { transcribeService } from './video/transcribe.service';
 import { videoProvider } from './video';
+import {
+  computePuntajeTotal,
+  COLUMNAS_HISTORIA_AUDITORIA,
+  type ContextoConsulta,
+} from '../helpers/rubrica-calidad';
 
 /** Origen de la grabación de una consulta. */
 type Grabacion =
@@ -170,6 +175,59 @@ async function buscarFormulario(
   }
 }
 
+/**
+ * Instante real en que arrancó la videollamada: `room_historia_map.created_at`
+ * lo escribe el médico al conectarse (session-start), y `video_sessions` guarda
+ * la creación de la sala. Se toma el más temprano de los dos.
+ *
+ * Alimenta el ítem de PUNTUALIDAD de la auditoría, que de otro modo el
+ * evaluador tendría que adivinar desde el transcript.
+ */
+async function buscarInicioReal(historiaId: string): Promise<string | null> {
+  try {
+    const rows = await postgresService.query(
+      `SELECT MIN(LEAST(rhm.created_at, COALESCE(vs.created_at, rhm.created_at))) AS inicio
+         FROM room_historia_map rhm
+         LEFT JOIN video_sessions vs ON vs.room_name = rhm.room_name
+        WHERE rhm.historia_id = $1`,
+      [historiaId]
+    );
+    const inicio = rows?.[0]?.inicio;
+    if (!inicio) return null;
+    const d = inicio instanceof Date ? inicio : new Date(String(inicio));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[calidad] No se pudo resolver el inicio real de la sesión:', msg);
+    return null;
+  }
+}
+
+/**
+ * Fila de `HistoriaClinica` con los campos clínicos que mide la auditoría.
+ * Alimenta el ítem "diligenciamiento íntegro y detallado de la Historia Clínica":
+ * eso se mide sobre la base de datos, no sobre el transcript.
+ */
+async function buscarHistoriaAuditoria(
+  historiaId: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    // COLUMNAS_HISTORIA_AUDITORIA es una constante hardcodeada del helper de
+    // rúbrica — no hay entrada de usuario en la interpolación.
+    const cols = COLUMNAS_HISTORIA_AUDITORIA.map((c) => `"${c}"`).join(', ');
+    const rows = await postgresService.query(
+      `SELECT ${cols} FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+      [historiaId]
+    );
+    if (rows && rows.length > 0) return rows[0] as Record<string, unknown>;
+    return null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[calidad] No se pudo leer la historia para auditoría:', msg);
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pipeline asíncrono (fire-and-forget)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +237,8 @@ async function procesarEvaluacion(
   source: Grabacion,
   historiaId: string,
   numeroId: string | null,
-  medico: string | null
+  medico: string | null,
+  fechaAgendada: string | null
 ): Promise<void> {
   const tag = `[calidad][eval#${evaluacionId}]`;
 
@@ -314,11 +373,22 @@ async function procesarEvaluacion(
       return;
     }
 
-    // 6. Formulario pre-consulta para contexto del agente
-    const formulario = await buscarFormulario(numeroId);
+    // 6. Contexto del agente: formulario pre-consulta + datos duros de la sesión
+    //    (puntualidad) y de la historia clínica (diligenciamiento). Los dos
+    //    últimos son la única fuente válida de dos ítems de la auditoría.
+    const [formulario, historiaAuditoria, fechaInicioReal] = await Promise.all([
+      buscarFormulario(numeroId),
+      buscarHistoriaAuditoria(historiaId),
+      buscarInicioReal(historiaId),
+    ]);
     if (formulario) {
       console.log(`${tag} Formulario pre-consulta encontrado para historia ${historiaId}`);
     }
+    const contexto: ContextoConsulta = {
+      fechaAgendada,
+      fechaInicioReal,
+      historia: historiaAuditoria,
+    };
 
     // 7. Evaluador: Anthropic Managed Agents (default) u OpenAI (fallback).
     // Toggleable con CALIDAD_EVALUATOR=openai mientras el cap de Anthropic
@@ -334,20 +404,32 @@ async function procesarEvaluacion(
     const runEvaluator = usarOpenAI ? evaluarConsultaOpenAI : evaluarConsulta;
     const { sessionId, evaluacion } = await runEvaluator(transcript, formulario, medico, {
       onProgreso: (texto) => agregarPaso(evaluacionId, texto),
+      contexto,
     });
     await agregarPaso(evaluacionId, 'Evaluación completada. Guardando resultados...');
 
-    // Guard de tipo sobre puntaje_total
-    let puntaje: number | null = null;
-    if (
-      evaluacion &&
-      typeof evaluacion.puntaje_total === 'number' &&
-      Number.isFinite(evaluacion.puntaje_total)
-    ) {
-      puntaje = evaluacion.puntaje_total;
-    } else if (evaluacion && evaluacion.puntaje_total != null) {
-      const n = Number(evaluacion.puntaje_total);
-      if (Number.isFinite(n)) puntaje = n;
+    // El total lo recalcula el backend a partir de los puntajes 1-5 y los pesos
+    // de la rúbrica: la aritmética del modelo no es confiable y la nota es lo
+    // que ve el coordinador. El puntaje_total del modelo queda de respaldo
+    // (solo si faltan criterios y no se puede recalcular).
+    let puntaje: number | null = computePuntajeTotal(evaluacion?.criterios, medico);
+
+    if (puntaje === null) {
+      console.warn(`${tag} No se pudo recalcular el puntaje; se usa el del modelo`);
+      if (
+        evaluacion &&
+        typeof evaluacion.puntaje_total === 'number' &&
+        Number.isFinite(evaluacion.puntaje_total)
+      ) {
+        puntaje = evaluacion.puntaje_total;
+      } else if (evaluacion && evaluacion.puntaje_total != null) {
+        const n = Number(evaluacion.puntaje_total);
+        if (Number.isFinite(n)) puntaje = n;
+      }
+    } else if (evaluacion) {
+      // El JSONB también alimenta el gauge del frontend: si no se sincroniza,
+      // la tarjeta y el detalle muestran notas distintas.
+      evaluacion.puntaje_total = puntaje;
     }
 
     // 8. Estado → completado
@@ -597,7 +679,8 @@ class CalidadService {
       source,
       historiaId,
       session.numeroId,
-      session.doctorName
+      session.doctorName,
+      session.fechaAtencion
     ).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[calidad][eval#${evaluacionId}] procesamiento async falló:`, msg);

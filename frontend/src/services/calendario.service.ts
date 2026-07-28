@@ -100,6 +100,8 @@ export interface IndicadoresResumen {
   atendidas: number;
   noContactadas: number;
   noContacto: number;
+  /** Cupos teóricos del rango; null si el cálculo falló. */
+  capacidad: number | null;
   porMedico: IndicadorMedico[];
 }
 

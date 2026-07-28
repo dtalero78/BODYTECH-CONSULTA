@@ -238,6 +238,8 @@ export interface IndicadoresResumen {
   atendidas: number;
   noContactadas: number;
   noContacto: number;
+  /** Cupos teóricos del rango (disponibilidad ÷ tiempo_consulta); null si falló. */
+  capacidad: number | null;
   porMedico: IndicadorMedico[];
 }
 
@@ -363,9 +365,13 @@ class CalendarioService {
 
     // Citas y cupos teóricos en paralelo: son independientes y el segundo no
     // debe alargar la carga del calendario.
+    const primerDia = `${year}-${String(month).padStart(2, '0')}-01`;
+    const mesSiguiente = month === 12 ? 1 : month + 1;
+    const anioSiguiente = month === 12 ? year + 1 : year;
+    const finExclusivo = `${anioSiguiente}-${String(mesSiguiente).padStart(2, '0')}-01`;
     const [rows, cuposPorDia] = await Promise.all([
       postgresService.query(sql, params),
-      this.getCuposPorDia(year, month, sedeIds, medicoCodigo),
+      this.getCuposPorDia(primerDia, finExclusivo, sedeIds, medicoCodigo),
     ]);
     if (rows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando calendario.' } };
@@ -633,10 +639,19 @@ class CalendarioService {
       GROUP BY medico_codigo, clase
     `;
 
-    const rows = await postgresService.query(sql, params);
+    // Citas y cupos teóricos del rango en paralelo. `to` es inclusive para el
+    // usuario, y getCuposPorDia espera el fin exclusivo → +1 día.
+    const [rows, cuposPorDia] = await Promise.all([
+      postgresService.query(sql, params),
+      this.getCuposPorDia(from, addDaysIso(to, 1).fecha, sedeIds, medicoCodigo),
+    ]);
     if (rows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando indicadores.' } };
     }
+    const capacidad =
+      cuposPorDia === null
+        ? null
+        : Object.values(cuposPorDia).reduce((a, n) => a + n, 0);
 
     let agendadas = 0;
     let atendidas = 0;
@@ -719,7 +734,7 @@ class CalendarioService {
     return {
       ok: true,
       status: 200,
-      data: { from, to, agendadas, atendidas, noContactadas, noContacto, porMedico },
+      data: { from, to, agendadas, atendidas, noContactadas, noContacto, capacidad, porMedico },
     };
   }
 
@@ -803,16 +818,13 @@ class CalendarioService {
    * presencial), esto lo subestima.
    */
   private async getCuposPorDia(
-    year: number,
-    month: number,
+    /** Primer día del rango, inclusive (YYYY-MM-DD). */
+    start: string,
+    /** Día siguiente al último, EXCLUSIVE (YYYY-MM-DD). */
+    end: string,
     sedeIds: string[],
     medicoCodigo?: string
   ): Promise<Record<string, number> | null> {
-    const start = `${year}-${String(month).padStart(2, '0')}-01`;
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    const end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
-
     const params: unknown[] = [sedeIds, start, end];
     let medicoFilter = '';
     if (medicoCodigo) {

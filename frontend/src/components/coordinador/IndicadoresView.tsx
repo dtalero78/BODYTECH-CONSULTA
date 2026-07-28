@@ -266,6 +266,13 @@ export function IndicadoresView({ showToast }: Props) {
     { key: 'ayer', label: 'Ayer' },
   ];
 
+  // Capacidad del rango: cupos teóricos según la disponibilidad configurada.
+  // La tarjeta muestra el total; el % es lo que queda libre. Sobrecupo = se
+  // agendó por encima de la agenda abierta (no queda nada libre).
+  const capacidad = data?.capacidad ?? null;
+  const capacidadLibre = capacidad === null ? 0 : Math.max(0, capacidad - (data?.agendadas ?? 0));
+  const sobrecupo = capacidad !== null && capacidad > 0 && (data?.agendadas ?? 0) > capacidad;
+
   return (
     <div style={{ fontFamily: FONT_INTER }}>
       {/* Encabezado */}
@@ -334,7 +341,7 @@ export function IndicadoresView({ showToast }: Props) {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
           <KpiCard
             label="Personas agendadas"
             value={data?.agendadas ?? 0}
@@ -368,6 +375,19 @@ export function IndicadoresView({ showToast }: Props) {
             caption={data ? `${pct(data.noContacto, data.agendadas)} de agendadas` : undefined}
             loading={loading}
             accent="red"
+          />
+          <KpiCard
+            label="Capacidad total"
+            value={capacidad ?? 0}
+            unavailable={capacidad === null}
+            caption={
+              capacidad === null
+                ? 'sin datos de disponibilidad'
+                : `${pct(capacidadLibre, capacidad)} disponible · ${pct(data?.agendadas ?? 0, capacidad)} ${sobrecupo ? 'sobrecupo' : 'utilizado'}`
+            }
+            loading={loading}
+            accent={sobrecupo ? 'red' : 'ink'}
+            title="Cupos que caben en la disponibilidad configurada del rango: cada franja se trocea con el tiempo de consulta de cada profesional. El porcentaje es lo que queda libre (capacidad − reservados)."
           />
         </div>
       </div>
@@ -555,12 +575,18 @@ function KpiCard({
   caption,
   loading,
   accent,
+  unavailable = false,
+  title,
 }: {
   label: string;
   value: number;
   caption?: string;
   loading: boolean;
   accent: 'ink' | 'green' | 'amber' | 'red' | 'zinc';
+  /** El dato no se pudo calcular: "—" en vez de un cero engañoso. */
+  unavailable?: boolean;
+  /** Tooltip sobre la etiqueta (marca un ° al lado). */
+  title?: string;
 }) {
   const dot =
     accent === 'green'
@@ -586,13 +612,16 @@ function KpiCard({
     <div className="px-6 py-5" style={{ fontFamily: FONT_INTER }}>
       <div className="flex items-center gap-1.5">
         <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-        <span className={SECTION_LABEL}>{label}</span>
+        <span className={SECTION_LABEL} title={title}>
+          {label}
+          {title && <span className="text-zinc-400 cursor-help"> °</span>}
+        </span>
       </div>
       <div
         className={`mt-2 text-[34px] font-semibold tabular-nums leading-none ${valCls}`}
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
-        {loading ? '—' : value.toLocaleString('es-CO')}
+        {loading || unavailable ? '—' : value.toLocaleString('es-CO')}
       </div>
       <div className="mt-2 h-[14px] text-[11.5px] text-zinc-400">
         {!loading && caption ? caption : ''}

@@ -363,13 +363,16 @@ export function CalendarioView({ showToast, reportCount }: Props) {
     return mesData?.porDia[selectedDay] ?? vacio;
   }, [selectedDay, mesData]);
 
-  // Etiqueta corta del día para las tarjetas: "mar 28 jul".
+  // Chip del día en las tarjetas: "28 JUL". Va deliberadamente corto — son 6
+  // columnas y un chip largo parte la etiqueta en dos líneas. El día completo
+  // con nombre ya se lee en el encabezado del panel lateral.
   const selectedDayLabel = useMemo(() => {
     if (!selectedDay) return '';
     const [y, m, d] = selectedDay.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d))
-      .toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
-      .replace(/\./g, '');
+      .toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+      .replace(/\./g, '')
+      .replace(/ de /, ' '); // "29 de jul" → "29 jul"
   }, [selectedDay]);
 
   const mesLabel = MESES[month - 1].toLowerCase();
@@ -399,7 +402,6 @@ export function CalendarioView({ showToast, reportCount }: Props) {
   // profesional) contra lo ya agendado. Con día seleccionado, ese día.
   const capacidad = selectedDay ? (diaKpis?.capacidad ?? null) : (mesData?.capacidad ?? null);
   const agendadas = selectedDay ? (diaKpis?.total ?? 0) : (mesData?.totalCitas ?? 0);
-  const cuposLibres = capacidad === null ? 0 : Math.max(0, capacidad - agendadas);
 
   function limpiarFiltros() {
     setSedesSel(sedes.map((s) => s.sedeId));
@@ -573,8 +575,8 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             hint={noContactoHint}
           />
           <KpiCard
-            label="Capacidad disponible"
-            value={cuposLibres}
+            label="Capacidad total"
+            value={capacidad ?? 0}
             unavailable={capacidad === null}
             compare={{ kind: 'ocupacion', ocupados: agendadas, capacidad }}
             loading={loadingMes}
@@ -583,7 +585,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
             hint={
               capacidad === null
                 ? 'No se pudo calcular la capacidad. Revisa la disponibilidad configurada de los profesionales.'
-                : 'Cupos que caben en la disponibilidad configurada (cada franja se trocea con el tiempo de consulta del profesional), menos lo ya agendado. Cuenta el periodo completo, incluidos los días que ya pasaron.'
+                : 'Cupos que caben en la disponibilidad configurada: cada franja se trocea con el tiempo de consulta del profesional. El porcentaje es lo que queda libre (capacidad − reservados). Cuenta el periodo completo, incluidos los días que ya pasaron.'
             }
             isLast
           />
@@ -967,12 +969,16 @@ function KpiCard({
     compare.kind === 'share' && compare.total > 0
       ? `${((value / compare.total) * 100).toFixed(1)}%`
       : '—';
-  // Modo capacidad: % de cupos ya tomados. Por encima de 100 hay sobrecupo
-  // (más citas que agenda configurada), que conviene que salte a la vista.
-  const ocupacion =
-    compare.kind === 'ocupacion' && compare.capacidad !== null && compare.capacidad > 0
-      ? (compare.ocupados / compare.capacidad) * 100
-      : null;
+  // Modo capacidad: el número grande es la capacidad total y el pie desglosa
+  // las dos caras de esa agenda — cuánto queda libre y cuánto está usado.
+  // Suman 100 salvo sobrecupo (se agendó por encima de la agenda configurada),
+  // donde utilizado pasa de 100 y disponible es 0.
+  const capacidadValida =
+    compare.kind === 'ocupacion' && compare.capacidad !== null && compare.capacidad > 0;
+  const libres = capacidadValida ? Math.max(0, compare.capacidad! - compare.ocupados) : 0;
+  const pctLibre = capacidadValida ? (libres / compare.capacidad!) * 100 : null;
+  const pctUsado = capacidadValida ? (compare.ocupados / compare.capacidad!) * 100 : null;
+  const sobrecupo = pctUsado !== null && pctUsado > 100;
   return (
     <div
       className={`py-3 px-6 ${isLast ? '' : 'border-r border-zinc-200'}`}
@@ -1043,24 +1049,21 @@ function KpiCard({
           </>
         ) : (
           <>
-            <span
-              className={`text-[12px] tabular-nums ${
-                ocupacion !== null && ocupacion > 100 ? 'text-red-700' : 'text-zinc-500'
-              }`}
-              style={{ fontFamily: FONT_MONO }}
-            >
-              {ocupacion === null ? '—' : `${ocupacion.toFixed(1)}%`}
-            </span>
             <span className="text-[11px] text-zinc-400">
-              {ocupacion !== null && ocupacion > 100 ? 'sobrecupo · ' : 'ocupada · '}
-              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
-                {compare.ocupados.toLocaleString('es-CO')}
-              </span>
-              {' de '}
-              <span className="tabular-nums" style={{ fontFamily: FONT_MONO }}>
-                {compare.capacidad === null ? '—' : compare.capacidad.toLocaleString('es-CO')}
+              <span
+                className="text-[12px] tabular-nums text-zinc-600"
+                style={{ fontFamily: FONT_MONO }}
+              >
+                {pctLibre === null ? '—' : `${pctLibre.toFixed(1)}%`}
               </span>{' '}
-              cupos
+              disponible ·{' '}
+              <span
+                className={`text-[12px] tabular-nums ${sobrecupo ? 'text-red-700' : 'text-zinc-600'}`}
+                style={{ fontFamily: FONT_MONO }}
+              >
+                {pctUsado === null ? '—' : `${pctUsado.toFixed(1)}%`}
+              </span>{' '}
+              {sobrecupo ? 'sobrecupo' : 'utilizado'}
             </span>
           </>
         )}

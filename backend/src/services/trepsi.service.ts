@@ -664,6 +664,28 @@ class TrepsiService {
 
     const historiaId = String(existing[0].historia_id);
 
+    // Una cita YA atendida no se puede reprogramar: reagendarla la volvería
+    // "fantasma" (fechaConsulta puesta + fecha futura → cuenta como atendida y
+    // reaparece en la agenda del día nuevo, inflando "Atendidos"). Para un
+    // control, Trepsi debe crear una cita NUEVA (otro citaId), no reutilizar
+    // una ya cerrada. Solo se bloquea si de verdad se está moviendo la fecha.
+    if (input.fechaAtencion) {
+      const hc = await postgresService.query(
+        'SELECT "fechaConsulta" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1',
+        [historiaId]
+      );
+      if (hc && hc.length > 0 && hc[0].fechaConsulta != null) {
+        return {
+          ok: false,
+          status: 409,
+          error: {
+            code: 'ALREADY_ATTENDED',
+            message: 'La cita ya fue atendida y no puede reprogramarse; cree una cita nueva.',
+          },
+        };
+      }
+    }
+
     // Build dynamic UPDATE only with provided fields.
     const sets: string[] = ['updated_at = NOW()'];
     const params: unknown[] = [];

@@ -702,6 +702,17 @@ class VideoController {
         res.status(409).json({ success: false, error: 'La cita no tiene médico asignado.' });
         return;
       }
+      // Una cita YA atendida no se puede reprogramar: si se mueve a futuro queda
+      // "fantasma" (aparece en la agenda del día nuevo pero ya tiene fechaConsulta,
+      // así que cuenta como atendida y nadie la atiende). El afiliado que necesite
+      // otra consulta debe agendar una NUEVA cita.
+      if (cita.yaAtendida) {
+        res.status(409).json({
+          success: false,
+          error: 'Esta consulta ya fue atendida y no puede reprogramarse. Agenda una cita nueva.',
+        });
+        return;
+      }
 
       // Validar que el slot elegido siga disponible para el MISMO médico de la
       // cita (evita doble reserva si alguien tomó el cupo entre que se listó y

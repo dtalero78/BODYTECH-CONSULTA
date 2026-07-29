@@ -721,10 +721,14 @@ class MedicalPanelService {
     celular: string | null;
     fechaAtencion: string | null;
     horaAtencion: string | null;
+    // Presente ⟺ la cita YA fue atendida. El flujo de reprogramación lo usa
+    // para rechazar reagendar una consulta cerrada (si no, queda "fantasma":
+    // atendida pero con fecha futura, inflando contadores y agendas).
+    yaAtendida: boolean;
   } | null> {
     const rows = await postgresService.query(
       `SELECT "medico", COALESCE("sede_id", 'bsl') AS sede_id, "primerNombre",
-              "celular", "fechaAtencion", "horaAtencion"
+              "celular", "fechaAtencion", "horaAtencion", "fechaConsulta"
          FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
       [id]
     );
@@ -737,6 +741,7 @@ class MedicalPanelService {
       celular: r.celular ? String(r.celular) : null,
       fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
       horaAtencion: r.horaAtencion ? String(r.horaAtencion) : null,
+      yaAtendida: r.fechaConsulta != null,
     };
   }
 

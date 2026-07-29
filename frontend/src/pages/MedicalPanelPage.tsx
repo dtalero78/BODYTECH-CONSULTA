@@ -390,9 +390,21 @@ export function MedicalPanelPage() {
   const handleContactar = async (patient: Patient) => {
     setContactingPatient(patient._id);
     try {
-      // Generar sala única y guardarla para este paciente
-      const roomName = medicalPanelService.generateRoomName();
-      setPatientRooms(prev => ({ ...prev, [patient._id]: roomName }));
+      // REUSAR la sala que el sistema ya conoce (la real donde está el paciente,
+      // o la persistida en el servidor), en vez de generar una NUEVA en cada
+      // "Contactar"/"Rellamar". Si no, al re-contactar (muy común) se creaba otra
+      // sala y se sobrescribía `video_room_name`, mientras el paciente seguía con
+      // el link viejo → coach y paciente en salas distintas ("esperando afiliado"
+      // mientras el paciente estaba conectado en otra). Mismo orden que "Atender":
+      // navegador → servidor → nueva.
+      let roomName = patientRooms[patient._id] || patientRooms[patient.numeroId] || '';
+      if (!roomName) {
+        roomName = (await apiService.getStoredRoom(patient._id)) || '';
+      }
+      if (!roomName) {
+        roomName = medicalPanelService.generateRoomName();
+      }
+      setPatientRooms((prev) => ({ ...prev, [patient._id]: roomName }));
 
       // Formatear teléfono con código de país internacional
       const phoneWithPlus = formatPhoneNumber(patient.celular);

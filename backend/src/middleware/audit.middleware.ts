@@ -48,6 +48,12 @@ function classify(method: string, path: string): Clasificacion {
   let id = g(/^\/api\/medical-panel\/patients\/([^/]+)\/no-answer/);
   if (id) return { accion: 'no_contesta', entidad: 'historia', entidadId: id };
 
+  // Reagendamiento del paciente por el link de WhatsApp (sin sesión → actor
+  // anónimo). Se etiqueta explícito para poder contarlo en Indicadores por
+  // evento (reprogramaciones, serial-reprogramadores).
+  id = g(/^\/api\/video\/reprogramar\/([^/]+)/);
+  if (id) return { accion: 'reprogramar', entidad: 'cita', entidadId: id };
+
   id = g(/^\/api\/medical-panel\/ordenes\/([^/]+)/);
   if (id) {
     return {

@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import calendarioService from '../services/calendario.service';
+import auditService from '../services/audit.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 import postgresService from '../services/postgres.service';
 import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
@@ -161,6 +162,29 @@ class CalendarioController {
         return;
       }
       res.status(200).json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Indicadores POR EVENTO (audit_log): No Contesta + Reprogramaciones. A
+  // diferencia de getIndicadores (que cuenta el estado ACTUAL de la cita, un
+  // snapshot que se pierde al reagendar/atender), estos cuentan los eventos
+  // reales e inmutables → métricas correctas que no se afectan por la limpieza.
+  getIndicadoresEventos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedes = await resolveSedes(req);
+      const from = typeof req.query.from === 'string' ? req.query.from : '';
+      const to = typeof req.query.to === 'string' ? req.query.to : '';
+      if (!from || !to) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'from y to son requeridos (YYYY-MM-DD).' },
+        });
+        return;
+      }
+      const data = await auditService.indicadoresEventos(from, to, sedes);
+      res.status(200).json({ success: true, data });
     } catch (err) {
       next(err);
     }

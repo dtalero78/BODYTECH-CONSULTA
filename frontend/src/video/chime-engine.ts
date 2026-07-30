@@ -44,6 +44,7 @@ import {
 } from 'amazon-chime-sdk-js';
 import type {
   AudioVideoObserver,
+  AudioMixObserver,
   VideoTileState,
   MeetingSession,
   Device,
@@ -212,6 +213,9 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   private chosenVideoDeviceId: Device | null = null;
   private localAudioStream: MediaStream | null = null;
   private remoteAudioStream: MediaStream | null = null;
+  // Observador del mezclador de audio: Chime avisa por aquí cuando el stream de
+  // la reunión (voz del paciente) queda activo o se reemplaza (ver connect()).
+  private audioMixObserver: AudioMixObserver | null = null;
   private currentVideoTransformDevice: DefaultVideoTransformDevice | null = null;
 
   private audioEnabled = true;
@@ -403,10 +407,32 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     document.body.appendChild(this.hiddenAudioEl);
     await session.audioVideo.bindAudioElement(this.hiddenAudioEl);
 
+    // El audio de la reunión (la voz del PACIENTE) no existe todavía en este
+    // punto: Chime lo crea cuando la conexión WebRTC entrega su primer track
+    // (CreatePeerConnectionTask → bindAudioStream), un par de segundos después
+    // de audioVideo.start(). Preguntar aquí por getCurrentMeetingAudioStream()
+    // devolvía null SIEMPRE y, como se cacheaba una sola vez, la mezcla que
+    // alimenta la transcripción quedaba con el micrófono del coach nada más —
+    // por eso el transcript traía solo las preguntas del coach y nunca al
+    // paciente. Nos suscribimos al mezclador para enterarnos cuando el stream
+    // quede activo (y también cuando Chime lo reemplace tras una reconexión).
+    this.audioMixObserver = {
+      meetingAudioStreamBecameActive: (activeStream: MediaStream) => {
+        this.remoteAudioStream = activeStream;
+        console.log(
+          `[Chime] Audio de la reunión listo para transcribir (${activeStream.getAudioTracks().length} pista/s)`
+        );
+      },
+      meetingAudioStreamBecameInactive: (inactiveStream: MediaStream) => {
+        if (this.remoteAudioStream === inactiveStream) this.remoteAudioStream = null;
+      },
+    };
+    session.audioVideo.addAudioMixObserver(this.audioMixObserver);
+    // Por si el stream ya estaba enlazado antes de suscribirnos.
     session.audioVideo
       .getCurrentMeetingAudioStream()
       .then((stream) => {
-        this.remoteAudioStream = stream;
+        if (stream) this.remoteAudioStream = stream;
       })
       .catch(() => undefined);
 
@@ -433,6 +459,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     if (this.session) {
       try {
         if (this.observer) this.session.audioVideo.removeObserver(this.observer);
+        if (this.audioMixObserver)
+          this.session.audioVideo.removeAudioMixObserver(this.audioMixObserver);
         this.session.audioVideo.stop();
       } catch {
         /* noop */
@@ -448,6 +476,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     }
     this.session = null;
     this.observer = null;
+    this.audioMixObserver = null;
     this.participants.clear();
     this.tileIdByAttendee.clear();
     this.streamByAttendee.clear();
@@ -513,7 +542,14 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
   }
 
   getRemoteAudioTracks(): MediaStreamTrack[] {
-    return this.remoteAudioStream ? this.remoteAudioStream.getAudioTracks() : [];
+    // Fuente principal: lo que reportó el observador del mezclador. Como red de
+    // seguridad leemos también el elemento <audio> oculto, que es donde el SDK
+    // deja el stream de la reunión (audioElement.srcObject) — si por lo que sea
+    // el observador no llegó, el audio del paciente igual entra a la mezcla.
+    const stream =
+      this.remoteAudioStream ||
+      ((this.hiddenAudioEl?.srcObject as MediaStream | null) ?? null);
+    return stream ? stream.getAudioTracks() : [];
   }
 
   // ---- ChimeVideoEngineLike: background effects (see useBackgroundEffects.ts) ----

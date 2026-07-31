@@ -390,16 +390,17 @@ export function MedicalPanelPage() {
   const handleContactar = async (patient: Patient) => {
     setContactingPatient(patient._id);
     try {
-      // REUSAR la sala que el sistema ya conoce (la real donde está el paciente,
-      // o la persistida en el servidor), en vez de generar una NUEVA en cada
-      // "Contactar"/"Rellamar". Si no, al re-contactar (muy común) se creaba otra
-      // sala y se sobrescribía `video_room_name`, mientras el paciente seguía con
-      // el link viejo → coach y paciente en salas distintas ("esperando afiliado"
-      // mientras el paciente estaba conectado en otra). Mismo orden que "Atender":
-      // navegador → servidor → nueva.
-      let roomName = patientRooms[patient._id] || patientRooms[patient.numeroId] || '';
+      // REUSAR la sala que el sistema ya conoce, en vez de generar una NUEVA en
+      // cada "Contactar"/"Rellamar" (si no, al re-contactar se creaba otra sala y
+      // el paciente quedaba con el link viejo → salas distintas). Mismo orden de
+      // confianza que "Atender": la sala donde el paciente está AHORA (socket) o
+      // la persistida en el SERVIDOR ganan sobre la memoria vieja del navegador.
+      let roomName = patientRooms[patient.numeroId] || '';
       if (!roomName) {
         roomName = (await apiService.getStoredRoom(patient._id)) || '';
+      }
+      if (!roomName) {
+        roomName = patientRooms[patient._id] || '';
       }
       if (!roomName) {
         roomName = medicalPanelService.generateRoomName();
@@ -488,22 +489,25 @@ export function MedicalPanelPage() {
   const handleAtender = async (patient: Patient) => {
     setAttendingPatient(patient._id);
     try {
-      // Sala a usar, por orden de confianza:
-      //  1. La guardada al Contactar (clave = _id de la historia).
-      //  2. La sala REAL donde el paciente ya está conectado, que llega por el
-      //     socket patient-connected (clave = numeroId/cédula, porque el paciente
-      //     entra con documento=numeroId). Sin esto, cuando el link lo mandó el
-      //     sistema (Trepsi) o tras recargar la página, se generaba una sala
-      //     nueva y quedaban en videollamadas distintas.
-      //  3. Solo si no hay ninguna, se genera una nueva.
-      let roomName = patientRooms[patient._id] || patientRooms[patient.numeroId];
-      // 3. Si la memoria del navegador no la tiene (recargó, u otra sesión),
-      //    pedirla al SERVIDOR: ahí se guardó al enviar el link. Es la fuente de
-      //    verdad, así entra a la MISMA sala del paciente aunque ya no la recuerde.
+      // Sala a usar, por orden de CONFIANZA: la fuente de verdad va ANTES que la
+      // memoria volátil del navegador. `patientRooms[_id]` podía tener una sala
+      // vieja de otra acción de esta misma sesión y GANABA sobre la sala real del
+      // paciente/servidor → coach y paciente quedaban en salas distintas
+      // ("conectado pero no se ve"). Ahora:
+      //  1. Donde el paciente está conectado AHORA (socket patient-connected,
+      //     clave = numeroId/cédula, porque entra con documento=numeroId).
+      //  2. La sala persistida al enviar el link (SERVIDOR = video_room_name): la
+      //     que recibió el paciente, aunque el navegador ya no la recuerde
+      //     (recarga, otra sesión, o link enviado por Trepsi).
+      //  3. La memoria del navegador bajo _id (último recurso antes de generar).
+      //  4. Si no hay ninguna, una nueva.
+      let roomName = patientRooms[patient.numeroId] || '';
       if (!roomName) {
         roomName = (await apiService.getStoredRoom(patient._id)) || '';
       }
-      // 4. Último recurso: no hay ninguna guardada (nunca se contactó). Nueva.
+      if (!roomName) {
+        roomName = patientRooms[patient._id] || '';
+      }
       if (!roomName) {
         roomName = medicalPanelService.generateRoomName();
       }

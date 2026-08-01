@@ -197,31 +197,31 @@ class MedicalPanelService {
         params
       );
 
-      // Query para restantes hoy (programados sin fechaConsulta y que NO estén
-      // en "No Contesta" — esos se ocultan de la lista del coach, así que el
-      // contador de restantes debe cuadrar con la lista de getPendingPatients).
+      // Query para restantes hoy. Se oculta SOLO por `pvEstado='No Contesta'`,
+      // NO por `atendido='NO CONTESTA'`: al reagendar/editar se limpia pvEstado
+      // pero `atendido` puede quedar colgado en 'NO CONTESTA' (hay rutas que no
+      // lo resetean: editar cita del paciente, reasignación, etc.) → la cita
+      // quedaba oculta aunque ya estuviera reagendada. Con pvEstado como único
+      // criterio, una cita reagendada (pvEstado limpio) SIEMPRE reaparece.
       const restantesResult = await postgresService.query(
         `SELECT COUNT(*) as count FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND "fechaConsulta" IS NULL
-         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
          AND COALESCE("pvEstado", '') <> 'No Contesta'${sf}`,
         params
       );
 
-      // Query para "No Contesta" de hoy (sin atender). Es el complemento exacto
-      // de `restantes`: juntos cubren todo lo que no tiene fechaConsulta, de modo
-      // que programados = atendidos + restantes + noContesta.
+      // "No Contesta" de hoy (sin atender): complemento exacto de `restantes`
+      // (mismo criterio pvEstado) → programados = atendidos + restantes + noContesta.
       const noContestaResult = await postgresService.query(
         `SELECT COUNT(*) as count FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND "fechaConsulta" IS NULL
-         AND (UPPER(COALESCE("atendido", '')) = 'NO CONTESTA'
-              OR COALESCE("pvEstado", '') = 'No Contesta')${sf}`,
+         AND COALESCE("pvEstado", '') = 'No Contesta'${sf}`,
         params
       );
 
@@ -287,7 +287,6 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
-         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
          AND COALESCE("pvEstado", '') <> 'No Contesta'
          AND "numeroId" NOT IN ('TEST', 'test')${sf}
          ORDER BY (CASE WHEN "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
@@ -305,7 +304,6 @@ class MedicalPanelService {
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
          AND ("fechaConsulta" IS NULL)
-         AND UPPER(COALESCE("atendido", '')) <> 'NO CONTESTA'
          AND COALESCE("pvEstado", '') <> 'No Contesta'
          AND "numeroId" NOT IN ('TEST', 'test')${sf}`,
         whereParams

@@ -24,6 +24,12 @@ import postgresService from '../postgres.service';
 const REGION = process.env.CHIME_MEDIA_REGION || process.env.AWS_REGION || 'us-east-1';
 const BUCKET = process.env.RECORDINGS_BUCKET || '';
 const ENABLED = (process.env.RECORDINGS_ENABLED || 'false').toLowerCase() === 'true' && !!BUCKET;
+// Muestreo de calidad: cuántas grabaciones por coach al mes (repartidas). El mes
+// se parte en esta cantidad de franjas iguales y se graba la primera consulta de
+// cada coach en cada franja → N grabaciones repartidas parejo, tope garantizado.
+// Ajustable por env sin redeploy. NO afecta lo clínico (el autollenado usa la vía
+// del navegador, corre en todas las consultas); solo limita la muestra de /calidad.
+const MUESTRAS_POR_MES = Math.max(1, Number(process.env.CHIME_SAMPLES_PER_MONTH) || 10);
 
 interface ChimeMeetingLike {
   MeetingId?: string;
@@ -107,6 +113,16 @@ class ChimeRecordingService {
         [meeting.MeetingId]
       );
       if (existing && existing.length > 0) return;
+
+      // Compuerta de muestreo: 10/mes por coach, repartidas en franjas de ~3 días
+      // (una por franja). Si esta franja ya tiene grabación de este coach, no se
+      // graba (invisible para la llamada; la historia clínica no se afecta).
+      if (!(await this.debeGrabarPorMuestreo(roomName))) {
+        await postgresService
+          .query(`UPDATE video_sessions SET recording_enabled = false WHERE room_name = $1`, [roomName])
+          .catch(() => {});
+        return;
+      }
 
       const capturePrefix = `captures/${meeting.MeetingId}`;
       const res = await this.pipelines.send(
@@ -251,6 +267,73 @@ class ChimeRecordingService {
       return rows?.[0]?.meeting_id || null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Muestreo estratificado por franjas de tiempo. El mes se parte en
+   * `MUESTRAS_POR_MES` franjas iguales (~3 días con el default de 10) y en cada
+   * franja se graba SOLO la primera consulta de cada coach. Resultado: hasta
+   * N grabaciones por coach al mes, REPARTIDAS parejo, sin necesidad de saber
+   * cuántas consultas hará (un coach con pocas consultas tendrá menos de N —
+   * natural). Devuelve true si esta consulta cae en una franja donde el coach
+   * aún no tiene grabación.
+   *
+   * Zona horaria: Colombia = UTC-5 (los límites de día se arman con
+   * Date.UTC(y, m, d, 5, ...), igual que getDailyStats). Ante cualquier duda
+   * (sin coach identificable o error de consulta) devuelve true: mejor grabar de
+   * más que perder una muestra de auditoría — el tope real de costo lo protege
+   * además el barrido de huérfanas.
+   */
+  private async debeGrabarPorMuestreo(roomName: string): Promise<boolean> {
+    try {
+      const vs = await postgresService.query(
+        `SELECT medico FROM video_sessions WHERE room_name = $1 LIMIT 1`,
+        [roomName]
+      );
+      const medico: string | undefined = vs?.[0]?.medico;
+      if (!medico) return true; // sin coach → no bloquear
+
+      // "Ahora" en hora Colombia: desplazar UTC-5 y leer los campos UTC.
+      const ahoraCo = new Date(Date.now() - 5 * 3600_000);
+      const y = ahoraCo.getUTCFullYear();
+      const m = ahoraCo.getUTCMonth(); // 0-11
+      const diaDelMes = ahoraCo.getUTCDate(); // 1-31
+      const diasEnMes = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+
+      const tamFranja = diasEnMes / MUESTRAS_POR_MES;
+      const franja = Math.floor((diaDelMes - 1) / tamFranja); // 0 .. N-1
+      // ceil (no floor): con franjas no enteras (meses de 28/31 días) floor
+      // desalinea el rango con la asignación de franja y clasifica mal los días
+      // del borde. ceil mantiene las franjas contiguas, sin huecos ni solapes.
+      const diaInicio = Math.ceil(franja * tamFranja) + 1;
+      const diaFin = Math.ceil((franja + 1) * tamFranja) + 1; // primer día de la franja siguiente
+
+      // Límites en UTC (inicio de día en Colombia = 05:00 UTC).
+      const inicioUtc = new Date(Date.UTC(y, m, diaInicio, 5, 0, 0)).toISOString();
+      const finUtc = new Date(Date.UTC(y, m, diaFin, 5, 0, 0)).toISOString();
+
+      // ¿Este coach ya tiene una grabación REALMENTE iniciada en esta franja?
+      // (chime_recordings = capturas que arrancaron; se une al coach por sala)
+      const rec = await postgresService.query(
+        `SELECT 1
+           FROM chime_recordings cr
+           JOIN video_sessions vs2 ON vs2.room_name = cr.room_name
+          WHERE vs2.medico = $1
+            AND cr.created_at >= $2 AND cr.created_at < $3
+          LIMIT 1`,
+        [medico, inicioUtc, finUtc]
+      );
+      const yaGrabo = !!(rec && rec.length > 0);
+      if (yaGrabo) {
+        console.log(
+          `[ChimeRecording] Muestreo: coach ${medico} ya grabó en la franja ${franja + 1}/${MUESTRAS_POR_MES} del mes → se omite (sala ${roomName})`
+        );
+      }
+      return !yaGrabo;
+    } catch (err: any) {
+      console.warn(`[ChimeRecording] Muestreo: no se pudo evaluar cuota (${err?.message}) → se graba por seguridad`);
+      return true;
     }
   }
 

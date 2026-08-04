@@ -64,6 +64,29 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     variant: panelVariant,
   });
 
+  // Contador de duración de la consulta: arranca junto con la grabación y
+  // corre mientras isRecording sea true (se congela si se detiene/finaliza).
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const formattedRecordingTime = (() => {
+    const h = Math.floor(recordingSeconds / 3600);
+    const m = Math.floor((recordingSeconds % 3600) / 60);
+    const s = recordingSeconds % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  })();
+
   const {
     currentEffect,
     isProcessing,
@@ -287,9 +310,14 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
       )}
       {/* Indicador de grabación de la consulta (solo médico) */}
       {role === 'doctor' && isRecording && !isFinishing && (
-        <div className="absolute top-2 right-3 z-30 flex items-center gap-1.5 bg-black/55 backdrop-blur text-white text-[11px] font-medium rounded-full px-2.5 py-1 shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          Grabando consulta
+        <div className="absolute top-2 right-3 z-30 flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur text-white text-[11px] font-medium rounded-full px-2.5 py-1 shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            Grabando consulta
+          </div>
+          <div className="bg-black/55 backdrop-blur text-white text-[11px] font-mono rounded-full px-2.5 py-1 shadow-lg tabular-nums">
+            {formattedRecordingTime}
+          </div>
         </div>
       )}
 

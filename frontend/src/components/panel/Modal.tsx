@@ -19,6 +19,8 @@ interface ModalProps {
   children: ReactNode;
   /** Callback opcional al click en "Guardar" — sólo cierra por defecto. */
   onSave?: () => void;
+  /** Oculta el pill "Afiliado visible/en miniatura" — solo aplica a paneles con videollamada. Default true. */
+  showEyePill?: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface ModalProps {
  *
  * Animación scaleY 200ms ease-out al abrir.
  */
-export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave }: ModalProps) {
+export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true }: ModalProps) {
   // Esc para cerrar
   useEffect(() => {
     if (!open) return;
@@ -74,7 +76,7 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
             )}
             <div className="text-base font-bold text-[#e9edef] mt-0.5">{title}</div>
           </div>
-          <EyeOnPatientPill isMaxed={isMaxed} />
+          {showEyePill && <EyeOnPatientPill isMaxed={isMaxed} />}
           <button
             type="button"
             onClick={onClose}

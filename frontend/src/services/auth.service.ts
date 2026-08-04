@@ -259,6 +259,15 @@ class AuthService {
     return normalizeEsp(esp) === 'nutricion deportiva';
   }
 
+  /**
+   * True si el profesional logueado es Médico Corporativo → examen ocupacional
+   * presencial, sin sala de video ni notificación WhatsApp (ver /corporativo).
+   */
+  isMedicoCorporativo(): boolean {
+    const esp = this.getUser()?.especialidad ?? localStorage.getItem(ESP_KEY);
+    return normalizeEsp(esp) === 'medico corporativo';
+  }
+
   getToken(): string | null {
     return localStorage.getItem(TOKEN_KEY);
   }

@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import type { TabId } from './types';
 
-export interface TabDef {
-  id: TabId;
+export interface TabDef<T extends string = TabId> {
+  id: T;
   label: string;
   /** Cantidad de campos diligenciados */
   filled: number;
@@ -12,18 +12,20 @@ export interface TabDef {
   warn?: boolean;
 }
 
-interface TabsProps {
-  active: TabId;
-  onChange: (id: TabId) => void;
-  tabs: TabDef[];
+interface TabsProps<T extends string = TabId> {
+  active: T;
+  onChange: (id: T) => void;
+  tabs: ReadonlyArray<TabDef<T>>;
 }
 
 /**
- * 7 tabs con contador X/Y embebido + dot de status.
+ * Tabs con contador X/Y embebido + dot de status. Genérico sobre el tipo de id
+ * (por defecto `TabId` del panel de consulta estándar; otros paneles como el
+ * Médico Corporativo pasan su propio union type sin tocar `TabId`).
  * Cuando el contenedor es más angosto que el total de tabs,
  * aparecen flechas de navegación izquierda/derecha.
  */
-export function Tabs({ active, onChange, tabs }: TabsProps) {
+export function Tabs<T extends string = TabId>({ active, onChange, tabs }: TabsProps<T>) {
   const navRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);

@@ -489,6 +489,15 @@ export function MedicalPanelPage() {
   const handleAtender = async (patient: Patient) => {
     setAttendingPatient(patient._id);
     try {
+      // Médico Corporativo: examen ocupacional presencial, SIN sala de video —
+      // no aplica nada de la lógica de roomName/Twilio de abajo. Abre directo
+      // el formulario sobre la historia de la cita.
+      if (authService.isMedicoCorporativo()) {
+        const corporativoUrl = `${window.location.origin}/corporativo/${patient._id}`;
+        window.open(corporativoUrl, '_blank');
+        return;
+      }
+
       // Sala a usar, por orden de CONFIANZA: la fuente de verdad va ANTES que la
       // memoria volátil del navegador. `patientRooms[_id]` podía tener una sala
       // vieja de otra acción de esta misma sesión y GANABA sobre la sala real del
@@ -885,6 +894,8 @@ export function MedicalPanelPage() {
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-gray-700 flex flex-col gap-2 md:flex-row md:flex-wrap md:justify-between md:items-center">
+                    {/* Médico Corporativo: examen presencial, sin WhatsApp/llamada/chat */}
+                    {!authService.isMedicoCorporativo() && (
                     <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
                       <button
                         onClick={() => handleContactar(searchResult)}
@@ -957,6 +968,7 @@ export function MedicalPanelPage() {
                         Chat
                       </button>
                     </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
                       <button
@@ -1095,6 +1107,8 @@ export function MedicalPanelPage() {
 
                     {!collapsedItems[patient._id] && (
                       <div className="mt-4 pt-4 border-t border-gray-700 flex flex-col gap-2 md:flex-row md:flex-wrap md:justify-between md:items-center">
+                        {/* Médico Corporativo: examen presencial, sin WhatsApp/llamada/chat */}
+                        {!authService.isMedicoCorporativo() && (
                         <div className="grid grid-cols-3 gap-2 md:flex md:gap-2">
                           <button
                             onClick={() => handleContactar(patient)}
@@ -1167,6 +1181,7 @@ export function MedicalPanelPage() {
                             Chat
                           </button>
                         </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
                           <button

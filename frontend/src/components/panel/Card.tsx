@@ -45,9 +45,10 @@ export function Card({
 
   return (
     <div
+      onClick={onEdit}
       className={`bg-[#1f2c34] border border-[#324049] rounded-[18px] p-5 relative transition hover:border-[#3b4a54] ${
-        span2 ? 'col-span-1 md:col-span-2' : ''
-      }`}
+        onEdit ? 'cursor-pointer' : ''
+      } ${span2 ? 'col-span-1 md:col-span-2' : ''}`}
     >
       <div className="flex items-center gap-2.5 mb-3.5">
         <div className="w-[34px] h-[34px] rounded-[10px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
@@ -78,7 +79,10 @@ export function Card({
           {onEdit && (
             <button
               type="button"
-              onClick={onEdit}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
               className="ml-3 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold bg-[#00a884] text-[#001b14] hover:bg-[#008f6f] transition shadow-[0_4px_14px_rgba(0,168,132,0.25)]"
             >
               <Pencil size={13} />

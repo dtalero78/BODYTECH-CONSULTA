@@ -207,6 +207,141 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   // pero pasan por updateField() para reutilizar la coerción + audit centralizada.
   { field: 'transcription_status', type: 'string' },
   { field: 'transcription_text', type: 'string' },
+
+  // ---- Médico Corporativo (examen ocupacional presencial, sin videollamada) ----
+  // Whitelist-only: la columna `email` ya existe (legacy, base table) pero no
+  // estaba en el editor de ningún panel. Se habilita aquí para el panel
+  // corporativo (Identificación · Correo).
+  { field: 'email', type: 'string' },
+  { field: 'mc_direccion', type: 'string' },
+  { field: 'mc_enfermedad_actual', type: 'string' },
+  // Síntomas en ejercicio
+  { field: 'mc_sint_dolor_toracico', type: 'boolean' },
+  { field: 'mc_sint_palpitaciones', type: 'boolean' },
+  { field: 'mc_sint_disnea', type: 'boolean' },
+  { field: 'mc_sint_edema_mmii', type: 'boolean' },
+  { field: 'mc_sint_sincope', type: 'boolean' },
+  { field: 'mc_sint_claudicacion', type: 'boolean' },
+  // Antecedentes familiares
+  { field: 'mc_fam_cardiaca', type: 'boolean' },
+  { field: 'mc_fam_respiratoria', type: 'boolean' },
+  { field: 'mc_fam_msc_iam', type: 'boolean' },
+  { field: 'mc_fam_hta', type: 'boolean' },
+  { field: 'mc_fam_cerebrovascular', type: 'boolean' },
+  { field: 'mc_fam_otros', type: 'boolean' },
+  { field: 'mc_fam_diabetes', type: 'boolean' },
+  { field: 'mc_fam_cancer', type: 'boolean' },
+  { field: 'mc_fam_observaciones', type: 'string' },
+  // Antecedentes personales
+  { field: 'mc_per_cardiaca', type: 'boolean' },
+  { field: 'mc_per_respiratoria', type: 'boolean' },
+  { field: 'mc_per_tabaquismo', type: 'boolean' },
+  { field: 'mc_per_renal', type: 'boolean' },
+  { field: 'mc_per_hta', type: 'boolean' },
+  { field: 'mc_per_metabolica', type: 'boolean' },
+  { field: 'mc_per_cerebrovascular', type: 'boolean' },
+  { field: 'mc_per_alcohol', type: 'boolean' },
+  { field: 'mc_per_vacunas_covid', type: 'string' },
+  { field: 'mc_per_antecedente_covid', type: 'string' },
+  { field: 'mc_per_osteomuscular', type: 'string' },
+  { field: 'mc_per_quirurgicos', type: 'string' },
+  { field: 'mc_per_alergicos', type: 'string' },
+  { field: 'mc_per_farmacologicos', type: 'string' },
+  { field: 'mc_per_paraclinicos', type: 'string' },
+  { field: 'mc_per_alimentacion', type: 'string' },
+  { field: 'mc_per_observaciones', type: 'string' },
+  // Registro de actividad física
+  { field: 'mc_af_horas_dia', type: 'number' },
+  { field: 'mc_af_horas_semana', type: 'number' },
+  { field: 'mc_af_meses', type: 'number' },
+  { field: 'mc_af_sesiones_semana', type: 'number' },
+  { field: 'mc_af_rpe', type: 'number' },
+  { field: 'mc_af_horas_sedentario', type: 'number' },
+  { field: 'mc_af_modalidad', type: 'string' },
+  { field: 'mc_af_recomendacion', type: 'string' },
+  { field: 'mc_af_nivel', type: 'string' },
+  { field: 'mc_af_objetivo', type: 'string' },
+  // Examen físico — signos
+  { field: 'mc_frec_card', type: 'number' },
+  { field: 'mc_frec_resp', type: 'number' },
+  { field: 'mc_sato2', type: 'number' },
+  { field: 'mc_perimetro_abdominal', type: 'number' },
+  { field: 'mc_talla', type: 'number' },
+  // Examen físico — composición corporal
+  { field: 'mc_pct_grasa', type: 'number' },
+  { field: 'mc_pct_musculo', type: 'number' },
+  { field: 'mc_peso', type: 'number' },
+  { field: 'mc_grasa_visceral', type: 'number' },
+  { field: 'mc_imc', type: 'number' },
+  { field: 'mc_tmb', type: 'number' },
+  // Examen físico — parámetros de frecuencia cardíaca (Tanaka, %FCR, Karvonen)
+  { field: 'mc_fc_pico_prueba_esfuerzo', type: 'number' },
+  { field: 'mc_fc_reserva', type: 'number' },
+  { field: 'mc_fc_reserva_80', type: 'number' },
+  { field: 'mc_fc_reserva_75', type: 'number' },
+  { field: 'mc_fc_reserva_70', type: 'number' },
+  { field: 'mc_fc_reserva_60', type: 'number' },
+  { field: 'mc_fc_tanaka', type: 'number' },
+  { field: 'mc_fc_pico_predicha_90', type: 'number' },
+  { field: 'mc_fc_pico_predicha_80', type: 'number' },
+  { field: 'mc_fc_pico_predicha_75', type: 'number' },
+  { field: 'mc_fc_pico_predicha_70', type: 'number' },
+  { field: 'mc_fc_pico_predicha_60', type: 'number' },
+  // Examen físico — revisión por sistemas
+  { field: 'mc_rs_cabeza', type: 'string' },
+  { field: 'mc_rs_pares_craneales', type: 'string' },
+  { field: 'mc_rs_fuerza_mmss', type: 'string' },
+  { field: 'mc_rs_fuerza_mmii', type: 'string' },
+  { field: 'mc_rs_cara', type: 'string' },
+  { field: 'mc_rs_abd_pelvis', type: 'string' },
+  { field: 'mc_rs_push_ups', type: 'number' },
+  { field: 'mc_rs_cuello', type: 'string' },
+  { field: 'mc_rs_genitales', type: 'string' },
+  { field: 'mc_rs_abdominales', type: 'number' },
+  { field: 'mc_rs_torax', type: 'string' },
+  { field: 'mc_rs_piel', type: 'string' },
+  { field: 'mc_rs_abdomen', type: 'string' },
+  { field: 'mc_rs_pulsos', type: 'string' },
+  { field: 'mc_rs_corazon', type: 'string' },
+  { field: 'mc_rs_respiratorio', type: 'string' },
+  { field: 'mc_rs_osteomuscular', type: 'string' },
+  // Examen físico — Ruffier (fórmula estándar; validar bandas con el equipo médico)
+  { field: 'mc_ruffier_fc1', type: 'number' },
+  { field: 'mc_ruffier_fc2', type: 'number' },
+  { field: 'mc_ruffier_fc3', type: 'number' },
+  { field: 'mc_ruffier_resultado', type: 'number' },
+  { field: 'mc_ruffier_calificacion', type: 'string' },
+  // Examen físico — Handgrip (dinamometría)
+  { field: 'mc_handgrip_der_1', type: 'number' },
+  { field: 'mc_handgrip_izq_1', type: 'number' },
+  { field: 'mc_handgrip_der_2', type: 'number' },
+  { field: 'mc_handgrip_izq_2', type: 'number' },
+  { field: 'mc_handgrip_promedio_der', type: 'number' },
+  { field: 'mc_handgrip_promedio_izq', type: 'number' },
+  { field: 'mc_handgrip_asimetria_mm', type: 'number' },
+  { field: 'mc_handgrip_asimetria_pct', type: 'number' },
+  // Examen físico — observaciones finales
+  { field: 'mc_icc', type: 'string' },
+  { field: 'mc_wells', type: 'string' },
+  { field: 'mc_examen_observaciones', type: 'string' },
+  // Diagnósticos
+  { field: 'mc_dx_nutricional', type: 'string' },
+  { field: 'mc_dx_cardiovascular', type: 'string' },
+  { field: 'mc_dx_osteomuscular', type: 'string' },
+  { field: 'mc_dx_cie10', type: 'string' },
+  { field: 'mc_dx_osiics', type: 'string' },
+  // Riesgo (nota: distinto del riesgo ACSM de 12 factores de t3 — este es el
+  // valor de riesgo propio del examen corporativo, texto libre)
+  { field: 'mc_riesgo_acsm', type: 'string' },
+  { field: 'mc_riesgo_framingham', type: 'string' },
+  { field: 'mc_riesgo_bodytech', type: 'string' },
+  { field: 'mc_nivel', type: 'string' },
+  // Análisis y prescripción de ejercicio
+  { field: 'mc_analisis', type: 'string' },
+  { field: 'mc_prescripcion_cardio', type: 'string' },
+  { field: 'mc_prescripcion_fuerza', type: 'string' },
+  { field: 'mc_prescripcion_flexibilidad', type: 'string' },
+  { field: 'mc_remision', type: 'string' },
   // ─────────────────────────────────────────────────────────────────────────
   // Auditoría EDITABLE_FIELD_DEFS ↔ runMigrations() (Round 1):
   //   - Todos los campos snake_case y camelCase legacy listados arriba tienen
@@ -222,8 +357,10 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   //       · Legacy Wix: `empresa`, `pvEstado`, `examenes`, `horaAtencion`,
   //         `_createdDate`, `_updatedDate`, `numeroId`, `primerNombre`,
   //         `segundoNombre`, `primerApellido`, `segundoApellido`, `celular`,
-  //         `email`, `fechaConsulta`, `atendido`, `medico`, `ciudad` — son
+  //         `fechaConsulta`, `atendido`, `medico`, `ciudad` — son
   //         identidad / estado de la consulta, no campos del editor.
+  //         (`email` SÍ está en el whitelist desde el panel Médico
+  //         Corporativo — ver bloque "Médico Corporativo" arriba.)
   // ─────────────────────────────────────────────────────────────────────────
 ];
 

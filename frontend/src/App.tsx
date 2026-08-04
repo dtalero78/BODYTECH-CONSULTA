@@ -8,6 +8,7 @@ import { PatientPage } from './pages/PatientPage';
 import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
 import { HistoriaDetallePage } from './pages/HistoriaDetallePage';
+import { CorporativoConsultaPage } from './pages/CorporativoConsultaPage';
 import { OrdenesPage } from './pages/OrdenesPage';
 import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
@@ -30,6 +31,13 @@ const ReactQueryDevtools = import.meta.env.DEV
         default: m.ReactQueryDevtools,
       }))
     )
+  : null;
+
+// Ruta demo (solo dev) para grabar el clip de antropometría ISAK. Igual que los
+// devtools: en producción `import.meta.env.DEV === false`, el lazy nunca se
+// evalúa y el chunk queda fuera del bundle.
+const IsakDemo = import.meta.env.DEV
+  ? lazy(() => import('./pages/IsakDemo').then((m) => ({ default: m.IsakDemo })))
   : null;
 
 /** Placeholder para el rol `torre` (aún sin alcances asignados). */
@@ -76,6 +84,16 @@ function App() {
           <Route path="/doctor" element={<DoctorPage />} />
           <Route path="/doctor/:roomName" element={<DoctorRoomPage />} />
           <Route path="/nutricion/:roomName" element={<NutricionRoomPage />} />
+          {IsakDemo && (
+            <Route
+              path="/demo-isak"
+              element={
+                <Suspense fallback={null}>
+                  <IsakDemo />
+                </Suspense>
+              }
+            />
+          )}
           <Route path="/patient/:roomName" element={<PatientPage />} />
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
@@ -105,6 +123,14 @@ function App() {
             element={
               <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
                 <HistoriaDetallePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/corporativo/:historiaId"
+            element={
+              <RequireRole roles={['medico', 'coordinador', 'admin']}>
+                <CorporativoConsultaPage />
               </RequireRole>
             }
           />

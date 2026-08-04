@@ -376,6 +376,158 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "ant_osteomuscular_lista" TEXT
       `);
 
+      // ===== Médico Corporativo — examen ocupacional presencial (sin videollamada) =====
+      // `email` (identificación) ya existe en la tabla base — se whitelistea en
+      // historia-field-coercion.service.ts, no requiere migración.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          -- Identificación
+          ADD COLUMN IF NOT EXISTS "mc_direccion" VARCHAR(200),
+
+          -- Enfermedad actual
+          ADD COLUMN IF NOT EXISTS "mc_enfermedad_actual" TEXT,
+
+          -- Síntomas en ejercicio
+          ADD COLUMN IF NOT EXISTS "mc_sint_dolor_toracico" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_palpitaciones" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_disnea" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_edema_mmii" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_sincope" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_claudicacion" BOOLEAN DEFAULT FALSE,
+
+          -- Antecedentes familiares
+          ADD COLUMN IF NOT EXISTS "mc_fam_cardiaca" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_respiratoria" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_msc_iam" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_hta" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_cerebrovascular" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_otros" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_diabetes" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_cancer" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_fam_observaciones" TEXT,
+
+          -- Antecedentes personales
+          ADD COLUMN IF NOT EXISTS "mc_per_cardiaca" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_respiratoria" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_tabaquismo" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_renal" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_hta" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_metabolica" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_cerebrovascular" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_alcohol" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_per_vacunas_covid" VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS "mc_per_antecedente_covid" VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS "mc_per_osteomuscular" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_quirurgicos" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_alergicos" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_farmacologicos" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_paraclinicos" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_alimentacion" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_per_observaciones" TEXT,
+
+          -- Registro de actividad física
+          ADD COLUMN IF NOT EXISTS "mc_af_horas_dia" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_horas_semana" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_meses" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_sesiones_semana" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_rpe" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_horas_sedentario" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_modalidad" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_af_recomendacion" VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS "mc_af_nivel" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_af_objetivo" VARCHAR(100),
+
+          -- Examen físico — signos
+          ADD COLUMN IF NOT EXISTS "mc_frec_card" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_frec_resp" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_sato2" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_perimetro_abdominal" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_talla" NUMERIC(5,2),
+
+          -- Examen físico — composición corporal
+          ADD COLUMN IF NOT EXISTS "mc_pct_grasa" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_pct_musculo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_peso" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_grasa_visceral" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_imc" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_tmb" NUMERIC(7,2),
+
+          -- Examen físico — parámetros de frecuencia cardíaca (Tanaka, %FCR, Karvonen)
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_prueba_esfuerzo" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_reserva" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_reserva_80" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_reserva_75" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_reserva_70" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_reserva_60" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_tanaka" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_predicha_90" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_predicha_80" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_predicha_75" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_predicha_70" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_fc_pico_predicha_60" NUMERIC(5,2),
+
+          -- Examen físico — revisión por sistemas
+          ADD COLUMN IF NOT EXISTS "mc_rs_cabeza" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_pares_craneales" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_fuerza_mmss" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "mc_rs_fuerza_mmii" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "mc_rs_cara" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_abd_pelvis" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_push_ups" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_rs_cuello" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_genitales" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_abdominales" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_rs_torax" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_piel" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_abdomen" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_pulsos" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_rs_corazon" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_rs_respiratorio" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_rs_osteomuscular" TEXT,
+
+          -- Examen físico — Ruffier
+          ADD COLUMN IF NOT EXISTS "mc_ruffier_fc1" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_ruffier_fc2" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_ruffier_fc3" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_ruffier_resultado" NUMERIC(6,2),
+          ADD COLUMN IF NOT EXISTS "mc_ruffier_calificacion" VARCHAR(30),
+
+          -- Examen físico — Handgrip (dinamometría)
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_der_1" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_izq_1" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_der_2" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_izq_2" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_promedio_der" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_promedio_izq" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_asimetria_mm" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_handgrip_asimetria_pct" NUMERIC(5,2),
+
+          -- Examen físico — observaciones finales
+          ADD COLUMN IF NOT EXISTS "mc_icc" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_wells" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_examen_observaciones" TEXT,
+
+          -- Diagnósticos
+          ADD COLUMN IF NOT EXISTS "mc_dx_nutricional" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_dx_cardiovascular" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_dx_osteomuscular" VARCHAR(200),
+          ADD COLUMN IF NOT EXISTS "mc_dx_cie10" VARCHAR(20),
+          ADD COLUMN IF NOT EXISTS "mc_dx_osiics" VARCHAR(20),
+
+          -- Riesgo
+          ADD COLUMN IF NOT EXISTS "mc_riesgo_acsm" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_riesgo_framingham" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_riesgo_bodytech" VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS "mc_nivel" VARCHAR(50),
+
+          -- Análisis, prescripción de ejercicio y remisión
+          ADD COLUMN IF NOT EXISTS "mc_analisis" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_prescripcion_cardio" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_prescripcion_fuerza" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_prescripcion_flexibilidad" TEXT,
+          ADD COLUMN IF NOT EXISTS "mc_remision" VARCHAR(150)
+      `);
+
       // ===== Run 4 — Multi-tenancy Foundation =====
       // sede_id en HistoriaClinica (snake_case con doble comillas, convención
       // de las columnas nuevas Phase 1+). DEFAULT 'bsl' garantiza que las

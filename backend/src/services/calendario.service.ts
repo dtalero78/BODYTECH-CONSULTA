@@ -739,6 +739,53 @@ class CalendarioService {
   }
 
   /**
+   * Tiempos de atención por cita en un rango: hora PROGRAMADA de la cita, hora
+   * en que se ENVIÓ el link de la videollamada (`link_enviado_at`), los minutos
+   * de DESFASE entre ambas (positivo = link enviado tarde), y la hora ATENDIDA
+   * (`fechaConsulta`). Solo incluye citas con link enviado. Alimenta el export a
+   * Excel del panel Indicadores.
+   *
+   * OJO: `link_enviado_at` solo es fiable desde 2026-07-09 (no hay backfill).
+   */
+  async getTiemposAtencion(
+    from: string,
+    to: string,
+    sedes: string[]
+  ): Promise<
+    Array<{
+      cedula: string;
+      paciente: string;
+      coach: string;
+      sede: string;
+      hora_cita: string | null;
+      link_enviado: string | null;
+      min_desfase: number | null;
+      hora_atendida: string | null;
+    }>
+  > {
+    const rows = await postgresService.query(
+      `SELECT h."numeroId" AS cedula,
+              trim(COALESCE(h."primerNombre", '') || ' ' || COALESCE(h."primerApellido", '')) AS paciente,
+              COALESCE(p.alias, h."medico") AS coach,
+              p.sede_id AS sede,
+              to_char(h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS hora_cita,
+              to_char(h."link_enviado_at" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS link_enviado,
+              round(extract(epoch FROM (h."link_enviado_at" - h."fechaAtencion"::timestamptz)) / 60)::int AS min_desfase,
+              to_char(h."fechaConsulta" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS hora_atendida
+         FROM "HistoriaClinica" h
+         JOIN profesionales p ON p.codigo = h."medico" AND p.sede_id = ANY($3::text[])
+        WHERE h."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+          AND (h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota')::date >= $1::date
+          AND (h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota')::date <= $2::date
+          AND h."link_enviado_at" IS NOT NULL
+        ORDER BY h."fechaAtencion"::timestamptz`,
+      [from, to, sedes]
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (rows ?? []) as any;
+  }
+
+  /**
    * Listado de personas "No contactó" de UN profesional en un rango: citas sin
    * resolver (≠ ATENDIDO/NO CONTESTA), SIN link enviado y con la hora YA vencida
    * — misma definición que la clase NOCONTACTO de getIndicadores. Alimenta la

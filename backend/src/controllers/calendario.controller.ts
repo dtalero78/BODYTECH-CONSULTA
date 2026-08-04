@@ -190,6 +190,27 @@ class CalendarioController {
     }
   };
 
+  // Export a Excel de "tiempos de atención": por cita, hora programada, hora en
+  // que se envió el link de la videollamada, minutos de desfase y hora atendida.
+  getTiemposAtencion = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedes = await resolveSedes(req);
+      const from = typeof req.query.from === 'string' ? req.query.from : '';
+      const to = typeof req.query.to === 'string' ? req.query.to : '';
+      if (!from || !to) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'from y to son requeridos (YYYY-MM-DD).' },
+        });
+        return;
+      }
+      const filas = await calendarioService.getTiemposAtencion(from, to, sedes);
+      res.status(200).json({ success: true, data: { desde: from, hasta: to, filas } });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   getNoContacto = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const sedes = await resolveSedes(req);

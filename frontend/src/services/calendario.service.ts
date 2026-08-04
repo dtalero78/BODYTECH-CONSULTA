@@ -157,6 +157,30 @@ export interface DisponibilidadMes {
   porDia: Record<string, { overrides: number; bloqueados: number }>;
 }
 
+/** Indicadores por EVENTO (audit_log): reales e inmutables (no snapshot). */
+export interface IndicadoresEventos {
+  desde: string;
+  hasta: string;
+  noContesta: Array<{ codigo: string; nombre: string; total: number }>;
+  reprogramaciones: {
+    porCoach: Array<{ codigo: string; nombre: string; total: number }>;
+    topPacientes: Array<{ numeroId: string; nombre: string; coach: string; total: number }>;
+    total: number;
+  };
+}
+
+/** Fila del export de tiempos de atención (Excel). */
+export interface TiempoAtencion {
+  cedula: string;
+  paciente: string;
+  coach: string;
+  sede: string;
+  hora_cita: string | null;
+  link_enviado: string | null;
+  min_desfase: number | null;
+  hora_atendida: string | null;
+}
+
 class CalendarioService {
   // `signal` permite abortar la petición cuando el usuario cambia de filtro
   // antes de que llegue la respuesta anterior (ver reloadMes en CalendarioView).
@@ -216,6 +240,36 @@ class CalendarioService {
       { headers: authHeaders() }
     );
     return res.data?.data?.items ?? [];
+  }
+
+  async getIndicadoresEventos(
+    from: string,
+    to: string,
+    sedes?: string[]
+  ): Promise<IndicadoresEventos> {
+    const params = new URLSearchParams({ from, to });
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/indicadores-eventos?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
+  }
+
+  // Tiempos de atención por cita (hora programada, link enviado, desfase, hora
+  // atendida) para el export a Excel del panel Indicadores.
+  async getTiemposAtencion(
+    from: string,
+    to: string,
+    sedes?: string[]
+  ): Promise<TiempoAtencion[]> {
+    const params = new URLSearchParams({ from, to });
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/tiempos-atencion?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data?.filas ?? [];
   }
 
   async getHorariosDisponibles(

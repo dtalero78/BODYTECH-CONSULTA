@@ -31,6 +31,7 @@ router.get('/mes', operativo, calendarioController.getMes);
 router.get('/dia', operativo, calendarioController.getDia);
 router.get('/indicadores', operativo, calendarioController.getIndicadores);
 router.get('/indicadores-eventos', operativo, calendarioController.getIndicadoresEventos);
+router.get('/tiempos-atencion', operativo, calendarioController.getTiemposAtencion);
 router.get('/no-contacto', operativo, calendarioController.getNoContacto);
 router.get('/horarios-disponibles', horarios, calendarioController.getHorariosDisponibles);
 router.get('/disponibilidad-dia', operativo, calendarioController.getDisponibilidadDia);

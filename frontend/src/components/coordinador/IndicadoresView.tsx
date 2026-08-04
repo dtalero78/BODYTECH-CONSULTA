@@ -13,7 +13,11 @@
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { ChevronDown, ChevronRight, X, Download, LineChart, Users } from 'lucide-react';
-import calendarioService, { IndicadoresResumen, NoContactoItem } from '../../services/calendario.service';
+import calendarioService, {
+  IndicadoresResumen,
+  NoContactoItem,
+  IndicadoresEventos,
+} from '../../services/calendario.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import authService, { Sede } from '../../services/auth.service';
 import {
@@ -119,6 +123,9 @@ export function IndicadoresView({ showToast }: Props) {
   const [{ from, to }, setRange] = useState(() => presetRange('hoy'));
   const [activePreset, setActivePreset] = useState<Preset | null>('hoy');
   const [data, setData] = useState<IndicadoresResumen | null>(null);
+  // Indicadores POR EVENTO (audit_log): No Contesta y Reprogramaciones reales,
+  // que NO se pierden cuando la cita se reagenda/atiende/limpia.
+  const [eventos, setEventos] = useState<IndicadoresEventos | null>(null);
   const [loading, setLoading] = useState(true);
   // Filas expandidas (por código de profesional) + caché del detalle "No contactó".
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -165,8 +172,12 @@ export function IndicadoresView({ showToast }: Props) {
     setExpanded(new Set());
     setDetalle({});
     try {
-      const res = await calendarioService.getIndicadores(from, to, filterMedico || undefined, sedesSel);
+      const [res, ev] = await Promise.all([
+        calendarioService.getIndicadores(from, to, filterMedico || undefined, sedesSel),
+        calendarioService.getIndicadoresEventos(from, to, sedesSel).catch(() => null),
+      ]);
       setData(res);
+      setEventos(ev);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: { message?: string } } } };
       const msg = e?.response?.data?.error?.message || 'Error cargando indicadores.';
@@ -261,6 +272,47 @@ export function IndicadoresView({ showToast }: Props) {
     URL.revokeObjectURL(url);
   }
 
+  // Export de "tiempos de atención": por cita, hora programada vs hora en que se
+  // envió el link de la videollamada, minutos de desfase y hora atendida.
+  const [exportandoTiempos, setExportandoTiempos] = useState(false);
+  async function exportTiempos() {
+    setExportandoTiempos(true);
+    try {
+      const filas = await calendarioService.getTiemposAtencion(from, to);
+      if (!filas.length) {
+        showToast({ type: 'error', message: 'No hay citas con link enviado en el rango.' });
+        return;
+      }
+      const rows: string[][] = [
+        ['Cédula', 'Paciente', 'Coach', 'Sede', 'Hora cita programada', 'Hora link enviado', 'Min desfase (link − cita)', 'Hora atendida'],
+        ...filas.map((f) => [
+          f.cedula ?? '',
+          f.paciente ?? '',
+          f.coach ?? '',
+          f.sede ?? '',
+          f.hora_cita ?? '',
+          f.link_enviado ?? '',
+          f.min_desfase == null ? '' : String(f.min_desfase),
+          f.hora_atendida ?? '',
+        ]),
+      ];
+      const csv = rows
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tiempos_atencion_${from}_${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast({ type: 'error', message: 'No se pudo exportar los tiempos de atención.' });
+    } finally {
+      setExportandoTiempos(false);
+    }
+  }
+
   const PRESETS: { key: Preset; label: string }[] = [
     { key: 'hoy', label: 'Hoy' },
     { key: 'ayer', label: 'Ayer' },
@@ -283,15 +335,27 @@ export function IndicadoresView({ showToast }: Props) {
             Indicadores
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={exportCsv}
-          disabled={!data || data.agendadas === 0}
-          className={`${CTA_OUTLINE} disabled:opacity-40 disabled:cursor-not-allowed`}
-        >
-          <Download className="w-4 h-4" />
-          Exportar CSV
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!data || data.agendadas === 0}
+            className={`${CTA_OUTLINE} disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            <Download className="w-4 h-4" />
+            Exportar CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportTiempos}
+            disabled={exportandoTiempos}
+            className={`${CTA_OUTLINE} disabled:opacity-40 disabled:cursor-not-allowed`}
+            title="Por cita: hora programada, hora en que se envió el link de la videollamada y minutos de desfase"
+          >
+            <Download className="w-4 h-4" />
+            {exportandoTiempos ? 'Exportando…' : 'Tiempos de atención'}
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -506,6 +570,77 @@ export function IndicadoresView({ showToast }: Props) {
           </table>
         </div>
       </div>
+
+      {/* Indicadores POR EVENTO (audit_log): reales e inmutables — no se pierden
+          cuando la cita se reagenda/atiende/limpia (a diferencia del estado
+          `atendido`, que es un snapshot). */}
+      {eventos && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-sm font-semibold text-zinc-700">Por evento (audit log)</span>
+            <span className="text-[11px] text-zinc-400">
+              conteos reales — no se pierden al reagendar/atender
+            </span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 text-[13px] font-semibold text-zinc-700">
+                No contesta (eventos)
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {eventos.noContesta.length === 0 ? (
+                  <div className="px-4 py-3 text-[13px] text-zinc-400">Sin eventos en el rango.</div>
+                ) : (
+                  eventos.noContesta.map((c) => (
+                    <div key={c.codigo} className="flex items-center justify-between px-4 py-2 border-b border-zinc-100 last:border-0">
+                      <span className="text-[13px] text-zinc-700 truncate">{c.nombre}</span>
+                      <span className="text-[13px] font-semibold text-amber-700 tabular-nums" style={{ fontFamily: FONT_MONO }}>{c.total}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 text-[13px] font-semibold text-zinc-700 flex items-center justify-between">
+                <span>Reprogramaciones</span>
+                <span className="text-[11px] text-zinc-400 font-normal">total {eventos.reprogramaciones.total}</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {eventos.reprogramaciones.porCoach.length === 0 ? (
+                  <div className="px-4 py-3 text-[13px] text-zinc-400">Sin reprogramaciones en el rango.</div>
+                ) : (
+                  eventos.reprogramaciones.porCoach.map((c) => (
+                    <div key={c.codigo} className="flex items-center justify-between px-4 py-2 border-b border-zinc-100 last:border-0">
+                      <span className="text-[13px] text-zinc-700 truncate">{c.nombre}</span>
+                      <span className="text-[13px] font-semibold text-blue-700 tabular-nums" style={{ fontFamily: FONT_MONO }}>{c.total}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 text-[13px] font-semibold text-zinc-700">
+                Quienes más reprograman
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {eventos.reprogramaciones.topPacientes.length === 0 ? (
+                  <div className="px-4 py-3 text-[13px] text-zinc-400">Nadie con 2+ reprogramaciones.</div>
+                ) : (
+                  eventos.reprogramaciones.topPacientes.map((pac) => (
+                    <div key={pac.numeroId} className="flex items-center justify-between gap-2 px-4 py-2 border-b border-zinc-100 last:border-0">
+                      <div className="min-w-0">
+                        <div className="text-[13px] text-zinc-700 truncate">{pac.nombre}</div>
+                        <div className="text-[11px] text-zinc-400 truncate">{pac.numeroId} · {pac.coach}</div>
+                      </div>
+                      <span className="text-[13px] font-semibold text-red-700 tabular-nums shrink-0" style={{ fontFamily: FONT_MONO }}>{pac.total}×</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

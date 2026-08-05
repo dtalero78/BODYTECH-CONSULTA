@@ -48,6 +48,30 @@ function camel(s: string): string {
   return s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
+/**
+ * Los antecedentes ginecobstétricos solo aplican a pacientes mujeres. Se mira
+ * `genero_biologico` (el que se diligencia en Identificación) y, si aún no está,
+ * se cae al `genero` legacy que trae la ficha del afiliado, para no esconder la
+ * sección en historias que ya venían con el dato desde la admisión.
+ */
+function esFemenino(data: MedicalHistoryFull | null): boolean {
+  const raw = data?.generoBiologico || data?.genero;
+  if (!raw) return false;
+  return String(raw)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase()
+    .startsWith('f');
+}
+
+/** Normaliza una fecha (Date o ISO) al `yyyy-mm-dd` que espera `<input type="date">`. */
+function toDateInput(v: unknown): string {
+  if (v instanceof Date) return v.toISOString().split('T')[0];
+  if (typeof v === 'string' && v) return v.split('T')[0];
+  return '';
+}
+
 export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAntecedentesTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
 
@@ -243,6 +267,53 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
               />
             </div>
           </div>
+
+          {/* Ginecobstétricos — solo para pacientes mujeres. Reusa las columnas
+              que ya existen para el panel de consulta estándar. */}
+          {esFemenino(data) && (
+            <div className="pt-4 border-t border-dashed border-[#324049]">
+              <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+                Antecedentes ginecobstétricos
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+                <TextField
+                  historiaId={historiaId}
+                  field="fum"
+                  initialValue={toDateInput(data?.fum)}
+                  onSaved={onPatchLocal}
+                  label="Fecha última menstruación"
+                  type="date"
+                />
+                <PillToggleField
+                  historiaId={historiaId}
+                  field="embarazo_actual"
+                  initialValue={data?.embarazoActual}
+                  onSaved={onPatchLocal}
+                  label="Embarazo"
+                  trueLabel="Sí"
+                  falseLabel="No"
+                />
+                <TextField
+                  historiaId={historiaId}
+                  field="partos"
+                  initialValue={data?.partos}
+                  onSaved={onPatchLocal}
+                  label="Número de partos"
+                  type="number"
+                  min={0}
+                  max={30}
+                />
+                <TextField
+                  historiaId={historiaId}
+                  field="planificacion"
+                  initialValue={data?.planificacion}
+                  onSaved={onPatchLocal}
+                  label="Planificación"
+                  placeholder="¿Cuál método?"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

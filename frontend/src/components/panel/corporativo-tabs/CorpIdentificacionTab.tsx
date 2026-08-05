@@ -16,6 +16,13 @@ const GRUPO_SANGUINEO_OPTS: ReadonlyArray<DropdownOption> = [
   'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-',
 ].map((v) => ({ value: v, label: v }));
 
+// Mismas opciones que el panel de consulta estándar (t1 · Identidad), porque
+// comparten la columna `genero_biologico`. Además de figurar en la plantilla,
+// este campo decide si se muestran los antecedentes ginecobstétricos.
+const SEXO_OPTS: ReadonlyArray<DropdownOption> = [
+  'Femenino', 'Masculino', 'Indeterminado',
+].map((v) => ({ value: v, label: v }));
+
 const TIPO_CONSULTA_OPTS: ReadonlyArray<DropdownOption> = [
   'Primera vez',
   'Control',
@@ -37,6 +44,7 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
   const vals = [
     data?.mcDireccion,
     data?.email,
+    data?.generoBiologico,
     data?.grupoSanguineo,
     data?.ocupacion,
     data?.eps,
@@ -94,6 +102,18 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
             label="Correo"
             type="email"
             placeholder="correo@ejemplo.com"
+          />
+          <SelectField
+            historiaId={historiaId}
+            field="genero_biologico"
+            initialValue={data?.generoBiologico}
+            onSaved={onPatchLocal}
+            label="Sexo"
+            options={SEXO_OPTS}
+            placeholder="Seleccionar..."
+            // Actualiza el cache local de inmediato para que los antecedentes
+            // ginecobstétricos aparezcan sin esperar el debounce del auto-save.
+            onChange={(val) => onPatchLocal('genero_biologico', val)}
           />
           <SelectField
             historiaId={historiaId}

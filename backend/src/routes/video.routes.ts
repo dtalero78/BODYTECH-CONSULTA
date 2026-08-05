@@ -107,6 +107,13 @@ router.get(
   clinico,
   videoController.getPreviewHTML
 );
+// Médico Corporativo — visita anterior del paciente para la fila "Comparación".
+// También va antes de la ruta genérica '/:historiaId'.
+router.get(
+  '/medical-history/:historiaId/corporativo-anterior',
+  clinico,
+  videoController.getCorporativoVisitaAnterior
+);
 router.get('/medical-history/:historiaId', clinico, videoController.getMedicalHistory);
 router.post('/medical-history', clinico, videoController.updateMedicalHistory);
 // Phase 1 — auto-save por field (PATCH)

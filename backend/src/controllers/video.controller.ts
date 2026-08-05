@@ -1039,6 +1039,29 @@ class VideoController {
   }
 
   /**
+   * Visita corporativa anterior del mismo paciente, para la fila "Comparación"
+   * del examen ocupacional. Devuelve `data: null` (200) si es la primera visita
+   * — no es un error, el panel simplemente no muestra deltas.
+   * GET /api/video/medical-history/:historiaId/corporativo-anterior
+   */
+  async getCorporativoVisitaAnterior(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { historiaId } = req.params;
+
+      if (!historiaId) {
+        res.status(400).json({ success: false, error: 'historiaId requerido' });
+        return;
+      }
+
+      const anterior = await medicalHistoryService.getCorporativoVisitaAnterior(historiaId);
+
+      res.status(200).json({ success: true, data: anterior });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Obtener historia clínica de un paciente por _id
    * GET /api/video/medical-history/:historiaId
    */

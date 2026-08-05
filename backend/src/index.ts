@@ -97,7 +97,12 @@ app.use(
   cors({
     origin: appConfig.allowedOrigins,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    // PATCH es el método del auto-save por campo del panel
+    // (PATCH /api/video/medical-history/:id/field). En producción no aplica
+    // CORS (mismo origen), pero sin él el setup de dev cross-origin del
+    // `.env.example` (VITE_API_BASE_URL=http://localhost:3000) bloquea el
+    // guardado en el preflight.
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );

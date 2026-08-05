@@ -124,6 +124,21 @@ export interface PatientHistoryRecord {
 }
 
 /**
+ * Composición corporal de la visita corporativa ANTERIOR del mismo paciente.
+ * Alimenta la fila "Comparación / Diferencia" del examen ocupacional, que en la
+ * plantilla de Excel se resolvía contra la hoja Consolidado.
+ */
+export interface CorporativoVisitaAnterior {
+  _id: string;
+  fecha: Date | null;
+  mcPeso: number | null;
+  mcPctGrasa: number | null;
+  mcPctMusculo: number | null;
+  mcGrasaVisceral: number | null;
+  mcImc: number | null;
+}
+
+/**
  * Calcula la edad (años cumplidos) a partir de la fecha de nacimiento.
  * Usado como fallback cuando no hay fila en `formularios` (p.ej. pacientes que
  * entran por la integración Trepsi, donde solo viene `fecha_nacimiento`).
@@ -456,6 +471,75 @@ class HistoriaQueryService {
       const msg = error instanceof Error ? error.message : String(error);
       console.error('❌ Error obteniendo historial del paciente:', msg);
       throw new Error('Error al obtener historial de consultas del paciente');
+    }
+  }
+
+  /**
+   * Visita corporativa ANTERIOR del mismo paciente (mismo `numeroId`), para la
+   * fila "Comparación" del examen ocupacional.
+   *
+   * Se ordena por `COALESCE("fechaConsulta", "_createdDate")` porque
+   * `fechaAtencion` es TEXT con formatos mezclados y su orden lexicográfico no
+   * es cronológico (ver nota en medical-panel.service.ts). Solo devuelve filas
+   * que tengan al menos una medida de composición corporal registrada.
+   *
+   * Devuelve `null` si es la primera visita del paciente.
+   */
+  async getCorporativoVisitaAnterior(
+    historiaId: string,
+    sedes?: string[]
+  ): Promise<CorporativoVisitaAnterior | null> {
+    try {
+      const actual = await postgresService.query(
+        `SELECT "numeroId", COALESCE("fechaConsulta", "_createdDate") AS ref
+           FROM "HistoriaClinica"
+          WHERE "_id" = $1
+          LIMIT 1`,
+        [historiaId]
+      );
+      if (!actual || actual.length === 0 || !actual[0].numeroId) {
+        return null;
+      }
+
+      const params: unknown[] = [actual[0].numeroId, historiaId, actual[0].ref];
+      const sf = sedeFilter(sedes, '"sede_id"', params);
+      const rows = await postgresService.query(
+        `SELECT "_id",
+                COALESCE("fechaConsulta", "_createdDate") AS fecha,
+                "mc_peso", "mc_pct_grasa", "mc_pct_musculo",
+                "mc_grasa_visceral", "mc_imc"
+           FROM "HistoriaClinica"
+          WHERE "numeroId" = $1
+            AND "_id" <> $2
+            AND COALESCE("fechaConsulta", "_createdDate") < $3
+            AND (
+              "mc_peso" IS NOT NULL OR "mc_imc" IS NOT NULL OR
+              "mc_pct_grasa" IS NOT NULL OR "mc_pct_musculo" IS NOT NULL OR
+              "mc_grasa_visceral" IS NOT NULL
+            )${sf}
+          ORDER BY COALESCE("fechaConsulta", "_createdDate") DESC
+          LIMIT 1`,
+        params
+      );
+
+      if (!rows || rows.length === 0) return null;
+
+      const toNum = (v: unknown): number | null =>
+        v === null || v === undefined ? null : Number(v);
+      const r = rows[0];
+      return {
+        _id: r._id,
+        fecha: r.fecha ?? null,
+        mcPeso: toNum(r.mc_peso),
+        mcPctGrasa: toNum(r.mc_pct_grasa),
+        mcPctMusculo: toNum(r.mc_pct_musculo),
+        mcGrasaVisceral: toNum(r.mc_grasa_visceral),
+        mcImc: toNum(r.mc_imc),
+      };
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('❌ Error obteniendo visita corporativa anterior:', msg);
+      throw new Error('Error al obtener la visita anterior del paciente');
     }
   }
 }

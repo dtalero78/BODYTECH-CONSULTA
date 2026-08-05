@@ -31,6 +31,7 @@ export default {
   getAtendidos: queryService.getAtendidos.bind(queryService),
   getPreviewHTML: queryService.getPreviewHTML.bind(queryService),
   getPatientHistory: queryService.getPatientHistory.bind(queryService),
+  getCorporativoVisitaAnterior: queryService.getCorporativoVisitaAnterior.bind(queryService),
   updateField: mutationService.updateField.bind(mutationService),
   updateMedicalHistory: mutationService.updateMedicalHistory.bind(mutationService),
 };

@@ -4,7 +4,8 @@ import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
 import { TextField, TextareaField } from '../fields';
-import { useFieldAutoSave } from '../hooks/useFieldAutoSave';
+import { CalcAutosave } from './CalcAutosave';
+import { ComparacionAnterior } from './ComparacionAnterior';
 import type { MedicalHistoryFull } from '../types';
 
 interface CorpExamenFisicoTabProps {
@@ -27,32 +28,6 @@ function isFilled(v: unknown): boolean {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
-}
-
-// Persiste un campo calculado sin renderizar nada (mismo patrón que ExamenFisicoTab/RiesgoTab).
-function CalcAutosave({
-  historiaId,
-  field,
-  value,
-  serverValue,
-  onPatchLocal,
-}: {
-  historiaId: string | undefined;
-  field: string;
-  value: number | string | null;
-  serverValue?: unknown;
-  onPatchLocal: (field: string, value: unknown) => void;
-}) {
-  const hasValue = value !== null && value !== undefined;
-  useFieldAutoSave({
-    historiaId,
-    field,
-    value,
-    serverValue,
-    onSaved: onPatchLocal,
-    enabled: hasValue,
-  });
-  return null;
 }
 
 export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExamenFisicoTabProps) {
@@ -81,14 +56,18 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   const tanakaPct = (pct: number): number | null =>
     tanakaCalc !== null ? round1(tanakaCalc * pct) : null;
 
-  // ---- Ruffier (fórmula clásica — validar bandas con el equipo médico) ----
-  const fc1 = toNum(data?.mcRuffierFc1);
+  // ---- Ruffier ----
+  // Plantilla: L40 (FC1) = F32, o sea la FC en reposo → no se digita, se deriva.
+  const fc1 = toNum(data?.mcFrecCard);
   const fc2 = toNum(data?.mcRuffierFc2);
   const fc3 = toNum(data?.mcRuffierFc3);
   let ruffierResultado: number | null = null;
   let ruffierCalificacion: string | null = null;
   if (fc1 !== null && fc2 !== null && fc3 !== null) {
+    // N41 = ((FC1+FC2+FC3)-200)/10
     ruffierResultado = round1((fc1 + fc2 + fc3 - 200) / 10);
+    // Bandas clínicas estándar. La plantilla trae `=IF(N41>0.1<5,"Bueno","Medio")`,
+    // sintaxis inválida que devuelve siempre "Medio"; se usan las 5 bandas reales.
     if (ruffierResultado <= 0) ruffierCalificacion = 'Excelente';
     else if (ruffierResultado <= 5) ruffierCalificacion = 'Bueno';
     else if (ruffierResultado <= 10) ruffierCalificacion = 'Medio';
@@ -101,14 +80,17 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   const der2 = toNum(data?.mcHandgripDer2);
   const izq1 = toNum(data?.mcHandgripIzq1);
   const izq2 = toNum(data?.mcHandgripIzq2);
+  // L45 = AVERAGE(L43:L44) → promedio de los 2 intentos
   const promDer = der1 !== null && der2 !== null ? round1((der1 + der2) / 2) : der1 ?? der2;
   const promIzq = izq1 !== null && izq2 !== null ? round1((izq1 + izq2) / 2) : izq1 ?? izq2;
   let asimetriaMm: number | null = null;
   let asimetriaPct: number | null = null;
   if (promDer !== null && promDer !== undefined && promIzq !== null && promIzq !== undefined) {
-    asimetriaMm = round1(Math.abs(promDer - promIzq));
-    const max = Math.max(promDer, promIzq);
-    asimetriaPct = max > 0 ? round1((asimetriaMm / max) * 100) : null;
+    // N43 = L43-M43 → derecha − izquierda, CON signo (negativo = domina izquierda)
+    asimetriaMm = round1(promDer - promIzq);
+    // O43 = 100-((M43*100)/L43). Si la derecha es 0 la plantilla da #DIV/0!; aquí
+    // se deja en null (se muestra "—") en vez de propagar un error.
+    asimetriaPct = promDer !== 0 ? round1(100 - (promIzq * 100) / promDer) : null;
   }
 
   // ---- Card states ----
@@ -126,7 +108,8 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   ];
   const sistemasFilled = sistemasVals.filter(isFilled).length;
 
-  const ruffierVals = [data?.mcRuffierFc1, data?.mcRuffierFc2, data?.mcRuffierFc3];
+  // FC1 se deriva de la FC en reposo, así que cuenta como diligenciada si esta existe.
+  const ruffierVals = [data?.mcFrecCard, data?.mcRuffierFc2, data?.mcRuffierFc3];
   const ruffierFilled = ruffierVals.filter(isFilled).length;
 
   const handgripVals = [data?.mcHandgripDer1, data?.mcHandgripIzq1, data?.mcHandgripDer2, data?.mcHandgripIzq2];
@@ -231,6 +214,9 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             </div>
             <CalcAutosave historiaId={historiaId} field="mc_imc" value={imcCalc} serverValue={data?.mcImc ?? null} onPatchLocal={onPatchLocal} />
           </div>
+
+          {/* Fila "Comparación" de la plantilla: delta vs. la visita anterior */}
+          <ComparacionAnterior historiaId={historiaId} data={data} imcActual={imcCalc} />
         </div>
       </Modal>
 
@@ -343,18 +329,23 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         showEyePill={false}
       >
         <div className="flex flex-col gap-4">
-          <div className="px-4 py-2.5 rounded-xl border border-[#fbbf24]/30 bg-[rgba(251,191,36,0.08)] text-[#fbbf24] text-[12px]">
-            Cálculo estimado con la fórmula clásica de Ruffier — validar la fórmula y las bandas de calificación con el equipo médico antes de usarlas clínicamente.
-          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            <TextField historiaId={historiaId} field="mc_ruffier_fc1" initialValue={data?.mcRuffierFc1} onSaved={onPatchLocal} label="FC1 (reposo)" type="number" min={30} max={220} />
+            {/* FC1 = FC en reposo (fórmula de la plantilla: L40 = F32) */}
+            <Calculated label="FC1 (reposo)" value={fc1 ?? '—'} unit="lpm" />
             <TextField historiaId={historiaId} field="mc_ruffier_fc2" initialValue={data?.mcRuffierFc2} onSaved={onPatchLocal} label="FC2 (post-esfuerzo)" type="number" min={30} max={220} />
             <TextField historiaId={historiaId} field="mc_ruffier_fc3" initialValue={data?.mcRuffierFc3} onSaved={onPatchLocal} label="FC3 (recuperación)" type="number" min={30} max={220} />
           </div>
+          {fc1 === null && (
+            <div className="px-4 py-2.5 rounded-xl border border-[#fbbf24]/30 bg-[rgba(251,191,36,0.08)] text-[#fbbf24] text-[12px]">
+              FC1 se toma de la frecuencia cardiaca en reposo — diligénciala en "Signos y composición corporal" para calcular el índice.
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <Calculated label="Resultado (índice de Ruffier)" value={ruffierResultado ?? '—'} />
             <Calculated label="Calificación" value={ruffierCalificacion ?? '—'} />
           </div>
+          {/* FC1 se persiste también en su columna para dejar el dato congelado en la historia */}
+          <CalcAutosave historiaId={historiaId} field="mc_ruffier_fc1" value={fc1} serverValue={data?.mcRuffierFc1 ?? null} onPatchLocal={onPatchLocal} />
           <CalcAutosave historiaId={historiaId} field="mc_ruffier_resultado" value={ruffierResultado} serverValue={data?.mcRuffierResultado ?? null} onPatchLocal={onPatchLocal} />
           <CalcAutosave historiaId={historiaId} field="mc_ruffier_calificacion" value={ruffierCalificacion} serverValue={data?.mcRuffierCalificacion ?? null} onPatchLocal={onPatchLocal} />
         </div>
@@ -380,7 +371,11 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-3 border-t border-dashed border-[#324049]">
             <Calculated label="Promedio mano derecha" value={promDer ?? '—'} />
             <Calculated label="Promedio mano izquierda" value={promIzq ?? '—'} />
-            <Calculated label="Asimetría" value={asimetriaMm ?? '—'} />
+            <Calculated
+              label="Asimetría (der − izq)"
+              value={asimetriaMm ?? '—'}
+              unit={asimetriaMm !== null && asimetriaMm < 0 ? 'domina izquierda' : undefined}
+            />
             <Calculated label="% Asimetría" value={asimetriaPct ?? '—'} unit="%" />
           </div>
           <CalcAutosave historiaId={historiaId} field="mc_handgrip_promedio_der" value={promDer ?? null} serverValue={data?.mcHandgripPromedioDer ?? null} onPatchLocal={onPatchLocal} />

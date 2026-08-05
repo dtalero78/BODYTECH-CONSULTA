@@ -67,6 +67,7 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
         icon={<Contact size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <div className="md:col-span-2">

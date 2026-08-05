@@ -99,6 +99,7 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
         icon={<Dumbbell size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
         formulas={FORMULAS}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

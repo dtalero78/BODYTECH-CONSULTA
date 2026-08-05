@@ -90,6 +90,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
         icon={<Users size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -131,6 +132,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
         icon={<User size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -170,7 +172,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
               label="Antecedente COVID-19"
               placeholder="Ej. Niega"
             />
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_osteomuscular"
@@ -180,7 +182,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_quirurgicos"
@@ -190,7 +192,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_alergicos"
@@ -200,7 +202,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_farmacologicos"
@@ -210,7 +212,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_paraclinicos"
@@ -220,7 +222,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_alimentacion"
@@ -230,7 +232,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 rows={2}
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <TextareaField
                 historiaId={historiaId}
                 field="mc_per_observaciones"

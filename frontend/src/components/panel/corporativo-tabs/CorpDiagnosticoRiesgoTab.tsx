@@ -62,6 +62,7 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
         icon={<Stethoscope size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <TextField historiaId={historiaId} field="mc_dx_nutricional" initialValue={data?.mcDxNutricional} onSaved={onPatchLocal} label="Nutricional" />
@@ -80,6 +81,7 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
         icon={<ShieldAlert size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <TextField historiaId={historiaId} field="mc_riesgo_acsm" initialValue={data?.mcRiesgoAcsm} onSaved={onPatchLocal} label="Riesgo ACSM" />

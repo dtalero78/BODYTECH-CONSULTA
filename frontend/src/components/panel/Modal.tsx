@@ -27,6 +27,14 @@ interface ModalProps {
    * muestra un ícono con el detalle de cómo se obtiene cada valor bloqueado.
    */
   formulas?: ReadonlyArray<FormulaDef>;
+  /**
+   * Ancho máximo. `default` (max-w-3xl) para el panel de consulta, que vive en
+   * un dock del 25% junto al video. `wide` para paneles a pantalla completa
+   * (Médico Corporativo): más ancho = los campos caben en más columnas y se
+   * reduce el scroll vertical. Siempre limitado por `w-full`, así que nunca
+   * desborda el contenedor.
+   */
+  size?: 'default' | 'wide';
 }
 
 /**
@@ -35,7 +43,7 @@ interface ModalProps {
  *
  * Animación scaleY 200ms ease-out al abrir.
  */
-export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true, formulas }: ModalProps) {
+export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true, formulas, size = 'default' }: ModalProps) {
   // Esc para cerrar
   useEffect(() => {
     if (!open) return;
@@ -52,7 +60,9 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
 
   return (
     <div
-      className="absolute inset-0 z-50 flex items-start justify-center p-6 overflow-y-auto"
+      className={`absolute inset-0 z-50 flex items-start justify-center overflow-y-auto ${
+        size === 'wide' ? 'p-3' : 'p-6'
+      }`}
       style={{
         background: 'rgba(11,20,26,0.82)',
         backdropFilter: 'blur(6px)',
@@ -62,7 +72,9 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
       }}
     >
       <div
-        className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-[20px] w-full max-w-3xl shadow-2xl flex flex-col my-auto"
+        className={`relative bg-[#1f2c34] border border-[#3b4a54] rounded-[20px] w-full shadow-2xl flex flex-col my-auto ${
+          size === 'wide' ? 'max-w-6xl' : 'max-w-3xl'
+        }`}
         style={{
           maxHeight: 'calc(100% - 8px)',
           animation: 'panelScaleY 200ms ease-out',

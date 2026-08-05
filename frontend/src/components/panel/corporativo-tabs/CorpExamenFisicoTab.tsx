@@ -260,6 +260,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Scale size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
         formulas={FORMULAS_SIGNOS}
       >
         <div className="flex flex-col gap-5">
@@ -302,6 +303,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<HeartPulse size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
         formulas={FORMULAS_FC}
       >
         <div className="flex flex-col gap-5">
@@ -364,8 +366,10 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Stethoscope size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* 3 columnas en pantallas anchas: son 14 campos cortos, así baja de 7 a 5 filas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
           <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
@@ -380,13 +384,13 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
           <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
           <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
           <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
-          <div className="md:col-span-2">
+          <div>
             <TextareaField historiaId={historiaId} field="mc_rs_corazon" initialValue={data?.mcRsCorazon} onSaved={onPatchLocal} label="Corazón" rows={2} placeholder="RsCs rítmicos, sin soplos" />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <TextareaField historiaId={historiaId} field="mc_rs_respiratorio" initialValue={data?.mcRsRespiratorio} onSaved={onPatchLocal} label="Respiratorio" rows={2} />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteomuscular" rows={3} />
           </div>
         </div>
@@ -401,6 +405,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Gauge size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
         formulas={FORMULAS_RUFFIER}
       >
         <div className="flex flex-col gap-4">
@@ -435,6 +440,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Hand size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
         formulas={FORMULAS_HANDGRIP}
       >
         <div className="flex flex-col gap-4">
@@ -470,6 +476,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Activity size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <TextField historiaId={historiaId} field="mc_icc" initialValue={data?.mcIcc} onSaved={onPatchLocal} label="ICC (índice cintura-cadera)" />

@@ -95,6 +95,7 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
         icon={<FileText size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <TextareaField
           historiaId={historiaId}
@@ -115,6 +116,7 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
         icon={<Dumbbell size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="flex flex-col gap-4">
           <TemplateTextareaField
@@ -155,6 +157,7 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
         icon={<Send size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <TextField
           historiaId={historiaId}

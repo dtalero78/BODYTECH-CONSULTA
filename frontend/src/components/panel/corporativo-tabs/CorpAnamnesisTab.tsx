@@ -87,6 +87,7 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
         icon={<ClipboardList size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
         <div className="flex flex-col gap-4">
           <TextareaField
@@ -119,8 +120,9 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
         icon={<HeartPulse size={18} />}
         isMaxed
         showEyePill={false}
+        size="wide"
       >
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {SINTOMAS.map((s) => (
             <div
               key={s.field}

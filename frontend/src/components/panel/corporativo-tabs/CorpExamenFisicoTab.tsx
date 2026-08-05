@@ -6,7 +6,79 @@ import { Calculated } from '../Calculated';
 import { TextField, TextareaField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import { ComparacionAnterior } from './ComparacionAnterior';
+import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
+
+const FORMULAS_SIGNOS: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'IMC',
+    formula: 'Peso (kg) ÷ Talla (m)²',
+  },
+  {
+    campo: 'Comparación · Δ',
+    formula: 'Valor actual − valor de la visita anterior',
+    nota: 'Verde = cambio favorable. En peso e IMC el delta es informativo (sin color), porque si es favorable depende del objetivo del afiliado.',
+  },
+  {
+    campo: 'TMB (Kcal)',
+    formula: 'Entrada manual',
+    nota: 'La plantilla no trae fórmula para este campo.',
+  },
+];
+
+const FORMULAS_FC: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'FC predicha (Tanaka)',
+    formula: '208 − (0.7 × Edad)',
+  },
+  {
+    campo: '% FC pico predicha',
+    formula: 'FC predicha (Tanaka) × 0.90 / 0.80 / 0.75 / 0.70 / 0.60',
+  },
+  {
+    campo: 'FC de reserva',
+    formula: 'FC pico (prueba de esfuerzo) − FC en reposo',
+    nota: 'Requiere la FC pico de la prueba de esfuerzo y la frecuencia cardiaca de "Signos y composición corporal".',
+  },
+  {
+    campo: '% FCR (Karvonen)',
+    formula: '(FC de reserva × %) + FC en reposo',
+  },
+];
+
+const FORMULAS_RUFFIER: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'FC1 (reposo)',
+    formula: '= Frecuencia cardiaca de "Signos y composición corporal"',
+    nota: 'No se digita: se toma del signo vital ya registrado.',
+  },
+  {
+    campo: 'Resultado (índice de Ruffier)',
+    formula: '(FC1 + FC2 + FC3 − 200) ÷ 10',
+  },
+  {
+    campo: 'Calificación',
+    formula: '≤ 0 Excelente · ≤ 5 Bueno · ≤ 10 Medio · ≤ 15 Insuficiente · > 15 Malo',
+    nota: 'Bandas clínicas estándar. La plantilla de Excel tiene aquí una fórmula inválida que devolvía siempre "Medio".',
+  },
+];
+
+const FORMULAS_HANDGRIP: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'Promedio por mano',
+    formula: '(1er intento + 2do intento) ÷ 2',
+  },
+  {
+    campo: 'Asimetría',
+    formula: 'Promedio derecha − Promedio izquierda',
+    nota: 'Conserva el signo: un valor negativo indica que domina la mano izquierda.',
+  },
+  {
+    campo: '% Asimetría',
+    formula: '100 − ((Promedio izquierda × 100) ÷ Promedio derecha)',
+    nota: 'Si el promedio derecho es 0 se muestra "—" (la división no está definida).',
+  },
+];
 
 interface CorpExamenFisicoTabProps {
   historiaId: string | undefined;
@@ -188,6 +260,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Scale size={18} />}
         isMaxed
         showEyePill={false}
+        formulas={FORMULAS_SIGNOS}
       >
         <div className="flex flex-col gap-5">
           <div>
@@ -229,11 +302,12 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<HeartPulse size={18} />}
         isMaxed
         showEyePill={false}
+        formulas={FORMULAS_FC}
       >
         <div className="flex flex-col gap-5">
           <div>
             <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
-              FC de reserva (Karvonen — requiere FC pico de prueba de esfuerzo)
+              FC de reserva (Karvonen)
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
               <TextField
@@ -261,7 +335,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
 
           <div className="pt-4 border-t border-dashed border-[#324049]">
             <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
-              FC predicha (Tanaka: 208 − 0.7 × edad)
+              FC predicha (Tanaka)
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
               <Calculated label="FC predicha (Tanaka)" value={tanakaCalc ?? '—'} unit="lpm" />
@@ -327,6 +401,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Gauge size={18} />}
         isMaxed
         showEyePill={false}
+        formulas={FORMULAS_RUFFIER}
       >
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -360,6 +435,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         icon={<Hand size={18} />}
         isMaxed
         showEyePill={false}
+        formulas={FORMULAS_HANDGRIP}
       >
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

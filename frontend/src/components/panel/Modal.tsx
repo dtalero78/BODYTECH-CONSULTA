@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { EyeOnPatientPill } from './EyeOnPatientPill';
+import { FormulaHint, type FormulaDef } from './FormulaHint';
 
 interface ModalProps {
   open: boolean;
@@ -21,6 +22,11 @@ interface ModalProps {
   onSave?: () => void;
   /** Oculta el pill "Afiliado visible/en miniatura" — solo aplica a paneles con videollamada. Default true. */
   showEyePill?: boolean;
+  /**
+   * Fórmulas de los campos calculados de la sección. Si se pasan, el header
+   * muestra un ícono con el detalle de cómo se obtiene cada valor bloqueado.
+   */
+  formulas?: ReadonlyArray<FormulaDef>;
 }
 
 /**
@@ -29,7 +35,7 @@ interface ModalProps {
  *
  * Animación scaleY 200ms ease-out al abrir.
  */
-export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true }: ModalProps) {
+export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true, formulas }: ModalProps) {
   // Esc para cerrar
   useEffect(() => {
     if (!open) return;
@@ -76,6 +82,7 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
             )}
             <div className="text-base font-bold text-[#e9edef] mt-0.5">{title}</div>
           </div>
+          {formulas && formulas.length > 0 && <FormulaHint formulas={formulas} />}
           {showEyePill && <EyeOnPatientPill isMaxed={isMaxed} />}
           <button
             type="button"

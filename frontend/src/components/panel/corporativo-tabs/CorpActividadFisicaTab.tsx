@@ -5,7 +5,23 @@ import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
 import { TextField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
+import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
+
+const FORMULAS: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'Horas entrenamiento/semana',
+    formula: 'Sesiones entreno/semana × Horas entrenamiento/día',
+  },
+  {
+    campo: 'Recomendación act. física/semana',
+    formula: 'Activo si horas/semana > 2.5 · Inactivo si no',
+  },
+  {
+    campo: 'Activo según tiempo entrenando',
+    formula: 'Activo si meses de entrenamiento > 3 · Inactivo si no',
+  },
+];
 
 interface CorpActividadFisicaTabProps {
   historiaId: string | undefined;
@@ -83,6 +99,7 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
         icon={<Dumbbell size={18} />}
         isMaxed
         showEyePill={false}
+        formulas={FORMULAS}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
           <TextField

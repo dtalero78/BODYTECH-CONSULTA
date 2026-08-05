@@ -16,6 +16,11 @@ const GRUPO_SANGUINEO_OPTS: ReadonlyArray<DropdownOption> = [
   'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-',
 ].map((v) => ({ value: v, label: v }));
 
+const TIPO_CONSULTA_OPTS: ReadonlyArray<DropdownOption> = [
+  'Primera vez',
+  'Control',
+].map((v) => ({ value: v, label: v }));
+
 const EPS_OPTS: ReadonlyArray<DropdownOption> = [
   'Sura', 'Sanitas', 'Nueva EPS', 'Compensar', 'Famisanar', 'Salud Total',
   'Coomeva', 'Cafesalud', 'Particular',
@@ -69,8 +74,9 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
         showEyePill={false}
         size="wide"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          <div className="md:col-span-2">
+        {/* 3 columnas en pantallas anchas: los 8 campos caben sin scroll */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+          <div className="md:col-span-2 xl:col-span-3">
             <TextField
               historiaId={historiaId}
               field="mc_direccion"
@@ -137,13 +143,14 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
             dialCode="+57"
             placeholder="300 123 4567"
           />
-          <TextField
+          <SelectField
             historiaId={historiaId}
             field="tipo_consulta"
             initialValue={data?.tipoConsulta}
             onSaved={onPatchLocal}
             label="Tipo de consulta"
-            placeholder="Ej. Ingreso"
+            options={TIPO_CONSULTA_OPTS}
+            placeholder="Seleccionar..."
           />
         </div>
       </Modal>

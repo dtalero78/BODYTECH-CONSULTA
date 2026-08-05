@@ -525,7 +525,29 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "mc_prescripcion_cardio" TEXT,
           ADD COLUMN IF NOT EXISTS "mc_prescripcion_fuerza" TEXT,
           ADD COLUMN IF NOT EXISTS "mc_prescripcion_flexibilidad" TEXT,
-          ADD COLUMN IF NOT EXISTS "mc_remision" VARCHAR(150)
+          ADD COLUMN IF NOT EXISTS "mc_remision" VARCHAR(150),
+
+          -- Prescripción de ejercicio (panel de consulta médica, tab t8).
+          -- Estructura FIT por bloque (cardio/fuerza/flexibilidad) + clases grupales.
+          ADD COLUMN IF NOT EXISTS "presc_generales" TEXT,
+          ADD COLUMN IF NOT EXISTS "presc_cardio_frecuencia" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_cardio_intensidad" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "presc_cardio_tiempo" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_cardio_tipo" VARCHAR(150),
+          ADD COLUMN IF NOT EXISTS "presc_cardio_notas" TEXT,
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_frecuencia" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_intensidad" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_series" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_repeticiones" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_tipo" VARCHAR(150),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_notas" TEXT,
+          ADD COLUMN IF NOT EXISTS "presc_flex_frecuencia" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_flex_tiempo" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_flex_tipo" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "presc_flex_enfasis" VARCHAR(150),
+          ADD COLUMN IF NOT EXISTS "presc_clase_modalidad" VARCHAR(80),
+          ADD COLUMN IF NOT EXISTS "presc_clase_nombre" VARCHAR(120),
+          ADD COLUMN IF NOT EXISTS "presc_clase_reemplaza" VARCHAR(80)
       `);
 
       // ===== Run 4 — Multi-tenancy Foundation =====

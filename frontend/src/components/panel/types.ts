@@ -6,7 +6,7 @@
  * (`EDITABLE_FIELDS`).
  */
 
-export type TabId = 't1' | 't2' | 't3' | 't4' | 't5' | 't6' | 't7';
+export type TabId = 't1' | 't2' | 't3' | 't4' | 't5' | 't6' | 't7' | 't8';
 
 export type CardId =
   | 'identidad'
@@ -360,6 +360,27 @@ export interface MedicalHistoryFull {
   mcPrescripcionFuerza?: string;
   mcPrescripcionFlexibilidad?: string;
   mcRemision?: string;
+
+  // ---- Prescripción de ejercicio (tab t8, panel de consulta médica) ----
+  prescGenerales?: string;
+  prescCardioFrecuencia?: string;
+  prescCardioIntensidad?: string;
+  prescCardioTiempo?: string;
+  prescCardioTipo?: string;
+  prescCardioNotas?: string;
+  prescFuerzaFrecuencia?: string;
+  prescFuerzaIntensidad?: string;
+  prescFuerzaSeries?: string;
+  prescFuerzaRepeticiones?: string;
+  prescFuerzaTipo?: string;
+  prescFuerzaNotas?: string;
+  prescFlexFrecuencia?: string;
+  prescFlexTiempo?: string;
+  prescFlexTipo?: string;
+  prescFlexEnfasis?: string;
+  prescClaseModalidad?: string;
+  prescClaseNombre?: string;
+  prescClaseReemplaza?: string;
 
   // Cualquier otro campo que el backend devuelva
   [key: string]: unknown;

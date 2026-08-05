@@ -15,6 +15,7 @@ import { ExamenFisicoTab } from './tabs/ExamenFisicoTab';
 import { IntervencionTab } from './tabs/IntervencionTab';
 import { ConductaTab } from './tabs/ConductaTab';
 import { ObservacionesTab } from './tabs/ObservacionesTab';
+import { PrescripcionTab } from './tabs/PrescripcionTab';
 
 interface MedicalConsultationPanelProps {
   historiaId: string;
@@ -37,6 +38,7 @@ const TAB_LABELS: Record<TabId, string> = {
   t5: 'Intervención y procedimiento',
   t6: 'Conducta y remisión',
   t7: 'Observaciones',
+  t8: 'Prescripción',
 };
 
 function isFilled(v: unknown): boolean {
@@ -138,6 +140,7 @@ export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
     { id: 't5', label: 'Intervención', filled: [data?.intervencionAnalisis, data?.intervencionTipoTecnologia, data?.intervencionTipoMeta, data?.dxTecnologiaSalud].filter(isFilled).length, total: 4 },
     { id: 't6', label: 'Conducta', filled: [data?.aptitud, data?.controlFecha].filter(isFilled).length, total: 2 },
     { id: 't7', label: 'Observaciones', filled: [data?.mdConceptoFinal, data?.mdRecomendacionesMedicasAdicionales].filter(isFilled).length, total: 2 },
+    { id: 't8', label: 'Prescripción', filled: [isFilled(data?.prescGenerales), [data?.prescCardioFrecuencia, data?.prescCardioIntensidad, data?.prescCardioTiempo, data?.prescCardioTipo].some(isFilled), [data?.prescFuerzaFrecuencia, data?.prescFuerzaIntensidad, data?.prescFuerzaSeries, data?.prescFuerzaRepeticiones, data?.prescFuerzaTipo].some(isFilled), [data?.prescFlexFrecuencia, data?.prescFlexTiempo, data?.prescFlexTipo].some(isFilled), [data?.prescClaseModalidad, data?.prescClaseNombre, data?.prescClaseReemplaza].some(isFilled)].filter(Boolean).length, total: 5 },
   ];
 }
 
@@ -302,6 +305,14 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
               )}
               {activeTab === 't7' && (
                 <ObservacionesTab
+                  historiaId={historiaId}
+                  data={data}
+                  isMaxed={isMaxed}
+                  onPatchLocal={patchLocal}
+                />
+              )}
+              {activeTab === 't8' && (
+                <PrescripcionTab
                   historiaId={historiaId}
                   data={data}
                   isMaxed={isMaxed}

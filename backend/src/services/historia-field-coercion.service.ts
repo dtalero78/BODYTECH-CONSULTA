@@ -342,6 +342,26 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'mc_prescripcion_fuerza', type: 'string' },
   { field: 'mc_prescripcion_flexibilidad', type: 'string' },
   { field: 'mc_remision', type: 'string' },
+  // ---- Prescripción de ejercicio (panel de consulta médica, tab t8) ----
+  { field: 'presc_generales', type: 'string' },
+  { field: 'presc_cardio_frecuencia', type: 'string' },
+  { field: 'presc_cardio_intensidad', type: 'string' },
+  { field: 'presc_cardio_tiempo', type: 'string' },
+  { field: 'presc_cardio_tipo', type: 'string' },
+  { field: 'presc_cardio_notas', type: 'string' },
+  { field: 'presc_fuerza_frecuencia', type: 'string' },
+  { field: 'presc_fuerza_intensidad', type: 'string' },
+  { field: 'presc_fuerza_series', type: 'string' },
+  { field: 'presc_fuerza_repeticiones', type: 'string' },
+  { field: 'presc_fuerza_tipo', type: 'string' },
+  { field: 'presc_fuerza_notas', type: 'string' },
+  { field: 'presc_flex_frecuencia', type: 'string' },
+  { field: 'presc_flex_tiempo', type: 'string' },
+  { field: 'presc_flex_tipo', type: 'string' },
+  { field: 'presc_flex_enfasis', type: 'string' },
+  { field: 'presc_clase_modalidad', type: 'string' },
+  { field: 'presc_clase_nombre', type: 'string' },
+  { field: 'presc_clase_reemplaza', type: 'string' },
   // ─────────────────────────────────────────────────────────────────────────
   // Auditoría EDITABLE_FIELD_DEFS ↔ runMigrations() (Round 1):
   //   - Todos los campos snake_case y camelCase legacy listados arriba tienen

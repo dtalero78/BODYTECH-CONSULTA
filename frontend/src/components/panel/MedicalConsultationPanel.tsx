@@ -254,7 +254,8 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
             active={activeTab}
             onChange={setActiveTab}
             tabs={tabs}
-            eyebrow="Consulta"
+            brandTitle="Historia clínica"
+            brandSubtitle="consulta médica"
             collapsed={navCollapsed}
             footer={
               <button

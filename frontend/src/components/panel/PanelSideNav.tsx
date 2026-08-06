@@ -26,6 +26,9 @@ interface PanelSideNavProps<T extends string = TabId> {
   tabs: ReadonlyArray<TabDef<T>>;
   /** Rótulo de la sección (estilo SECTION_LABEL del Panel Coordinador). */
   eyebrow?: string;
+  /** Bloque de marca del sidebar: qué panel es. */
+  brandTitle: string;
+  brandSubtitle: string;
   /** Rail de solo íconos, para cuando el panel va angosto. */
   collapsed?: boolean;
   /** Contenido opcional al pie del sidebar (ej. botón de consulta guiada). */
@@ -46,7 +49,9 @@ export function PanelSideNav<T extends string = TabId>({
   active,
   onChange,
   tabs,
-  eyebrow = 'Historia clínica',
+  eyebrow = 'Secciones',
+  brandTitle,
+  brandSubtitle,
   collapsed = false,
   footer,
 }: PanelSideNavProps<T>) {
@@ -60,6 +65,33 @@ export function PanelSideNav<T extends string = TabId>({
         collapsed ? 'w-[58px]' : 'w-[232px]'
       }`}
     >
+      {/* Bloque de marca, igual que el aside del Panel Coordinador. Vive acá y no
+          en el header de la página porque en la consulta en vivo el panel se
+          monta dentro de `VideoRoom`, que no tiene header donde ponerlo.
+          Ojo: `logoNegro.png` no se ve sobre `.panel-theme-dark`; si algún día
+          se vuelve a ese tema hay que cambiarlo por `logoBlanco.png`. */}
+      <div
+        className={`shrink-0 border-b border-[var(--p-line)] flex items-center gap-3 ${
+          collapsed ? 'px-2 py-3 justify-center' : 'px-4 py-3.5'
+        }`}
+      >
+        <img
+          src="/logoNegro.png"
+          alt="Bodytech"
+          className={`object-contain shrink-0 ${collapsed ? 'h-5' : 'h-6'}`}
+        />
+        {!collapsed && (
+          <div className="leading-tight min-w-0">
+            <div className="text-[13.5px] font-semibold text-[var(--p-text)] tracking-tight truncate">
+              {brandTitle}
+            </div>
+            <div className="text-[11px] text-[var(--p-text-3)] -mt-0.5 truncate">
+              {brandSubtitle}
+            </div>
+          </div>
+        )}
+      </div>
+
       <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 pt-3.5 pb-2">
         {!collapsed && (
           <div className="px-2.5 pb-2 text-[10.5px] uppercase tracking-[0.1em] text-[var(--p-text-3)] font-semibold">

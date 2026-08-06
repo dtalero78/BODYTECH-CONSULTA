@@ -168,7 +168,8 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
             active={activeTab}
             onChange={setActiveTab}
             tabs={tabs}
-            eyebrow="Secciones"
+            brandTitle="Médico Corporativo"
+            brandSubtitle="examen ocupacional"
             collapsed={navCollapsed}
           />
         )}

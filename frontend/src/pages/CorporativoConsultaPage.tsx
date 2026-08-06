@@ -42,8 +42,9 @@ export function CorporativoConsultaPage() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <img src="/logoNegro.png" alt="Bodytech" className="h-8 w-auto shrink-0" />
-        <div className="min-w-0 border-l border-zinc-200 pl-3">
+        {/* El logo vive en el bloque de marca del sidebar del panel, como en el
+            Panel Coordinador. Acá sería un duplicado. */}
+        <div className="min-w-0">
           <div className="text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
             Médico Corporativo · Examen ocupacional
           </div>

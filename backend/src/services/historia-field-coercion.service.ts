@@ -373,6 +373,9 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'presc_fuerza_intensidad', type: 'string' },
   { field: 'presc_fuerza_series', type: 'string' },
   { field: 'presc_fuerza_repeticiones', type: 'string' },
+  // Las series se pueden pautar por repeticiones o por tiempo (p. ej. 3 series
+  // de 20 segundos haciendo las que se puedan).
+  { field: 'presc_fuerza_modo_serie', type: 'string' },
   { field: 'presc_fuerza_tipo', type: 'string' },
   { field: 'presc_fuerza_notas', type: 'string' },
   { field: 'presc_flex_frecuencia', type: 'string' },

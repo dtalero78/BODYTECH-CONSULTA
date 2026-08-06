@@ -557,6 +557,7 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "presc_fuerza_intensidad" VARCHAR(80),
           ADD COLUMN IF NOT EXISTS "presc_fuerza_series" VARCHAR(60),
           ADD COLUMN IF NOT EXISTS "presc_fuerza_repeticiones" VARCHAR(60),
+          ADD COLUMN IF NOT EXISTS "presc_fuerza_modo_serie" VARCHAR(30),
           ADD COLUMN IF NOT EXISTS "presc_fuerza_tipo" VARCHAR(150),
           ADD COLUMN IF NOT EXISTS "presc_fuerza_notas" TEXT,
           ADD COLUMN IF NOT EXISTS "presc_flex_frecuencia" VARCHAR(60),

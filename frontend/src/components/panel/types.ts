@@ -383,6 +383,8 @@ export interface MedicalHistoryFull {
   prescFuerzaIntensidad?: string;
   prescFuerzaSeries?: string;
   prescFuerzaRepeticiones?: string;
+  /** 'Repeticiones' | 'Tiempo' — cómo se pauta cada serie. */
+  prescFuerzaModoSerie?: string;
   prescFuerzaTipo?: string;
   prescFuerzaNotas?: string;
   prescFlexFrecuencia?: string;

@@ -68,6 +68,10 @@ const FUERZA_INTENSIDAD = opt([
 
 const FUERZA_TIPO = opt(['Peso propio', 'Bandas / therabands', 'Máquinas', 'Peso libre']);
 
+/** Una serie se puede pautar por repeticiones o por tiempo: "tres series de 20
+ *  segundos y haces las que puedas en esos 20 segundos". */
+const FUERZA_MODO_SERIE = opt(['Repeticiones', 'Tiempo']);
+
 const FLEX_TIPO = opt(['Estático / sostenido', 'Dinámico', 'Balístico', 'Asistido (FNP)']);
 
 const CLASE_MODALIDAD = opt([
@@ -274,7 +278,15 @@ export function PrescripcionTab({
             <TextField historiaId={historiaId} field="presc_fuerza_frecuencia" initialValue={data?.prescFuerzaFrecuencia} onSaved={onPatchLocal} label="Frecuencia" placeholder="Ej: 3 días/semana" />
             <SelectField historiaId={historiaId} field="presc_fuerza_intensidad" initialValue={data?.prescFuerzaIntensidad} onSaved={onPatchLocal} label="Intensidad (%RM)" options={FUERZA_INTENSIDAD} placeholder="Seleccionar zona" />
             <TextField historiaId={historiaId} field="presc_fuerza_series" initialValue={data?.prescFuerzaSeries} onSaved={onPatchLocal} label="Series" placeholder="Ej: 3 series" />
-            <TextField historiaId={historiaId} field="presc_fuerza_repeticiones" initialValue={data?.prescFuerzaRepeticiones} onSaved={onPatchLocal} label="Repeticiones" placeholder="Ej: 8-12" />
+            <SelectField historiaId={historiaId} field="presc_fuerza_modo_serie" initialValue={data?.prescFuerzaModoSerie} onSaved={onPatchLocal} label="Cada serie se mide por" options={FUERZA_MODO_SERIE} placeholder="Seleccionar" />
+            <TextField
+              historiaId={historiaId}
+              field="presc_fuerza_repeticiones"
+              initialValue={data?.prescFuerzaRepeticiones}
+              onSaved={onPatchLocal}
+              label={data?.prescFuerzaModoSerie === 'Tiempo' ? 'Tiempo por serie' : 'Repeticiones'}
+              placeholder={data?.prescFuerzaModoSerie === 'Tiempo' ? 'Ej: 20 s' : 'Ej: 8-12'}
+            />
             <SelectField historiaId={historiaId} field="presc_fuerza_tipo" initialValue={data?.prescFuerzaTipo} onSaved={onPatchLocal} label="Tipo / modo" options={FUERZA_TIPO} placeholder="Seleccionar" />
           </div>
           <RefTable {...FUERZA_BOARD} />

@@ -44,8 +44,11 @@ export function PatientStrip({ data }: PatientStripProps) {
   const tallaM = tallaCm && tallaCm > 3 ? tallaCm / 100 : tallaCm;
   const imc = peso && tallaM ? peso / (tallaM * tallaM) : null;
 
+  // Sin borde. La sombra `0,0,0,0.25` venía del tema oscuro y sobre superficie
+  // clara se leía como un contorno duro; acá basta una elevación suave, que
+  // igual hace falta porque el strip es sticky y el contenido le pasa por debajo.
   return (
-    <div className="sticky top-0 z-[5] mx-5 mt-4 p-4 rounded-2xl border border-[var(--p-line)] shadow-[0_6px_22px_rgba(0,0,0,0.25)] grid grid-cols-[auto,1fr,auto] md:grid-cols-[auto,1fr,auto,auto,auto] gap-4 items-center"
+    <div className="sticky top-0 z-[5] mx-5 mt-4 p-4 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.05),0_8px_24px_rgba(0,0,0,0.05)] grid grid-cols-[auto,1fr,auto] md:grid-cols-[auto,1fr,auto,auto,auto] gap-4 items-center"
       style={{ background: 'linear-gradient(135deg, var(--p-surface) 0%, var(--p-surface-6) 100%)' }}>
       <div className="w-[46px] h-[46px] rounded-[14px] grid place-items-center font-extrabold text-[15px] text-white"
         style={{ background: 'linear-gradient(135deg, var(--p-violet), var(--p-violet-2))' }}>

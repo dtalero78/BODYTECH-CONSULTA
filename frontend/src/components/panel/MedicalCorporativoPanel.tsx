@@ -42,7 +42,18 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
   const t4 = [data?.mcAfHorasDia, data?.mcAfHorasSemana, data?.mcAfMeses, data?.mcAfModalidad, data?.mcAfObjetivo].filter(isFilled).length;
   const t5 = [data?.mcPeso, data?.mcTalla, data?.tas, data?.tad, data?.mcRuffierFc1, data?.mcHandgripDer1, data?.mcExamenObservaciones].filter(isFilled).length;
   const t6 = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcNivel, data?.aptitud].filter(isFilled).length;
-  const t7 = [data?.mcAnalisis, data?.mcPrescripcionCardio, data?.mcPrescripcionFuerza, data?.mcPrescripcionFlexibilidad, data?.mcRemision].filter(isFilled).length;
+  // La prescripción de ejercicio pasó a las columnas `presc_*` del panel del rol
+  // Médico (mismo componente), así que el contador mira una sección de cada
+  // bloque de ese tab más lo propio del examen ocupacional.
+  const t7 = [
+    data?.mcAnalisis,
+    data?.prescGenerales,
+    data?.prescCardioIntensidad,
+    data?.prescFuerzaIntensidad,
+    data?.prescFlexTipo,
+    data?.prescClaseModalidad,
+    data?.mcRemision,
+  ].filter(isFilled).length;
 
   return [
     { id: 'c1', label: TAB_LABELS.c1, filled: t1, total: 7 },
@@ -51,7 +62,7 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
     { id: 'c4', label: TAB_LABELS.c4, filled: t4, total: 5 },
     { id: 'c5', label: TAB_LABELS.c5, filled: t5, total: 7 },
     { id: 'c6', label: TAB_LABELS.c6, filled: t6, total: 5 },
-    { id: 'c7', label: TAB_LABELS.c7, filled: t7, total: 5 },
+    { id: 'c7', label: TAB_LABELS.c7, filled: t7, total: 7 },
   ];
 }
 

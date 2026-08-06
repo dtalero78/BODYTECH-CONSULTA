@@ -27,6 +27,14 @@ interface PrescripcionTabProps {
   data: MedicalHistoryFull | null;
   isMaxed: boolean;
   onPatchLocal: (field: string, value: unknown) => void;
+  /**
+   * El panel Médico Corporativo reusa este tab tal cual, pero es standalone a
+   * pantalla completa y sin videollamada: no aplica el pill de "afiliado
+   * visible" y los modales van anchos. Los defaults conservan el
+   * comportamiento del panel de consulta.
+   */
+  showEyePill?: boolean;
+  modalSize?: 'default' | 'wide';
 }
 
 type ModalKey = 'generales' | 'cardio' | 'fuerza' | 'flexibilidad' | 'clases' | null;
@@ -140,7 +148,14 @@ const FUERZA_BOARD = {
   ],
 };
 
-export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: PrescripcionTabProps) {
+export function PrescripcionTab({
+  historiaId,
+  data,
+  isMaxed,
+  onPatchLocal,
+  showEyePill = true,
+  modalSize = 'default',
+}: PrescripcionTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
 
   const cardioVals = [data?.prescCardioFrecuencia, data?.prescCardioIntensidad, data?.prescCardioTiempo, data?.prescCardioTipo];
@@ -206,6 +221,8 @@ export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: Pre
         title="Recomendaciones generales"
         icon={<ClipboardList size={18} />}
         isMaxed={isMaxed}
+        showEyePill={showEyePill}
+        size={modalSize}
       >
         <TextareaField
           historiaId={historiaId}
@@ -226,6 +243,8 @@ export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: Pre
         title="Ejercicio cardiovascular (FIT)"
         icon={<HeartPulse size={18} />}
         isMaxed={isMaxed}
+        showEyePill={showEyePill}
+        size={modalSize}
       >
         <div className="flex flex-col gap-3.5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -247,6 +266,8 @@ export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: Pre
         title="Ejercicio de fuerza (FIT)"
         icon={<Dumbbell size={18} />}
         isMaxed={isMaxed}
+        showEyePill={showEyePill}
+        size={modalSize}
       >
         <div className="flex flex-col gap-3.5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -269,6 +290,8 @@ export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: Pre
         title="Ejercicio de flexibilidad"
         icon={<Activity size={18} />}
         isMaxed={isMaxed}
+        showEyePill={showEyePill}
+        size={modalSize}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <TextField historiaId={historiaId} field="presc_flex_frecuencia" initialValue={data?.prescFlexFrecuencia} onSaved={onPatchLocal} label="Frecuencia" placeholder="Ej: diario / 3 días/semana" />
@@ -286,6 +309,8 @@ export function PrescripcionTab({ historiaId, data, isMaxed, onPatchLocal }: Pre
         title="Clases grupales"
         icon={<Users size={18} />}
         isMaxed={isMaxed}
+        showEyePill={showEyePill}
+        size={modalSize}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           <SelectField historiaId={historiaId} field="presc_clase_modalidad" initialValue={data?.prescClaseModalidad} onSaved={onPatchLocal} label="Modalidad" options={CLASE_MODALIDAD} placeholder="Seleccionar modalidad" />

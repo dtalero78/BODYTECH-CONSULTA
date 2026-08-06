@@ -146,7 +146,14 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
       style={{ backgroundColor: '#0b141a', zoom: 1.4 }}
     >
       <CorpHeader sectionTitle={sectionTitle} saveState={aggregate} onRetry={retryAll} />
-      <div className="flex-1 overflow-y-auto relative">
+      {/* El wrapper es el que está posicionado; el que scrollea NO lo está.
+          Los modales son `absolute inset-0`, así que se anclan a este wrapper
+          (el área visible del panel) y no al origen del contenido scrolleado.
+          Si el scroller fuera el contenedor posicionado, al abrir un modal
+          estando abajo aparecería por encima de la vista y habría que subir
+          para poder verlo — que es justo lo que reportó el equipo médico. */}
+      <div className="flex-1 min-h-0 relative">
+        <div className="h-full overflow-y-auto">
         {loading && (
           <div className="p-6 text-center text-[#a4b1b9] text-sm">Cargando historia clínica...</div>
         )}
@@ -184,6 +191,7 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

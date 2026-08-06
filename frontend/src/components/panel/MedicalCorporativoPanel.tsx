@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Cloud, CloudOff } from 'lucide-react';
 import { PatientStrip } from './PatientStrip';
-import { Tabs, type TabDef } from './Tabs';
+import { PanelSideNav, type TabDef } from './PanelSideNav';
 import { SaveProvider, useSaveCtx } from './SaveContext';
 import { useMedicalHistory } from './hooks/useMedicalHistory';
+import { useContainerWidth } from './hooks/useContainerWidth';
 import type { MedicalHistoryFull, SaveStatus } from './types';
 import { CorpIdentificacionTab } from './corporativo-tabs/CorpIdentificacionTab';
 import { CorpAnamnesisTab } from './corporativo-tabs/CorpAnamnesisTab';
@@ -76,8 +77,8 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
     { id: 'c3', label: TAB_LABELS.c3, filled: t3, total: 4 },
     { id: 'c4', label: TAB_LABELS.c4, filled: t4, total: 6 },
     { id: 'c5', label: TAB_LABELS.c5, filled: t5, total: 7 },
-    { id: 'c6', label: TAB_LABELS.c6, filled: t6, total: 7 },
-    { id: 'c7', label: TAB_LABELS.c7, filled: t7, total: 7 },
+    { id: 'c6', label: TAB_LABELS.c6, shortLabel: 'Diagnóstico', filled: t6, total: 7 },
+    { id: 'c7', label: TAB_LABELS.c7, shortLabel: 'Prescripción', filled: t7, total: 7 },
   ];
 }
 
@@ -102,18 +103,18 @@ function CorpHeader({ sectionTitle, saveState, onRetry }: { sectionTitle: string
         ? `Guardado ${relativeTime(saveState.lastSavedAt)}`
         : 'Sin cambios';
   const pillCls = saveState.error
-    ? 'bg-[rgba(239,68,68,0.12)] text-[#ef4444] border-[rgba(239,68,68,0.25)]'
+    ? 'bg-[rgba(var(--p-danger-rgb),0.12)] text-[var(--p-danger)] border-[rgba(var(--p-danger-rgb),0.25)]'
     : saveState.saving
-      ? 'bg-[rgba(0,168,132,0.18)] text-[#34d399] border-[rgba(0,168,132,0.4)] animate-pulse'
-      : 'bg-[rgba(0,168,132,0.12)] text-[#34d399] border-[rgba(0,168,132,0.25)]';
+      ? 'bg-[rgba(var(--p-accent-rgb),0.18)] text-[var(--p-accent)] border-[rgba(var(--p-accent-rgb),0.4)] animate-pulse'
+      : 'bg-[rgba(var(--p-ok-rgb),0.12)] text-[var(--p-ok)] border-[rgba(var(--p-ok-rgb),0.25)]';
 
   return (
-    <div className="flex items-center gap-3 px-5 py-3 border-b border-[#324049] sticky top-0 z-20 bg-[#0b141a]">
+    <div className="flex items-center gap-3 px-5 py-2.5 border-b border-[var(--p-line)] shrink-0 z-20 bg-[var(--p-surface)]">
       <div className="flex flex-col min-w-0">
-        <span className="text-[10.5px] font-semibold text-[#6b7882] tracking-widest uppercase">
-          Médico Corporativo · Sección
+        <span className="text-[10.5px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase">
+          Sección
         </span>
-        <span className="text-[15px] font-bold text-[#e9edef] truncate">{sectionTitle}</span>
+        <span className="text-[15px] font-bold text-[var(--p-text)] truncate">{sectionTitle}</span>
       </div>
       <button
         type="button"
@@ -132,40 +133,59 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const { data, loading, error, patchLocal } = useMedicalHistory(historiaId);
   const [activeTab, setActiveTab] = useState<CorpTabId>('c1');
   const { aggregate, retryAll } = useSaveCtx();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const width = useContainerWidth(rootRef);
+  // width === 0 es "todavía sin medir" (primer render), no "angosto".
+  const navCollapsed = width > 0 && width < 900;
 
   const tabs = computeCorpTabsCount(data);
   const sectionTitle = TAB_LABELS[activeTab];
 
   return (
     <div
-      className="relative flex flex-col flex-1 min-h-0 overflow-hidden font-figtree"
+      ref={rootRef}
+      className="panel-theme relative flex flex-col flex-1 min-h-0 overflow-hidden"
       // Este panel es standalone a pantalla completa (no un dock del 25% junto al
       // video como el panel de consulta estándar), así que se agranda con `zoom`
       // el tipográfico compacto compartido (Card/Modal/fields.tsx) en vez de
       // tocar esos componentes — son reusados por el panel de consulta acoplado.
-      style={{ backgroundColor: '#0b141a', zoom: 1.4 }}
+      style={{ backgroundColor: 'var(--p-bg)', zoom: 1.4 }}
     >
       <CorpHeader sectionTitle={sectionTitle} saveState={aggregate} onRetry={retryAll} />
-      {/* El wrapper es el que está posicionado; el que scrollea NO lo está.
-          Los modales son `absolute inset-0`, así que se anclan a este wrapper
-          (el área visible del panel) y no al origen del contenido scrolleado.
-          Si el scroller fuera el contenedor posicionado, al abrir un modal
-          estando abajo aparecería por encima de la vista y habría que subir
-          para poder verlo — que es justo lo que reportó el equipo médico. */}
-      <div className="flex-1 min-h-0 relative">
-        <div className="h-full overflow-y-auto">
+
+      {/* La fila (sidebar + contenido) es el contenedor posicionado; el que
+          scrollea NO lo está. Los modales son `absolute inset-0`, así que se
+          anclan al área visible del panel y no al origen del contenido
+          scrolleado — si el scroller fuera el posicionado, abrir un modal
+          estando abajo lo dejaría por encima de la vista, que es justo lo que
+          reportó el equipo médico. Anclar a la fila (y no solo a la columna de
+          contenido) también hace que el velo tape el sidebar: sin eso se puede
+          cambiar de sección con un modal abierto y desmontarlo con un
+          auto-guardado en vuelo. */}
+      <div className="flex-1 min-h-0 flex relative">
+        {!loading && !error && (
+          <PanelSideNav
+            active={activeTab}
+            onChange={setActiveTab}
+            tabs={tabs}
+            eyebrow="Secciones"
+            collapsed={navCollapsed}
+          />
+        )}
+
+        <div className="flex-1 min-w-0 min-h-0">
+          <div className="h-full overflow-y-auto">
         {loading && (
-          <div className="p-6 text-center text-[#a4b1b9] text-sm">Cargando historia clínica...</div>
+          <div className="p-6 text-center text-[var(--p-text-2)] text-sm">Cargando historia clínica...</div>
         )}
         {error && (
-          <div className="m-5 p-4 rounded-xl border border-[#ef4444]/40 bg-[rgba(239,68,68,0.08)] text-[#ef4444] text-sm">
+          <div className="m-5 p-4 rounded-xl border border-[rgba(var(--p-danger-rgb),0.40)] bg-[rgba(var(--p-danger-rgb),0.08)] text-[var(--p-danger)] text-sm">
             {error}
           </div>
         )}
         {!loading && !error && (
           <>
             <PatientStrip data={data} />
-            <Tabs active={activeTab} onChange={setActiveTab} tabs={tabs} />
             <div className="p-5 pb-16">
               {activeTab === 'c1' && (
                 <CorpIdentificacionTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
@@ -191,6 +211,7 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
             </div>
           </>
         )}
+          </div>
         </div>
       </div>
     </div>

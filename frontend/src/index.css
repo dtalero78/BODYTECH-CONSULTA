@@ -91,12 +91,123 @@ body {
   overflow: hidden;
 }
 
-/* Scrollbars del panel — coherente con el design system WhatsApp-like */
-.font-figtree *::-webkit-scrollbar {
+/* ============================================
+   Tema del panel de historia clínica (Médico + Médico Corporativo)
+
+   Todo el color de `components/panel/**` está expresado como `var(--p-*)`,
+   así que el look completo se decide acá. `.panel-theme` es el lenguaje
+   editorial del Panel Coordinador (zinc/Inter/azul ink) y `.panel-theme-dark`
+   conserva el look WhatsApp-like anterior — cambiar de uno a otro es cambiar
+   una sola clase en el orchestrator del panel.
+
+   El panel nutricional (`MedicalHistoryPanel`) NO usa estos componentes y
+   por lo tanto no se ve afectado.
+============================================ */
+.panel-theme {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Superficies */
+  --p-bg: #fafaf9;
+  --p-bg-2: #f4f4f5;
+  --p-surface: #ffffff;
+  --p-surface-2: #fafaf9;
+  --p-surface-3: #f4f4f5;
+  --p-surface-4: #f4f4f5;
+  --p-surface-5: #f4f4f5;
+  --p-surface-6: #efeff1;
+  --p-surface-7: #efeff1;
+  --p-input: #ffffff;
+  --p-input-2: #f4f4f5;
+
+  /* Líneas */
+  --p-line: #e4e4e7;
+  --p-line-2: #d4d4d8;
+
+  /* Texto */
+  --p-text: #18181b;
+  --p-text-2: #3f3f46;
+  /* zinc-500, no zinc-400: --p-text-3 no es solo decorativo, lleva los
+     contadores X/Y y los placeholders "Sin informacion" a 10.5-12px. */
+  --p-text-3: #71717a;
+  --p-text-3-rgb: 113, 113, 122;
+
+  /* Acento (azul ink del Coordinador) */
+  --p-accent: #1f3a8a;
+  --p-accent-hover: #172e6e;
+  --p-accent-2: #2f4fae;
+  --p-on-accent: #ffffff;
+  --p-accent-rgb: 31, 58, 138;
+
+  /* Semánticos */
+  --p-ok: #15803d;
+  --p-ok-rgb: 22, 163, 74;
+  --p-warn: #b45309;
+  --p-warn-rgb: 217, 119, 6;
+  --p-danger: #dc2626;
+  --p-danger-rgb: 220, 38, 38;
+  --p-info: #2563eb;
+  --p-info-rgb: 37, 99, 235;
+  --p-violet: #6d28d9;
+  /* Segunda parada del degradado del avatar del paciente, no un color de texto. */
+  --p-violet-2: #4c1d95;
+  --p-orange: #ea580c;
+
+  /* Velo de los modales — se mantiene oscuro en ambos temas */
+  --p-scrim-rgb: 24, 24, 27;
+}
+
+.panel-theme-dark {
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+
+  --p-bg: #0b141a;
+  --p-bg-2: #16222a;
+  --p-surface: #1f2c34;
+  --p-surface-2: #1a2530;
+  --p-surface-3: #1a262e;
+  --p-surface-4: #1c2930;
+  --p-surface-5: #23323b;
+  --p-surface-6: #25333d;
+  --p-surface-7: #26323b;
+  --p-input: #2a3942;
+  --p-input-2: #2c3b44;
+
+  --p-line: #324049;
+  --p-line-2: #3b4a54;
+
+  --p-text: #e9edef;
+  --p-text-2: #a4b1b9;
+  --p-text-3: #6b7882;
+  --p-text-3-rgb: 107, 120, 130;
+
+  --p-accent: #00a884;
+  --p-accent-hover: #008f6f;
+  --p-accent-2: #00c99a;
+  --p-on-accent: #001b14;
+  --p-accent-rgb: 0, 168, 132;
+
+  --p-ok: #34d399;
+  --p-ok-rgb: 52, 211, 153;
+  --p-warn: #fbbf24;
+  --p-warn-rgb: 251, 191, 36;
+  --p-danger: #ef4444;
+  --p-danger-rgb: 239, 68, 68;
+  --p-info: #60a5fa;
+  --p-info-rgb: 59, 130, 246;
+  --p-violet: #7a4dff;
+  --p-violet-2: #3a1d99;
+  --p-orange: #f97316;
+
+  --p-scrim-rgb: 11, 20, 26;
+}
+
+/* Scrollbars del panel */
+.font-figtree *::-webkit-scrollbar,
+.panel-theme *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-.font-figtree *::-webkit-scrollbar-track {
+.font-figtree *::-webkit-scrollbar-track,
+.panel-theme *::-webkit-scrollbar-track {
   background: transparent;
 }
 .font-figtree *::-webkit-scrollbar-thumb {
@@ -105,4 +216,11 @@ body {
 }
 .font-figtree *::-webkit-scrollbar-thumb:hover {
   background: #3b4a54;
+}
+.panel-theme *::-webkit-scrollbar-thumb {
+  background: var(--p-line-2);
+  border-radius: 4px;
+}
+.panel-theme *::-webkit-scrollbar-thumb:hover {
+  background: var(--p-text-3);
 }

@@ -121,9 +121,9 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
             {FAMILIARES.map((f) => (
               <div
                 key={f.field}
-                className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#324049] bg-[#1a2530]"
+                className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)]"
               >
-                <span className="text-[13px] text-[#e9edef]">{f.label}</span>
+                <span className="text-[13px] text-[var(--p-text)]">{f.label}</span>
                 <PillToggleField
                   historiaId={historiaId}
                   field={f.field}
@@ -163,9 +163,9 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
             {PERSONALES_BOOL.map((f) => (
               <div
                 key={f.field}
-                className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#324049] bg-[#1a2530]"
+                className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)]"
               >
-                <span className="text-[13px] text-[#e9edef]">{f.label}</span>
+                <span className="text-[13px] text-[var(--p-text)]">{f.label}</span>
                 <PillToggleField
                   historiaId={historiaId}
                   field={f.field}
@@ -179,7 +179,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
             ))}
           </div>
 
-          <div className="pt-4 border-t border-dashed border-[#324049] grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)] grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <TextField
               historiaId={historiaId}
               field="mc_per_vacunas_covid"
@@ -271,8 +271,8 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
           {/* Ginecobstétricos — solo para pacientes mujeres. Reusa las columnas
               que ya existen para el panel de consulta estándar. */}
           {esFemenino(data) && (
-            <div className="pt-4 border-t border-dashed border-[#324049]">
-              <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+            <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+              <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
                 Antecedentes ginecobstétricos
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">

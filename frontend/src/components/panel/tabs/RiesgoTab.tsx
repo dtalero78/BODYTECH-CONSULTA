@@ -37,13 +37,13 @@ function acsmCategoria(count: number): string {
 function acsmBadgeColor(cat: string): string {
   switch (cat) {
     case 'MUY ALTO':
-      return '#ef4444';
+      return 'var(--p-danger)';
     case 'ALTO':
-      return '#f97316';
+      return 'var(--p-orange)';
     case 'MEDIO':
-      return '#fbbf24';
+      return 'var(--p-warn)';
     default:
-      return '#34d399';
+      return 'var(--p-ok)';
   }
 }
 
@@ -117,7 +117,7 @@ function BumpCounter({ count, total }: { count: number; total: number }) {
   }, [count]);
   return (
     <span
-      className={`inline-block text-[12px] font-semibold text-[#a4b1b9] ${pulse ? 'is-bumping' : ''}`}
+      className={`inline-block text-[12px] font-semibold text-[var(--p-text-2)] ${pulse ? 'is-bumping' : ''}`}
     >
       {count} / {total} factores activos
     </span>
@@ -163,7 +163,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
       : 'empty';
 
   const finalColorBadge =
-    riesgoFinal === 'ALTO' ? '#ef4444' : riesgoFinal === 'MEDIO' ? '#fbbf24' : '#34d399';
+    riesgoFinal === 'ALTO' ? 'var(--p-danger)' : riesgoFinal === 'MEDIO' ? 'var(--p-warn)' : 'var(--p-ok)';
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -191,7 +191,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
             >
               {acsmCat}
             </span>
-            <span className="text-[#6b7882]">{acsmCount}/12 factores</span>
+            <span className="text-[var(--p-text-3)]">{acsmCount}/12 factores</span>
           </span>
         }
         state={acsmCardState}
@@ -214,7 +214,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
             >
               {riesgoFinal === 'ALTO' ? '⚠️ ALTO' : riesgoFinal === 'MEDIO' ? 'MEDIO' : 'BAJO'}
             </span>
-            <span className="text-[#6b7882]">
+            <span className="text-[var(--p-text-3)]">
               Resumen final · {btFlagsCount}/3 factores BT
             </span>
           </span>
@@ -236,7 +236,7 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
       >
         <div className="flex flex-col gap-4">
           {/* Header reactivo */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#324049] bg-[#1a2530]">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)]">
             <div
               className="px-3 py-1.5 rounded-lg text-[13px] font-bold tracking-wider"
               style={{
@@ -306,8 +306,8 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-              <span className="text-[13.5px] text-[#e9edef]">Pérdida de conocimiento</span>
+            <div className="flex items-center justify-between border-b border-dashed border-[var(--p-line)] pb-3">
+              <span className="text-[13.5px] text-[var(--p-text)]">Pérdida de conocimiento</span>
               <PillToggleField
                 historiaId={historiaId}
                 field="bt_factor_1"
@@ -316,8 +316,8 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
                 inline
               />
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-              <span className="text-[13.5px] text-[#e9edef]">Razón médica para no ejercitarse</span>
+            <div className="flex items-center justify-between border-b border-dashed border-[var(--p-line)] pb-3">
+              <span className="text-[13.5px] text-[var(--p-text)]">Razón médica para no ejercitarse</span>
               <PillToggleField
                 historiaId={historiaId}
                 field="bt_factor_2"
@@ -326,8 +326,8 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
                 inline
               />
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-              <span className="text-[13.5px] text-[#e9edef]">
+            <div className="flex items-center justify-between border-b border-dashed border-[var(--p-line)] pb-3">
+              <span className="text-[13.5px] text-[var(--p-text)]">
                 Dolor osteomuscular que empeora con ejercicio
               </span>
               <PillToggleField
@@ -397,11 +397,11 @@ function AcsmRow({ label, field, value, historiaId, onPatchLocal }: AcsmRowProps
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#324049] bg-[#1a2530] ${
+      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)] ${
         flash ? 'is-flashing' : ''
       }`}
     >
-      <span className="text-[13px] text-[#e9edef]">{label}</span>
+      <span className="text-[13px] text-[var(--p-text)]">{label}</span>
       <PillToggleField
         historiaId={historiaId}
         field={field}

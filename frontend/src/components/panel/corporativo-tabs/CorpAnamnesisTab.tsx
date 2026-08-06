@@ -126,9 +126,9 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
           {SINTOMAS.map((s) => (
             <div
               key={s.field}
-              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[#324049] bg-[#1a2530]"
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)]"
             >
-              <span className="text-[13.5px] text-[#e9edef]">{s.label}</span>
+              <span className="text-[13.5px] text-[var(--p-text)]">{s.label}</span>
               <PillToggleField
                 historiaId={historiaId}
                 field={s.field}

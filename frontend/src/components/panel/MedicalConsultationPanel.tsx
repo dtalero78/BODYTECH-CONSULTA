@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Compass } from 'lucide-react';
 import { PanelHeader } from './PanelHeader';
 import { PatientStrip } from './PatientStrip';
-import { Tabs, type TabDef } from './Tabs';
+import { PanelSideNav, type TabDef } from './PanelSideNav';
 import { FAB } from './FAB';
 import { GuidedConsultation } from './GuidedConsultation';
 import { SaveProvider, useSaveCtx } from './SaveContext';
 import { useMedicalHistory } from './hooks/useMedicalHistory';
+import { useContainerWidth } from './hooks/useContainerWidth';
 import type { MedicalHistoryFull, TabId } from './types';
 import { DatosBasicosTab } from './tabs/DatosBasicosTab';
 import { AnamnesisTab } from './tabs/AnamnesisTab';
@@ -135,7 +136,7 @@ export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   return [
     { id: 't1', label: 'Datos Básicos', filled: t1Filled, total: 13 },
     { id: 't2', label: 'Anamnesis', filled: t2Filled, total: 3 },
-    { id: 't3', label: 'Clasificación de riesgo', filled: t3Filled, total: 3, warn: t3Warn },
+    { id: 't3', label: 'Clasificación de riesgo', shortLabel: 'Riesgo', filled: t3Filled, total: 3, warn: t3Warn },
     { id: 't4', label: 'Examen físico', filled: t4Filled, total: 15 },
     { id: 't5', label: 'Intervención', filled: [data?.intervencionAnalisis, data?.intervencionTipoTecnologia, data?.intervencionTipoMeta, data?.dxTecnologiaSalud].filter(isFilled).length, total: 4 },
     { id: 't6', label: 'Conducta', filled: [data?.aptitud, data?.controlFecha].filter(isFilled).length, total: 2 },
@@ -153,6 +154,7 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
   // y se puede reabrir con el botón. Una sola auto-apertura por montaje.
   const [guideOpen, setGuideOpen] = useState(false);
   const autoOpenedGuideRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   // Phase 3 — Transcripción post-llamada.
   const [showTranscriptionBadge, setShowTranscriptionBadge] = useState(false);
   // Ref con el último status observado, para detectar la transición a 'done'
@@ -218,9 +220,17 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
 
   const tabs = computeTabsCount(data);
   const sectionTitle = TAB_LABELS[activeTab];
+  // Con el video al lado el panel ronda los 1000-1400px; maximizado, la pantalla
+  // completa. Por debajo de 900 (pantallas chicas) el sidebar pasa a rail de íconos.
+  const width = useContainerWidth(rootRef);
+  const navCollapsed = width > 0 && width < 900;
+  const navWidth = navCollapsed ? 58 : 232;
 
   return (
-    <div className="relative flex flex-col h-full bg-[#0b141a] overflow-hidden font-figtree">
+    <div
+      ref={rootRef}
+      className="panel-theme relative flex flex-col h-full bg-[var(--p-bg)] overflow-hidden"
+    >
       <PanelHeader
         data={data}
         isMaxed={isMaxed}
@@ -231,29 +241,50 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
         transcriptionReady={showTranscriptionBadge}
         onDismissTranscriptionBadge={() => setShowTranscriptionBadge(false)}
       />
-      <div className="flex-1 overflow-y-auto relative">
+      {/* La fila (sidebar + contenido) es el contenedor posicionado; el que
+          scrollea NO lo está. Los modales son `absolute inset-0` y deben
+          anclarse al área visible del panel, no al origen del contenido
+          scrolleado (si no, abrir un modal estando abajo lo deja por encima de
+          la vista). Anclar a la fila también hace que el velo tape el sidebar:
+          sin eso se puede cambiar de sección con un modal abierto y
+          desmontarlo con un auto-guardado en vuelo. */}
+      <div className="flex-1 min-h-0 flex relative">
+        {!loading && !error && (
+          <PanelSideNav
+            active={activeTab}
+            onChange={setActiveTab}
+            tabs={tabs}
+            eyebrow="Consulta"
+            collapsed={navCollapsed}
+            footer={
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                title="Consulta guiada"
+                className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold bg-[rgba(var(--p-accent-rgb),0.10)] text-[var(--p-accent)] border border-[rgba(var(--p-accent-rgb),0.25)] hover:bg-[rgba(var(--p-accent-rgb),0.18)] transition ${
+                  navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
+                }`}
+              >
+                <Compass size={15} className="shrink-0" />
+                {!navCollapsed && 'Consulta guiada'}
+              </button>
+            }
+          />
+        )}
+
+        <div className="flex-1 min-w-0 min-h-0">
+          <div className="h-full overflow-y-auto">
         {loading && (
-          <div className="p-6 text-center text-[#a4b1b9] text-sm">Cargando historia clínica...</div>
+          <div className="p-6 text-center text-[var(--p-text-2)] text-sm">Cargando historia clínica...</div>
         )}
         {error && (
-          <div className="m-5 p-4 rounded-xl border border-[#ef4444]/40 bg-[rgba(239,68,68,0.08)] text-[#ef4444] text-sm">
+          <div className="m-5 p-4 rounded-xl border border-[rgba(var(--p-danger-rgb),0.40)] bg-[rgba(var(--p-danger-rgb),0.08)] text-[var(--p-danger)] text-sm">
             {error}
           </div>
         )}
         {!loading && !error && (
           <>
             <PatientStrip data={data} />
-            <div className="px-5 pt-3">
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-[10px] text-xs font-semibold bg-[rgba(0,168,132,0.12)] text-[#00a884] border border-[#00a884]/30 hover:bg-[rgba(0,168,132,0.2)] transition"
-              >
-                <Compass size={15} />
-                Consulta guiada
-              </button>
-            </div>
-            <Tabs active={activeTab} onChange={setActiveTab} tabs={tabs} />
             <div className="p-5 pb-32">
               {activeTab === 't1' && (
                 <DatosBasicosTab
@@ -322,6 +353,8 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
             </div>
           </>
         )}
+          </div>
+        </div>
       </div>
       <GuidedConsultation
         historiaId={historiaId}
@@ -331,7 +364,7 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
         onClose={() => setGuideOpen(false)}
         onPatchLocal={patchLocal}
       />
-      <FAB isMaxed={isMaxed} externalOpen={fabOpen} onOpenChange={setFabOpen} />
+      <FAB isMaxed={isMaxed} externalOpen={fabOpen} onOpenChange={setFabOpen} navWidth={navWidth} />
     </div>
   );
 }

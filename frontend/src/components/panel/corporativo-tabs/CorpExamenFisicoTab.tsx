@@ -300,7 +300,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       >
         <div className="flex flex-col gap-5">
           <div>
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">Signos vitales</div>
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Signos vitales</div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
               <TextField historiaId={historiaId} field="tas" initialValue={data?.tas} onSaved={onPatchLocal} label="TAS (mmHg)" type="number" min={60} max={250} />
               <TextField historiaId={historiaId} field="tad" initialValue={data?.tad} onSaved={onPatchLocal} label="TAD (mmHg)" type="number" min={40} max={180} />
@@ -311,8 +311,8 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
               <TextField historiaId={historiaId} field="mc_talla" initialValue={data?.mcTalla} onSaved={onPatchLocal} label="Talla (m)" type="number" min={1} max={2.5} placeholder="Ej. 1.65" error={talla !== null && (talla < 1 || talla > 2.5) ? "En metros, con punto decimal (ej. 1.65)" : undefined} />
             </div>
           </div>
-          <div className="pt-4 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">Composición corporal</div>
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Composición corporal</div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
               <TextField historiaId={historiaId} field="mc_peso" initialValue={data?.mcPeso} onSaved={onPatchLocal} label="Peso (kg)" type="number" min={20} max={300} />
               <TextField historiaId={historiaId} field="mc_pct_grasa" initialValue={data?.mcPctGrasa} onSaved={onPatchLocal} label="% Grasa" type="number" min={0} max={80} />
@@ -350,7 +350,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       >
         <div className="flex flex-col gap-5">
           <div>
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               FC predicha (Tanaka) — se calcula siempre
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -369,8 +369,8 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             <CalcAutosave historiaId={historiaId} field="mc_fc_pico_predicha_60" value={tanakaPct(0.6)} serverValue={data?.mcFcPicoPredicha60 ?? null} onPatchLocal={onPatchLocal} />
           </div>
 
-          <div className="pt-4 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               FC de reserva (Karvonen) — solo si se hizo ergometría
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -451,7 +451,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             <TextField historiaId={historiaId} field="mc_ruffier_fc3" initialValue={data?.mcRuffierFc3} onSaved={onPatchLocal} label="FC3 (recuperación)" type="number" min={30} max={220} />
           </div>
           {fc1 === null && (
-            <div className="px-4 py-2.5 rounded-xl border border-[#fbbf24]/30 bg-[rgba(251,191,36,0.08)] text-[#fbbf24] text-[12px]">
+            <div className="px-4 py-2.5 rounded-xl border border-[rgba(var(--p-warn-rgb),0.30)] bg-[rgba(var(--p-warn-rgb),0.08)] text-[var(--p-warn)] text-[12px]">
               FC1 se toma de la frecuencia cardiaca en reposo — diligénciala en "Signos y composición corporal" para calcular el índice.
             </div>
           )}
@@ -485,7 +485,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             <TextField historiaId={historiaId} field="mc_handgrip_der_2" initialValue={data?.mcHandgripDer2} onSaved={onPatchLocal} label="Mano derecha · 2do intento" type="number" min={0} max={100} />
             <TextField historiaId={historiaId} field="mc_handgrip_izq_2" initialValue={data?.mcHandgripIzq2} onSaved={onPatchLocal} label="Mano izquierda · 2do intento" type="number" min={0} max={100} />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-3 border-t border-dashed border-[#324049]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-3 border-t border-dashed border-[var(--p-line)]">
             <Calculated label="Promedio mano derecha" value={promDer ?? '—'} />
             <Calculated label="Promedio mano izquierda" value={promIzq ?? '—'} />
             <Calculated

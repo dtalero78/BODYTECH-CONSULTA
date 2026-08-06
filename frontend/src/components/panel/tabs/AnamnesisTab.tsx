@@ -316,25 +316,25 @@ function OmListManager({
           {entries.map((entry, idx) => (
             <div
               key={entry.id}
-              className="flex items-start justify-between gap-3 p-3 rounded-xl bg-[#1a2530] border border-[#324049]"
+              className="flex items-start justify-between gap-3 p-3 rounded-xl bg-[var(--p-surface-2)] border border-[var(--p-line)]"
             >
               <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] font-semibold text-[#e9edef]">
+                <div className="text-[12.5px] font-semibold text-[var(--p-text)]">
                   {idx + 1}. {entry.tipo || '—'}
                   {entry.lateralidad && ` · ${entry.lateralidad}`}
                   {entry.evolucion && ` · ${entry.evolucion}`}
                   {entry.fecha && (
-                    <span className="text-[#6b7882] font-normal ml-1">({entry.fecha})</span>
+                    <span className="text-[var(--p-text-3)] font-normal ml-1">({entry.fecha})</span>
                   )}
                 </div>
                 {entry.obs && (
-                  <div className="text-[11.5px] text-[#a4b1b9] mt-0.5 line-clamp-2">{entry.obs}</div>
+                  <div className="text-[11.5px] text-[var(--p-text-2)] mt-0.5 line-clamp-2">{entry.obs}</div>
                 )}
               </div>
               <button
                 type="button"
                 onClick={() => removeEntry(entry.id)}
-                className="text-[#6b7882] hover:text-[#ef4444] transition-colors shrink-0 mt-0.5"
+                className="text-[var(--p-text-3)] hover:text-[var(--p-danger)] transition-colors shrink-0 mt-0.5"
                 title="Eliminar"
               >
                 <Trash2 size={14} />
@@ -346,11 +346,11 @@ function OmListManager({
 
       {/* Formulario de nuevo antecedente */}
       {showForm && (
-        <div className="mb-3 p-3.5 rounded-xl bg-[#1a2530] border border-[#00a884]/40">
+        <div className="mb-3 p-3.5 rounded-xl bg-[var(--p-surface-2)] border border-[rgba(var(--p-accent-rgb),0.40)]">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-                Tipo de lesión <span className="text-[#ef4444]">*</span>
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+                Tipo de lesión <span className="text-[var(--p-danger)]">*</span>
               </label>
               <Dropdown
                 value={form.tipo}
@@ -360,7 +360,7 @@ function OmListManager({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
                 Lateralidad
               </label>
               <Dropdown
@@ -371,7 +371,7 @@ function OmListManager({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
                 Evolución
               </label>
               <Dropdown
@@ -382,18 +382,18 @@ function OmListManager({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
                 Fecha aproximada
               </label>
               <input
                 type="date"
                 value={form.fecha}
                 onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))}
-                className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[#00a884] transition-colors"
+                className="w-full bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[var(--p-accent)] transition-colors"
               />
             </div>
             <div className="md:col-span-2 flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
                 Observaciones
               </label>
               <textarea
@@ -401,7 +401,7 @@ function OmListManager({
                 value={form.obs}
                 onChange={(e) => setForm((f) => ({ ...f, obs: e.target.value }))}
                 placeholder="Descripción, tratamiento, recurrencia..."
-                className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[#00a884] resize-y transition-colors"
+                className="w-full bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none focus:border-[var(--p-accent)] resize-y transition-colors"
               />
             </div>
           </div>
@@ -409,7 +409,7 @@ function OmListManager({
             <button
               type="button"
               onClick={() => { setShowForm(false); setForm(emptyForm); }}
-              className="px-3.5 py-1.5 rounded-lg text-[12.5px] text-[#a4b1b9] hover:text-[#e9edef] transition-colors"
+              className="px-3.5 py-1.5 rounded-lg text-[12.5px] text-[var(--p-text-2)] hover:text-[var(--p-text)] transition-colors"
             >
               Cancelar
             </button>
@@ -417,7 +417,7 @@ function OmListManager({
               type="button"
               onClick={addEntry}
               disabled={!form.tipo}
-              className="px-3.5 py-1.5 rounded-lg text-[12.5px] bg-[#00a884] text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#00c99a] transition-colors"
+              className="px-3.5 py-1.5 rounded-lg text-[12.5px] bg-[var(--p-accent)] text-white font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--p-accent-2)] transition-colors"
             >
               Agregar
             </button>
@@ -430,7 +430,7 @@ function OmListManager({
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 text-[12.5px] text-[#00a884] hover:text-[#00c99a] font-semibold transition-colors"
+          className="flex items-center gap-2 text-[12.5px] text-[var(--p-accent)] hover:text-[var(--p-accent-2)] font-semibold transition-colors"
         >
           <Plus size={14} />
           Agregar antecedente osteomuscular
@@ -456,9 +456,9 @@ interface AntRowProps {
 function AntRow({ label, flagField, flagValue, historiaId, onPatchLocal, children }: AntRowProps) {
   const open = coerceBool(flagValue);
   return (
-    <div className="border-b border-dashed border-[#324049] pb-4 mb-4 last:border-b-0 last:mb-0 last:pb-0">
+    <div className="border-b border-dashed border-[var(--p-line)] pb-4 mb-4 last:border-b-0 last:mb-0 last:pb-0">
       <div className="flex items-center justify-between gap-4">
-        <div className="text-[13.5px] font-semibold text-[#e9edef] flex-1">{label}</div>
+        <div className="text-[13.5px] font-semibold text-[var(--p-text)] flex-1">{label}</div>
         <PillToggleField
           historiaId={historiaId}
           field={flagField}
@@ -934,15 +934,15 @@ export function AnamnesisTab({ historiaId, data, isMaxed, onPatchLocal }: Anamne
             placeholder="0"
           />
           {nivelActividad && (
-            <div className="md:col-span-2 flex items-center gap-3 p-3.5 rounded-xl bg-[#1a2530] border border-[#324049]">
-              <div className="text-[11.5px] text-[#6b7882] uppercase tracking-widest font-semibold flex-1">
+            <div className="md:col-span-2 flex items-center gap-3 p-3.5 rounded-xl bg-[var(--p-surface-2)] border border-[var(--p-line)]">
+              <div className="text-[11.5px] text-[var(--p-text-3)] uppercase tracking-widest font-semibold flex-1">
                 Nivel de actividad calculado
               </div>
               <div className={`text-[13.5px] font-bold ${
-                nivelActividad === 'Muy activo' ? 'text-[#34d399]' :
-                nivelActividad === 'Activo' ? 'text-[#60a5fa]' :
-                nivelActividad === 'Irregularmente activo' ? 'text-[#fbbf24]' :
-                'text-[#ef4444]'
+                nivelActividad === 'Muy activo' ? 'text-[var(--p-ok)]' :
+                nivelActividad === 'Activo' ? 'text-[var(--p-info)]' :
+                nivelActividad === 'Irregularmente activo' ? 'text-[var(--p-warn)]' :
+                'text-[var(--p-danger)]'
               }`}>
                 {nivelActividad}
               </div>

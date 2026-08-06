@@ -33,12 +33,14 @@ export function HistoriaDetallePage() {
   }
 
   return (
+    // `h-screen` (no `min-h-screen`): el panel maneja su propio scroll interno y
+    // su raíz es `h-full`, así que necesita una altura definida de la que colgar.
     <div
-      className="min-h-screen bg-zinc-50 flex flex-col"
+      className="h-screen bg-zinc-50 flex flex-col"
       style={{ fontFamily: FONT_INTER }}
     >
       {/* Header con back button */}
-      <header className="bg-white border-b border-zinc-200 px-6 py-3 flex items-center gap-3 sticky top-0 z-30">
+      <header className="bg-white border-b border-zinc-200 px-6 py-3 flex items-center gap-3 shrink-0 z-30">
         <button
           onClick={() => navigate(-1)}
           className="p-1.5 rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
@@ -55,7 +57,7 @@ export function HistoriaDetallePage() {
       </header>
 
       {/* Panel completo */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 min-h-0 flex flex-col">
         <MedicalConsultationPanel
           historiaId={historiaId}
           isMaxed={isMaxed}

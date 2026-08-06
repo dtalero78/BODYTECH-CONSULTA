@@ -78,14 +78,14 @@ function pillTone(
 ): { className: string; text: string } {
   if (delta === null) {
     return {
-      className: 'bg-[#1a2530] border border-[#324049] text-[#6b7882]',
+      className: 'bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-3)]',
       text: '—',
     };
   }
   // tolerancia: |delta| < 0.05 → 0
   if (Math.abs(delta) < 0.05) {
     return {
-      className: 'bg-[#1a2530] border border-[#324049] text-[#a4b1b9]',
+      className: 'bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)]',
       text: '0.0 NEUTRO',
     };
   }
@@ -94,7 +94,7 @@ function pillTone(
   const text = `${sign}${abs}`;
   if (direction === 'neutral') {
     return {
-      className: 'bg-[#1a2530] border border-[#324049] text-[#a4b1b9]',
+      className: 'bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)]',
       text,
     };
   }
@@ -102,12 +102,12 @@ function pillTone(
     (direction === 'down-good' && delta < 0) || (direction === 'up-good' && delta > 0);
   if (isGood) {
     return {
-      className: 'bg-[rgba(52,211,153,0.12)] border border-[rgba(52,211,153,0.35)] text-[#34d399]',
+      className: 'bg-[rgba(var(--p-ok-rgb),0.12)] border border-[rgba(var(--p-ok-rgb),0.35)] text-[var(--p-ok)]',
       text,
     };
   }
   return {
-    className: 'bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.35)] text-[#ef4444]',
+    className: 'bg-[rgba(var(--p-danger-rgb),0.12)] border border-[rgba(var(--p-danger-rgb),0.35)] text-[var(--p-danger)]',
     text,
   };
 }
@@ -331,17 +331,17 @@ export function ExamenFisicoTab({
       >
         <div className="flex flex-col">
           {/* Header columnas */}
-          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 pb-2 border-b border-[#324049] mb-3">
-            <div className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 pb-2 border-b border-[var(--p-line)] mb-3">
+            <div className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
               Medida
             </div>
-            <div className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+            <div className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
               Anterior
             </div>
-            <div className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+            <div className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
               Nuevo
             </div>
-            <div className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+            <div className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
               Δ
             </div>
           </div>
@@ -349,9 +349,9 @@ export function ExamenFisicoTab({
           {rows.map((row) => (
             <div
               key={row.label}
-              className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 items-center py-2 border-b border-dashed border-[#324049] last:border-b-0"
+              className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 items-center py-2 border-b border-dashed border-[var(--p-line)] last:border-b-0"
             >
-              <div className="text-[13px] text-[#e9edef] font-medium">{row.label}</div>
+              <div className="text-[13px] text-[var(--p-text)] font-medium">{row.label}</div>
               <TextField
                 historiaId={historiaId}
                 field={row.anteriorField}
@@ -363,7 +363,7 @@ export function ExamenFisicoTab({
                 placeholder="—"
               />
               {row.nuevoReadonly ? (
-                <div className="w-full bg-[#1a2530] border border-[#324049] text-[#a4b1b9] px-3.5 py-2.5 rounded-xl text-[13.5px]">
+                <div className="w-full bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)] px-3.5 py-2.5 rounded-xl text-[13.5px]">
                   {row.nuevoCalculated !== null && row.nuevoCalculated !== undefined
                     ? row.nuevoCalculated
                     : '—'}
@@ -427,7 +427,7 @@ export function ExamenFisicoTab({
         <div className="flex flex-col">
           {/* Subsección Postura */}
           <div className="pb-5">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Postura
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -475,8 +475,8 @@ export function ExamenFisicoTab({
           </div>
 
           {/* Subsección Hallazgos */}
-          <div className="pt-5 pb-5 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-5 pb-5 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Hallazgos
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -526,8 +526,8 @@ export function ExamenFisicoTab({
           </div>
 
           {/* Subsección Fuerza y movilidad */}
-          <div className="pt-5 pb-5 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-5 pb-5 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Fuerza y movilidad
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -595,8 +595,8 @@ export function ExamenFisicoTab({
           </div>
 
           {/* Subsección Signos y evaluación */}
-          <div className="pt-5 pb-5 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-5 pb-5 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Signos y evaluación
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
@@ -652,8 +652,8 @@ export function ExamenFisicoTab({
           </div>
 
           {/* Subsección final */}
-          <div className="pt-5 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-5 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Equilibrio y marcha
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

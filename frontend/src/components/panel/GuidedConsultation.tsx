@@ -397,13 +397,13 @@ export function GuidedConsultation({
   return (
     <div
       className="absolute inset-0 z-[60] flex items-start justify-center p-6 overflow-y-auto"
-      style={{ background: 'rgba(11,20,26,0.86)', backdropFilter: 'blur(6px)' }}
+      style={{ background: 'rgba(var(--p-scrim-rgb),0.86)', backdropFilter: 'blur(6px)' }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="relative bg-[#1f2c34] border border-[#3b4a54] rounded-[20px] w-full max-w-2xl shadow-2xl flex flex-col my-auto"
+        className="relative bg-[var(--p-surface)] border border-[var(--p-line-2)] rounded-[20px] w-full max-w-2xl shadow-2xl flex flex-col my-auto"
         style={{
           maxHeight: 'calc(100% - 8px)',
           animation: 'panelScaleY 200ms ease-out',
@@ -411,15 +411,15 @@ export function GuidedConsultation({
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-[#324049]">
-          <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-[var(--p-line)]">
+          <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(var(--p-accent-rgb),0.12)] text-[var(--p-accent)] grid place-items-center flex-shrink-0">
             <Compass size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10.5px] text-[#6b7882] tracking-widest uppercase font-semibold">
+            <div className="text-[10.5px] text-[var(--p-text-3)] tracking-widest uppercase font-semibold">
               Consulta guiada · {step.topic}
             </div>
-            <div className="text-[12px] text-[#a4b1b9] mt-0.5">
+            <div className="text-[12px] text-[var(--p-text-2)] mt-0.5">
               Paso {index + 1} de {steps.length}
             </div>
           </div>
@@ -427,7 +427,7 @@ export function GuidedConsultation({
           <button
             type="button"
             onClick={onClose}
-            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#a4b1b9] hover:bg-[#2a3942] hover:text-[#e9edef] transition"
+            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[var(--p-text-2)] hover:bg-[var(--p-input)] hover:text-[var(--p-text)] transition"
             aria-label="Cerrar guía"
           >
             <X size={18} />
@@ -435,19 +435,19 @@ export function GuidedConsultation({
         </div>
 
         {/* Progress */}
-        <div className="h-1 bg-[#16222a]">
+        <div className="h-1 bg-[var(--p-bg-2)]">
           <div
-            className="h-full bg-[#00a884] transition-[width] duration-300 ease-out"
+            className="h-full bg-[var(--p-accent)] transition-[width] duration-300 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="text-[19px] leading-snug font-bold text-[#e9edef] mb-1.5">
+          <div className="text-[19px] leading-snug font-bold text-[var(--p-text)] mb-1.5">
             {step.question}
           </div>
-          {step.hint && <div className="text-[12.5px] text-[#6b7882] mb-4">{step.hint}</div>}
+          {step.hint && <div className="text-[12.5px] text-[var(--p-text-3)] mb-4">{step.hint}</div>}
           {!step.hint && <div className="mb-4" />}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -479,12 +479,12 @@ export function GuidedConsultation({
         </div>
 
         {/* Footer / navegación */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[#324049] bg-[#1a262e] rounded-b-[20px]">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[var(--p-line)] bg-[var(--p-surface-3)] rounded-b-[20px]">
           <button
             type="button"
             onClick={goPrev}
             disabled={isFirst}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-[#e9edef] hover:bg-[#2a3942] transition disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[var(--p-text-2)] hover:text-[var(--p-text)] hover:bg-[var(--p-input)] transition disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronLeft size={15} />
             Atrás
@@ -496,7 +496,7 @@ export function GuidedConsultation({
                 type="button"
                 onClick={goNext}
                 title="La transcripción intentará llenarlo al finalizar la llamada"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-[#e9edef] hover:bg-[#2a3942] transition"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[var(--p-text-2)] hover:text-[var(--p-text)] hover:bg-[var(--p-input)] transition"
               >
                 <Mic size={14} />
                 Preguntar de viva voz
@@ -505,7 +505,7 @@ export function GuidedConsultation({
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-xs font-bold bg-[#00a884] text-[#001b14] hover:bg-[#008f6f] transition shadow-[0_4px_14px_rgba(0,168,132,0.25)]"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-xs font-bold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition shadow-[0_4px_14px_rgba(var(--p-accent-rgb),0.25)]"
             >
               {isLast ? (
                 <>

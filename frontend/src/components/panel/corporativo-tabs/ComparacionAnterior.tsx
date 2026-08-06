@@ -31,7 +31,7 @@ function toNum(v: unknown): number | null {
 function DeltaPill({ actual, anterior, direction }: Omit<Metric, 'label' | 'unit'>) {
   if (actual === null || anterior === null) {
     return (
-      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[#1a2530] border border-[#324049] text-[#6b7882]">
+      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-3)]">
         —
       </span>
     );
@@ -39,7 +39,7 @@ function DeltaPill({ actual, anterior, direction }: Omit<Metric, 'label' | 'unit
   const delta = Math.round((actual - anterior) * 10) / 10;
   if (Math.abs(delta) < 0.05) {
     return (
-      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[#1a2530] border border-[#324049] text-[#a4b1b9]">
+      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)]">
         0.0 IGUAL
       </span>
     );
@@ -47,7 +47,7 @@ function DeltaPill({ actual, anterior, direction }: Omit<Metric, 'label' | 'unit
   const text = `${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)}`;
   if (direction === 'neutral') {
     return (
-      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[#1a2530] border border-[#324049] text-[#a4b1b9]">
+      <span className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)]">
         {text}
       </span>
     );
@@ -55,8 +55,8 @@ function DeltaPill({ actual, anterior, direction }: Omit<Metric, 'label' | 'unit
   const isGood =
     (direction === 'down-good' && delta < 0) || (direction === 'up-good' && delta > 0);
   const cls = isGood
-    ? 'bg-[rgba(52,211,153,0.12)] border-[rgba(52,211,153,0.35)] text-[#34d399]'
-    : 'bg-[rgba(239,68,68,0.12)] border-[rgba(239,68,68,0.35)] text-[#ef4444]';
+    ? 'bg-[rgba(var(--p-ok-rgb),0.12)] border-[rgba(var(--p-ok-rgb),0.35)] text-[var(--p-ok)]'
+    : 'bg-[rgba(var(--p-danger-rgb),0.12)] border-[rgba(var(--p-danger-rgb),0.35)] text-[var(--p-danger)]';
   return (
     <span
       className={`inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] font-bold tracking-wider border ${cls}`}
@@ -80,7 +80,7 @@ export function ComparacionAnterior({
 
   if (loading) {
     return (
-      <div className="pt-4 border-t border-dashed border-[#324049] text-[12px] text-[#6b7882]">
+      <div className="pt-4 border-t border-dashed border-[var(--p-line)] text-[12px] text-[var(--p-text-3)]">
         Buscando visita anterior…
       </div>
     );
@@ -88,7 +88,7 @@ export function ComparacionAnterior({
 
   if (!anterior) {
     return (
-      <div className="pt-4 border-t border-dashed border-[#324049] text-[12px] text-[#6b7882] italic">
+      <div className="pt-4 border-t border-dashed border-[var(--p-line)] text-[12px] text-[var(--p-text-3)] italic">
         Primera valoración corporativa del afiliado — no hay visita anterior con la cual comparar.
       </div>
     );
@@ -135,19 +135,19 @@ export function ComparacionAnterior({
       : null;
 
   return (
-    <div className="pt-4 border-t border-dashed border-[#324049]">
+    <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase">
+        <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase">
           Comparación con visita anterior
         </div>
-        {fechaTxt && <div className="text-[11px] text-[#6b7882]">{fechaTxt}</div>}
+        {fechaTxt && <div className="text-[11px] text-[var(--p-text-3)]">{fechaTxt}</div>}
       </div>
 
-      <div className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 pb-2 border-b border-[#324049] mb-2">
+      <div className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 pb-2 border-b border-[var(--p-line)] mb-2">
         {['Medida', 'Anterior', 'Actual', 'Δ'].map((h) => (
           <div
             key={h}
-            className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase"
+            className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase"
           >
             {h}
           </div>
@@ -157,14 +157,14 @@ export function ComparacionAnterior({
       {metrics.map((m) => (
         <div
           key={m.label}
-          className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 items-center py-2 border-b border-dashed border-[#324049] last:border-b-0"
+          className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 items-center py-2 border-b border-dashed border-[var(--p-line)] last:border-b-0"
         >
-          <div className="text-[13px] text-[#e9edef] font-medium">
+          <div className="text-[13px] text-[var(--p-text)] font-medium">
             {m.label}
-            {m.unit && <span className="text-[#6b7882] text-[11px] ml-1">({m.unit})</span>}
+            {m.unit && <span className="text-[var(--p-text-3)] text-[11px] ml-1">({m.unit})</span>}
           </div>
-          <div className="text-[13px] text-[#a4b1b9]">{m.anterior ?? '—'}</div>
-          <div className="text-[13px] text-[#e9edef]">{m.actual ?? '—'}</div>
+          <div className="text-[13px] text-[var(--p-text-2)]">{m.anterior ?? '—'}</div>
+          <div className="text-[13px] text-[var(--p-text)]">{m.actual ?? '—'}</div>
           <DeltaPill actual={m.actual} anterior={m.anterior} direction={m.direction} />
         </div>
       ))}

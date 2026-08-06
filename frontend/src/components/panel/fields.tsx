@@ -67,8 +67,8 @@ export function TextField(
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
-        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
       <input
@@ -78,11 +78,11 @@ export function TextField(
         placeholder={props.placeholder}
         min={props.min}
         max={props.max}
-        className={`w-full bg-[#2a3942] border text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] ${
-          displayError ? 'border-[#ef4444]' : 'border-[#324049] focus:border-[#00a884]'
+        className={`w-full bg-[var(--p-input)] border text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] ${
+          displayError ? 'border-[var(--p-danger)]' : 'border-[var(--p-line)] focus:border-[var(--p-accent)]'
         }`}
       />
-      {displayError && <span className="text-[11px] text-[#ef4444]">{displayError}</span>}
+      {displayError && <span className="text-[11px] text-[var(--p-danger)]">{displayError}</span>}
     </div>
   );
 }
@@ -114,8 +114,8 @@ export function TextareaField(
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
-        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
       <textarea
@@ -124,7 +124,7 @@ export function TextareaField(
         onChange={(e) => setV(e.target.value)}
         placeholder={props.placeholder}
         style={props.minHeight ? { minHeight: props.minHeight } : undefined}
-        className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] focus:border-[#00a884] resize-y"
+        className="w-full bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] focus:border-[var(--p-accent)] resize-y"
       />
     </div>
   );
@@ -164,8 +164,8 @@ export function PillToggleField(props: PillToggleFieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
-        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
       <PillToggle value={v} onChange={setV} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
@@ -199,8 +199,8 @@ export function SelectField(
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
-        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
       <Dropdown
@@ -259,13 +259,13 @@ export function PhoneField(
   return (
     <div className="flex flex-col gap-1.5">
       {props.label && (
-        <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
-          {props.label} {props.required && <span className="text-[#ef4444] ml-0.5">*</span>}
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
       <div className="flex items-stretch gap-2">
         {dial && (
-          <span className="inline-flex items-center px-3 rounded-xl bg-[#1a2530] border border-[#324049] text-[#a4b1b9] text-[13.5px] font-semibold select-none whitespace-nowrap">
+          <span className="inline-flex items-center px-3 rounded-xl bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)] text-[13.5px] font-semibold select-none whitespace-nowrap">
             {dial}
           </span>
         )}
@@ -274,7 +274,7 @@ export function PhoneField(
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           placeholder={props.placeholder}
-          className="flex-1 min-w-0 bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] focus:border-[#00a884]"
+          className="flex-1 min-w-0 bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] focus:border-[var(--p-accent)]"
         />
       </div>
     </div>

@@ -24,19 +24,19 @@ export function VisitTimeline({ dots }: VisitTimelineProps) {
   const progress = items.length > 1 ? (doneCount - 1) / (items.length - 1) : 0;
 
   return (
-    <div className="flex flex-col gap-1.5 px-3.5 border-l border-[#324049] min-w-[148px]">
-      <span className="text-[9.5px] text-[#6b7882] tracking-widest uppercase font-semibold">
+    <div className="flex flex-col gap-1.5 px-3.5 border-l border-[var(--p-line)] min-w-[148px]">
+      <span className="text-[9.5px] text-[var(--p-text-3)] tracking-widest uppercase font-semibold">
         Trayectoria · {items.length} visitas
       </span>
       <div className="flex items-center h-[18px] relative">
         {/* Track base */}
-        <div className="absolute left-1.5 right-1.5 top-1/2 h-[2px] bg-[#324049] rounded-[2px] -translate-y-1/2" />
+        <div className="absolute left-1.5 right-1.5 top-1/2 h-[2px] bg-[var(--p-line)] rounded-[2px] -translate-y-1/2" />
         {/* Track progreso */}
         <div
-          className="absolute left-1.5 top-1/2 h-[2px] -translate-y-1/2 rounded-[2px] shadow-[0_0_8px_rgba(0,168,132,0.45)]"
+          className="absolute left-1.5 top-1/2 h-[2px] -translate-y-1/2 rounded-[2px] shadow-[0_0_8px_rgba(var(--p-accent-rgb),0.45)]"
           style={{
             width: `calc(${Math.max(0, Math.min(1, progress)) * 100}% - 12px)`,
-            background: 'linear-gradient(90deg, #008f6f, #00a884)',
+            background: 'linear-gradient(90deg, var(--p-accent-hover), var(--p-accent))',
           }}
         />
         {/* Dots */}
@@ -44,10 +44,10 @@ export function VisitTimeline({ dots }: VisitTimelineProps) {
           {items.map((d, idx) => {
             const cls =
               d.status === 'now'
-                ? 'bg-[#00a884] border-[#00a884] shadow-[0_0_0_4px_rgba(0,168,132,0.18)] animate-pulse'
+                ? 'bg-[var(--p-accent)] border-[var(--p-accent)] shadow-[0_0_0_4px_rgba(var(--p-accent-rgb),0.18)] animate-pulse'
                 : d.status === 'done'
-                  ? 'bg-[#00a884] border-[#00a884]'
-                  : 'bg-[#2a3942] border-[#324049] border-dashed';
+                  ? 'bg-[var(--p-accent)] border-[var(--p-accent)]'
+                  : 'bg-[var(--p-input)] border-[var(--p-line)] border-dashed';
             return (
               <button
                 key={idx}

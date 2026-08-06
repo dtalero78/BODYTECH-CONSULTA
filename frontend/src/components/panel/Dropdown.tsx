@@ -112,18 +112,21 @@ export function Dropdown({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
-        className={`w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] flex items-center justify-between cursor-pointer outline-none transition disabled:opacity-50 disabled:cursor-not-allowed ${
-          open ? 'border-[#00a884] bg-[#2c3b44]' : ''
+        className={`w-full bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] flex items-center justify-between cursor-pointer outline-none transition disabled:opacity-50 disabled:cursor-not-allowed ${
+          open ? 'border-[var(--p-accent)] bg-[var(--p-input-2)]' : ''
         }`}
       >
-        <span className={selected ? '' : 'text-[#6b7882]'}>{selected ? selected.label : placeholder}</span>
+        <span className={selected ? '' : 'text-[var(--p-text-3)]'}>{selected ? selected.label : placeholder}</span>
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && createPortal(
         <div
           ref={listRef}
-          className="bg-[#23323b] border border-[#00a884] rounded-2xl shadow-2xl overflow-hidden"
+          // `panel-theme` va acá porque el menú se portalea a `document.body`,
+          // fuera del árbol del panel: sin la clase no heredaría las `--p-*` y
+          // los colores quedarían sin resolver.
+          className="panel-theme bg-[var(--p-surface-5)] border border-[var(--p-accent)] rounded-2xl shadow-2xl overflow-hidden"
           style={{
             ...dropdownStyle,
             transformOrigin: 'top center',
@@ -132,20 +135,20 @@ export function Dropdown({
           onKeyDown={handleKey}
         >
           {searchable && (
-            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[#324049] bg-[#1c2930]">
-              <Search size={14} className="text-[#6b7882]" />
+            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[var(--p-line)] bg-[var(--p-surface-4)]">
+              <Search size={14} className="text-[var(--p-text-3)]" />
               <input
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#e9edef] placeholder:text-[#6b7882]"
+                className="flex-1 bg-transparent border-none outline-none text-[13px] text-[var(--p-text)] placeholder:text-[var(--p-text-3)]"
                 placeholder="Buscar..."
               />
             </div>
           )}
           <ul className="max-h-[230px] overflow-y-auto p-1.5 list-none m-0">
             {filtered.length === 0 ? (
-              <li className="px-4 py-4 text-center text-xs text-[#6b7882]">Sin resultados</li>
+              <li className="px-4 py-4 text-center text-xs text-[var(--p-text-3)]">Sin resultados</li>
             ) : (
               filtered.map((opt, idx) => (
                 <li
@@ -157,15 +160,15 @@ export function Dropdown({
                     setQuery('');
                   }}
                   className={`flex items-center justify-between px-3 py-2 rounded-[9px] text-[13px] cursor-pointer ${
-                    activeIndex === idx ? 'bg-[#2a3942]' : ''
-                  } ${value === opt.value ? 'text-[#00a884] bg-[rgba(0,168,132,0.12)] font-semibold' : 'text-[#e9edef]'}`}
+                    activeIndex === idx ? 'bg-[var(--p-input)]' : ''
+                  } ${value === opt.value ? 'text-[var(--p-accent)] bg-[rgba(var(--p-accent-rgb),0.12)] font-semibold' : 'text-[var(--p-text)]'}`}
                 >
                   <span>{opt.label}</span>
                 </li>
               ))
             )}
           </ul>
-          <div className="px-3 py-2 border-t border-[#324049] bg-[#1c2930] flex justify-between text-[10.5px] text-[#6b7882]">
+          <div className="px-3 py-2 border-t border-[var(--p-line)] bg-[var(--p-surface-4)] flex justify-between text-[10.5px] text-[var(--p-text-3)]">
             <span>↑↓ navegar</span>
             <span>Enter seleccionar · Esc cerrar</span>
           </div>

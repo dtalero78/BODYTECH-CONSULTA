@@ -37,14 +37,14 @@ export function TemplateTextareaField(props: TemplateTextareaFieldProps) {
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
         {props.label && (
-          <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+          <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
             {props.label}
           </label>
         )}
         <button
           type="button"
           onClick={() => setV(props.template)}
-          className="text-[11px] font-semibold text-[#00a884] hover:text-[#00c99a] transition whitespace-nowrap"
+          className="text-[11px] font-semibold text-[var(--p-accent)] hover:text-[var(--p-accent-2)] transition whitespace-nowrap"
         >
           Usar plantilla
         </button>
@@ -54,7 +54,7 @@ export function TemplateTextareaField(props: TemplateTextareaFieldProps) {
         value={v}
         onChange={(e) => setV(e.target.value)}
         placeholder={props.placeholder}
-        className="w-full bg-[#2a3942] border border-[#324049] text-[#e9edef] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[#6b7882] focus:bg-[#2c3b44] focus:border-[#00a884] resize-y"
+        className="w-full bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] focus:border-[var(--p-accent)] resize-y"
       />
     </div>
   );

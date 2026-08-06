@@ -64,7 +64,7 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
         size === 'wide' ? 'p-3' : 'p-6'
       }`}
       style={{
-        background: 'rgba(11,20,26,0.82)',
+        background: 'rgba(var(--p-scrim-rgb),0.82)',
         backdropFilter: 'blur(6px)',
       }}
       onClick={(e) => {
@@ -72,7 +72,7 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
       }}
     >
       <div
-        className={`relative bg-[#1f2c34] border border-[#3b4a54] rounded-[20px] w-full shadow-2xl flex flex-col my-auto ${
+        className={`relative bg-[var(--p-surface)] border border-[var(--p-line-2)] rounded-[20px] w-full shadow-2xl flex flex-col my-auto ${
           size === 'wide' ? 'max-w-6xl' : 'max-w-3xl'
         }`}
         style={{
@@ -82,24 +82,24 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-[#324049]">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-[var(--p-line)]">
           {icon && (
-            <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(0,168,132,0.12)] text-[#00a884] grid place-items-center flex-shrink-0">
+            <div className="w-[38px] h-[38px] rounded-[11px] bg-[rgba(var(--p-accent-rgb),0.12)] text-[var(--p-accent)] grid place-items-center flex-shrink-0">
               {icon}
             </div>
           )}
           <div className="flex-1 min-w-0">
             {crumb && (
-              <div className="text-[10.5px] text-[#6b7882] tracking-widest uppercase font-semibold">{crumb}</div>
+              <div className="text-[10.5px] text-[var(--p-text-3)] tracking-widest uppercase font-semibold">{crumb}</div>
             )}
-            <div className="text-base font-bold text-[#e9edef] mt-0.5">{title}</div>
+            <div className="text-base font-bold text-[var(--p-text)] mt-0.5">{title}</div>
           </div>
           {formulas && formulas.length > 0 && <FormulaHint formulas={formulas} />}
           {showEyePill && <EyeOnPatientPill isMaxed={isMaxed} />}
           <button
             type="button"
             onClick={onClose}
-            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[#a4b1b9] hover:bg-[#2a3942] hover:text-[#e9edef] transition"
+            className="w-[34px] h-[34px] rounded-[10px] grid place-items-center text-[var(--p-text-2)] hover:bg-[var(--p-input)] hover:text-[var(--p-text)] transition"
             aria-label="Cerrar"
           >
             <X size={18} />
@@ -110,13 +110,13 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
         <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[#324049] bg-[#1a262e] rounded-b-[20px]">
-          <span className="text-[11px] text-[#6b7882]">{footerHint || 'Auto-guardado activo'}</span>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[var(--p-line)] bg-[var(--p-surface-3)] rounded-b-[20px]">
+          <span className="text-[11px] text-[var(--p-text-3)]">{footerHint || 'Auto-guardado activo'}</span>
           <div className="flex gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[#a4b1b9] hover:text-[#e9edef] hover:bg-[#2a3942] transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[var(--p-text-2)] hover:text-[var(--p-text)] hover:bg-[var(--p-input)] transition"
             >
               Cancelar
             </button>
@@ -126,7 +126,7 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
                 onSave?.();
                 onClose();
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-bold bg-[#00a884] text-[#001b14] hover:bg-[#008f6f] transition shadow-[0_4px_14px_rgba(0,168,132,0.25)]"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-bold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition shadow-[0_4px_14px_rgba(var(--p-accent-rgb),0.25)]"
             >
               Guardado ✓
             </button>

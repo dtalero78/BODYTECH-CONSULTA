@@ -434,10 +434,10 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
           />
           {age !== null && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+              <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
                 Edad calculada
               </label>
-              <div className="w-full bg-[#1a2530] border border-[#324049] text-[#a4b1b9] px-3.5 py-2.5 rounded-xl text-[13.5px]">
+              <div className="w-full bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)] px-3.5 py-2.5 rounded-xl text-[13.5px]">
                 {age} años
               </div>
             </div>
@@ -482,10 +482,10 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             }}
           />
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10.5px] font-semibold text-[#a4b1b9] tracking-widest uppercase">
+            <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
               Entidad Territorial
             </label>
-            <div className="w-full bg-[#1a2530] border border-[#324049] text-[#a4b1b9] px-3.5 py-2.5 rounded-xl text-[13.5px]">
+            <div className="w-full bg-[var(--p-surface-2)] border border-[var(--p-line)] text-[var(--p-text-2)] px-3.5 py-2.5 rounded-xl text-[13.5px]">
               {data?.entidadTerritorial || 'Se autocompleta con el municipio'}
             </div>
           </div>
@@ -508,8 +508,8 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
           />
         </div>
 
-        <div className="mt-5 pt-4 border-t border-dashed border-[#324049]">
-          <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-2.5">
+        <div className="mt-5 pt-4 border-t border-dashed border-[var(--p-line)]">
+          <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-2.5">
             Contacto de emergencia
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

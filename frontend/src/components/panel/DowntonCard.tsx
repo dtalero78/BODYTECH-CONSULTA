@@ -102,10 +102,10 @@ export function DowntonCard({
 
   const subCls =
     cat === 'Riesgo alto'
-      ? 'bg-[rgba(239,68,68,0.15)] text-[#ef4444]'
+      ? 'bg-[rgba(var(--p-danger-rgb),0.15)] text-[var(--p-danger)]'
       : cat === 'Riesgo intermedio'
-        ? 'bg-[rgba(251,191,36,0.15)] text-[#fbbf24]'
-        : 'bg-[rgba(52,211,153,0.15)] text-[#34d399]';
+        ? 'bg-[rgba(var(--p-warn-rgb),0.15)] text-[var(--p-warn)]'
+        : 'bg-[rgba(var(--p-ok-rgb),0.15)] text-[var(--p-ok)]';
 
   return (
     <>
@@ -117,7 +117,7 @@ export function DowntonCard({
             <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold mr-2 ${subCls}`}>
               {cat}
             </span>
-            <span className="text-[#6b7882]">Score: {score}/4</span>
+            <span className="text-[var(--p-text-3)]">Score: {score}/4</span>
           </span>
         }
         state={state}
@@ -136,8 +136,8 @@ export function DowntonCard({
         size={modalSize}
       >
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-            <span className="text-[13.5px] text-[#e9edef]">Antecedente de caídas</span>
+          <div className="flex items-center justify-between border-b border-dashed border-[var(--p-line)] pb-3">
+            <span className="text-[13.5px] text-[var(--p-text)]">Antecedente de caídas</span>
             <PillToggleField
               historiaId={historiaId}
               field="downton_caidas"
@@ -146,8 +146,8 @@ export function DowntonCard({
               inline
             />
           </div>
-          <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-            <span className="text-[13.5px] text-[#e9edef]">Estado mental confuso/desorientado</span>
+          <div className="flex items-center justify-between border-b border-dashed border-[var(--p-line)] pb-3">
+            <span className="text-[13.5px] text-[var(--p-text)]">Estado mental confuso/desorientado</span>
             <PillToggleField
               historiaId={historiaId}
               field="downton_estado_mental"
@@ -157,9 +157,9 @@ export function DowntonCard({
             />
           </div>
 
-          <div className="border-b border-dashed border-[#324049] pb-3">
+          <div className="border-b border-dashed border-[var(--p-line)] pb-3">
             <div className="flex items-center justify-between">
-              <span className="text-[13.5px] text-[#e9edef]">Toma medicamentos</span>
+              <span className="text-[13.5px] text-[var(--p-text)]">Toma medicamentos</span>
               <PillToggleField
                 historiaId={historiaId}
                 field="downton_medicamentos"
@@ -176,8 +176,8 @@ export function DowntonCard({
                     { label: 'Antidepresivos', field: 'downton_med_antidepresivos', value: data?.downtonMedAntidepresivos },
                     { label: 'Otros', field: 'downton_med_otros', value: data?.downtonMedOtros },
                   ].map((r) => (
-                    <div key={r.field} className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                      <span className="text-[12px] text-[#a4b1b9]">{r.label}</span>
+                    <div key={r.field} className="flex items-center justify-between bg-[var(--p-surface-2)] rounded-xl px-3 py-2 border border-[var(--p-line)]">
+                      <span className="text-[12px] text-[var(--p-text-2)]">{r.label}</span>
                       <PillToggleField
                         historiaId={historiaId}
                         field={r.field}
@@ -192,9 +192,9 @@ export function DowntonCard({
             </div>
           </div>
 
-          <div className="border-b border-dashed border-[#324049] pb-3">
+          <div className="border-b border-dashed border-[var(--p-line)] pb-3">
             <div className="flex items-center justify-between">
-              <span className="text-[13.5px] text-[#e9edef]">Déficits sensoriales</span>
+              <span className="text-[13.5px] text-[var(--p-text)]">Déficits sensoriales</span>
               <PillToggleField
                 historiaId={historiaId}
                 field="downton_deficits_sensoriales"
@@ -211,8 +211,8 @@ export function DowntonCard({
                     { label: 'Auditivo', field: 'downton_auditivo', value: data?.downtonAuditivo },
                     { label: 'Extremidades', field: 'downton_def_extremidades', value: data?.downtonDefExtremidades },
                   ].map((r) => (
-                    <div key={r.field} className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                      <span className="text-[12px] text-[#a4b1b9]">{r.label}</span>
+                    <div key={r.field} className="flex items-center justify-between bg-[var(--p-surface-2)] rounded-xl px-3 py-2 border border-[var(--p-line)]">
+                      <span className="text-[12px] text-[var(--p-text-2)]">{r.label}</span>
                       <PillToggleField
                         historiaId={historiaId}
                         field={r.field}

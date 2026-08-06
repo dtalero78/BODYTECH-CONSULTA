@@ -146,7 +146,7 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
         <div className="flex flex-col gap-5">
           {/* Volumen: lo que determina el nivel de actividad física */}
           <div>
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Volumen de entrenamiento
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
@@ -186,8 +186,8 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
           </div>
 
           {/* Experiencia: lo que determina qué tan exigente puede ser el programa */}
-          <div className="pt-4 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Experiencia de entrenamiento
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
@@ -215,8 +215,8 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
           </div>
 
           {/* Contexto */}
-          <div className="pt-4 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">
               Contexto y objetivo
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">

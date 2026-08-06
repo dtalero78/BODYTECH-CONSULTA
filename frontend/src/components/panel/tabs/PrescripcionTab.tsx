@@ -95,16 +95,16 @@ const FUERZA_TEMPLATE =
 // ---- Tablero de referencia read-only (colapsable) ----
 function RefTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
   return (
-    <details className="mt-1 rounded-xl border border-[#324049] bg-[#1a2530] overflow-hidden">
-      <summary className="cursor-pointer select-none px-3.5 py-2.5 text-[11px] font-semibold text-[#00a884] tracking-wide">
+    <details className="mt-1 rounded-xl border border-[var(--p-line)] bg-[var(--p-surface-2)] overflow-hidden">
+      <summary className="cursor-pointer select-none px-3.5 py-2.5 text-[11px] font-semibold text-[var(--p-accent)] tracking-wide">
         {title}
       </summary>
       <div className="overflow-x-auto px-3.5 pb-3">
-        <table className="w-full text-[11.5px] text-[#a4b1b9] border-collapse">
+        <table className="w-full text-[11.5px] text-[var(--p-text-2)] border-collapse">
           <thead>
             <tr>
               {headers.map((h) => (
-                <th key={h} className="text-left font-semibold text-[#e9edef] py-1.5 pr-3 border-b border-[#324049]">
+                <th key={h} className="text-left font-semibold text-[var(--p-text)] py-1.5 pr-3 border-b border-[var(--p-line)]">
                   {h}
                 </th>
               ))}
@@ -114,7 +114,7 @@ function RefTable({ title, headers, rows }: { title: string; headers: string[]; 
             {rows.map((r, i) => (
               <tr key={i}>
                 {r.map((c, j) => (
-                  <td key={j} className="py-1.5 pr-3 border-b border-[#26323b] whitespace-nowrap">
+                  <td key={j} className="py-1.5 pr-3 border-b border-[var(--p-surface-7)] whitespace-nowrap">
                     {c}
                   </td>
                 ))}

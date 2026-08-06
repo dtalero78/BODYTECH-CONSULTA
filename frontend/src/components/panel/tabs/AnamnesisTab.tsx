@@ -417,7 +417,7 @@ function OmListManager({
               type="button"
               onClick={addEntry}
               disabled={!form.tipo}
-              className="px-3.5 py-1.5 rounded-lg text-[12.5px] bg-[var(--p-cta)] text-[var(--p-on-cta)] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--p-cta-hover)] transition-colors"
+              className="px-3.5 py-1.5 rounded-lg text-[12.5px] bg-[var(--p-accent)] text-[var(--p-on-accent)] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--p-accent-hover)] transition-colors"
             >
               Agregar
             </button>

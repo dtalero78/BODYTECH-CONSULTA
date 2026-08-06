@@ -109,8 +109,8 @@ export function PanelHeader({
   const pillCls = saveState.error
     ? 'bg-[rgba(var(--p-danger-rgb),0.12)] text-[var(--p-danger)] border-[rgba(var(--p-danger-rgb),0.25)]'
     : saveState.saving
-      ? 'bg-[rgba(var(--p-accent-rgb),0.18)] text-[var(--p-ok)] border-[rgba(var(--p-accent-rgb),0.4)] animate-pulse'
-      : 'bg-[rgba(var(--p-accent-rgb),0.12)] text-[var(--p-ok)] border-[rgba(var(--p-accent-rgb),0.25)]';
+      ? 'bg-[rgba(var(--p-accent-rgb),0.18)] text-[var(--p-accent)] border-[rgba(var(--p-accent-rgb),0.4)] animate-pulse'
+      : 'bg-[rgba(var(--p-ok-rgb),0.12)] text-[var(--p-ok)] border-[rgba(var(--p-ok-rgb),0.25)]';
 
   return (
     <div className="flex items-center gap-3 px-5 py-3 border-b border-[var(--p-line)] sticky top-0 z-20 bg-[var(--p-bg)]">
@@ -119,7 +119,7 @@ export function PanelHeader({
         onClick={onToggleMaxed}
         title={isMaxed ? 'Restaurar panel (M)' : 'Maximizar panel (M)'}
         aria-label={isMaxed ? 'Restaurar' : 'Maximizar'}
-        className="w-9 h-9 rounded-[10px] bg-[var(--p-cta)] text-[var(--p-on-cta)] grid place-items-center flex-shrink-0 hover:bg-[var(--p-cta-hover)] transition shadow-[0_4px_14px_rgba(var(--p-cta-rgb),0.35)]"
+        className="w-9 h-9 rounded-[10px] bg-[var(--p-accent)] text-[var(--p-on-accent)] grid place-items-center flex-shrink-0 hover:bg-[var(--p-accent-hover)] transition"
       >
         {isMaxed ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>

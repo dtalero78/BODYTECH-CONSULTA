@@ -505,7 +505,7 @@ export function GuidedConsultation({
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-xs font-bold bg-[var(--p-cta)] text-[var(--p-on-cta)] hover:bg-[var(--p-cta-hover)] transition shadow-[0_4px_14px_rgba(var(--p-cta-rgb),0.25)]"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-xs font-bold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition"
             >
               {isLast ? (
                 <>

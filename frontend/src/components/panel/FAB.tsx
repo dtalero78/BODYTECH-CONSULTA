@@ -79,7 +79,7 @@ export function FAB({ isMaxed, externalOpen, onOpenChange, navWidth = 0 }: FABPr
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-[52px] h-[52px] rounded-full bg-[var(--p-cta)] text-[var(--p-on-cta)] grid place-items-center shadow-[0_14px_32px_rgba(var(--p-cta-rgb),0.45)] hover:bg-[var(--p-cta-hover)] hover:-translate-y-0.5 transition"
+        className="w-[52px] h-[52px] rounded-full bg-[var(--p-accent)] text-[var(--p-on-accent)] grid place-items-center shadow-[0_10px_24px_rgba(0,0,0,0.18)] hover:bg-[var(--p-accent-hover)] hover:-translate-y-0.5 transition"
         aria-label={open ? 'Cerrar nota' : 'Nueva nota'}
         title="Nueva nota (N)"
       >

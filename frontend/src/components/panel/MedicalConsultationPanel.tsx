@@ -261,7 +261,7 @@ function PanelInner({ historiaId, isMaxed, onToggleMaxed, autoGuide }: MedicalCo
                 type="button"
                 onClick={() => setGuideOpen(true)}
                 title="Consulta guiada"
-                className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold bg-[rgba(var(--p-accent-rgb),0.10)] text-[var(--p-accent)] border border-[rgba(var(--p-accent-rgb),0.25)] hover:bg-[rgba(var(--p-accent-rgb),0.18)] transition ${
+                className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold bg-[rgba(var(--p-cta-rgb),0.10)] text-[var(--p-cta-hover)] border border-[rgba(var(--p-cta-rgb),0.35)] hover:bg-[rgba(var(--p-cta-rgb),0.18)] transition ${
                   navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
                 }`}
               >

@@ -131,12 +131,21 @@ body {
   --p-text-3: #71717a;
   --p-text-3-rgb: 113, 113, 122;
 
-  /* Acento (azul ink del Coordinador) */
+  /* Acento estructural (azul ink del Coordinador): pestaña activa, barras de
+     progreso, chips de ícono, bordes de foco. */
   --p-accent: #1f3a8a;
   --p-accent-hover: #172e6e;
   --p-accent-2: #2f4fae;
   --p-on-accent: #ffffff;
   --p-accent-rgb: 31, 58, 138;
+
+  /* CTA: naranja institucional Bodytech. Va con texto oscuro encima, no blanco
+     — blanco sobre #f47900 da 2.8:1 y no es legible a 12px. Es el mismo patrón
+     que ya usaba el tema oscuro (texto #001b14 sobre el verde #00a884). */
+  --p-cta: #f47900;
+  --p-cta-hover: #d96a00;
+  --p-on-cta: #3d1c00;
+  --p-cta-rgb: 244, 121, 0;
 
   /* Semánticos */
   --p-ok: #15803d;
@@ -184,6 +193,11 @@ body {
   --p-accent-2: #00c99a;
   --p-on-accent: #001b14;
   --p-accent-rgb: 0, 168, 132;
+
+  --p-cta: #f47900;
+  --p-cta-hover: #d96a00;
+  --p-on-cta: #2a1200;
+  --p-cta-rgb: 244, 121, 0;
 
   --p-ok: #34d399;
   --p-ok-rgb: 52, 211, 153;

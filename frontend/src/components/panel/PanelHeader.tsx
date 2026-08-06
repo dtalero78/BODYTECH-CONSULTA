@@ -119,7 +119,7 @@ export function PanelHeader({
         onClick={onToggleMaxed}
         title={isMaxed ? 'Restaurar panel (M)' : 'Maximizar panel (M)'}
         aria-label={isMaxed ? 'Restaurar' : 'Maximizar'}
-        className="w-9 h-9 rounded-[10px] bg-[var(--p-accent)] text-[var(--p-on-accent)] grid place-items-center flex-shrink-0 hover:bg-[var(--p-accent-hover)] transition shadow-[0_4px_14px_rgba(var(--p-accent-rgb),0.35)]"
+        className="w-9 h-9 rounded-[10px] bg-[var(--p-cta)] text-[var(--p-on-cta)] grid place-items-center flex-shrink-0 hover:bg-[var(--p-cta-hover)] transition shadow-[0_4px_14px_rgba(var(--p-cta-rgb),0.35)]"
       >
         {isMaxed ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
@@ -152,7 +152,10 @@ export function PanelHeader({
             aria-live="polite"
             onClick={onDismissTranscriptionBadge}
             title="La transcripción post-llamada llenó campos. Click para revisar y descartar el aviso."
-            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-[rgba(var(--p-accent-rgb),0.15)] text-[var(--p-ok)] border-[rgba(var(--p-accent-rgb),0.45)] text-[12px] font-semibold animate-pulse hover:bg-[rgba(var(--p-accent-rgb),0.25)] transition flex-shrink-0"
+            // Aviso de éxito, no un CTA: va todo en el color `ok`. Antes mezclaba
+            // fondo de acento con texto verde, que en el tema oscuro coincidían
+            // (ambos verdes) pero acá no.
+            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-[rgba(var(--p-ok-rgb),0.12)] text-[var(--p-ok)] border-[rgba(var(--p-ok-rgb),0.35)] text-[12px] font-semibold animate-pulse hover:bg-[rgba(var(--p-ok-rgb),0.2)] transition flex-shrink-0"
           >
             <Sparkles size={13} />
             <span>Transcripción lista · Revisar</span>

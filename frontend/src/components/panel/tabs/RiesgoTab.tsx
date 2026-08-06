@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
-import { Activity, HeartPulse, Shield } from 'lucide-react';
+import { HeartPulse, Shield } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
 import { PillToggleField } from '../fields';
 import { useFieldAutoSave } from '../hooks/useFieldAutoSave';
+import { DowntonCard } from '../DowntonCard';
 import type { MedicalHistoryFull } from '../types';
 
 interface RiesgoTabProps {
@@ -23,33 +24,6 @@ function coerceBool(v: unknown): boolean {
     return x === 'true' || x === 'Sí' || x === 'SI' || x === 'sí' || x === 'si';
   }
   return false;
-}
-
-// ===== Downton =====
-function downtonCategoria(score: number): string {
-  if (score >= 4) return 'Riesgo alto';
-  if (score >= 2) return 'Riesgo intermedio';
-  return 'Bajo riesgo';
-}
-
-function computeDowntonScore(d: MedicalHistoryFull | null): number {
-  const caidas = coerceBool(d?.downtonCaidas) ? 1 : 0;
-  const mental = coerceBool(d?.downtonEstadoMental) ? 1 : 0;
-  const meds =
-    coerceBool(d?.downtonMedicamentos) &&
-    (coerceBool(d?.downtonMedAntiparkinson) ||
-      coerceBool(d?.downtonMedAntidepresivos) ||
-      coerceBool(d?.downtonMedOtros))
-      ? 1
-      : 0;
-  const sens =
-    coerceBool(d?.downtonDeficitsSensoriales) &&
-    (coerceBool(d?.downtonVisual) ||
-      coerceBool(d?.downtonAuditivo) ||
-      coerceBool(d?.downtonDefExtremidades))
-      ? 1
-      : 0;
-  return caidas + mental + meds + sens;
 }
 
 // ===== ACSM =====
@@ -153,9 +127,6 @@ function BumpCounter({ count, total }: { count: number; total: number }) {
 export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
 
-  const downtonScore = computeDowntonScore(data);
-  const downtonCat = downtonCategoria(downtonScore);
-
   const acsmCount = computeAcsmCount(data);
   const acsmCat = acsmCategoria(acsmCount);
   const acsmColor = acsmBadgeColor(acsmCat);
@@ -166,20 +137,6 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
   // Completion = cuántos de los 4 campos principales tienen un valor explícito
   // (true/false cuenta igual — "No" es una respuesta válida)
   const isSet = (v: unknown) => v !== null && v !== undefined;
-  const downtonMainFilled = [
-    data?.downtonCaidas,
-    data?.downtonEstadoMental,
-    data?.downtonMedicamentos,
-    data?.downtonDeficitsSensoriales,
-  ].filter(isSet).length;
-  const downtonPct = Math.round((downtonMainFilled / 4) * 100);
-  const downtonComplete = downtonMainFilled === 4;
-  const downtonCardState = downtonComplete
-    ? 'complete'
-    : downtonMainFilled > 0
-      ? 'partial'
-      : 'empty';
-
   const acsmMainFilled = [
     data?.acsmSedentarismo, data?.acsmTabaquismo, data?.acsmHipertension,
     data?.acsmDislipidemia, data?.acsmObesidad, data?.acsmEdad,
@@ -210,29 +167,13 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* ============ Card 3.1: Downton ============ */}
-      <Card
-        icon={<Activity size={16} />}
-        title="Índice Downton"
-        subtitle={
-          <span>
-            <span
-              className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold mr-2 ${
-                downtonCat === 'Riesgo alto'
-                  ? 'bg-[rgba(239,68,68,0.15)] text-[#ef4444]'
-                  : downtonCat === 'Riesgo intermedio'
-                    ? 'bg-[rgba(251,191,36,0.15)] text-[#fbbf24]'
-                    : 'bg-[rgba(52,211,153,0.15)] text-[#34d399]'
-              }`}
-            >
-              {downtonCat}
-            </span>
-            <span className="text-[#6b7882]">Score: {downtonScore}/4</span>
-          </span>
-        }
-        state={downtonCardState}
-        completionPct={downtonPct}
-        onEdit={() => setOpenModal('downton')}
+      {/* Downton vive en `DowntonCard` porque lo comparten este panel y el
+          Médico Corporativo. */}
+      <DowntonCard
+        historiaId={historiaId}
+        data={data}
+        isMaxed={isMaxed}
+        onPatchLocal={onPatchLocal}
       />
 
       {/* ============ Card 3.2: ACSM ============ */}
@@ -283,152 +224,6 @@ export function RiesgoTab({ historiaId, data, isMaxed, onPatchLocal }: RiesgoTab
         completionPct={btState === 'complete' ? 100 : Math.round((btFlagsCount / 3) * 100)}
         onEdit={() => setOpenModal('bodytech')}
       />
-
-      {/* ============ Modal Downton ============ */}
-      <Modal
-        open={openModal === 'downton'}
-        onClose={() => setOpenModal(null)}
-        crumb="Riesgo · Downton"
-        title="Índice Downton"
-        icon={<Activity size={18} />}
-        isMaxed={isMaxed}
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-            <span className="text-[13.5px] text-[#e9edef]">Antecedente de caídas</span>
-            <PillToggleField
-              historiaId={historiaId}
-              field="downton_caidas"
-              initialValue={data?.downtonCaidas}
-              onSaved={onPatchLocal}
-              inline
-            />
-          </div>
-          <div className="flex items-center justify-between border-b border-dashed border-[#324049] pb-3">
-            <span className="text-[13.5px] text-[#e9edef]">Estado mental confuso/desorientado</span>
-            <PillToggleField
-              historiaId={historiaId}
-              field="downton_estado_mental"
-              initialValue={data?.downtonEstadoMental}
-              onSaved={onPatchLocal}
-              inline
-            />
-          </div>
-
-          {/* Medicamentos */}
-          <div className="border-b border-dashed border-[#324049] pb-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[13.5px] text-[#e9edef]">Toma medicamentos</span>
-              <PillToggleField
-                historiaId={historiaId}
-                field="downton_medicamentos"
-                initialValue={data?.downtonMedicamentos}
-                onSaved={onPatchLocal}
-                inline
-              />
-            </div>
-            <div className={`reveal-grid ${coerceBool(data?.downtonMedicamentos) ? 'is-open' : ''}`}>
-              <div>
-                <div className="pt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Antiparkinsonianos</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_med_antiparkinson"
-                      initialValue={data?.downtonMedAntiparkinson}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Antidepresivos</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_med_antidepresivos"
-                      initialValue={data?.downtonMedAntidepresivos}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Otros</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_med_otros"
-                      initialValue={data?.downtonMedOtros}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Déficits sensoriales */}
-          <div className="border-b border-dashed border-[#324049] pb-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[13.5px] text-[#e9edef]">Déficits sensoriales</span>
-              <PillToggleField
-                historiaId={historiaId}
-                field="downton_deficits_sensoriales"
-                initialValue={data?.downtonDeficitsSensoriales}
-                onSaved={onPatchLocal}
-                inline
-              />
-            </div>
-            <div
-              className={`reveal-grid ${coerceBool(data?.downtonDeficitsSensoriales) ? 'is-open' : ''}`}
-            >
-              <div>
-                <div className="pt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Visual</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_visual"
-                      initialValue={data?.downtonVisual}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Auditivo</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_auditivo"
-                      initialValue={data?.downtonAuditivo}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                  <div className="flex items-center justify-between bg-[#1a2530] rounded-xl px-3 py-2 border border-[#324049]">
-                    <span className="text-[12px] text-[#a4b1b9]">Extremidades</span>
-                    <PillToggleField
-                      historiaId={historiaId}
-                      field="downton_def_extremidades"
-                      initialValue={data?.downtonDefExtremidades}
-                      onSaved={onPatchLocal}
-                      inline
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <Calculated label="Riesgo Downton" value={downtonCat} unit={`Score ${downtonScore}/4`} />
-            <CalcAutosave
-              historiaId={historiaId}
-              field="downton_riesgo"
-              value={downtonCat}
-              serverValue={data?.downtonRiesgo ?? null}
-              onPatchLocal={onPatchLocal}
-            />
-          </div>
-        </div>
-      </Modal>
 
       {/* ============ Modal ACSM ============ */}
       <Modal

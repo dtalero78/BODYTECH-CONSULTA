@@ -3,31 +3,60 @@ import { Dumbbell } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
-import { TextField } from '../fields';
+import { TextField, SelectField, PillToggleField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
-
-const FORMULAS: ReadonlyArray<FormulaDef> = [
-  {
-    campo: 'Horas entrenamiento/semana',
-    formula: 'Sesiones entreno/semana × Horas entrenamiento/día',
-  },
-  {
-    campo: 'Recomendación act. física/semana',
-    formula: 'Activo si horas/semana > 2.5 · Inactivo si no',
-  },
-  {
-    campo: 'Activo según tiempo entrenando',
-    formula: 'Activo si meses de entrenamiento > 3 · Inactivo si no',
-  },
-];
+import type { DropdownOption } from '../Dropdown';
 
 interface CorpActividadFisicaTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
 }
+
+const opt = (vals: string[]): ReadonlyArray<DropdownOption> =>
+  vals.map((v) => ({ value: v, label: v }));
+
+/** Dónde entrena. La plantilla traía tipos de deporte; el equipo médico pidió
+ *  el lugar, porque en sedes corporativas se mezcla gimnasio y casa. */
+const MODALIDAD_OPTS = opt(['Gym', 'Casa', 'Outdoor']);
+
+/** Catálogo de la hoja "Listas" del Excel, sin la opción "Otro" (decisión del
+ *  equipo médico: "esos son los seis, sin ningún otro"). */
+const OBJETIVO_OPTS = opt([
+  'Salud',
+  'Mejorar condición física',
+  'Bajar de peso',
+  'Aumento de masa muscular',
+  'Tonificar y definir',
+  'Rehabilitación de lesión',
+]);
+
+// ---- Umbrales acordados con el equipo médico ----
+/** Minutos/semana a partir de los cuales se considera Activo. */
+const MIN_SEMANA_ACTIVO = 300;
+/** Meses entrenando de forma regular para pasar de Principiante a Intermedio. */
+const MESES_INTERMEDIO = 3;
+/** Meses entrenando de forma regular para pasar de Intermedio a Avanzado. */
+const MESES_AVANZADO = 12;
+
+const FORMULAS: ReadonlyArray<FormulaDef> = [
+  {
+    campo: 'Minutos entrenamiento/semana',
+    formula: 'Sesiones entreno/semana × Minutos por sesión',
+  },
+  {
+    campo: 'Nivel de actividad física',
+    formula: `Sedentario si 0 · Irregularmente activo si 1–${MIN_SEMANA_ACTIVO - 1} · Activo si ${MIN_SEMANA_ACTIVO}+ min/semana`,
+    nota: 'Mide cuánto se mueve la persona hoy, sin importar dónde ni desde cuándo.',
+  },
+  {
+    campo: 'Nivel de entrenamiento',
+    formula: `Principiante si ≤ ${MESES_INTERMEDIO} meses · Intermedio si ${MESES_INTERMEDIO}–${MESES_AVANZADO} · Avanzado si > ${MESES_AVANZADO}`,
+    nota: 'Es distinto del nivel de actividad física: sirve para graduar la exigencia del programa. Alguien puede ser muy activo (corre, monta bici) y aun así principiante en gimnasio. Si está sedentario se toma como Principiante.',
+  },
+];
 
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -42,33 +71,45 @@ function isFilled(v: unknown): boolean {
 export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpActividadFisicaTabProps) {
   const [open, setOpen] = useState(false);
 
-  // ---- Fórmulas de la plantilla (hoja "Historia clinica") ----
-  // I28 = L29*D28  → horas/semana = sesiones/semana × horas/día
-  const horasDia = toNum(data?.mcAfHorasDia);
+  // ---- Volumen semanal: sesiones/semana × minutos por sesión ----
+  const minutosSesion = toNum(data?.mcAfMinutosSesion);
   const sesionesSemana = toNum(data?.mcAfSesionesSemana);
-  const horasSemanaCalc =
-    horasDia !== null && sesionesSemana !== null
-      ? Math.round(horasDia * sesionesSemana * 100) / 100
+  const minutosSemanaCalc =
+    minutosSesion !== null && sesionesSemana !== null
+      ? Math.round(minutosSesion * sesionesSemana)
       : null;
 
-  // D29 = IF(I28>2.5,"Activo","Inactivo")
-  const recomendacionCalc =
-    horasSemanaCalc !== null ? (horasSemanaCalc > 2.5 ? 'Activo' : 'Inactivo') : null;
+  // ---- Nivel de ACTIVIDAD FÍSICA (cuánto se mueve hoy) ----
+  let clasificacionCalc: string | null = null;
+  if (minutosSemanaCalc !== null) {
+    if (minutosSemanaCalc <= 0) clasificacionCalc = 'Sedentario';
+    else if (minutosSemanaCalc < MIN_SEMANA_ACTIVO) clasificacionCalc = 'Irregularmente activo';
+    else clasificacionCalc = 'Activo';
+  }
 
-  // I29 = IF(L28>3,"Activo","Inactivo")  → L28 = meses de entrenamiento
+  // ---- Nivel de ENTRENAMIENTO (desde cuándo entrena regularmente) ----
+  // Es una clasificación distinta a la anterior: gradúa qué tan exigente puede
+  // ser el programa. Si la persona está sedentaria arranca como Principiante,
+  // aunque en el pasado haya entrenado varios meses.
   const meses = toNum(data?.mcAfMeses);
-  const nivelCalc = meses !== null ? (meses > 3 ? 'Activo' : 'Inactivo') : null;
+  let nivelCalc: string | null = null;
+  if (clasificacionCalc === 'Sedentario') {
+    nivelCalc = 'Principiante';
+  } else if (meses !== null) {
+    if (meses <= MESES_INTERMEDIO) nivelCalc = 'Principiante';
+    else if (meses <= MESES_AVANZADO) nivelCalc = 'Intermedio';
+    else nivelCalc = 'Avanzado';
+  }
 
   const vals = [
-    data?.mcAfHorasDia,
-    horasSemanaCalc,
-    data?.mcAfMeses,
-    data?.mcAfModalidad,
-    recomendacionCalc,
-    nivelCalc,
+    data?.mcAfMinutosSesion,
     data?.mcAfSesionesSemana,
-    data?.mcAfRpe,
+    minutosSemanaCalc,
+    data?.mcAfMeses,
+    nivelCalc,
+    data?.mcAfExperienciaGym,
     data?.mcAfHorasSedentario,
+    data?.mcAfModalidad,
     data?.mcAfObjetivo,
   ];
   const filled = vals.filter(isFilled).length;
@@ -80,8 +121,8 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
         icon={<Dumbbell size={16} />}
         title="Registro de actividad física"
         subtitle={
-          recomendacionCalc
-            ? `${recomendacionCalc} · ${horasSemanaCalc} h/semana`
+          clasificacionCalc
+            ? `${clasificacionCalc} · ${minutosSemanaCalc} min/semana${nivelCalc ? ` · ${nivelCalc}` : ''}`
             : filled === 0
               ? 'Sin información'
               : `${filled} de ${vals.length} campos completos`
@@ -102,107 +143,128 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
         size="wide"
         formulas={FORMULAS}
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_horas_dia"
-            initialValue={data?.mcAfHorasDia}
-            onSaved={onPatchLocal}
-            label="Horas entrenamiento/día"
-            type="number"
-            min={0}
-            max={24}
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_sesiones_semana"
-            initialValue={data?.mcAfSesionesSemana}
-            onSaved={onPatchLocal}
-            label="Sesiones entreno/semana"
-            type="number"
-            min={0}
-            max={14}
-          />
-          {/* Calculado: sesiones/semana × horas/día */}
-          <Calculated
-            label="Horas entrenamiento/semana"
-            value={horasSemanaCalc ?? '—'}
-            unit="h"
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_meses"
-            initialValue={data?.mcAfMeses}
-            onSaved={onPatchLocal}
-            label="Meses de entrenamiento"
-            type="number"
-            min={0}
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_rpe"
-            initialValue={data?.mcAfRpe}
-            onSaved={onPatchLocal}
-            label="Intensidad (RPE promedio)"
-            type="number"
-            min={0}
-            max={10}
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_horas_sedentario"
-            initialValue={data?.mcAfHorasSedentario}
-            onSaved={onPatchLocal}
-            label="Horas sedentario/día"
-            type="number"
-            min={0}
-            max={24}
-          />
-          {/* Calculado: > 2.5 h/semana → Activo */}
-          <Calculated
-            label="Recomendación act. física/semana"
-            value={recomendacionCalc ?? '—'}
-            unit="> 2.5 h/sem"
-          />
-          {/* Calculado: > 3 meses entrenando → Activo */}
-          <Calculated
-            label="Activo según tiempo entrenando"
-            value={nivelCalc ?? '—'}
-            unit="> 3 meses"
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_af_modalidad"
-            initialValue={data?.mcAfModalidad}
-            onSaved={onPatchLocal}
-            label="Modalidad"
-            placeholder="Ej. Pesas, cardio, funcional..."
-          />
-          <div className="md:col-span-3">
-            <TextField
-              historiaId={historiaId}
-              field="mc_af_objetivo"
-              initialValue={data?.mcAfObjetivo}
-              onSaved={onPatchLocal}
-              label="Objetivo"
-              placeholder="Ej. Acondicionamiento físico general"
-            />
+        <div className="flex flex-col gap-5">
+          {/* Volumen: lo que determina el nivel de actividad física */}
+          <div>
+            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+              Volumen de entrenamiento
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              <TextField
+                historiaId={historiaId}
+                field="mc_af_minutos_sesion"
+                initialValue={data?.mcAfMinutosSesion}
+                onSaved={onPatchLocal}
+                label="Minutos por sesión"
+                type="number"
+                min={0}
+                max={600}
+                placeholder="Ej. 50"
+              />
+              <TextField
+                historiaId={historiaId}
+                field="mc_af_sesiones_semana"
+                initialValue={data?.mcAfSesionesSemana}
+                onSaved={onPatchLocal}
+                label="Sesiones entreno/semana"
+                type="number"
+                min={0}
+                max={14}
+              />
+              <Calculated
+                label="Minutos entrenamiento/semana"
+                value={minutosSemanaCalc ?? '—'}
+                unit="min"
+              />
+              {/* El detalle de los umbrales vive en el tooltip de fórmulas del
+                  header, para no repetirlo aquí y que no parta el renglón. */}
+              <Calculated
+                label="Nivel de actividad física"
+                value={clasificacionCalc ?? '—'}
+              />
+            </div>
+          </div>
+
+          {/* Experiencia: lo que determina qué tan exigente puede ser el programa */}
+          <div className="pt-4 border-t border-dashed border-[#324049]">
+            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+              Experiencia de entrenamiento
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              <TextField
+                historiaId={historiaId}
+                field="mc_af_meses"
+                initialValue={data?.mcAfMeses}
+                onSaved={onPatchLocal}
+                label="Meses entrenando regularmente"
+                type="number"
+                min={0}
+                max={600}
+              />
+              <Calculated label="Nivel de entrenamiento" value={nivelCalc ?? '—'} />
+              <PillToggleField
+                historiaId={historiaId}
+                field="mc_af_experiencia_gym"
+                initialValue={data?.mcAfExperienciaGym}
+                onSaved={onPatchLocal}
+                label="¿Experiencia en gimnasio?"
+                trueLabel="Sí"
+                falseLabel="No"
+              />
+            </div>
+          </div>
+
+          {/* Contexto */}
+          <div className="pt-4 border-t border-dashed border-[#324049]">
+            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+              Contexto y objetivo
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              <TextField
+                historiaId={historiaId}
+                field="mc_af_horas_sedentario"
+                initialValue={data?.mcAfHorasSedentario}
+                onSaved={onPatchLocal}
+                label="Horas sedentario/día"
+                type="number"
+                min={0}
+                max={24}
+              />
+              <SelectField
+                historiaId={historiaId}
+                field="mc_af_modalidad"
+                initialValue={data?.mcAfModalidad}
+                onSaved={onPatchLocal}
+                label="¿Dónde entrena?"
+                options={MODALIDAD_OPTS}
+                placeholder="Seleccionar..."
+              />
+              <SelectField
+                historiaId={historiaId}
+                field="mc_af_objetivo"
+                initialValue={data?.mcAfObjetivo}
+                onSaved={onPatchLocal}
+                label="Objetivo"
+                options={OBJETIVO_OPTS}
+                placeholder="Seleccionar..."
+              />
+            </div>
           </div>
         </div>
 
-        {/* Persistencia de los tres campos derivados */}
+        {/* Persistencia de los derivados */}
         <CalcAutosave
           historiaId={historiaId}
-          field="mc_af_horas_semana"
-          value={horasSemanaCalc}
-          serverValue={data?.mcAfHorasSemana ?? null}
+          field="mc_af_minutos_semana"
+          value={minutosSemanaCalc}
+          serverValue={data?.mcAfMinutosSemana ?? null}
           onPatchLocal={onPatchLocal}
         />
         <CalcAutosave
           historiaId={historiaId}
-          field="mc_af_recomendacion"
-          value={recomendacionCalc}
-          serverValue={data?.mcAfRecomendacion ?? null}
+          field="mc_af_clasificacion"
+          value={clasificacionCalc}
+          serverValue={data?.mcAfClasificacion ?? null}
           onPatchLocal={onPatchLocal}
         />
         <CalcAutosave

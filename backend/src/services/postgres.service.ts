@@ -527,6 +527,16 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "mc_prescripcion_flexibilidad" TEXT,
           ADD COLUMN IF NOT EXISTS "mc_remision" VARCHAR(150),
 
+          -- Registro de actividad física — revisión con el equipo médico (2026-08).
+          -- El volumen se mide en MINUTOS y se separan las dos clasificaciones
+          -- (actividad física vs. nivel de entrenamiento). Reemplazan a
+          -- mc_af_horas_dia / mc_af_horas_semana / mc_af_rpe / mc_af_recomendacion,
+          -- que se conservan por compatibilidad con historias ya diligenciadas.
+          ADD COLUMN IF NOT EXISTS "mc_af_minutos_sesion" NUMERIC(6,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_minutos_semana" NUMERIC(7,2),
+          ADD COLUMN IF NOT EXISTS "mc_af_clasificacion" VARCHAR(40),
+          ADD COLUMN IF NOT EXISTS "mc_af_experiencia_gym" BOOLEAN,
+
           -- Prescripción de ejercicio (panel de consulta médica, tab t8).
           -- Estructura FIT por bloque (cardio/fuerza/flexibilidad) + clases grupales.
           ADD COLUMN IF NOT EXISTS "presc_generales" TEXT,

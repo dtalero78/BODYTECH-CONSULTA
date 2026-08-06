@@ -280,16 +280,23 @@ export interface MedicalHistoryFull {
   mcPerParaclinicos?: string;
   mcPerAlimentacion?: string;
   mcPerObservaciones?: string;
-  mcAfHorasDia?: number;
-  mcAfHorasSemana?: number;
+  mcAfMinutosSesion?: number;
+  mcAfMinutosSemana?: number;
+  /** Nivel de ACTIVIDAD FÍSICA: Sedentario | Irregularmente activo | Activo. */
+  mcAfClasificacion?: string;
+  mcAfExperienciaGym?: boolean;
   mcAfMeses?: number;
   mcAfSesionesSemana?: number;
-  mcAfRpe?: number;
   mcAfHorasSedentario?: number;
   mcAfModalidad?: string;
-  mcAfRecomendacion?: string;
+  /** Nivel de ENTRENAMIENTO: Principiante | Intermedio | Avanzado. */
   mcAfNivel?: string;
   mcAfObjetivo?: string;
+  // Reemplazados en la revisión de 2026-08 (se conservan para historias viejas).
+  mcAfHorasDia?: number;
+  mcAfHorasSemana?: number;
+  mcAfRpe?: number;
+  mcAfRecomendacion?: string;
   mcFrecCard?: number;
   mcFrecResp?: number;
   mcSato2?: number;

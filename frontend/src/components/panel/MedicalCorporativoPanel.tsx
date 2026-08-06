@@ -39,7 +39,14 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
   const t1 = [data?.mcDireccion, data?.email, data?.grupoSanguineo, data?.ocupacion, data?.eps, data?.fechaNacimiento, data?.telefonoResidencia].filter(isFilled).length;
   const t2 = [data?.motivoConsultaTexto, data?.mcEnfermedadActual].filter(isFilled).length;
   const t3 = [data?.mcFamObservaciones, data?.mcPerOsteomuscular, data?.mcPerQuirurgicos, data?.mcPerAlergicos].filter(isFilled).length;
-  const t4 = [data?.mcAfHorasDia, data?.mcAfHorasSemana, data?.mcAfMeses, data?.mcAfModalidad, data?.mcAfObjetivo].filter(isFilled).length;
+  const t4 = [
+    data?.mcAfMinutosSesion,
+    data?.mcAfSesionesSemana,
+    data?.mcAfMeses,
+    data?.mcAfExperienciaGym,
+    data?.mcAfModalidad,
+    data?.mcAfObjetivo,
+  ].filter(isFilled).length;
   const t5 = [data?.mcPeso, data?.mcTalla, data?.tas, data?.tad, data?.mcRuffierFc1, data?.mcHandgripDer1, data?.mcExamenObservaciones].filter(isFilled).length;
   const t6 = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcNivel, data?.aptitud].filter(isFilled).length;
   // La prescripción de ejercicio pasó a las columnas `presc_*` del panel del rol
@@ -59,7 +66,7 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
     { id: 'c1', label: TAB_LABELS.c1, filled: t1, total: 7 },
     { id: 'c2', label: TAB_LABELS.c2, filled: t2, total: 2 },
     { id: 'c3', label: TAB_LABELS.c3, filled: t3, total: 4 },
-    { id: 'c4', label: TAB_LABELS.c4, filled: t4, total: 5 },
+    { id: 'c4', label: TAB_LABELS.c4, filled: t4, total: 6 },
     { id: 'c5', label: TAB_LABELS.c5, filled: t5, total: 7 },
     { id: 'c6', label: TAB_LABELS.c6, filled: t6, total: 5 },
     { id: 'c7', label: TAB_LABELS.c7, filled: t7, total: 7 },

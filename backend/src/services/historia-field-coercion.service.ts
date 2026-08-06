@@ -251,16 +251,30 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'mc_per_alimentacion', type: 'string' },
   { field: 'mc_per_observaciones', type: 'string' },
   // Registro de actividad física
-  { field: 'mc_af_horas_dia', type: 'number' },
-  { field: 'mc_af_horas_semana', type: 'number' },
+  //
+  // Revisión con el equipo médico (2026-08): el volumen se mide en MINUTOS (hay
+  // quien entrena 50 min y no tiene sentido escribir 0.83 horas), y se separan
+  // dos clasificaciones que antes se confundían:
+  //   · nivel de ACTIVIDAD FÍSICA  → `mc_af_clasificacion` (según minutos/semana)
+  //   · nivel de ENTRENAMIENTO     → `mc_af_nivel` (según meses entrenando)
+  // Alguien puede ser "muy activo" (corre y monta bici) y a la vez "principiante"
+  // en gimnasio, de ahí que sean campos distintos.
+  { field: 'mc_af_minutos_sesion', type: 'number' },
+  { field: 'mc_af_minutos_semana', type: 'number' },
+  { field: 'mc_af_clasificacion', type: 'string' },
+  { field: 'mc_af_experiencia_gym', type: 'boolean' },
   { field: 'mc_af_meses', type: 'number' },
   { field: 'mc_af_sesiones_semana', type: 'number' },
-  { field: 'mc_af_rpe', type: 'number' },
   { field: 'mc_af_horas_sedentario', type: 'number' },
   { field: 'mc_af_modalidad', type: 'string' },
-  { field: 'mc_af_recomendacion', type: 'string' },
   { field: 'mc_af_nivel', type: 'string' },
   { field: 'mc_af_objetivo', type: 'string' },
+  // Reemplazados en esa misma revisión; se conservan en el whitelist para no
+  // romper historias viejas que ya tengan el dato guardado.
+  { field: 'mc_af_horas_dia', type: 'number' },
+  { field: 'mc_af_horas_semana', type: 'number' },
+  { field: 'mc_af_rpe', type: 'number' },
+  { field: 'mc_af_recomendacion', type: 'string' },
   // Examen físico — signos
   { field: 'mc_frec_card', type: 'number' },
   { field: 'mc_frec_resp', type: 'number' },

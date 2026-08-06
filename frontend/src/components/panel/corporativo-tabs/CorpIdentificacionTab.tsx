@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { Contact } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
+import { Calculated } from '../Calculated';
 import { TextField, SelectField, PhoneField } from '../fields';
+import { edadEfectiva } from './edad';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+
 
 interface CorpIdentificacionTabProps {
   historiaId: string | undefined;
@@ -41,6 +44,9 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
   const [open, setOpen] = useState(false);
 
   const fechaNac = data?.fechaNacimiento as string | Date | null | undefined;
+  // Si la ficha del afiliado ya trae la edad, se respeta; si no, se deriva de la
+  // fecha de nacimiento que se diligencie aquí.
+  const edadCalc = edadEfectiva(data);
   const vals = [
     data?.mcDireccion,
     data?.email,
@@ -136,6 +142,12 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
             onSaved={onPatchLocal}
             label="Fecha de nacimiento"
             type="date"
+          />
+          {/* Alimenta la FC predicha (Tanaka) del examen físico. */}
+          <Calculated
+            label="Edad"
+            value={edadCalc ?? '—'}
+            unit={edadCalc !== null ? 'años' : 'requiere fecha de nacimiento'}
           />
           <TextField
             historiaId={historiaId}

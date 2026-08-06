@@ -3,11 +3,17 @@ import { Activity, Scale, HeartPulse, Stethoscope, Gauge, Hand } from 'lucide-re
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
-import { TextField, TextareaField } from '../fields';
+import { TextField, TextareaField, SelectField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import { ComparacionAnterior } from './ComparacionAnterior';
+import { edadEfectiva } from './edad';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
+import type { DropdownOption } from '../Dropdown';
+
+const PROPIOCEPCION_OPTS: ReadonlyArray<DropdownOption> = [
+  'Buena', 'Regular', 'Deficiente',
+].map((v) => ({ value: v, label: v }));
 
 const FORMULAS_SIGNOS: ReadonlyArray<FormulaDef> = [
   {
@@ -18,6 +24,14 @@ const FORMULAS_SIGNOS: ReadonlyArray<FormulaDef> = [
     campo: 'Comparación · Δ',
     formula: 'Valor actual − valor de la visita anterior',
     nota: 'Verde = cambio favorable. En peso e IMC el delta es informativo (sin color), porque si es favorable depende del objetivo del afiliado.',
+  },
+  {
+    campo: 'ICC (cintura-cadera)',
+    formula: 'Perímetro abdominal ÷ Perímetro cadera',
+  },
+  {
+    campo: 'ICT (cintura-talla)',
+    formula: 'Perímetro abdominal (cm) ÷ Talla (cm)',
   },
   {
     campo: 'TMB (Kcal)',
@@ -102,6 +116,12 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** ICC e ICT se leen contra umbrales de riesgo con dos decimales (p. ej. 0.90 en
+ *  hombres, 0.85 en mujeres), así que redondear a uno cruzaría el corte. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExamenFisicoTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
 
@@ -113,6 +133,20 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
     imcCalc = round1(peso / (talla * talla));
   }
 
+  // ---- Índices de composición corporal ----
+  // ICC = perímetro abdominal / perímetro cadera (el equipo notó que faltaba la
+  // cadera para poder calcularlo). ICT = perímetro abdominal / talla.
+  const perimAbd = toNum(data?.mcPerimetroAbdominal);
+  const perimCadera = toNum(data?.mcPerimetroCadera);
+  const iccCalc =
+    perimAbd !== null && perimCadera !== null && perimCadera > 0
+      ? round2(perimAbd / perimCadera)
+      : null;
+  const ictCalc =
+    perimAbd !== null && talla !== null && talla > 0
+      ? round2(perimAbd / (talla * 100))
+      : null;
+
   // ---- Parámetros de FC ----
   const frecCard = toNum(data?.mcFrecCard); // FC en reposo
   const fcPico = toNum(data?.mcFcPicoPruebaEsfuerzo);
@@ -123,7 +157,8 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   const fcReservaPct = (pct: number): number | null =>
     frecCard !== null && fcReservaCalc !== null ? Math.round(frecCard + pct * fcReservaCalc) : null;
 
-  const edad = typeof data?.edad === 'number' && !isNaN(data.edad) ? data.edad : null;
+  // Se deriva de la fecha de nacimiento si la ficha no trae la edad.
+  const edad = edadEfectiva(data);
   const tanakaCalc = edad !== null ? Math.round(208 - edad * 0.7) : null;
   const tanakaPct = (pct: number): number | null =>
     tanakaCalc !== null ? round1(tanakaCalc * pct) : null;
@@ -273,7 +308,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
               <TextField historiaId={historiaId} field="mc_frec_resp" initialValue={data?.mcFrecResp} onSaved={onPatchLocal} label="Frecuencia respiratoria (rpm)" type="number" min={5} max={60} />
               <TextField historiaId={historiaId} field="mc_sato2" initialValue={data?.mcSato2} onSaved={onPatchLocal} label="SatO2 (%)" type="number" min={50} max={100} />
               <TextField historiaId={historiaId} field="mc_perimetro_abdominal" initialValue={data?.mcPerimetroAbdominal} onSaved={onPatchLocal} label="Perímetro abdominal (cm)" type="number" min={40} max={200} />
-              <TextField historiaId={historiaId} field="mc_talla" initialValue={data?.mcTalla} onSaved={onPatchLocal} label="Talla (m)" type="number" min={1} max={2.5} />
+              <TextField historiaId={historiaId} field="mc_talla" initialValue={data?.mcTalla} onSaved={onPatchLocal} label="Talla (m)" type="number" min={1} max={2.5} placeholder="Ej. 1.65" error={talla !== null && (talla < 1 || talla > 2.5) ? "En metros, con punto decimal (ej. 1.65)" : undefined} />
             </div>
           </div>
           <div className="pt-4 border-t border-dashed border-[#324049]">
@@ -285,8 +320,15 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
               <TextField historiaId={historiaId} field="mc_grasa_visceral" initialValue={data?.mcGrasaVisceral} onSaved={onPatchLocal} label="Grasa visceral" type="number" min={0} max={60} />
               <Calculated label="IMC" value={imcCalc ?? '—'} />
               <TextField historiaId={historiaId} field="mc_tmb" initialValue={data?.mcTmb} onSaved={onPatchLocal} label="TMB (Kcal)" type="number" placeholder="Entrada manual" min={0} />
+              {/* El ICC vive aquí (y no en Observaciones) porque es una medida de
+                  composición corporal; necesitaba el perímetro de cadera, que faltaba. */}
+              <TextField historiaId={historiaId} field="mc_perimetro_cadera" initialValue={data?.mcPerimetroCadera} onSaved={onPatchLocal} label="Perímetro cadera (cm)" type="number" min={40} max={200} />
+              <Calculated label="ICC (cintura-cadera)" value={iccCalc ?? '—'} />
+              <Calculated label="ICT (cintura-talla)" value={ictCalc ?? '—'} />
             </div>
             <CalcAutosave historiaId={historiaId} field="mc_imc" value={imcCalc} serverValue={data?.mcImc ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_icc" value={iccCalc} serverValue={data?.mcIcc ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_indice_cintura_talla" value={ictCalc} serverValue={data?.mcIndiceCinturaTalla ?? null} onPatchLocal={onPatchLocal} />
           </div>
 
           {/* Fila "Comparación" de la plantilla: delta vs. la visita anterior */}
@@ -309,35 +351,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         <div className="flex flex-col gap-5">
           <div>
             <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
-              FC de reserva (Karvonen)
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              <TextField
-                historiaId={historiaId}
-                field="mc_fc_pico_prueba_esfuerzo"
-                initialValue={data?.mcFcPicoPruebaEsfuerzo}
-                onSaved={onPatchLocal}
-                label="FC pico (prueba de esfuerzo)"
-                type="number"
-                min={60}
-                max={230}
-              />
-              <Calculated label="FC de reserva" value={fcReservaCalc ?? '—'} unit="lpm" />
-              <Calculated label="80% FCR" value={fcReservaPct(0.8) ?? '—'} unit="lpm" />
-              <Calculated label="75% FCR" value={fcReservaPct(0.75) ?? '—'} unit="lpm" />
-              <Calculated label="70% FCR" value={fcReservaPct(0.7) ?? '—'} unit="lpm" />
-              <Calculated label="60% FCR" value={fcReservaPct(0.6) ?? '—'} unit="lpm" />
-            </div>
-            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva" value={fcReservaCalc} serverValue={data?.mcFcReserva ?? null} onPatchLocal={onPatchLocal} />
-            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_80" value={fcReservaPct(0.8)} serverValue={data?.mcFcReserva80 ?? null} onPatchLocal={onPatchLocal} />
-            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_75" value={fcReservaPct(0.75)} serverValue={data?.mcFcReserva75 ?? null} onPatchLocal={onPatchLocal} />
-            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_70" value={fcReservaPct(0.7)} serverValue={data?.mcFcReserva70 ?? null} onPatchLocal={onPatchLocal} />
-            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_60" value={fcReservaPct(0.6)} serverValue={data?.mcFcReserva60 ?? null} onPatchLocal={onPatchLocal} />
-          </div>
-
-          <div className="pt-4 border-t border-dashed border-[#324049]">
-            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
-              FC predicha (Tanaka)
+              FC predicha (Tanaka) — se calcula siempre
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
               <Calculated label="FC predicha (Tanaka)" value={tanakaCalc ?? '—'} unit="lpm" />
@@ -353,6 +367,34 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             <CalcAutosave historiaId={historiaId} field="mc_fc_pico_predicha_75" value={tanakaPct(0.75)} serverValue={data?.mcFcPicoPredicha75 ?? null} onPatchLocal={onPatchLocal} />
             <CalcAutosave historiaId={historiaId} field="mc_fc_pico_predicha_70" value={tanakaPct(0.7)} serverValue={data?.mcFcPicoPredicha70 ?? null} onPatchLocal={onPatchLocal} />
             <CalcAutosave historiaId={historiaId} field="mc_fc_pico_predicha_60" value={tanakaPct(0.6)} serverValue={data?.mcFcPicoPredicha60 ?? null} onPatchLocal={onPatchLocal} />
+          </div>
+
+          <div className="pt-4 border-t border-dashed border-[#324049]">
+            <div className="text-[11px] font-semibold text-[#6b7882] tracking-widest uppercase mb-3">
+              FC de reserva (Karvonen) — solo si se hizo ergometría
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <TextField
+                historiaId={historiaId}
+                field="mc_fc_pico_prueba_esfuerzo"
+                initialValue={data?.mcFcPicoPruebaEsfuerzo}
+                onSaved={onPatchLocal}
+                label="FC máxima teórica o pico en prueba"
+                type="number"
+                min={60}
+                max={230}
+              />
+              <Calculated label="FC de reserva" value={fcReservaCalc ?? '—'} unit="lpm" />
+              <Calculated label="80% FCR" value={fcReservaPct(0.8) ?? '—'} unit="lpm" />
+              <Calculated label="75% FCR" value={fcReservaPct(0.75) ?? '—'} unit="lpm" />
+              <Calculated label="70% FCR" value={fcReservaPct(0.7) ?? '—'} unit="lpm" />
+              <Calculated label="60% FCR" value={fcReservaPct(0.6) ?? '—'} unit="lpm" />
+            </div>
+            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva" value={fcReservaCalc} serverValue={data?.mcFcReserva ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_80" value={fcReservaPct(0.8)} serverValue={data?.mcFcReserva80 ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_75" value={fcReservaPct(0.75)} serverValue={data?.mcFcReserva75 ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_70" value={fcReservaPct(0.7)} serverValue={data?.mcFcReserva70 ?? null} onPatchLocal={onPatchLocal} />
+            <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_60" value={fcReservaPct(0.6)} serverValue={data?.mcFcReserva60 ?? null} onPatchLocal={onPatchLocal} />
           </div>
         </div>
       </Modal>
@@ -375,8 +417,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
           <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_genitales" initialValue={data?.mcRsGenitales} onSaved={onPatchLocal} label="Genitales" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
           <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
           <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
@@ -385,13 +426,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
           <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
           <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
           <div>
-            <TextareaField historiaId={historiaId} field="mc_rs_corazon" initialValue={data?.mcRsCorazon} onSaved={onPatchLocal} label="Corazón" rows={2} placeholder="RsCs rítmicos, sin soplos" />
-          </div>
-          <div>
-            <TextareaField historiaId={historiaId} field="mc_rs_respiratorio" initialValue={data?.mcRsRespiratorio} onSaved={onPatchLocal} label="Respiratorio" rows={2} />
-          </div>
-          <div>
-            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteomuscular" rows={3} />
+            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
           </div>
         </div>
       </Modal>
@@ -478,10 +513,38 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         showEyePill={false}
         size="wide"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          <TextField historiaId={historiaId} field="mc_icc" initialValue={data?.mcIcc} onSaved={onPatchLocal} label="ICC (índice cintura-cadera)" />
-          <TextField historiaId={historiaId} field="mc_wells" initialValue={data?.mcWells} onSaved={onPatchLocal} label="Escala de Wells" />
-          <div className="md:col-span-2">
+        {/* El ICC se movió a Composición corporal (es una medida de composición y
+            necesita el perímetro de cadera). Aquí quedó la propiocepción. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+          <SelectField
+            historiaId={historiaId}
+            field="mc_propiocepcion"
+            initialValue={data?.mcPropiocepcion}
+            onSaved={onPatchLocal}
+            label="Propiocepción"
+            options={PROPIOCEPCION_OPTS}
+            placeholder="Seleccionar..."
+          />
+          <TextField
+            historiaId={historiaId}
+            field="mc_propiocepcion_segundos"
+            initialValue={data?.mcPropiocepcionSegundos}
+            onSaved={onPatchLocal}
+            label="Estabilidad unipodal (s)"
+            type="number"
+            min={0}
+            max={300}
+            placeholder="Medición objetiva"
+          />
+          <TextField
+            historiaId={historiaId}
+            field="mc_wells"
+            initialValue={data?.mcWells}
+            onSaved={onPatchLocal}
+            label="Wells (cm dedos–piso)"
+            placeholder="Prueba modificada"
+          />
+          <div className="md:col-span-2 xl:col-span-3">
             <TextareaField historiaId={historiaId} field="mc_examen_observaciones" initialValue={data?.mcExamenObservaciones} onSaved={onPatchLocal} label="Observaciones" rows={3} />
           </div>
         </div>

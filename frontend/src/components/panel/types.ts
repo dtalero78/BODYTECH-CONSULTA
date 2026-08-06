@@ -351,6 +351,10 @@ export interface MedicalHistoryFull {
   mcHandgripAsimetriaMm?: number;
   mcHandgripAsimetriaPct?: number;
   mcIcc?: string;
+  mcPerimetroCadera?: number;
+  mcIndiceCinturaTalla?: number;
+  mcPropiocepcion?: string;
+  mcPropiocepcionSegundos?: number;
   mcWells?: string;
   mcExamenObservaciones?: string;
   mcDxNutricional?: string;

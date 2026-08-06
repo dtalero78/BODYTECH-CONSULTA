@@ -537,6 +537,14 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "mc_af_clasificacion" VARCHAR(40),
           ADD COLUMN IF NOT EXISTS "mc_af_experiencia_gym" BOOLEAN,
 
+          -- Examen físico — misma revisión. El ICC se movió a composición
+          -- corporal (necesita perímetro de cadera, que faltaba) y se sumó el
+          -- índice cintura-talla. La casilla que ocupaba pasa a propiocepción.
+          ADD COLUMN IF NOT EXISTS "mc_perimetro_cadera" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_indice_cintura_talla" NUMERIC(5,2),
+          ADD COLUMN IF NOT EXISTS "mc_propiocepcion" VARCHAR(30),
+          ADD COLUMN IF NOT EXISTS "mc_propiocepcion_segundos" NUMERIC(5,2),
+
           -- Prescripción de ejercicio (panel de consulta médica, tab t8).
           -- Estructura FIT por bloque (cardio/fuerza/flexibilidad) + clases grupales.
           ADD COLUMN IF NOT EXISTS "presc_generales" TEXT,

@@ -335,7 +335,13 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'mc_handgrip_asimetria_mm', type: 'number' },
   { field: 'mc_handgrip_asimetria_pct', type: 'number' },
   // Examen físico — observaciones finales
+  // El ICC pasó a Composición corporal (es una medida de composición) y se le
+  // sumó el índice cintura-talla; en su lugar aquí quedó la propiocepción.
   { field: 'mc_icc', type: 'string' },
+  { field: 'mc_indice_cintura_talla', type: 'number' },
+  { field: 'mc_perimetro_cadera', type: 'number' },
+  { field: 'mc_propiocepcion', type: 'string' },
+  { field: 'mc_propiocepcion_segundos', type: 'number' },
   { field: 'mc_wells', type: 'string' },
   { field: 'mc_examen_observaciones', type: 'string' },
   // Diagnósticos

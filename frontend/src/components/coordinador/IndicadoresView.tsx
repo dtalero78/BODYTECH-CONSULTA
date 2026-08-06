@@ -283,8 +283,16 @@ export function IndicadoresView({ showToast }: Props) {
         showToast({ type: 'error', message: 'No hay citas con link enviado en el rango.' });
         return;
       }
-      const rows: string[][] = [
-        ['Cédula', 'Paciente', 'Coach', 'Sede', 'Hora cita programada', 'Hora link enviado', 'Min desfase (link − cita)', 'Hora atendida'],
+      // Excel real (.xlsx): abre con columnas separadas y `min_desfase` como número.
+      // Import dinámico → el chunk de SheetJS solo se descarga al exportar.
+      const XLSX = await import('xlsx');
+      const header = [
+        'Cédula', 'Paciente', 'Coach', 'Sede',
+        'Hora cita programada', 'Hora link enviado',
+        'Min desfase (link − cita)', 'Hora atendida',
+      ];
+      const aoa: (string | number | null)[][] = [
+        header,
         ...filas.map((f) => [
           f.cedula ?? '',
           f.paciente ?? '',
@@ -292,20 +300,18 @@ export function IndicadoresView({ showToast }: Props) {
           f.sede ?? '',
           f.hora_cita ?? '',
           f.link_enviado ?? '',
-          f.min_desfase == null ? '' : String(f.min_desfase),
+          f.min_desfase ?? null,
           f.hora_atendida ?? '',
         ]),
       ];
-      const csv = rows
-        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tiempos_atencion_${from}_${to}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 26 }, { wch: 22 }, { wch: 16 },
+        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 20 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Tiempos de atención');
+      XLSX.writeFile(wb, `tiempos_atencion_${from}_${to}.xlsx`);
     } catch {
       showToast({ type: 'error', message: 'No se pudo exportar los tiempos de atención.' });
     } finally {

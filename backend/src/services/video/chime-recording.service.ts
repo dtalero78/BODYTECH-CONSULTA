@@ -287,12 +287,22 @@ class ChimeRecordingService {
    */
   private async debeGrabarPorMuestreo(roomName: string): Promise<boolean> {
     try {
-      const vs = await postgresService.query(
-        `SELECT medico FROM video_sessions WHERE room_name = $1 LIMIT 1`,
-        [roomName]
-      );
-      const medico: string | undefined = vs?.[0]?.medico;
-      if (!medico) return true; // sin coach → no bloquear
+      // El vínculo de la sala (video_sessions con el coach) puede insertarse un
+      // instante DESPUÉS de que arranca startCapture. Si se leía una sola vez,
+      // `medico` salía null y el fallback "sin coach → no bloquear" grababa TODO,
+      // anulando el muestreo (coaches con 40-54/mes en vez de 10). Se reintenta
+      // unos segundos hasta que el coach esté disponible; recién ahí se decide.
+      let medico: string | undefined;
+      for (let intento = 0; intento < 5; intento++) {
+        const vs = await postgresService.query(
+          `SELECT medico FROM video_sessions WHERE room_name = $1 LIMIT 1`,
+          [roomName]
+        );
+        medico = vs?.[0]?.medico || undefined;
+        if (medico) break;
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+      if (!medico) return true; // sin coach tras reintentar → no bloquear
 
       // "Ahora" en hora Colombia: desplazar UTC-5 y leer los campos UTC.
       const ahoraCo = new Date(Date.now() - 5 * 3600_000);

@@ -35,6 +35,9 @@ router.get('/patients/details/:documento', clinico, medicalPanelController.getPa
 
 // Marcar paciente como "No Contesta"
 router.patch('/patients/:patientId/no-answer', clinico, medicalPanelController.markAsNoAnswer);
+// Deshacer el "No Contesta": marcar era irreversible desde la interfaz y un
+// toque accidental solo se arreglaba reprogramando o entrando a la BD.
+router.delete('/patients/:patientId/no-answer', clinico, medicalPanelController.undoNoAnswer);
 
 // Disponibilidad recurrente del PROPIO coach/médico (self-service desde su panel).
 // El profesional se resuelve de la sesión → cada quien solo edita SU horario.

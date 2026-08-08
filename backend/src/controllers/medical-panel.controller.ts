@@ -276,6 +276,30 @@ class MedicalPanelController {
   }
 
   /**
+   * Deshace el "No Contesta" de un paciente (la cita vuelve a su lista).
+   */
+  async undoNoAnswer(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const parsed = patientIdParamsSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return validationResponse(res, parsed.error);
+    }
+    const { patientId } = parsed.data;
+
+    try {
+      const updated = await medicalPanelService.undoPatientNoAnswer(patientId);
+
+      if (!updated) {
+        res.status(404).json({ error: 'Cita no encontrada o ya atendida' });
+        return;
+      }
+
+      res.json({ success: true, message: 'Se deshizo el "No Contesta"' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Disponibilidad recurrente del PROPIO coach/médico (self-service).
    * GET /api/medical-panel/mi-disponibilidad?modalidad=virtual
    */

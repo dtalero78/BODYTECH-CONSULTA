@@ -93,6 +93,12 @@ export function MedicalPanelPage() {
   const [attendingPatient, setAttendingPatient] = useState<string | null>(null);
   const [contactingPatient, setContactingPatient] = useState<string | null>(null);
   const [recallingPatient, setRecallingPatient] = useState<string | null>(null);
+  // "No Contesta" pedía confirmación a nadie y era irreversible: estaba pegado a
+  // "Atender" (misma grilla, 8px) y un toque de más borraba al afiliado de la
+  // lista sin vuelta atrás. Estos dos estados sostienen el paso de confirmación
+  // y el "Deshacer" posterior.
+  const [confirmingNoAnswer, setConfirmingNoAnswer] = useState<string | null>(null);
+  const [undoNoAnswer, setUndoNoAnswer] = useState<{ id: string; nombre: string } | null>(null);
   const [connectedPatients, setConnectedPatients] = useState<Set<string>>(new Set());
   const [patientRooms, setPatientRooms] = useState<{ [patientId: string]: string }>({});
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
@@ -339,16 +345,31 @@ export function MedicalPanelPage() {
     }
   };
 
-  const handleNoAnswer = async (patientId: string) => {
+  const handleNoAnswer = async (patientId: string, nombre = 'El afiliado') => {
+    setConfirmingNoAnswer(null);
     try {
       await medicalPanelService.markAsNoAnswer(patientId);
       setCollapsedItems({ ...collapsedItems, [patientId]: true });
+      setUndoNoAnswer({ id: patientId, nombre });
       // Recargar datos: invalidar las queries principales para que TanStack
       // Query refetchee con los valores actuales.
       queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
       queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
     } catch (err) {
       console.error('Error marcando como no contesta:', err);
+    }
+  };
+
+  /** Revierte el "No Contesta": la cita vuelve a la lista sin cambiar de fecha. */
+  const handleUndoNoAnswer = async (patientId: string) => {
+    try {
+      await medicalPanelService.undoNoAnswer(patientId);
+      setUndoNoAnswer(null);
+      setCollapsedItems({ ...collapsedItems, [patientId]: false });
+      queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
+      queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
+    } catch (err) {
+      console.error('Error deshaciendo el no contesta:', err);
     }
   };
 
@@ -970,7 +991,7 @@ export function MedicalPanelPage() {
                     </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
+                    <div className="flex flex-col gap-2">
                       <button
                         onClick={() => handleAtender(searchResult)}
                         disabled={attendingPatient === searchResult._id}
@@ -994,12 +1015,33 @@ export function MedicalPanelPage() {
                         )}
                       </button>
 
-                      <button
-                        onClick={() => handleNoAnswer(searchResult._id)}
-                        className="bg-gray-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-gray-700 transition text-xs md:text-sm font-medium flex items-center justify-center gap-1.5 md:gap-2"
-                      >
-                        No Contesta
-                      </button>
+                      {/* "No Contesta" ya NO es par de "Atender": era un botón gemelo a 8px de
+                          distancia y en móvil ocupaban el mismo ancho, así que un toque de más
+                          cancelaba la cita. Ahora es secundario, va debajo y pide confirmación. */}
+                      {confirmingNoAnswer === searchResult._id ? (
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                          <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
+                          <button
+                            onClick={() => handleNoAnswer(searchResult._id, searchResult.primerNombre)}
+                            className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
+                          >
+                            Sí, marcar
+                          </button>
+                          <button
+                            onClick={() => setConfirmingNoAnswer(null)}
+                            className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmingNoAnswer(searchResult._id)}
+                          className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
+                        >
+                          No contesta
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1183,7 +1225,7 @@ export function MedicalPanelPage() {
                         </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
+                        <div className="flex flex-col gap-2">
                           <button
                             onClick={() => handleAtender(patient)}
                             disabled={attendingPatient === patient._id}
@@ -1207,12 +1249,33 @@ export function MedicalPanelPage() {
                             )}
                           </button>
 
-                          <button
-                            onClick={() => handleNoAnswer(patient._id)}
-                            className="bg-gray-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-gray-700 transition text-xs md:text-sm font-medium flex items-center justify-center gap-1.5 md:gap-2"
-                          >
-                            No Contesta
-                          </button>
+                          {/* "No Contesta" ya NO es par de "Atender": era un botón gemelo a 8px de
+                              distancia y en móvil ocupaban el mismo ancho, así que un toque de más
+                              cancelaba la cita. Ahora es secundario, va debajo y pide confirmación. */}
+                          {confirmingNoAnswer === patient._id ? (
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                              <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
+                              <button
+                                onClick={() => handleNoAnswer(patient._id, patient.primerNombre)}
+                                className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
+                              >
+                                Sí, marcar
+                              </button>
+                              <button
+                                onClick={() => setConfirmingNoAnswer(null)}
+                                className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmingNoAnswer(patient._id)}
+                              className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
+                            >
+                              No contesta
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1280,6 +1343,34 @@ export function MedicalPanelPage() {
           nombre={chatPatient.nombre}
           onClose={() => setChatPatient(null)}
         />
+      )}
+
+      {/* Aviso con "Deshacer". Marcar "No Contesta" no tenía vuelta atrás desde
+          la interfaz: el afiliado desaparecía de la lista y la única salida era
+          reprogramar la cita (que la mueve de fecha) o tocar la base de datos.
+          Se queda hasta que la persona lo cierre — no se desvanece solo, para
+          que un toque accidental siempre tenga cómo revertirse. */}
+      {undoNoAnswer && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md">
+          <div className="bg-[#202c33] border border-gray-600 rounded-lg shadow-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-gray-200 text-xs md:text-sm flex-1">
+              {undoNoAnswer.nombre} quedó marcado como "No Contesta".
+            </span>
+            <button
+              onClick={() => handleUndoNoAnswer(undoNoAnswer.id)}
+              className="bg-[#00a884] text-white px-3 py-1.5 rounded-lg hover:bg-[#008f6f] transition text-xs font-medium whitespace-nowrap"
+            >
+              Deshacer
+            </button>
+            <button
+              onClick={() => setUndoNoAnswer(null)}
+              className="text-gray-400 hover:text-white transition text-lg leading-none px-1"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

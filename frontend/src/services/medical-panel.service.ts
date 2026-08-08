@@ -206,6 +206,13 @@ class MedicalPanelService {
   }
 
   /**
+   * Deshace un "No Contesta" — la cita vuelve a la lista del coach.
+   */
+  async undoNoAnswer(patientId: string): Promise<void> {
+    await this.client.delete(`/api/medical-panel/patients/${patientId}/no-answer`);
+  }
+
+  /**
    * Genera enlace de WhatsApp con mensaje
    */
   generateWhatsAppLink(phone: string, message: string): string {

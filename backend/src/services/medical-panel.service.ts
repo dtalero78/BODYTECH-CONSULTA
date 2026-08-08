@@ -424,6 +424,36 @@ class MedicalPanelService {
   }
 
   /**
+   * Deshace un "No Contesta" — la cita vuelve a la lista del coach.
+   *
+   * Existe porque marcar era IRREVERSIBLE desde la interfaz: un toque de más
+   * borraba al afiliado de la lista y la única salida era reprogramar la cita
+   * (que la mueve de fecha) o un UPDATE a mano en producción. Limpia los DOS
+   * campos, igual que el reagendamiento: el panel oculta por `pvEstado` y el
+   * calendario del coordinador lee `atendido` — dejar uno colgado deja la cita
+   * a medio camino.
+   *
+   * Solo aplica a citas SIN atender: una consulta ya realizada no se "des-marca".
+   */
+  async undoPatientNoAnswer(patientId: string): Promise<boolean> {
+    try {
+      const result = await postgresService.query(
+        `UPDATE "HistoriaClinica"
+         SET "pvEstado" = NULL, "atendido" = 'PENDIENTE'
+         WHERE "_id" = $1
+           AND "fechaConsulta" IS NULL
+         RETURNING "_id"`,
+        [patientId]
+      );
+
+      return result !== null && result.length > 0;
+    } catch (error) {
+      console.error('❌ Error deshaciendo el "No Contesta" en PostgreSQL:', error);
+      return false;
+    }
+  }
+
+  /**
    * Obtiene detalles completos de un paciente
    */
   async getPatientDetails(documento: string, sedes?: string[]): Promise<PatientDetails | null> {

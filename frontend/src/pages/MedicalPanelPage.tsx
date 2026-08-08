@@ -71,6 +71,99 @@ const speakText = (text: string) => {
   }
 };
 
+/**
+ * Control secundario "No contesta" de la tarjeta del afiliado.
+ *
+ * Nace de un incidente real: el botón era gemelo de "Atender" (misma grilla, 8px
+ * de separación, mismo ancho en móvil) y marcaba de una, sin vuelta atrás. Tres
+ * guardas, de menor a mayor fuerza:
+ *
+ *  1. Jerarquía — es un enlace gris debajo de "Atender", no un botón par.
+ *  2. Hora — antes de la hora agendada NO deja marcar; explica por qué.
+ *  3. Confirmación — dos pasos en línea, sin modal.
+ *
+ * La hora se evalúa EN EL CLIC, no al renderizar: así no hace falta un timer que
+ * refresque la tarjeta cuando llega la hora, y el dato siempre está al día.
+ */
+function NoContestaAccion({
+  patientId,
+  nombre,
+  fechaAtencion,
+  onConfirmar,
+}: {
+  patientId: string;
+  nombre: string;
+  fechaAtencion: Date | string;
+  onConfirmar: (patientId: string, nombre: string) => void;
+}) {
+  const [paso, setPaso] = useState<'idle' | 'confirmar' | 'antesDeHora'>('idle');
+  const [horaCita, setHoraCita] = useState('');
+
+  const alTocar = () => {
+    const t = new Date(fechaAtencion).getTime();
+    if (Number.isFinite(t) && Date.now() < t) {
+      setHoraCita(
+        new Date(t).toLocaleTimeString('es-CO', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'America/Bogota',
+        })
+      );
+      setPaso('antesDeHora');
+      return;
+    }
+    setPaso('confirmar');
+  };
+
+  if (paso === 'antesDeHora') {
+    return (
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        <span className="text-amber-400 text-[11px] md:text-xs text-right">
+          Aún no es la hora de la consulta ({horaCita}).
+        </span>
+        <button
+          onClick={() => setPaso('idle')}
+          className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
+        >
+          Entendido
+        </button>
+      </div>
+    );
+  }
+
+  if (paso === 'confirmar') {
+    return (
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
+        <button
+          onClick={() => {
+            setPaso('idle');
+            onConfirmar(patientId, nombre);
+          }}
+          className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
+        >
+          Sí, marcar
+        </button>
+        <button
+          onClick={() => setPaso('idle')}
+          className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
+        >
+          Cancelar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={alTocar}
+      className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
+    >
+      No contesta
+    </button>
+  );
+}
+
 export function MedicalPanelPage() {
   const queryClient = useQueryClient();
   const [medicoCode, setMedicoCode] = useState('');
@@ -97,7 +190,6 @@ export function MedicalPanelPage() {
   // "Atender" (misma grilla, 8px) y un toque de más borraba al afiliado de la
   // lista sin vuelta atrás. Estos dos estados sostienen el paso de confirmación
   // y el "Deshacer" posterior.
-  const [confirmingNoAnswer, setConfirmingNoAnswer] = useState<string | null>(null);
   const [undoNoAnswer, setUndoNoAnswer] = useState<{ id: string; nombre: string } | null>(null);
   const [connectedPatients, setConnectedPatients] = useState<Set<string>>(new Set());
   const [patientRooms, setPatientRooms] = useState<{ [patientId: string]: string }>({});
@@ -346,7 +438,6 @@ export function MedicalPanelPage() {
   };
 
   const handleNoAnswer = async (patientId: string, nombre = 'El afiliado') => {
-    setConfirmingNoAnswer(null);
     try {
       await medicalPanelService.markAsNoAnswer(patientId);
       setCollapsedItems({ ...collapsedItems, [patientId]: true });
@@ -1015,33 +1106,13 @@ export function MedicalPanelPage() {
                         )}
                       </button>
 
-                      {/* "No Contesta" ya NO es par de "Atender": era un botón gemelo a 8px de
-                          distancia y en móvil ocupaban el mismo ancho, así que un toque de más
-                          cancelaba la cita. Ahora es secundario, va debajo y pide confirmación. */}
-                      {confirmingNoAnswer === searchResult._id ? (
-                        <div className="flex items-center justify-end gap-2 flex-wrap">
-                          <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
-                          <button
-                            onClick={() => handleNoAnswer(searchResult._id, searchResult.primerNombre)}
-                            className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
-                          >
-                            Sí, marcar
-                          </button>
-                          <button
-                            onClick={() => setConfirmingNoAnswer(null)}
-                            className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmingNoAnswer(searchResult._id)}
-                          className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
-                        >
-                          No contesta
-                        </button>
-                      )}
+                      {/* Secundario, con guarda de hora y confirmación (ver NoContestaAccion). */}
+                      <NoContestaAccion
+                        patientId={searchResult._id}
+                        nombre={searchResult.primerNombre}
+                        fechaAtencion={searchResult.fechaAtencion}
+                        onConfirmar={handleNoAnswer}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1249,33 +1320,13 @@ export function MedicalPanelPage() {
                             )}
                           </button>
 
-                          {/* "No Contesta" ya NO es par de "Atender": era un botón gemelo a 8px de
-                              distancia y en móvil ocupaban el mismo ancho, así que un toque de más
-                              cancelaba la cita. Ahora es secundario, va debajo y pide confirmación. */}
-                          {confirmingNoAnswer === patient._id ? (
-                            <div className="flex items-center justify-end gap-2 flex-wrap">
-                              <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
-                              <button
-                                onClick={() => handleNoAnswer(patient._id, patient.primerNombre)}
-                                className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
-                              >
-                                Sí, marcar
-                              </button>
-                              <button
-                                onClick={() => setConfirmingNoAnswer(null)}
-                                className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmingNoAnswer(patient._id)}
-                              className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
-                            >
-                              No contesta
-                            </button>
-                          )}
+                          {/* Secundario, con guarda de hora y confirmación (ver NoContestaAccion). */}
+                          <NoContestaAccion
+                            patientId={patient._id}
+                            nombre={patient.primerNombre}
+                            fechaAtencion={patient.fechaAtencion}
+                            onConfirmar={handleNoAnswer}
+                          />
                         </div>
                       </div>
                     )}

@@ -154,17 +154,6 @@ export default function BodyVibeTechPage() {
     setVista('app');
   }, []);
 
-  /** Arranca un borrador y deja el compositor con el texto ya puesto. */
-  const empezar = useCallback(async (textoInicial = '') => {
-    const app = await bodyvibeService.crearApp();
-    setApps((a) => [app, ...a]);
-    setActivo(app);
-    setVersiones([]);
-    setTurnos([]);
-    setError(null);
-    setPedido(textoInicial);
-    setVista('app');
-  }, []);
 
   const eliminar = useCallback(
     async (id: string) => {
@@ -178,36 +167,85 @@ export default function BodyVibeTechPage() {
     [activo]
   );
 
+  /**
+   * Corre una generación sobre un app concreto. El historial va por parámetro y
+   * no leído del estado: quien acaba de crear el app lo llama en el mismo
+   * tick, cuando `turnos` todavía tiene lo del app anterior.
+   */
+  const correrGeneracion = useCallback(
+    async (app: App, texto: string, historial: { pedido: string; titulo: string }[]) => {
+      setGenerando(true);
+      setError(null);
+      setAvance(null);
+
+      const r = await bodyvibeService.generar(app.id, texto, historial, setAvance);
+
+      if (r.ok) {
+        setActivo(r.app);
+        setPedido('');
+        setTurnos((t) => [
+          ...t,
+          { pedido: texto, titulo: r.app.titulo, notas: r.notas, costoUsd: r.costoUsd },
+        ]);
+        setApps((a) => a.map((x) => (x.id === r.app.id ? r.app : x)));
+        setVersiones(await bodyvibeService.versiones(app.id));
+        recargarCabecera();
+      } else {
+        setError(r.mensaje);
+      }
+
+      setGenerando(false);
+      setAvance(null);
+      return r.ok;
+    },
+    [recargarCabecera]
+  );
+
+  /**
+   * Crea el borrador y arranca a construir de una.
+   *
+   * Antes el borrador nacía al ENTRAR al compositor, con lo cual cada visita
+   * que no terminaba en nada dejaba una «App sin título» vacía en la lista.
+   * Ahora nace cuando hay algo que construir, y si esa primera generación falla
+   * se lo lleva consigo: un app sin una sola línea de código no es un borrador,
+   * es basura con nombre.
+   */
+  const empezar = useCallback(
+    async (textoInicial = '') => {
+      const texto = textoInicial.trim();
+      if (!texto || generando) return;
+
+      const app = await bodyvibeService.crearApp();
+      setApps((a) => [app, ...a]);
+      setActivo(app);
+      setVersiones([]);
+      setTurnos([]);
+      setError(null);
+      setPedido('');
+      setVista('app');
+
+      const ok = await correrGeneracion(app, texto, []);
+      if (ok) return;
+
+      // Se devuelve al compositor con lo que había escrito, para que pueda
+      // reintentar sin volver a redactarlo.
+      await bodyvibeService.eliminarApp(app.id).catch(() => undefined);
+      setApps((a) => a.filter((x) => x.id !== app.id));
+      setActivo(null);
+      setPedido(texto);
+      setVista('construir');
+    },
+    [generando, correrGeneracion]
+  );
+
   const generar = useCallback(async () => {
     if (!activo || !pedido.trim() || generando) return;
-    setGenerando(true);
-    setError(null);
-    setAvance(null);
-
-    const texto = pedido.trim();
-    const r = await bodyvibeService.generar(
-      activo.id,
-      texto,
-      turnos.map((t) => ({ pedido: t.pedido, titulo: t.titulo })),
-      setAvance
+    await correrGeneracion(
+      activo,
+      pedido.trim(),
+      turnos.map((t) => ({ pedido: t.pedido, titulo: t.titulo }))
     );
-
-    if (!r.ok) {
-      setError(r.mensaje);
-    } else {
-      setActivo(r.app);
-      setPedido('');
-      setTurnos((t) => [
-        ...t,
-        { pedido: texto, titulo: r.app.titulo, notas: r.notas, costoUsd: r.costoUsd },
-      ]);
-      setApps((a) => a.map((x) => (x.id === r.app.id ? r.app : x)));
-      setVersiones(await bodyvibeService.versiones(activo.id));
-      recargarCabecera();
-    }
-    setGenerando(false);
-    setAvance(null);
-  }, [activo, pedido, generando, turnos, recargarCabecera]);
+  }, [activo, pedido, generando, turnos, correrGeneracion]);
 
   const restaurar = useCallback(
     async (version: number) => {

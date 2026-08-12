@@ -164,24 +164,78 @@ class BodyVibeService {
     return (await this.client.post(`/api/bodyvibe/apps/${id}/restaurar`, { version })).data;
   }
 
+  /**
+   * Genera (o modifica) un app.
+   *
+   * Por dentro son dos pasos: el servidor arranca el trabajo y responde al
+   * instante, y acá se pregunta cada pocos segundos hasta que termina. Antes
+   * era una sola petición abierta durante minutos, y el balanceador la cortaba:
+   * el navegador se quedaba sin respuesta mientras la generación seguía
+   * corriendo del otro lado y se cobraba igual.
+   */
   async generar(
     id: string,
     pedido: string,
     historial: { pedido: string; titulo: string }[]
-  ): Promise<{ ok: true; app: App; notas: string; uso: UsoGeneracion } | { ok: false; mensaje: string; code?: string }> {
+  ): Promise<
+    | { ok: true; app: App; notas: string; costoUsd: number | null }
+    | { ok: false; mensaje: string; code?: string }
+  > {
+    let jobId: number;
     try {
-      const r = await this.client.post(`/api/bodyvibe/apps/${id}/generar`, { pedido, historial });
-      return r.data;
+      const r = await this.client.post(
+        `/api/bodyvibe/apps/${id}/generar`,
+        { pedido, historial },
+        { timeout: 20_000 }
+      );
+      if (!r.data?.ok) return { ok: false, mensaje: r.data?.mensaje ?? 'No se pudo iniciar.' };
+      jobId = r.data.id;
     } catch (e: any) {
-      // El backend devuelve el motivo con forma estable incluso en 429/502; se
-      // prefiere ese mensaje al genérico de axios, que no le dice nada a nadie.
       const datos = e?.response?.data;
       return {
         ok: false,
-        mensaje: datos?.mensaje ?? 'No se pudo generar el app. Intentalo de nuevo.',
+        // Sin respuesta del servidor no hay `mensaje` que mostrar; se dice eso
+        // en vez de "intentalo de nuevo", que no le sirve a nadie.
+        mensaje:
+          datos?.mensaje ??
+          (e?.response
+            ? `El servidor respondió ${e.response.status} sin explicación.`
+            : 'No hubo respuesta del servidor al iniciar la generación.'),
         code: datos?.code,
       };
     }
+
+    // Un intervalo corto al principio (a veces termina rápido) y más espaciado
+    // después, para no golpear el servidor durante minutos.
+    const inicio = Date.now();
+    const LIMITE_MS = 8 * 60_000;
+    let espera = 2_000;
+
+    while (Date.now() - inicio < LIMITE_MS) {
+      await new Promise((r) => setTimeout(r, espera));
+      espera = Math.min(espera + 1_000, 6_000);
+
+      try {
+        const e = (await this.client.get(`/api/bodyvibe/generaciones/${jobId}`, { timeout: 20_000 }))
+          .data;
+
+        if (e.estado === 'listo' && e.app) {
+          return { ok: true, app: e.app, notas: e.notas ?? '', costoUsd: e.costoUsd ?? null };
+        }
+        if (e.estado === 'error') {
+          return { ok: false, mensaje: e.mensaje ?? 'La generación falló.' };
+        }
+      } catch {
+        // Un tropiezo de red no cancela el trabajo: sigue corriendo del lado
+        // del servidor, así que se vuelve a preguntar.
+      }
+    }
+
+    return {
+      ok: false,
+      mensaje:
+        'La generación se pasó de ocho minutos. Puede haber terminado igual — revisá las versiones del app antes de volver a pedirla, para no pagarla dos veces.',
+    };
   }
 
   // -- Apariencia --------------------------------------------------------------

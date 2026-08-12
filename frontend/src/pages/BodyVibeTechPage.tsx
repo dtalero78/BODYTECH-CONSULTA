@@ -18,7 +18,6 @@ import bodyvibeService, {
   App,
   EstadoBodyVibe,
   EstadoGasto,
-  UsoGeneracion,
   VersionApp,
 } from '../services/bodyvibe.service';
 
@@ -26,7 +25,7 @@ interface Turno {
   pedido: string;
   titulo: string;
   notas?: string;
-  uso?: UsoGeneracion;
+  costoUsd?: number | null;
 }
 
 const dinero = (usd: number) => `USD ${usd.toFixed(2)}`;
@@ -109,7 +108,7 @@ export default function BodyVibeTechPage() {
     } else {
       setActivo(r.app);
       setPedido('');
-      setTurnos((t) => [...t, { pedido: texto, titulo: r.app.titulo, notas: r.notas, uso: r.uso }]);
+      setTurnos((t) => [...t, { pedido: texto, titulo: r.app.titulo, notas: r.notas, costoUsd: r.costoUsd }]);
       setApps((a) => a.map((x) => (x.id === r.app.id ? r.app : x)));
       setVersiones(await bodyvibeService.versiones(activo.id));
       recargarCabecera();
@@ -285,10 +284,9 @@ export default function BodyVibeTechPage() {
                     {t.notas && (
                       <p className="mt-1 text-[12.5px] text-zinc-500">{t.notas}</p>
                     )}
-                    {t.uso && (
+                    {typeof t.costoUsd === 'number' && (
                       <p className="mt-1 font-mono text-[10.5px] text-zinc-400">
-                        {dinero(t.uso.costoUsd)}
-                        {t.uso.lecturaCache > 0 && ' · catálogo desde caché'}
+                        {dinero(t.costoUsd)}
                       </p>
                     )}
                   </div>
@@ -325,7 +323,9 @@ export default function BodyVibeTechPage() {
                   </button>
                 </div>
                 <p className="mt-1 text-[11px] text-zinc-400">
-                  Puede tardar un par de minutos. ⌘/Ctrl + Enter también funciona.
+                  {generando
+                    ? 'Construyendo. Puede tardar un par de minutos; el trabajo sigue en el servidor aunque cierres esta pestaña.'
+                    : 'Puede tardar un par de minutos. ⌘/Ctrl + Enter también funciona.'}
                 </p>
               </div>
 

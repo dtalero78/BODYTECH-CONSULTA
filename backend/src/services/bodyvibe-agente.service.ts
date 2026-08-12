@@ -203,36 +203,40 @@ class BodyVibeAgenteService {
       };
     }
 
-    const gasto = await this.estadoDeGasto();
-    if (!gasto.disponible) {
-      return {
-        ok: false,
-        code: 'tope_alcanzado',
-        mensaje:
-          `BodyVibeTech llegó al tope de gasto del mes (USD ${gasto.topeUsd}). ` +
-          'Se reanuda el primero del mes que viene, o subiendo el tope si esto fue inesperado.',
-      };
-    }
-
-    const catalogo = await bodyvibeCatalogoService.comoTexto();
-
-    // El pedido y el código actual son lo único que cambia entre llamadas, así
-    // que van en `messages`, después del prefijo cacheado.
-    const mensajes: Anthropic.MessageParam[] = [];
-
-    for (const h of entrada.historial ?? []) {
-      mensajes.push({ role: 'user', content: h.pedido });
-      mensajes.push({ role: 'assistant', content: `Construí "${h.titulo}".` });
-    }
-
-    const pedidoFinal = entrada.codigoActual
-      ? `Este es el código actual del app:\n\n\`\`\`javascript\n${entrada.codigoActual}\n\`\`\`\n\n` +
-        `Modificalo según este pedido, devolviendo el código COMPLETO ya modificado:\n\n${entrada.pedido}`
-      : entrada.pedido;
-
-    mensajes.push({ role: 'user', content: pedidoFinal });
-
+    // TODO lo que sigue va dentro del try. Cualquier excepción que se escape de
+    // acá termina en el manejador global de errores, que responde
+    // `{success, error}` sin campo `mensaje` — y el usuario ve "Intentalo de
+    // nuevo" sin la menor idea de qué pasó. Ese silencio es peor que la falla.
     try {
+      const gasto = await this.estadoDeGasto();
+      if (!gasto.disponible) {
+        return {
+          ok: false,
+          code: 'tope_alcanzado',
+          mensaje:
+            `BodyVibeTech llegó al tope de gasto del mes (USD ${gasto.topeUsd}). ` +
+            'Se reanuda el primero del mes que viene, o subiendo el tope si esto fue inesperado.',
+        };
+      }
+
+      const catalogo = await bodyvibeCatalogoService.comoTexto();
+
+      // El pedido y el código actual son lo único que cambia entre llamadas,
+      // así que van en `messages`, después del prefijo cacheado.
+      const mensajes: Anthropic.MessageParam[] = [];
+
+      for (const h of entrada.historial ?? []) {
+        mensajes.push({ role: 'user', content: h.pedido });
+        mensajes.push({ role: 'assistant', content: `Construí "${h.titulo}".` });
+      }
+
+      const pedidoFinal = entrada.codigoActual
+        ? `Este es el código actual del app:\n\n\`\`\`javascript\n${entrada.codigoActual}\n\`\`\`\n\n` +
+          `Modificalo según este pedido, devolviendo el código COMPLETO ya modificado:\n\n${entrada.pedido}`
+        : entrada.pedido;
+
+      mensajes.push({ role: 'user', content: pedidoFinal });
+
       // Streaming porque `max_tokens` es alto: una petición sin streaming con
       // este techo se arriesga a que la conexión expire antes de la respuesta.
       const stream = client.messages.stream({

@@ -72,6 +72,7 @@ router.delete('/apps/:id', requireConstructor, bodyvibeController.eliminarApp);
 router.get('/apps/:id/versiones', requireConstructor, bodyvibeController.versionesApp);
 router.post('/apps/:id/restaurar', requireConstructor, bodyvibeController.restaurarApp);
 router.post('/apps/:id/generar', requireConstructor, bodyvibeController.generar);
+router.get('/generaciones/:id', requireConstructor, bodyvibeController.generacion);
 router.post('/apps/:id/publicar', requireConstructor, bodyvibeController.publicar);
 // Despublicar no exige ser el dueño: cualquier admin puede bajar cualquier app
 // (decisión 10). No destruye nada — vuelve a ser borrador de su dueño.

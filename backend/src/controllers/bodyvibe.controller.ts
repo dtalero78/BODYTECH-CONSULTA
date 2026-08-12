@@ -13,6 +13,7 @@ import bodyvibeDbService from '../services/bodyvibe-db.service';
 import bodyvibeCatalogoService from '../services/bodyvibe-catalogo.service';
 import bodyvibeAppsService from '../services/bodyvibe-apps.service';
 import bodyvibeAgenteService from '../services/bodyvibe-agente.service';
+import bodyvibeGeneracionService from '../services/bodyvibe-generacion.service';
 import bodyvibeTemaService, { Densidad } from '../services/bodyvibe-tema.service';
 import { ANCLAJES } from '../services/bodyvibe-anclajes';
 import { puedeConstruir } from '../services/bodyvibe-acceso';
@@ -243,10 +244,12 @@ class BodyVibeController {
   }
 
   /**
-   * POST /api/bodyvibe/apps/:id/generar — el agente construye o modifica.
+   * POST /api/bodyvibe/apps/:id/generar — arranca la generación.
    *
-   * Devuelve el app ya guardado con su versión nueva, para que el frontend no
-   * tenga que volver a pedirlo.
+   * Devuelve al instante con un id de trabajo. Generar tarda entre 30 s y un
+   * par de minutos, y una petición abierta ese tiempo la corta el balanceador:
+   * el navegador se queda sin respuesta mientras del otro lado la generación
+   * sigue corriendo y se cobra igual.
    */
   async generar(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -272,32 +275,42 @@ class BodyVibeController {
         return;
       }
 
-      const app = await bodyvibeAppsService.obtener(req.params.id, sesion.userId);
-      if (!app) {
-        res.status(404).json({ ok: false, mensaje: 'Ese app no existe o no es tuyo.' });
+      const r = await bodyvibeGeneracionService.iniciar(
+        req.params.id,
+        sesion.userId,
+        sesion.email,
+        pedido,
+        Array.isArray(req.body?.historial) ? req.body.historial.slice(-6) : []
+      );
+
+      res.status(r.ok ? 202 : 400).json(r);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/bodyvibe/generaciones/:id — ¿ya terminó? */
+  async generacion(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const sesion = getSession(req);
+      if (!sesion) {
+        res.status(401).json({ ok: false, mensaje: 'Sesión requerida.' });
+        return;
+      }
+      const estado = await bodyvibeGeneracionService.consultar(Number(req.params.id), sesion.userId);
+      if (!estado) {
+        res.status(404).json({ ok: false, mensaje: 'No se encontró esa generación.' });
         return;
       }
 
-      const r = await bodyvibeAgenteService.generar({
-        pedido,
-        codigoActual: app.codigo || null,
-        historial: Array.isArray(req.body?.historial) ? req.body.historial.slice(-6) : [],
-        actor: { usuarioId: sesion.userId, email: sesion.email, appId: app.id },
-      });
+      // Si terminó bien se devuelve el app ya actualizado, para que el
+      // navegador no tenga que pedirlo aparte.
+      const app =
+        estado.estado === 'listo'
+          ? await bodyvibeAppsService.obtener(estado.appId, sesion.userId)
+          : null;
 
-      if (!r.ok) {
-        res.status(r.code === 'tope_alcanzado' ? 429 : 502).json(r);
-        return;
-      }
-
-      const guardado = await bodyvibeAppsService.guardarVersion(app.id, sesion.userId, {
-        titulo: r.resultado.titulo,
-        codigo: r.resultado.codigo,
-        notas: r.resultado.notas,
-        pedido,
-      });
-
-      res.json({ ok: true, app: guardado, notas: r.resultado.notas, uso: r.resultado.uso });
+      res.json({ ...estado, app });
     } catch (error) {
       next(error);
     }

@@ -1396,6 +1396,37 @@ class PostgresService {
            ON vistas_guardadas (usuario_id, tabla_id, updated_at DESC)`
       );
 
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — generaciones en curso.
+      //
+      // Generar tarda entre 30 s y un par de minutos: no cabe en un request
+      // HTTP detrás del balanceador, que corta antes. El navegador arranca el
+      // trabajo, se va, y pregunta por el resultado.
+      //
+      // El estado vive acá y no en memoria: si el contenedor se reinicia a
+      // mitad de una generación, un trabajo en memoria desaparece sin dejar
+      // rastro —y sin dejar constancia de que se pagó.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_generaciones (
+          id          BIGSERIAL PRIMARY KEY,
+          app_id      TEXT NOT NULL,
+          usuario_id  INTEGER NOT NULL,
+          email       TEXT,
+          pedido      TEXT NOT NULL,
+          estado      TEXT NOT NULL DEFAULT 'procesando',
+          mensaje     TEXT,
+          notas       TEXT,
+          costo_usd   NUMERIC(12, 6),
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_generaciones_app
+           ON bodyvibe_generaciones (app_id, created_at DESC)`
+      );
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

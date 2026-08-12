@@ -71,6 +71,28 @@ Ya viene calculado. La sutileza que resuelve: una jornada **abierta** se mide
 contra el último latido, no contra `NOW()`. Si un coach cerró el navegador a
 las 3pm y son las 9pm, su jornada duró hasta las 3pm, no seis horas más.
 
+### Género → `bv_citas.genero`, ya normalizado
+
+**Verificado 2026-08-12.** El dato vive en `HistoriaClinica.genero_biologico` y
+llega como `'F'` / `'M'`, con una fila suelta escrita `'Femenino'`. El estante
+lo entrega ya unificado como `Femenino` / `Masculino`, así que **nunca agrupes
+por la columna cruda**: en un `GROUP BY` sin normalizar, esa fila sale como una
+tercera categoría de un solo paciente.
+
+| Valor        | Citas | Atendidas |
+|--------------|-------|-----------|
+| Femenino     | 1.214 | 702       |
+| Masculino    | 1.039 | 607       |
+| (sin dato)   | 677   | 302       |
+
+**Falta en el 23%.** Todo reporte por género tiene que decirlo — la cifra está
+en `bv_cobertura.con_genero`. Un gráfico de dos barras sobre el 77% de los
+datos, sin esa línea, se ve completo y no lo está.
+
+Existe además `identidad_genero`, y está **vacía en las 2.930 historias**: nadie
+la diligencia. No está en ningún estante, por la misma razón que no hay estante
+de antecedentes.
+
 ### Hora y fecha → siempre Colombia (UTC-5)
 
 El servidor de producción corre en UTC. `bv_citas.fecha_local` ya viene

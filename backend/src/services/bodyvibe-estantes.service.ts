@@ -79,7 +79,7 @@ const GRUPOS_ANTECEDENTES = [
  */
 export const DESCRIPCION_ESTANTES: Record<string, string> = {
   bv_citas:
-    'La agenda. Una fila por cita (que en esta plataforma es una historia clínica). Trae identidad del paciente y estado, NO trae contenido clínico. Usá `estado` para saber si se atendió.',
+    'La agenda. Una fila por cita (que en esta plataforma es una historia clínica). Trae identidad del paciente, género y estado; NO trae contenido clínico. Usá `estado` para saber si se atendió, y `genero` (ya normalizado) para cortar por sexo — consultá antes `bv_cobertura.con_genero`, porque falta en el 23%.',
   bv_cobertura:
     'Qué tan diligenciado está cada campo, por sede y por mes. Consultalo SIEMPRE que vayas a agrupar por un campo con huecos, y mostrá el porcentaje junto al resultado.',
   bv_profesionales: 'Médicos y coaches: sede, rol, especialidad, duración de consulta, si está activo.',
@@ -198,6 +198,23 @@ class BodyVibeEstantesService {
             COALESCE(h."primerApellido",'') || ' ' || COALESCE(h."segundoApellido", '')
           )                                         AS paciente_nombre,
           h."celular"                               AS paciente_celular,
+
+          -- Género. La columna guarda 'F'/'M', pero hay filas escritas de otra
+          -- forma ('Femenino'): en un GROUP BY crudo aparecerían como una
+          -- categoría aparte de un solo paciente. Acá se normalizan las formas
+          -- conocidas y CUALQUIER OTRO VALOR SE DEJA PASAR TAL CUAL — así una
+          -- forma nueva se ve y alguien la corrige, en vez de desaparecer en
+          -- silencio dentro de "sin dato".
+          --
+          -- 677 de 2.930 historias no lo tienen (23%). Todo reporte por género
+          -- debe mostrar esa cobertura: está en bv_cobertura.con_genero.
+          CASE
+            WHEN lower(btrim(h."genero_biologico"::text)) IN ('f','fem','femenino','mujer')
+              THEN 'Femenino'
+            WHEN lower(btrim(h."genero_biologico"::text)) IN ('m','masc','masculino','hombre')
+              THEN 'Masculino'
+            ELSE NULLIF(btrim(h."genero_biologico"::text), '')
+          END                                       AS genero,
           h."link_enviado_at"                       AS link_enviado_at,
 
           -- Criterio del panel médico. Ver la advertencia de arriba.
@@ -294,6 +311,7 @@ class BodyVibeEstantesService {
           EXTRACT(MONTH FROM bv_a_fecha(h."fechaAtencion"::text) AT TIME ZONE 'America/Bogota')::int AS mes,
           COUNT(*)::int                                AS historias,
           COUNT(*) FILTER (WHERE NULLIF(btrim(h."ciudad"), '') IS NOT NULL)::int      AS con_ciudad,
+          COUNT(*) FILTER (WHERE NULLIF(btrim(h."genero_biologico"), '') IS NOT NULL)::int AS con_genero,
           COUNT(*) FILTER (WHERE NULLIF(btrim(h."empresa"), '') IS NOT NULL)::int     AS con_empresa,
           COUNT(*) FILTER (WHERE NULLIF(btrim(h."eps"), '') IS NOT NULL)::int         AS con_eps,
           COUNT(*) FILTER (WHERE NULLIF(btrim(h."celular"), '') IS NOT NULL)::int     AS con_celular,

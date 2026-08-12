@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { Anclaje } from '../components/bodyvibe/Anclaje';
+import bodyvibeService from '../services/bodyvibe.service';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -165,6 +167,17 @@ function NoContestaAccion({
 }
 
 export function MedicalPanelPage() {
+  // Igual que en el sidebar del coordinador: el acceso a Aplicaciones solo
+  // aparece si hay al menos una publicada para esta persona. Un botón que
+  // lleva a una pantalla vacía es peor que no tener botón.
+  const [hayApps, setHayApps] = useState(false);
+  useEffect(() => {
+    bodyvibeService
+      .publicados('sueltos')
+      .then((l) => setHayApps(l.length > 0))
+      .catch(() => setHayApps(false));
+  }, []);
+
   const queryClient = useQueryClient();
   const [medicoCode, setMedicoCode] = useState('');
   const [sedeId, setSedeId] = useState('');
@@ -849,6 +862,16 @@ export function MedicalPanelPage() {
                 <span className="hidden sm:inline">Agendar Cita</span>
                 <span className="sm:hidden">Agendar</span>
               </button>
+              {hayApps && (
+                <button
+                  onClick={() => { window.location.href = '/apps'; }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                  title="Aplicaciones publicadas para vos"
+                >
+                  <span className="hidden sm:inline">Aplicaciones</span>
+                  <span className="sm:hidden">Apps</span>
+                </button>
+              )}
               <button
                 onClick={handleRefresh}
                 disabled={isLoading}
@@ -1395,6 +1418,9 @@ export function MedicalPanelPage() {
           onClose={() => setChatPatient(null)}
         />
       )}
+
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="panel-medico.pie" />
 
       {/* Aviso con "Deshacer". Marcar "No Contesta" no tenía vuelta atrás desde
           la interfaz: el afiliado desaparecía de la lista y la única salida era

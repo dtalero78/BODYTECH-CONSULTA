@@ -18,6 +18,9 @@ import { ReprogramarPage } from './pages/ReprogramarPage';
 import { TerminosPage } from './pages/TerminosPage';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
+import BodyVibeTechPage from './pages/BodyVibeTechPage';
+import AppsPublicadosPage from './pages/AppsPublicadosPage';
+import { TemaBodyVibe } from './components/bodyvibe/TemaBodyVibe';
 import { RequireRole } from './components/RequireRole';
 import { useTorniquete } from './hooks/useTorniquete';
 import { queryClient } from './lib/queryClient';
@@ -71,6 +74,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <TorniqueteHeartbeat />
+        {/* Aplica la apariencia configurada en BodyVibeTech. No pinta nada; se
+            retira sola mientras hay una videollamada activa. */}
+        <TemaBodyVibe />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           {/* Login unificado (RBAC). Las páginas de login viejas redirigen aquí. */}
@@ -156,6 +162,30 @@ function App() {
             element={
               <RequireRole roles={['admin', 'coordinador']}>
                 <CoordinadorPage />
+              </RequireRole>
+            }
+          />
+
+          {/* BodyVibeTech — construcción de apps internos. Solo admin: en esta
+              fase quienes construyen son administradores, y la audiencia se
+              amplía recién con la publicación. */}
+          <Route
+            path="/bodyvibetech"
+            element={
+              <RequireRole roles={['admin']}>
+                <BodyVibeTechPage />
+              </RequireRole>
+            }
+          />
+
+          {/* Donde la audiencia USA los apps publicados. Abierta a todos los
+              roles: quién ve cada app lo decide su audiencia, y eso lo resuelve
+              el backend — la pantalla no decide permisos. */}
+          <Route
+            path="/apps"
+            element={
+              <RequireRole roles={['admin', 'coordinador', 'medico', 'coach', 'auxiliar', 'torre']}>
+                <AppsPublicadosPage />
               </RequireRole>
             }
           />

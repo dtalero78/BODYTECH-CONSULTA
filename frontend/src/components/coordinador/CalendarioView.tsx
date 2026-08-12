@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Anclaje } from '../bodyvibe/Anclaje';
 import {
   ChevronLeft,
   ChevronRight,
@@ -921,6 +922,9 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           showToast({ type: 'success', message: 'Cita agendada correctamente.' });
         }}
       />
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="coordinador.calendario.pie" />
+
     </div>
   );
 }

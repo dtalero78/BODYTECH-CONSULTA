@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Anclaje } from '../components/bodyvibe/Anclaje';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import authService from '../services/auth.service';
@@ -575,6 +576,9 @@ export function OrdenesPage() {
           </div>
         )}
       </div>
+
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="ordenes.pie" />
 
       {/* Modal crear / editar */}
       {modalOrden !== null && (

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { BarraVista, ColumnaVista } from '../vistas/BarraVista';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -181,7 +182,31 @@ interface Props {
   reportCount?: (count: number | null) => void;
 }
 
+const COLUMNAS: ColumnaVista[] = [
+  { id: 'id', label: 'ID / fecha', fija: true },
+  { id: 'afiliado', label: 'Afiliado' },
+  { id: 'medico', label: 'Médico' },
+  { id: 'tipo', label: 'Tipo' },
+  { id: 'atencion', label: 'Atención' },
+  { id: 'estado', label: 'Estado' },
+  { id: 'calidad', label: 'Calidad' },
+  { id: 'documento', label: 'Documento' },
+  { id: 'origen', label: 'Origen' },
+];
+
+const COLUMNAS_POR_DEFECTO = [
+  'id',
+  'afiliado',
+  'medico',
+  'tipo',
+  'atencion',
+  'estado',
+  'calidad',
+];
+
 export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
+  const [columnasVisibles, setColumnasVisibles] = useState<string[]>(COLUMNAS_POR_DEFECTO);
+  const ver = (id: string) => columnasVisibles.includes(id);
   const navigate = useNavigate();
   const [filters, setFilters] = useState({ status: 'all', q: '', from: '', to: '', trepsi: false });
   const [searchInput, setSearchInput] = useState('');
@@ -577,16 +602,34 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <div className="px-[14px] pb-2">
+              <BarraVista
+                tablaId="ordenes"
+                columnas={COLUMNAS}
+                visibles={columnasVisibles}
+                onVisiblesChange={setColumnasVisibles}
+                nombreArchivo="ordenes"
+                filas={ordenes.map((o) => ({
+                  id: ordenCodigo(o),
+                  afiliado: `${o.primerNombre ?? ''} ${o.primerApellido ?? ''}`.trim(),
+                  medico: o.medico ?? '',
+                  tipo: o.tipoExamen ?? '',
+                  atencion: fmtFechaHora(o.fechaAtencion, o.horaAtencion),
+                  estado: (o.atendido || 'PENDIENTE').toUpperCase(),
+                  calidad: '',
+                  documento: o.numeroId ?? '',
+                  origen: isTrepsi(o) ? 'Trepsi' : 'Nativa',
+                }))}
+              />
+            </div>
             <table className="w-full text-[13px]">
               <thead className="bg-[#fcfcfb] border-b border-zinc-200">
                 <tr>
-                  <Th>ID / fecha</Th>
-                  <Th width="26%">Afiliado</Th>
-                  <Th>Médico</Th>
-                  <Th>Tipo</Th>
-                  <Th>Atención</Th>
-                  <Th>Estado</Th>
-                  <Th>Calidad</Th>
+                  {COLUMNAS.filter((c) => ver(c.id)).map((c) => (
+                    <Th key={c.id} width={c.id === 'afiliado' ? '26%' : undefined}>
+                      {c.label}
+                    </Th>
+                  ))}
                   <Th align="right">Acciones</Th>
                 </tr>
               </thead>
@@ -599,6 +642,7 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                       className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors"
                       style={{ height: 58 }}
                     >
+                      {ver('id') && (
                       <td className="px-[14px] py-2.5">
                         <div
                           className="text-[12px] text-zinc-900 font-medium"
@@ -613,6 +657,8 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                           {fmtFechaCorta(o.createdAt) || '—'}
                         </div>
                       </td>
+                      )}
+                      {ver('afiliado') && (
                       <td className="px-[14px] py-2.5">
                         <div className="flex items-center gap-3">
                           <MonoAvatar
@@ -640,6 +686,8 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                           </div>
                         </div>
                       </td>
+                      )}
+                      {ver('medico') && (
                       <td className="px-[14px] py-2.5 text-zinc-700">
                         {(() => {
                           const prof = o.medico ? medicoByCodigo.get(o.medico) : undefined;
@@ -658,20 +706,35 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                           );
                         })()}
                       </td>
-                      <td className="px-[14px] py-2.5 text-zinc-700">
-                        {o.tipoExamen || '—'}
-                      </td>
-                      <td className="px-[14px] py-2.5 tabular-nums text-zinc-700">
-                        {fmtFechaHora(o.fechaAtencion, o.horaAtencion)}
-                      </td>
-                      <td className="px-[14px] py-2.5">
-                        <Pill variant={variant}>
-                          {(o.atendido || 'PENDIENTE').toUpperCase()}
-                        </Pill>
-                      </td>
-                      <td className="px-[14px] py-2.5">
-                        <CalidadCell orden={o} onClick={() => setCalidadTarget(o)} />
-                      </td>
+                      )}
+                      {ver('tipo') && (
+                        <td className="px-[14px] py-2.5 text-zinc-700">{o.tipoExamen || '—'}</td>
+                      )}
+                      {ver('atencion') && (
+                        <td className="px-[14px] py-2.5 tabular-nums text-zinc-700">
+                          {fmtFechaHora(o.fechaAtencion, o.horaAtencion)}
+                        </td>
+                      )}
+                      {ver('estado') && (
+                        <td className="px-[14px] py-2.5">
+                          <Pill variant={variant}>{(o.atendido || 'PENDIENTE').toUpperCase()}</Pill>
+                        </td>
+                      )}
+                      {ver('calidad') && (
+                        <td className="px-[14px] py-2.5">
+                          <CalidadCell orden={o} onClick={() => setCalidadTarget(o)} />
+                        </td>
+                      )}
+                      {ver('documento') && (
+                        <td className="px-[14px] py-2.5 text-zinc-600" style={{ fontFamily: FONT_MONO }}>
+                          {o.numeroId || '—'}
+                        </td>
+                      )}
+                      {ver('origen') && (
+                        <td className="px-[14px] py-2.5 text-zinc-600">
+                          {isTrepsi(o) ? 'Trepsi' : 'Nativa'}
+                        </td>
+                      )}
                       <td className="px-[14px] py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">
                           <button

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { marcarLlamadaActiva } from './bodyvibe/TemaBodyVibe';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { useConsultationRecorder } from '../hooks/useConsultationRecorder';
@@ -26,6 +27,15 @@ interface VideoRoomProps {
 }
 
 export const VideoRoom = ({ identity, roomName, role, historiaId, documento, medicoCode, panelVariant = 'consulta', onLeave }: VideoRoomProps) => {
+
+  // La personalización de apariencia de BodyVibeTech se retira mientras dura la
+  // llamada y vuelve al colgar (decisión 07). Este panel comparte pantalla con
+  // la consulta en vivo: durante esos minutos tiene que verse exactamente como
+  // viene de fábrica.
+  useEffect(() => {
+    marcarLlamadaActiva(true);
+    return () => marcarLlamadaActiva(false);
+  }, []);
   const [isPosturalAnalysisOpen, setIsPosturalAnalysisOpen] = useState(false);
   const [isPanelMaxed, setIsPanelMaxed] = useState(false);
 

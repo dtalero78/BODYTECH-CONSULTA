@@ -33,24 +33,25 @@
  */
 const CAMPO = [
   // Naranja: la base, ocupa todo el borde inferior.
-  'radial-gradient(90% 70% at 50% 112%, #FF8A1F 0%, rgba(255,138,31,0.55) 38%, rgba(255,138,31,0) 78%)',
+  'radial-gradient(105% 62% at 50% 118%, #FF7A00 0%, rgba(255,122,0,0.72) 34%, rgba(255,122,0,0) 76%)',
   // Coral a los costados — el paso del azul al naranja sin pasar por el gris.
-  'radial-gradient(70% 60% at 12% 92%, #FF6B4A 0%, rgba(255,107,74,0.45) 40%, rgba(255,107,74,0) 78%)',
-  'radial-gradient(70% 60% at 88% 96%, #FF7A2E 0%, rgba(255,122,46,0.45) 40%, rgba(255,122,46,0) 78%)',
+  'radial-gradient(62% 46% at 8% 98%, #FF5C36 0%, rgba(255,92,54,0.55) 38%, rgba(255,92,54,0) 76%)',
+  'radial-gradient(62% 46% at 92% 100%, #FF8A2B 0%, rgba(255,138,43,0.55) 38%, rgba(255,138,43,0) 76%)',
   // Violeta: el otro extremo del mismo puente, del lado del azul.
-  'radial-gradient(60% 55% at 18% 68%, #7C6BF5 0%, rgba(124,107,245,0.40) 42%, rgba(124,107,245,0) 80%)',
-  // Azul, la mancha grande del medio.
-  'radial-gradient(95% 65% at 55% 62%, #4F72F5 0%, rgba(79,114,245,0.50) 40%, rgba(79,114,245,0) 80%)',
-  'radial-gradient(60% 50% at 84% 60%, #6E8BFF 0%, rgba(110,139,255,0.40) 42%, rgba(110,139,255,0) 80%)',
+  'radial-gradient(58% 40% at 16% 82%, #8B5CF6 0%, rgba(139,92,246,0.50) 40%, rgba(139,92,246,0) 78%)',
+  'radial-gradient(52% 34% at 86% 78%, #A855F7 0%, rgba(168,85,247,0.42) 42%, rgba(168,85,247,0) 78%)',
+  // Azul, la mancha grande. Va bien abajo: si sube, le pisa el título y el
+  // texto queda leyéndose sobre color en vez de sobre blanco.
+  'radial-gradient(88% 46% at 50% 76%, #3B6BF5 0%, rgba(59,107,245,0.68) 38%, rgba(59,107,245,0) 78%)',
 ].join(', ');
 
 export function FondoDegradado() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <div className="absolute inset-0 opacity-90 dark:opacity-45" style={{ background: CAMPO }} />
+      <div className="absolute inset-0 dark:opacity-50" style={{ background: CAMPO }} />
       {/* El color arranca a media altura; arriba el fondo queda limpio para que
           el título y la barra de sesión se lean sin competencia. */}
-      <div className="absolute inset-x-0 top-0 h-[46%] bg-gradient-to-b from-white via-white/85 to-transparent dark:from-zinc-950 dark:via-zinc-950/85" />
+      <div className="absolute inset-x-0 top-0 h-[58%] bg-gradient-to-b from-white via-white/90 to-transparent dark:from-zinc-950 dark:via-zinc-950/90" />
     </div>
   );
 }

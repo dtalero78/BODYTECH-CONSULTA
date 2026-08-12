@@ -493,9 +493,11 @@ export default function BodyVibeTechPage() {
             <FondoDegradado />
 
             {/* Todo lo de acá abajo va sobre el degradado, no debajo. */}
-            <div className="relative w-full max-w-2xl">
-              <div className="mb-7 flex items-center justify-center gap-3">{marca(true)}</div>
+            {/* La marca va arriba a la izquierda, como encabezado, no en el
+                centro: el protagonista de la portada es el título. */}
+            <div className="absolute left-5 top-4 flex items-center gap-2.5">{marca(false)}</div>
 
+            <div className="relative w-full max-w-2xl">
               <h1 className="text-center text-[42px] font-semibold leading-[1.1] tracking-tight sm:text-[52px]">
                 Crea algo muy BodyTech
               </h1>

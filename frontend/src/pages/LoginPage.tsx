@@ -4,6 +4,21 @@ import authService, { homePathForRole, passwordLoginErrorMessage } from '../serv
 import { FONT_INTER } from '../components/coordinador/_tokens';
 
 /**
+ * A dónde ir después de entrar. Normalmente el inicio que le toca al rol, pero
+ * si llegó acá porque se le venció la sesión (`?volver=…`), se lo devuelve a la
+ * pantalla que estaba mirando.
+ *
+ * Solo se aceptan rutas de esta misma app: una que empiece por `/` y no por
+ * `//`. Sin ese filtro, `?volver=//otro-sitio` convierte al login en un
+ * trampolín para mandar gente a donde sea con nuestra dirección en la barra.
+ */
+function destinoTrasEntrar(rol: Parameters<typeof homePathForRole>[0]): string {
+  const pedido = new URLSearchParams(window.location.search).get('volver');
+  if (pedido && pedido.startsWith('/') && !pedido.startsWith('//')) return pedido;
+  return homePathForRole(rol);
+}
+
+/**
  * Login unificado (RBAC) — email + contraseña + "recordarme". Al autenticar,
  * redirige según el rol (homePathForRole). Es la única puerta de entrada;
  * las páginas viejas de login redirigen aquí.
@@ -18,7 +33,7 @@ export function LoginPage() {
 
   useEffect(() => {
     const user = authService.getUser();
-    if (user) navigate(homePathForRole(user.role), { replace: true });
+    if (user) navigate(destinoTrasEntrar(user.role), { replace: true });
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -37,7 +52,7 @@ export function LoginPage() {
         window.location.href = `${outcome.redirectUrl}#t=${encodeURIComponent(outcome.token)}`;
         return;
       }
-      navigate(homePathForRole(outcome.user.role), { replace: true });
+      navigate(destinoTrasEntrar(outcome.user.role), { replace: true });
     } catch (err) {
       setError(passwordLoginErrorMessage(err));
     } finally {

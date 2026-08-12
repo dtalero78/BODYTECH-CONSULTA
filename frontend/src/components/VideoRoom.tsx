@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { marcarLlamadaActiva } from './bodyvibe/TemaBodyVibe';
+import { marcarLlamadaActiva } from '../state/llamadaActiva';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { useConsultationRecorder } from '../hooks/useConsultationRecorder';

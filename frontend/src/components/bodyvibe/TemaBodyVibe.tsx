@@ -17,29 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import bodyvibeService from '../../services/bodyvibe.service';
-
-/**
- * Cuántas videollamadas hay montadas ahora mismo. Es un contador y no un
- * booleano porque durante una transición pueden convivir dos brevemente; con un
- * booleano, la que se desmonta apagaría la bandera de la que sigue viva.
- */
-let llamadasActivas = 0;
-const suscriptores = new Set<(enLlamada: boolean) => void>();
-
-function avisar() {
-  const enLlamada = llamadasActivas > 0;
-  suscriptores.forEach((f) => f(enLlamada));
-}
-
-/** Lo llama `VideoRoom` al montarse y al desmontarse. */
-export function marcarLlamadaActiva(activa: boolean): void {
-  llamadasActivas = Math.max(0, llamadasActivas + (activa ? 1 : -1));
-  avisar();
-}
-
-export function hayLlamadaActiva(): boolean {
-  return llamadasActivas > 0;
-}
+import { hayLlamadaActiva, suscribirLlamada } from '../../state/llamadaActiva';
 
 const DENSIDAD_ESCALA: Record<string, string> = {
   compacta: '0.92',
@@ -57,12 +35,7 @@ export function TemaBodyVibe() {
   const [densidad, setDensidad] = useState<string>('normal');
 
   // Suscripción al estado de llamada.
-  useEffect(() => {
-    suscriptores.add(setEnLlamada);
-    return () => {
-      suscriptores.delete(setEnLlamada);
-    };
-  }, []);
+  useEffect(() => suscribirLlamada(setEnLlamada), []);
 
   // Carga de la apariencia vigente. Si algo falla —o BodyVibeTech está
   // apagado— no se aplica nada y la plataforma se ve como siempre. El silencio

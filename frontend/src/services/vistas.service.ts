@@ -3,6 +3,7 @@
 // ============================================================================
 
 import axios, { AxiosInstance } from 'axios';
+import { instalarCierreDeSesion } from './sesion-vencida';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -28,6 +29,8 @@ class VistasService {
       if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     });
+
+    instalarCierreDeSesion(this.client);
   }
 
   async listar(tablaId: string): Promise<VistaGuardada[]> {

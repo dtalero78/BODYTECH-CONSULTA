@@ -420,7 +420,7 @@ export default function BodyVibeTechPage() {
         {vista === 'construir' && (
           <div className="mx-auto max-w-2xl px-6 pt-24">
             <h1 className="mb-6 text-center text-[26px] font-semibold tracking-tight">
-              Cuéntenos qué necesita ver.
+              Cuéntanos qué quieres construir
             </h1>
 
             {/* Quien llegó desde «Modificar» ya eligió pantalla. Se lo recuerda

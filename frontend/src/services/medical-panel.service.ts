@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { instalarCierreDeSesion } from './sesion-vencida';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -143,6 +144,8 @@ class MedicalPanelService {
       }
       return config;
     });
+
+    instalarCierreDeSesion(this.client);
   }
 
   /**

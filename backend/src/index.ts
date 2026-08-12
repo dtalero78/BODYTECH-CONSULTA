@@ -244,6 +244,7 @@ import usuariosService from './services/usuarios.service';
 import { chimeRecordingService } from './services/video/chime-recording.service';
 import bodyvibeDbService from './services/bodyvibe-db.service';
 import bodyvibeEstantesService from './services/bodyvibe-estantes.service';
+import bodyvibeLecturaService from './services/bodyvibe-lectura.service';
 import bodyvibeCatalogoService from './services/bodyvibe-catalogo.service';
 postgresService
   .runMigrations()
@@ -255,7 +256,11 @@ postgresService
   .then(() => bodyvibeDbService.ensureReadOnlyRole())
   // Los estantes solo se construyen si el rol quedó listo: sin rol al que
   // otorgarle SELECT, crear las vistas no sirve de nada.
-  .then((rolListo) => (rolListo ? bodyvibeEstantesService.ensureEstantes() : undefined))
+  // Lectura general sobre las tablas base. Va ANTES de los estantes: empieza
+  // revocando todo, y en Postgres "ALL TABLES" incluye las vistas — si corriera
+  // después, se llevaría por delante los permisos de los estantes.
+  .then((rolListo) => (rolListo ? bodyvibeLecturaService.otorgarLecturaGeneral() : undefined))
+  .then(() => bodyvibeEstantesService.ensureEstantes())
   // Rehacer los estantes cambia sus columnas: el catálogo en memoria queda
   // viejo y describiría una vista que ya no es.
   .then(() => bodyvibeCatalogoService.invalidar())

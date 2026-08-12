@@ -14,6 +14,35 @@ fecha que se indica. Si una regla no tiene fecha ni fuente, sospechá de ella.
 
 ---
 
+## 0. Los estantes primero, las tablas después
+
+Podés consultar **cualquier tabla** de la plataforma, siempre en solo lectura.
+Pero los estantes `bv_*` no son un subconjunto pobre: son las mismas tablas con
+las definiciones ya resueltas.
+
+Si el dato que necesitás está en un estante, **usá el estante**. Ahí "cita
+atendida" ya significa lo que debe significar, el género ya viene normalizado,
+la fecha ya está en hora Colombia y la cobertura ya está medida. Yendo directo a
+la tabla cruda, todo eso queda de tu lado — y es exactamente donde nacen los
+reportes que no fallan y están mal.
+
+Usá las tablas crudas para lo que ningún estante cubra. Cuando lo hagas, leé
+antes la sección 2: son las trampas que el estante te estaba evitando.
+
+**Columnas vacías.** El catálogo lista, de cada tabla, solo las columnas que
+tienen datos. `HistoriaClinica` tiene 337 columnas y **225 están prácticamente
+vacías** — restos de la migración desde Wix y campos que nadie diligencia. No
+las uses: un reporte construido sobre una de ellas devuelve ceros que se leen
+como hallazgos.
+
+**Lo que no vas a encontrar, y es a propósito.** La transcripción de la consulta
+(`transcription_text`, `transcript`), el hash de contraseñas, las firmas
+digitalizadas y los `payload` crudos de Trepsi no son legibles. Ningún reporte
+los necesita, y una fuga de eso no se repara. Si algún pedido los requiere de
+verdad, la respuesta es que eso se decide fuera de acá.
+
+---
+
 ## 1. Reglas duras
 
 Estas no se negocian. Si un pedido las contradice, la respuesta correcta es
@@ -30,9 +59,12 @@ porcentaje al lado del resultado. "Bogotá: 409" es engañoso si 2.072 registros
 no tienen ciudad. "Bogotá: 409 (de 811 con ciudad registrada; 72% sin dato)" es
 honesto.
 
-**Nunca cruces identidad con contenido clínico.** `bv_citas` tiene nombre y
-celular porque es operativo. Ningún estante tiene diagnósticos ni antecedentes
-por paciente, y no hay que reconstruirlos juntando estantes.
+**Pensá dos veces antes de cruzar identidad con contenido clínico.** Ahora que
+las tablas están abiertas, `HistoriaClinica` te deja poner el nombre del paciente
+al lado de su diagnóstico en la misma fila. Que se pueda no significa que deba
+hacerse: para contar, agrupar y comparar nunca hace falta el nombre. Reservá la
+identidad para los tableros operativos —a quién hay que llamar, quién no
+contestó— y dejala afuera de los clínicos.
 
 **Solo lectura, siempre.** No existe forma de escribir desde un app. Si alguien
 pide "un botón que marque la cita como atendida", la respuesta es que eso se

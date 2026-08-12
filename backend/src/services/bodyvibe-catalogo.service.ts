@@ -27,6 +27,7 @@
 import postgresService from './postgres.service';
 import { DESCRIPCION_ESTANTES } from './bodyvibe-estantes.service';
 import { ANCLAJES } from './bodyvibe-anclajes';
+import { COLUMNAS_VEDADAS, tablaVedada } from './bodyvibe-lectura.service';
 import CATALOGO_GENERADO from '../generated/catalogo.generado';
 
 export interface ColumnaEstante {
@@ -40,8 +41,17 @@ export interface EstanteCatalogo {
   columnas: ColumnaEstante[];
 }
 
+export interface TablaCatalogo {
+  nombre: string;
+  columnas: ColumnaEstante[];
+  /** Columnas que existen pero están (casi) siempre vacías. */
+  sinDatos: string[];
+}
+
 export interface Catalogo {
   estantes: EstanteCatalogo[];
+  /** Todas las tablas base legibles, con sus columnas. */
+  tablas: TablaCatalogo[];
   pantallas: typeof CATALOGO_GENERADO.pantallas;
   api: typeof CATALOGO_GENERADO.api;
   visual: typeof CATALOGO_GENERADO.visual;
@@ -119,8 +129,41 @@ class BodyVibeCatalogoService {
       if (!e.descripcion) faltantes.push(`descripción de ${e.nombre}`);
     }
 
+    // Todas las tablas base. `pg_stats.null_frac` dice qué proporción de cada
+    // columna es nula, y sale de las estadísticas ya calculadas: no hay que
+    // recorrer las tablas. Con eso se separan las columnas que existen de las
+    // que además tienen datos — una distinción que importa mucho acá, porque
+    // 225 de las 337 de HistoriaClinica están prácticamente vacías y un reporte
+    // construido sobre ellas devuelve ceros que parecen hallazgos.
+    const columnasBase = await postgresService.query(
+      `SELECT c.table_name, c.column_name, c.data_type,
+              COALESCE(s.null_frac, 0) AS null_frac
+         FROM information_schema.columns c
+         JOIN pg_class pc ON pc.relname = c.table_name
+         JOIN pg_namespace pn ON pn.oid = pc.relnamespace AND pn.nspname = 'public'
+         LEFT JOIN pg_stats s
+           ON s.schemaname = 'public' AND s.tablename = c.table_name
+          AND s.attname = c.column_name
+        WHERE c.table_schema = 'public' AND pc.relkind = 'r'
+        ORDER BY c.table_name, c.ordinal_position`
+    );
+
+    const porTabla = new Map<string, TablaCatalogo>();
+    for (const f of columnasBase ?? []) {
+      const tabla: string = f.table_name;
+      if (tablaVedada(tabla)) continue;
+      if ((COLUMNAS_VEDADAS[tabla] ?? []).includes(f.column_name)) continue;
+
+      const entrada = porTabla.get(tabla) ?? { nombre: tabla, columnas: [], sinDatos: [] };
+      if (Number(f.null_frac) >= 0.999) entrada.sinDatos.push(f.column_name);
+      else entrada.columnas.push({ nombre: f.column_name, tipo: tipoLegible(f.data_type) });
+      porTabla.set(tabla, entrada);
+    }
+    const tablas = [...porTabla.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     this.cache = {
       estantes,
+      tablas,
       pantallas: CATALOGO_GENERADO.pantallas,
       api: CATALOGO_GENERADO.api,
       visual: CATALOGO_GENERADO.visual,
@@ -161,6 +204,29 @@ class BodyVibeCatalogoService {
       p.push('| columna | tipo |');
       p.push('|---|---|');
       for (const col of e.columnas) p.push(`| ${col.nombre} | ${col.tipo} |`);
+      p.push('');
+    }
+
+    // -- Tablas base ---------------------------------------------------------
+    p.push('## Las tablas completas\n');
+    p.push(
+      'Además de los estantes podés consultar cualquier tabla de la plataforma,\n' +
+        'siempre en solo lectura. Los estantes siguen siendo el camino preferido:\n' +
+        'traen resueltas las definiciones que acá tenés que resolver vos (qué cuenta\n' +
+        'como cita atendida, cómo se normaliza el género, la hora de Colombia).\n' +
+        'Usá las tablas crudas para lo que el estante no cubra.\n'
+    );
+    p.push(
+      'De cada tabla se listan las columnas QUE TIENEN DATOS. Las que existen pero\n' +
+        'están siempre vacías se cuentan al final y **no hay que usarlas**: un reporte\n' +
+        'construido sobre una columna vacía devuelve ceros que se leen como hallazgos.\n'
+    );
+
+    for (const t of c.tablas) {
+      const vacías = t.sinDatos.length ? ` · ${t.sinDatos.length} sin datos` : '';
+      p.push(`**${t.nombre}** (${t.columnas.length} con datos${vacías})`);
+      p.push('');
+      p.push(t.columnas.map((col) => `\`${col.nombre}\` ${col.tipo}`).join(' · ') || '_(ninguna con datos)_');
       p.push('');
     }
 

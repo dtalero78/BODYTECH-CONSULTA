@@ -237,10 +237,15 @@ export default function BodyVibeTechPage() {
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
           <button
-            onClick={() => setVista('construir')}
-            className="w-full rounded-md bg-zinc-900 px-2.5 py-1.5 text-[13px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            onClick={() => {
+              setActivo(null);
+              setPedido('');
+              setVista('construir');
+            }}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-zinc-900 px-2.5 py-1.5 text-[13px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
           >
-            Construir algo nuevo
+            <span className="text-[15px] leading-none">+</span>
+            Nuevo
           </button>
 
           {apps.length > 0 && (

@@ -23,8 +23,10 @@ import { useCallback, useEffect, useState } from 'react';
 import AppSandbox, { ResultadoConsulta } from '../components/bodyvibe/AppSandbox';
 import { Bandeja, Publicar } from '../components/bodyvibe/PanelPublicacion';
 import { SelectorApariencia } from '../components/bodyvibe/SelectorApariencia';
+import VentanaAvance from '../components/bodyvibe/VentanaAvance';
 import bodyvibeService, {
   AnclajeDisponible,
+  AvanceGeneracion,
   App,
   EstadoBodyVibe,
   EstadoGasto,
@@ -107,6 +109,7 @@ export default function BodyVibeTechPage() {
 
   const [pedido, setPedido] = useState('');
   const [generando, setGenerando] = useState(false);
+  const [avance, setAvance] = useState<AvanceGeneracion | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [estado, setEstado] = useState<EstadoBodyVibe | null>(null);
@@ -179,12 +182,14 @@ export default function BodyVibeTechPage() {
     if (!activo || !pedido.trim() || generando) return;
     setGenerando(true);
     setError(null);
+    setAvance(null);
 
     const texto = pedido.trim();
     const r = await bodyvibeService.generar(
       activo.id,
       texto,
-      turnos.map((t) => ({ pedido: t.pedido, titulo: t.titulo }))
+      turnos.map((t) => ({ pedido: t.pedido, titulo: t.titulo })),
+      setAvance
     );
 
     if (!r.ok) {
@@ -201,6 +206,7 @@ export default function BodyVibeTechPage() {
       recargarCabecera();
     }
     setGenerando(false);
+    setAvance(null);
   }, [activo, pedido, generando, turnos, recargarCabecera]);
 
   const restaurar = useCallback(
@@ -652,9 +658,11 @@ export default function BodyVibeTechPage() {
               </div>
               <p className="mt-1 text-[11px] text-zinc-400">
                 {generando
-                  ? 'Puede tardar un par de minutos; el trabajo sigue en el servidor aunque cierre la pestaña.'
+                  ? 'El trabajo sigue en el servidor aunque cierre la pestaña.'
                   : '⌘/Ctrl + Enter también funciona.'}
               </p>
+
+              {generando && <VentanaAvance avance={avance} />}
             </div>
 
             {versiones.length > 1 && (

@@ -22,6 +22,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import postgresService from './postgres.service';
 import bodyvibeCatalogoService from './bodyvibe-catalogo.service';
+import { AvanceGeneracion, leerAvance } from '../helpers/bodyvibe-progreso';
 
 /** Decisión 11: el modelo potente. */
 const MODELO = 'claude-opus-5';
@@ -146,6 +147,12 @@ export interface PedidoAgente {
   /** Pedidos anteriores de esta misma sesión, del más viejo al más nuevo. */
   historial?: { pedido: string; titulo: string }[];
   actor: { usuarioId?: number | null; email?: string | null; appId?: string | null };
+  /**
+   * Se llama mientras el modelo escribe, para que el navegador pueda mostrar
+   * que algo está pasando. Es opcional y su costo lo decide quien la pasa: acá
+   * se invoca en CADA fragmento, sin acumular ni esperar.
+   */
+  onAvance?: (avance: AvanceGeneracion) => void;
 }
 
 export interface RespuestaAgente {
@@ -260,6 +267,19 @@ class BodyVibeAgenteService {
         messages: mensajes,
         output_config: { format: { type: 'json_schema', schema: ESQUEMA_RESPUESTA } },
       });
+
+      // El SDK entrega el acumulado en cada fragmento, así que no hay que
+      // pegar los pedazos a mano. Lo que llega es el JSON del esquema a medio
+      // escribir; `leerAvance` saca de ahí el título y el código.
+      if (entrada.onAvance) {
+        stream.on('text', (_delta, acumulado) => {
+          try {
+            entrada.onAvance!(leerAvance(acumulado));
+          } catch {
+            // Mostrar el avance no puede ser motivo de que falle la generación.
+          }
+        });
+      }
 
       const respuesta = await stream.finalMessage();
 

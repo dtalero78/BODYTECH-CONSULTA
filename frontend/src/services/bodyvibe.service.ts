@@ -81,6 +81,14 @@ export interface AppPublicado {
   anclaje: string | null;
 }
 
+/** Lo que el modelo lleva escrito, para la ventana de progreso. */
+export interface AvanceGeneracion {
+  titulo: string | null;
+  cola: string;
+  lineas: number;
+  caracteres: number;
+}
+
 export interface AnclajeDisponible {
   id: string;
   pantalla: string;
@@ -179,7 +187,9 @@ class BodyVibeService {
   async generar(
     id: string,
     pedido: string,
-    historial: { pedido: string; titulo: string }[]
+    historial: { pedido: string; titulo: string }[],
+    /** Se llama en cada consulta con lo que el modelo lleva escrito. */
+    onAvance?: (avance: AvanceGeneracion | null) => void
   ): Promise<
     | { ok: true; app: App; notas: string; costoUsd: number | null }
     | { ok: false; mensaje: string; code?: string }
@@ -216,11 +226,15 @@ class BodyVibeService {
 
     while (Date.now() - inicio < LIMITE_MS) {
       await new Promise((r) => setTimeout(r, espera));
-      espera = Math.min(espera + 1_000, 6_000);
+      // Se espacia, pero no tanto como antes: ahora cada consulta trae el
+      // avance, y con seis segundos entre una y otra la ventana se ve trabada.
+      espera = Math.min(espera + 500, 3_000);
 
       try {
         const e = (await this.client.get(`/api/bodyvibe/generaciones/${jobId}`, { timeout: 20_000 }))
           .data;
+
+        onAvance?.(e.avance ?? null);
 
         if (e.estado === 'listo' && e.app) {
           return { ok: true, app: e.app, notas: e.notas ?? '', costoUsd: e.costoUsd ?? null };

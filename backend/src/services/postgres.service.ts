@@ -1422,6 +1422,12 @@ class PostgresService {
           updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
+      // Lo que el modelo lleva escrito, para la ventanita de progreso. Va
+      // aparte de las columnas de resultado porque es efímero: se pisa cada
+      // segundo y deja de importar apenas la generación termina.
+      await this.query(
+        `ALTER TABLE bodyvibe_generaciones ADD COLUMN IF NOT EXISTS avance JSONB`
+      );
       await this.query(
         `CREATE INDEX IF NOT EXISTS idx_bv_generaciones_app
            ON bodyvibe_generaciones (app_id, created_at DESC)`

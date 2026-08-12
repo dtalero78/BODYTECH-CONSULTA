@@ -24,6 +24,7 @@
 import postgresService from './postgres.service';
 import bodyvibeAgenteService from './bodyvibe-agente.service';
 import bodyvibeAppsService from './bodyvibe-apps.service';
+import { AvanceGeneracion } from '../helpers/bodyvibe-progreso';
 
 /**
  * A partir de acá se da por muerto un trabajo que sigue diciendo "procesando".
@@ -31,6 +32,14 @@ import bodyvibeAppsService from './bodyvibe-apps.service';
  * indefinidamente por algo que ya nadie está haciendo.
  */
 const MINUTOS_ABANDONO = 10;
+
+/**
+ * Cada cuánto se baja el avance a la base. El modelo emite fragmentos varias
+ * veces por segundo; escribir cada uno serían cientos de UPDATE por generación
+ * para algo que el navegador consulta cada dos segundos. Con este intervalo la
+ * ventanita se ve fluida y la base ni se entera.
+ */
+const MS_ENTRE_AVANCES = 1_200;
 
 export interface EstadoGeneracion {
   id: number;
@@ -40,6 +49,8 @@ export interface EstadoGeneracion {
   notas: string | null;
   costoUsd: number | null;
   iniciadaAt: string;
+  /** Lo que el modelo lleva escrito. Solo mientras `estado` es 'procesando'. */
+  avance: AvanceGeneracion | null;
 }
 
 class BodyVibeGeneracionService {
@@ -90,12 +101,35 @@ class BodyVibeGeneracionService {
     historial: { pedido: string; titulo: string }[],
     codigoActual: string | null
   ): Promise<void> {
+    // El avance se guarda con freno: llega mucho más seguido de lo que nadie
+    // puede leer, y cada escritura es un viaje a la base.
+    let ultimoGuardado = 0;
+    let guardando = false;
+    const guardarAvance = (avance: AvanceGeneracion) => {
+      const ahora = Date.now();
+      if (guardando || ahora - ultimoGuardado < MS_ENTRE_AVANCES) return;
+      ultimoGuardado = ahora;
+      guardando = true;
+      // Sin `await`: esto corre dentro del streaming y frenarlo por un UPDATE
+      // sería pagar latencia de base en el camino de la generación.
+      postgresService
+        .query(`UPDATE bodyvibe_generaciones SET avance = $2 WHERE id = $1`, [
+          id,
+          JSON.stringify(avance),
+        ])
+        .catch(() => undefined)
+        .finally(() => {
+          guardando = false;
+        });
+    };
+
     try {
       const r = await bodyvibeAgenteService.generar({
         pedido,
         codigoActual,
         historial,
         actor: { usuarioId, email, appId },
+        onAvance: guardarAvance,
       });
 
       if (!r.ok) {
@@ -138,7 +172,7 @@ class BodyVibeGeneracionService {
 
   async consultar(id: number, usuarioId: number): Promise<EstadoGeneracion | null> {
     const filas = await postgresService.query(
-      `SELECT id, app_id, estado, mensaje, notas, costo_usd, created_at, updated_at
+      `SELECT id, app_id, estado, mensaje, notas, costo_usd, avance, created_at, updated_at
          FROM bodyvibe_generaciones
         WHERE id = $1 AND usuario_id = $2`,
       [id, usuarioId]
@@ -162,6 +196,8 @@ class BodyVibeGeneracionService {
       notas: f.notas ?? null,
       costoUsd: f.costo_usd !== null && f.costo_usd !== undefined ? Number(f.costo_usd) : null,
       iniciadaAt: new Date(f.created_at).toISOString(),
+      // Terminado, el avance sobra: lo que importa pasa a ser el app mismo.
+      avance: f.estado === 'procesando' && !viejo ? (f.avance ?? null) : null,
     };
   }
 }

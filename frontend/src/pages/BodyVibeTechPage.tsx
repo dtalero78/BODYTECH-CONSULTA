@@ -6,9 +6,13 @@
 // recinto, la conversación, las versiones, la publicación y la apariencia:
 // cinco cosas compitiendo por atención cuando en realidad se hace una a la vez.
 //
-// Ahora hay dos puertas al entrar —construir algo nuevo, o modificar lo que ya
-// existe— y el resto vive en la barra lateral, a un clic. Es la misma estructura
-// que se acordó al diseñar el producto; la interfaz la había perdido.
+// La portada es solo eso: el logo y dos puertas —construir algo nuevo, o
+// modificar lo que ya existe—. Sin barra lateral, porque antes de elegir una
+// puerta la barra no tiene nada útil que ofrecer y compite con la decisión.
+//
+// Elegida la puerta aparece la barra, y ahí viven las dos decisiones que
+// acompañan al pedido: «Diseño» (cómo se ve) y «A quién» (quién lo ve y en qué
+// pantalla queda). Debajo, el historial de borradores y los interruptores.
 //
 // Todo arranca vacío y crece: sin borradores no hay lista, sin solicitudes no
 // hay bandeja. Una pantalla que muestra secciones vacías enseña opciones que no
@@ -34,7 +38,14 @@ interface Turno {
 }
 
 /** Qué ocupa la zona principal. */
-type Vista = 'inicio' | 'construir' | 'modificar' | 'app' | 'apariencia' | 'aprobaciones';
+type Vista =
+  | 'inicio'
+  | 'construir'
+  | 'modificar'
+  | 'app'
+  | 'diseno'
+  | 'aquien'
+  | 'aprobaciones';
 
 const dinero = (usd: number) => `USD ${usd.toFixed(2)}`;
 
@@ -71,7 +82,6 @@ export default function BodyVibeTechPage() {
   const [versiones, setVersiones] = useState<VersionApp[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [vista, setVista] = useState<Vista>('inicio');
-  const [mostrarPublicar, setMostrarPublicar] = useState(false);
 
   const [pedido, setPedido] = useState('');
   const [generando, setGenerando] = useState(false);
@@ -111,7 +121,6 @@ export default function BodyVibeTechPage() {
   const abrir = useCallback(async (id: string) => {
     setError(null);
     setTurnos([]);
-    setMostrarPublicar(false);
     setPedido('');
     const app = await bodyvibeService.obtenerApp(id);
     setActivo(app);
@@ -127,7 +136,6 @@ export default function BodyVibeTechPage() {
     setVersiones([]);
     setTurnos([]);
     setError(null);
-    setMostrarPublicar(false);
     setPedido(textoInicial);
     setVista('app');
   }, []);
@@ -211,88 +219,108 @@ export default function BodyVibeTechPage() {
         : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
     }`;
 
+  /**
+   * La portada va sola: sin barra lateral, el logo centrado y las dos puertas.
+   * La barra aparece recién cuando ya se eligió una — antes no tiene nada útil
+   * que ofrecer y solo estorba la decisión.
+   */
+  const conBarra = vista !== 'inicio';
+
+  const marca = (grande: boolean) => (
+    <>
+      {/* El archivo original es negro sobre fondo blanco opaco; acá se usa la
+          versión en silueta con alfa, así `invert` lo vuelve blanco en modo
+          oscuro sin dejar un recuadro. */}
+      <img
+        src="/logo-bodytech.png"
+        alt="Bodytech"
+        className={`${grande ? 'h-12' : 'h-9'} w-auto shrink-0 dark:invert`}
+      />
+      <span
+        className={`${grande ? 'text-[20px]' : 'text-[15px]'} font-semibold leading-tight tracking-tight`}
+      >
+        BodyVibeTech
+      </span>
+    </>
+  );
+
   return (
     <div className="flex min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       {/* ================= Barra lateral ================= */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
-        <button
-          onClick={() => {
-            setActivo(null);
-            setVista('inicio');
-          }}
-          className="flex items-center gap-2.5 px-4 py-5 text-left"
-        >
-          {/* El archivo original es negro sobre fondo blanco opaco; acá se usa
-              la versión en silueta con alfa, así `invert` lo vuelve blanco en
-              modo oscuro sin dejar un recuadro. */}
-          <img
-            src="/logo-bodytech.png"
-            alt="Bodytech"
-            className="h-9 w-auto shrink-0 dark:invert"
-          />
-          <span className="text-[15px] font-semibold leading-tight tracking-tight">
-            BodyVibeTech
-          </span>
-        </button>
-
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+      {conBarra && (
+        <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
           <button
             onClick={() => {
               setActivo(null);
-              setPedido('');
-              setVista('construir');
+              setVista('inicio');
             }}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-zinc-900 px-2.5 py-1.5 text-[13px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            className="flex items-center gap-2.5 px-4 py-5 text-left"
           >
-            <span className="text-[15px] leading-none">+</span>
-            Nuevo
+            {marca(false)}
           </button>
 
-          {apps.length > 0 && (
-            <div>
-              <span className="mb-1.5 block px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                Mis borradores
-              </span>
-              <ul className="space-y-0.5">
-                {apps.map((a) => (
-                  <li key={a.id} className="group flex items-center gap-1">
+          <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+            {/* Las dos decisiones que no son el pedido: cómo se ve y para quién
+                es. Todo lo demás de esta barra es historial o interruptores. */}
+            <div className="space-y-0.5">
+              <button
+                onClick={() => setVista('diseno')}
+                className={itemLateral(vista === 'diseno')}
+              >
+                Diseño
+              </button>
+              <button
+                onClick={() => setVista('aquien')}
+                className={itemLateral(vista === 'aquien')}
+              >
+                A quién
+              </button>
+            </div>
+
+            {apps.length > 0 && (
+              <div>
+                <span className="mb-1.5 block px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                  Mis borradores
+                </span>
+                <ul className="space-y-0.5">
+                  <li>
                     <button
-                      onClick={() => abrir(a.id)}
-                      className={`${itemLateral(activo?.id === a.id && vista === 'app')} min-w-0 flex-1 truncate`}
+                      onClick={() => {
+                        setActivo(null);
+                        setPedido('');
+                        setVista('construir');
+                      }}
+                      className={`${itemLateral(vista === 'construir' && !activo)} text-zinc-500`}
                     >
-                      {a.titulo}
-                      {a.estado === 'publicado' && (
-                        <span className="ml-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                          &#9679;
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => eliminar(a.id)}
-                      aria-label={`Eliminar ${a.titulo}`}
-                      className="shrink-0 px-1 text-[11px] text-zinc-300 opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100 dark:text-zinc-600"
-                    >
-                      &#10005;
+                      + Nuevo
                     </button>
                   </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                  {apps.map((a) => (
+                    <li key={a.id} className="group flex items-center gap-1">
+                      <button
+                        onClick={() => abrir(a.id)}
+                        className={`${itemLateral(activo?.id === a.id && vista === 'app')} min-w-0 flex-1 truncate`}
+                      >
+                        {a.titulo}
+                        {a.estado === 'publicado' && (
+                          <span className="ml-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                            &#9679;
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => eliminar(a.id)}
+                        aria-label={`Eliminar ${a.titulo}`}
+                        className="shrink-0 px-1 text-[11px] text-zinc-300 opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100 dark:text-zinc-600"
+                      >
+                        &#10005;
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-          <div>
-            <span className="mb-1.5 block px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-              La plataforma
-            </span>
-            <button
-              onClick={() => {
-                setActivo(null);
-                setVista('apariencia');
-              }}
-              className={itemLateral(vista === 'apariencia')}
-            >
-              Apariencia
-            </button>
             {/* La bandeja solo existe si hay algo que aprobar, y solo para quien
                 aprueba: al resto la API le devuelve vacío. */}
             {pendientes > 0 && (
@@ -309,26 +337,26 @@ export default function BodyVibeTechPage() {
                 </span>
               </button>
             )}
-          </div>
-        </nav>
+          </nav>
 
-        <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          {gasto && (
-            <div className="mb-2 font-mono text-[10.5px] text-zinc-400">
-              {dinero(gasto.gastadoUsd)} de {dinero(gasto.topeUsd)} este mes
-            </div>
-          )}
-          <button
-            onClick={alternarInterruptor}
-            className="flex w-full items-center gap-2 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${apagado ? 'bg-amber-500' : 'bg-emerald-500'}`}
-            />
-            {apagado ? 'Apagado · encender' : 'Encendido · apagar todo'}
-          </button>
-        </div>
-      </aside>
+          <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            {gasto && (
+              <div className="mb-2 font-mono text-[10.5px] text-zinc-400">
+                {dinero(gasto.gastadoUsd)} de {dinero(gasto.topeUsd)} este mes
+              </div>
+            )}
+            <button
+              onClick={alternarInterruptor}
+              className="flex w-full items-center gap-2 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${apagado ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              />
+              {apagado ? 'Apagado · encender' : 'Encendido · apagar todo'}
+            </button>
+          </div>
+        </aside>
+      )}
 
       {/* ================= Zona principal ================= */}
       <main className="min-w-0 flex-1">
@@ -341,9 +369,7 @@ export default function BodyVibeTechPage() {
 
         {vista === 'inicio' && (
           <div className="mx-auto max-w-2xl px-6 pt-24">
-            <h1 className="mb-8 text-center text-[26px] font-semibold tracking-tight">
-              ¿Qué quiere hacer?
-            </h1>
+            <div className="mb-12 flex items-center justify-center gap-3">{marca(true)}</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 onClick={() => setVista('construir')}
@@ -360,7 +386,7 @@ export default function BodyVibeTechPage() {
               >
                 <span className="block text-[15px] font-medium">Modificar lo que ya existe</span>
                 <span className="mt-1 block text-[13px] text-zinc-500">
-                  Cambiar cómo se ve la plataforma, o agregar algo dentro de una pantalla actual.
+                  Agregar algo dentro de una pantalla actual de la plataforma.
                 </span>
               </button>
             </div>
@@ -413,30 +439,46 @@ export default function BodyVibeTechPage() {
 
         {vista === 'modificar' && (
           <div className="mx-auto max-w-2xl px-6 py-12">
-            <h1 className="mb-6 text-[22px] font-semibold tracking-tight">
-              Modificar lo que ya existe
+            <h1 className="mb-2 text-[22px] font-semibold tracking-tight">
+              Agregar algo a una pantalla
             </h1>
-            <SelectorApariencia />
-            <div className="mt-6 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-              <span className="block text-[14px] font-medium">Agregar algo a una pantalla</span>
-              <p className="mt-1 text-[12.5px] text-zinc-500">
-                Se construye igual que cualquier app; al publicarlo usted elige en qué pantalla queda
-                incrustado, al pie.
-              </p>
-              <button
-                onClick={() => setVista('construir')}
-                className="mt-3 rounded-md border border-zinc-200 px-3 py-1.5 text-[12.5px] dark:border-zinc-700"
-              >
-                Empezar
-              </button>
-            </div>
+            <p className="text-[13px] text-zinc-500">
+              Se construye igual que cualquier app; al publicarlo usted elige en qué pantalla de la
+              plataforma queda incrustado, al pie. Si lo que quiere es cambiar cómo se ve la
+              plataforma, eso está en «Diseño».
+            </p>
+            <button
+              onClick={() => setVista('construir')}
+              className="mt-4 rounded-md bg-zinc-900 px-4 py-2 text-[13px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              Empezar
+            </button>
           </div>
         )}
 
-        {vista === 'apariencia' && (
+        {vista === 'diseno' && (
           <div className="mx-auto max-w-2xl px-6 py-12">
-            <h1 className="mb-2 text-[22px] font-semibold tracking-tight">Apariencia</h1>
+            <h1 className="mb-2 text-[22px] font-semibold tracking-tight">Diseño</h1>
             <SelectorApariencia />
+          </div>
+        )}
+
+        {vista === 'aquien' && (
+          <div className="mx-auto max-w-2xl px-6 py-12">
+            <h1 className="mb-2 text-[22px] font-semibold tracking-tight">A quién</h1>
+            {activo ? (
+              <>
+                <p className="mb-4 text-[13px] text-zinc-500">
+                  Quién va a ver «{activo.titulo}», y en qué pantalla queda.
+                </p>
+                <Publicar app={activo} onCambio={refrescarActivo} />
+              </>
+            ) : (
+              <p className="text-[13px] text-zinc-500">
+                Primero construya algo. Cuando exista, acá elige quién lo ve —qué roles, qué
+                sedes— y en qué pantalla queda incrustado.
+              </p>
+            )}
           </div>
         )}
 
@@ -453,10 +495,10 @@ export default function BodyVibeTechPage() {
               <h1 className="text-[19px] font-semibold tracking-tight">{activo.titulo}</h1>
               <span className="font-mono text-[11px] text-zinc-400">v{activo.version}</span>
               <button
-                onClick={() => setMostrarPublicar((v) => !v)}
+                onClick={() => setVista('aquien')}
                 className="ml-auto rounded-md border border-zinc-200 px-3 py-1.5 text-[12.5px] dark:border-zinc-700"
               >
-                {activo.estado === 'publicado' ? 'Publicación · en vivo' : 'Publicar'}
+                {activo.estado === 'publicado' ? 'Publicado · en vivo' : 'A quién'}
               </button>
             </div>
 
@@ -469,8 +511,6 @@ export default function BodyVibeTechPage() {
                 </p>
               )}
             </div>
-
-            {mostrarPublicar && <Publicar app={activo} onCambio={refrescarActivo} />}
 
             <div className="mt-5">
               {turnos.map((t, i) => (
@@ -554,3 +594,4 @@ export default function BodyVibeTechPage() {
     </div>
   );
 }
+

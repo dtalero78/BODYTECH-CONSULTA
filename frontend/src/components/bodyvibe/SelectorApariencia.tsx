@@ -23,6 +23,12 @@ export function SelectorApariencia() {
   const [autor, setAutor] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  /**
+   * Distingue «todavía no llegó» de «no se pudo traer». Importa porque este
+   * componente pasó a ser una pantalla entera: sin esto, un fallo de red deja
+   * un título solo sobre blanco y parece que la sección no existiera.
+   */
+  const [carga, setCarga] = useState<'cargando' | 'listo' | 'fallo'>('cargando');
 
   const cargar = useCallback(async () => {
     try {
@@ -31,8 +37,9 @@ export function SelectorApariencia() {
       setPaleta(t.paleta);
       setDensidad(t.densidad);
       setAutor(t.actualizadoPor);
+      setCarga('listo');
     } catch {
-      /* Sin apariencia configurada se muestra la de fábrica. */
+      setCarga('fallo');
     }
   }, []);
 
@@ -57,7 +64,15 @@ export function SelectorApariencia() {
     setGuardando(false);
   };
 
-  if (paletas.length === 0) return null;
+  if (paletas.length === 0) {
+    return (
+      <p className="text-[13px] text-zinc-500">
+        {carga === 'fallo'
+          ? 'No se pudo traer la apariencia. Recargue la pantalla; si sigue igual, el servidor no está respondiendo.'
+          : 'Cargando…'}
+      </p>
+    );
+  }
 
   return (
     <section>

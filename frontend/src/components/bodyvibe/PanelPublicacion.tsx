@@ -27,12 +27,18 @@ const ROLES = [
 interface PropsPublicar {
   app: App;
   onCambio: () => void;
+  /**
+   * Anclaje elegido ANTES de construir, en «Modificar lo que ya existe». Quien
+   * entra por ahí ya dijo en qué pantalla quiere su app; volver a preguntárselo
+   * acá es hacerle repetir una decisión que ya tomó.
+   */
+  anclajeInicial?: string | null;
 }
 
-export function Publicar({ app, onCambio }: PropsPublicar) {
+export function Publicar({ app, onCambio, anclajeInicial = null }: PropsPublicar) {
   const [roles, setRoles] = useState<string[]>([]);
   const [alcance, setAlcance] = useState<'sede' | 'global'>('sede');
-  const [anclaje, setAnclaje] = useState<string | null>(null);
+  const [anclaje, setAnclaje] = useState<string | null>(anclajeInicial);
   const [anclajes, setAnclajes] = useState<AnclajeDisponible[]>([]);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);

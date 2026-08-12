@@ -24,6 +24,7 @@ import AppSandbox, { ResultadoConsulta } from '../components/bodyvibe/AppSandbox
 import { Bandeja, Publicar } from '../components/bodyvibe/PanelPublicacion';
 import { SelectorApariencia } from '../components/bodyvibe/SelectorApariencia';
 import bodyvibeService, {
+  AnclajeDisponible,
   App,
   EstadoBodyVibe,
   EstadoGasto,
@@ -54,6 +55,19 @@ const dinero = (usd: number) => `USD ${usd.toFixed(2)}`;
  * contra la base— porque una sugerencia que devuelve "no hay datos" enseña que
  * la herramienta no sirve justo en el primer intento.
  */
+/**
+ * Cómo se llama cada pantalla para alguien que no lee rutas. El mapa es
+ * explícito y no derivado del nombre del anclaje: si mañana alguien agrega un
+ * anclaje con otro formato de nombre, acá cae en la ruta cruda —feo pero
+ * cierto— en vez de mostrar un título recortado al azar.
+ */
+const NOMBRE_PANTALLA: Record<string, string> = {
+  '/panel-medico': 'Panel médico',
+  '/coordinador': 'Coordinador',
+  '/ordenes': 'Órdenes',
+  '/historias': 'Historias clínicas',
+};
+
 const SUGERENCIAS = [
   {
     titulo: 'Citas atendidas por sede, mes a mes',
@@ -83,6 +97,14 @@ export default function BodyVibeTechPage() {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [vista, setVista] = useState<Vista>('inicio');
 
+  const [anclajes, setAnclajes] = useState<AnclajeDisponible[]>([]);
+  /**
+   * Dónde va a quedar lo que se está construyendo. Se elige en «Modificar lo
+   * que ya existe» y viaja hasta la publicación; sin esto, quien entra por esa
+   * puerta tendría que volver a decir la misma pantalla al final.
+   */
+  const [anclajePreferido, setAnclajePreferido] = useState<string | null>(null);
+
   const [pedido, setPedido] = useState('');
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +130,7 @@ export default function BodyVibeTechPage() {
 
   useEffect(() => {
     bodyvibeService.listarApps().then(setApps).catch(() => setApps([]));
+    bodyvibeService.anclajes().then(setAnclajes).catch(() => setAnclajes([]));
     recargarCabecera();
   }, [recargarCabecera]);
 
@@ -288,6 +311,7 @@ export default function BodyVibeTechPage() {
                       onClick={() => {
                         setActivo(null);
                         setPedido('');
+                        setAnclajePreferido(null);
                         setVista('construir');
                       }}
                       className={`${itemLateral(vista === 'construir' && !activo)} text-zinc-500`}
@@ -399,6 +423,24 @@ export default function BodyVibeTechPage() {
               Cuéntenos qué necesita ver.
             </h1>
 
+            {/* Quien llegó desde «Modificar» ya eligió pantalla. Se lo recuerda
+                acá —y se lo deja soltar— para que no escriba a ciegas creyendo
+                que está haciendo un app suelto. */}
+            {anclajePreferido && (
+              <p className="mb-3 flex items-center gap-2 text-[12.5px] text-zinc-500">
+                Va a quedar en:{' '}
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  {anclajes.find((a) => a.id === anclajePreferido)?.nombre ?? anclajePreferido}
+                </span>
+                <button
+                  onClick={() => setAnclajePreferido(null)}
+                  className="text-[11.5px] underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  quitar
+                </button>
+              </p>
+            )}
+
             <textarea
               value={pedido}
               onChange={(e) => setPedido(e.target.value)}
@@ -440,19 +482,70 @@ export default function BodyVibeTechPage() {
         {vista === 'modificar' && (
           <div className="mx-auto max-w-2xl px-6 py-12">
             <h1 className="mb-2 text-[22px] font-semibold tracking-tight">
-              Agregar algo a una pantalla
+              Modificar lo que ya existe
             </h1>
-            <p className="text-[13px] text-zinc-500">
-              Se construye igual que cualquier app; al publicarlo usted elige en qué pantalla de la
-              plataforma queda incrustado, al pie. Si lo que quiere es cambiar cómo se ve la
-              plataforma, eso está en «Diseño».
+            <p className="mb-8 text-[13px] text-zinc-500">
+              Estas son las pantallas de la plataforma donde se puede agregar algo. Elija una y
+              cuéntenos qué quiere que muestre; al publicarlo queda incrustado ahí, al pie.
             </p>
-            <button
-              onClick={() => setVista('construir')}
-              className="mt-4 rounded-md bg-zinc-900 px-4 py-2 text-[13px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              Empezar
-            </button>
+
+            {/* La lista sale del catálogo de anclajes del servidor, no de una
+                copia acá: son puntos que alguien instaló a mano en el código, y
+                una lista paralela se desactualiza el día que se agrega uno. */}
+            {anclajes.length === 0 ? (
+              <p className="text-[13px] text-zinc-500">
+                No se pudo traer la lista de pantallas. Recargue; si sigue igual, el servidor no
+                está respondiendo.
+              </p>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(
+                  anclajes.reduce<Record<string, AnclajeDisponible[]>>((mapa, a) => {
+                    (mapa[a.pantalla] ??= []).push(a);
+                    return mapa;
+                  }, {})
+                ).map(([pantalla, puntos]) => (
+                  <div key={pantalla}>
+                    <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                      {NOMBRE_PANTALLA[pantalla] ?? pantalla}
+                    </span>
+                    <ul className="space-y-1">
+                      {puntos.map((a) => (
+                        <li key={a.id}>
+                          <button
+                            onClick={() => {
+                              setAnclajePreferido(a.id);
+                              setPedido('');
+                              setVista('construir');
+                            }}
+                            className="w-full rounded-lg border border-zinc-200 p-3.5 text-left transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+                          >
+                            <span className="block text-[14px] font-medium">{a.nombre}</span>
+                            <span className="mt-0.5 block text-[12.5px] text-zinc-500">
+                              {a.descripcion}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-8 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+              <p className="text-[13px] text-zinc-500">
+                ¿Lo que quiere cambiar es cómo se ve la plataforma —los colores, el espaciado— y no
+                lo que muestra?{' '}
+                <button
+                  onClick={() => setVista('diseno')}
+                  className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  Eso está en Diseño
+                </button>
+                .
+              </p>
+            </div>
           </div>
         )}
 
@@ -471,7 +564,11 @@ export default function BodyVibeTechPage() {
                 <p className="mb-4 text-[13px] text-zinc-500">
                   Quién va a ver «{activo.titulo}», y en qué pantalla queda.
                 </p>
-                <Publicar app={activo} onCambio={refrescarActivo} />
+                <Publicar
+                  app={activo}
+                  onCambio={refrescarActivo}
+                  anclajeInicial={anclajePreferido}
+                />
               </>
             ) : (
               <p className="text-[13px] text-zinc-500">

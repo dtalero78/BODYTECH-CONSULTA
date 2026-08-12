@@ -42,6 +42,7 @@ import { optionalAuthMiddleware } from './middleware/auth.middleware';
 import { sessionContextMiddleware, requireRole } from './middleware/rbac.middleware';
 import { torniquetePresenceMiddleware } from './middleware/torniquete-presence.middleware';
 import { auditMiddleware } from './middleware/audit.middleware';
+import { bodyvibeLogMiddleware } from './middleware/bodyvibe-log.middleware';
 
 const app: Application = express();
 // Detrás del proxy de DigitalOcean App Platform: confiar en X-Forwarded-For
@@ -198,7 +199,10 @@ app.use('/api/admin/audit', requireRole('admin', 'coordinador'), auditRoutes);
 // BodyVibeTech — construcción, publicación y consumo de apps internos.
 // El RBAC va por ruta dentro del router: construir es de `admin`, pero VER un
 // app publicado lo hace su audiencia, que no es administradora.
-app.use('/api/bodyvibe', bodyvibeRoutes);
+// El registro va ANTES del router: si algo falla en el gating, igual queda
+// constancia de que la petición llegó — que fue justo lo que no se pudo saber
+// la primera vez que esto falló en producción.
+app.use('/api/bodyvibe', bodyvibeLogMiddleware, bodyvibeRoutes);
 
 // "Mi vista" de cualquier tabla. Cualquier sesión válida: recordar cómo querés
 // ver una tabla no es un privilegio.

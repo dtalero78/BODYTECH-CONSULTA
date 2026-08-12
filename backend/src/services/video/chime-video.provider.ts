@@ -37,6 +37,11 @@ const CONTROL_REGION = process.env.CHIME_CONTROL_REGION || 'us-east-1';
 const MEDIA_REGION = process.env.CHIME_MEDIA_REGION || process.env.AWS_REGION || 'us-east-1';
 // Cuánto tiempo se bloquea el reingreso a una sala tras finalizarla.
 const ENDED_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+// Etiqueta de asignación de costos. BODYTECH y BSL comparten la cuenta AWS
+// 448962739796; sin esto el gasto de Chime (reuniones + grabación) llega a
+// Billing como un solo bloque y no se puede separar por app. Debe existir la
+// etiqueta 'app' activa en Billing → Cost allocation tags.
+const APP_TAG = process.env.COST_APP_TAG || 'bodytech-consulta';
 
 function sanitizeExternalUserId(identity: string): string {
   // Chime ExternalUserId: 2-64 chars. Recortamos y garantizamos longitud mínima.
@@ -167,6 +172,7 @@ export class ChimeVideoProvider implements IVideoProvider {
         ClientRequestToken: crypto.randomUUID(),
         MediaRegion: MEDIA_REGION,
         ExternalMeetingId: roomName.slice(0, 64),
+        Tags: [{ Key: 'app', Value: APP_TAG }],
       })
     );
     if (!created.Meeting) throw new Error('Chime CreateMeeting no devolvió Meeting');

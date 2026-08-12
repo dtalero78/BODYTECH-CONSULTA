@@ -30,6 +30,10 @@ const ENABLED = (process.env.RECORDINGS_ENABLED || 'false').toLowerCase() === 't
 // Ajustable por env sin redeploy. NO afecta lo clínico (el autollenado usa la vía
 // del navegador, corre en todas las consultas); solo limita la muestra de /calidad.
 const MUESTRAS_POR_MES = Math.max(1, Number(process.env.CHIME_SAMPLES_PER_MONTH) || 10);
+// Etiqueta de asignación de costos (ver chime-video.provider). La grabación es
+// el grueso del gasto de Chime, así que etiquetar los pipelines es lo que más
+// pesa para separar BODYTECH de BSL en Billing.
+const APP_TAG = process.env.COST_APP_TAG || 'bodytech-consulta';
 
 interface ChimeMeetingLike {
   MeetingId?: string;
@@ -143,6 +147,7 @@ class ChimeRecordingService {
               },
             },
           },
+          Tags: [{ Key: 'app', Value: APP_TAG }],
         })
       );
 
@@ -241,6 +246,7 @@ class ChimeRecordingService {
               S3BucketSinkConfiguration: { Destination: `arn:aws:s3:::${BUCKET}/${recordingPrefix}` },
             },
           ],
+          Tags: [{ Key: 'app', Value: APP_TAG }],
         })
       );
 

@@ -14,25 +14,37 @@ fecha que se indica. Si una regla no tiene fecha ni fuente, sospechá de ella.
 
 ---
 
-## 0. Los estantes primero, las tablas después
+## 0. Cómo se escribe acá
 
-Podés consultar **cualquier tabla** de la plataforma, siempre en solo lectura.
+Todo el texto visible va en **español de Colombia, tratando de usted**. Nunca
+"vos" ni "contá / querés / podés / elegí": en Bogotá suenan extranjeras. Diga
+"cuente", "quiere", "puede", "elija". Tampoco españolismos ("vale",
+"ordenador", "coger").
+
+Escriba para alguien del equipo de Bodytech, no para un programador: "citas
+atendidas", no "registros con fechaConsulta no nula".
+
+---
+
+## 1. Los estantes primero, las tablas después
+
+Puede consultar **cualquier tabla** de la plataforma, siempre en solo lectura.
 Pero los estantes `bv_*` no son un subconjunto pobre: son las mismas tablas con
 las definiciones ya resueltas.
 
-Si el dato que necesitás está en un estante, **usá el estante**. Ahí "cita
+Si el dato que necesita está en un estante, **use el estante**. Ahí "cita
 atendida" ya significa lo que debe significar, el género ya viene normalizado,
 la fecha ya está en hora Colombia y la cobertura ya está medida. Yendo directo a
-la tabla cruda, todo eso queda de tu lado — y es exactamente donde nacen los
+la tabla cruda, todo eso queda de su lado — y es exactamente donde nacen los
 reportes que no fallan y están mal.
 
-Usá las tablas crudas para lo que ningún estante cubra. Cuando lo hagas, leé
-antes la sección 2: son las trampas que el estante te estaba evitando.
+Use las tablas crudas para lo que ningún estante cubra. Cuando lo haga, lea
+antes la sección 2: son las trampas que el estante le estaba evitando.
 
 **Columnas vacías.** El catálogo lista, de cada tabla, solo las columnas que
 tienen datos. `HistoriaClinica` tiene 337 columnas y **225 están prácticamente
 vacías** — restos de la migración desde Wix y campos que nadie diligencia. No
-las uses: un reporte construido sobre una de ellas devuelve ceros que se leen
+las use: un reporte construido sobre una de ellas devuelve ceros que se leen
 como hallazgos.
 
 **Lo que no vas a encontrar, y es a propósito.** La transcripción de la consulta
@@ -43,28 +55,28 @@ verdad, la respuesta es que eso se decide fuera de acá.
 
 ---
 
-## 1. Reglas duras
+## 2. Reglas duras
 
 Estas no se negocian. Si un pedido las contradice, la respuesta correcta es
 explicar por qué no se puede, no buscarle la vuelta.
 
-**Nunca inventes datos que no existen.** Si un pedido necesita un dato que
-ningún estante tiene, decilo. No lo aproximes con otro campo "parecido", no lo
-dejes en cero, no lo simules. Un tablero vacío es un problema; un tablero con
+**Nunca invente datos que no existen.** Si un pedido necesita un dato que
+ningún estante tiene, dígalo. No lo aproxime con otro campo "parecido", no lo
+deje en cero, no lo simule. Un tablero vacío es un problema; un tablero con
 números inventados es un desastre que nadie detecta.
 
-**Siempre mostrá la cobertura cuando el dato esté incompleto.** Si vas a
-agrupar por un campo que tiene huecos, consultá `bv_cobertura` y mostrá el
+**Siempre muestre la cobertura cuando el dato esté incompleto.** Si va a
+agrupar por un campo que tiene huecos, consulte `bv_cobertura` y muestre el
 porcentaje al lado del resultado. "Bogotá: 409" es engañoso si 2.072 registros
 no tienen ciudad. "Bogotá: 409 (de 811 con ciudad registrada; 72% sin dato)" es
 honesto.
 
-**Pensá dos veces antes de cruzar identidad con contenido clínico.** Ahora que
-las tablas están abiertas, `HistoriaClinica` te deja poner el nombre del paciente
+**Piense dos veces antes de cruzar identidad con contenido clínico.** Ahora que
+las tablas están abiertas, `HistoriaClinica` permite poner el nombre del paciente
 al lado de su diagnóstico en la misma fila. Que se pueda no significa que deba
-hacerse: para contar, agrupar y comparar nunca hace falta el nombre. Reservá la
+hacerse: para contar, agrupar y comparar nunca hace falta el nombre. Reserve la
 identidad para los tableros operativos —a quién hay que llamar, quién no
-contestó— y dejala afuera de los clínicos.
+contestó— y déjela afuera de los clínicos.
 
 **Solo lectura, siempre.** No existe forma de escribir desde un app. Si alguien
 pide "un botón que marque la cita como atendida", la respuesta es que eso se
@@ -72,7 +84,7 @@ hace desde el panel médico, no desde acá.
 
 ---
 
-## 2. Definiciones: qué significa cada número
+## 3. Definiciones: qué significa cada número
 
 ### Cita atendida → `fechaConsulta IS NOT NULL`
 
@@ -85,7 +97,7 @@ los estantes ya viene resuelta como `bv_citas.estado`:
 | `NOCONTESTA` | El paciente no respondió (`pvEstado = 'No Contesta'`)        |
 | `PENDIENTE`  | Ni lo uno ni lo otro                                          |
 
-**Usá `estado`. No uses `atendido` ni `estado_calendario`.**
+**Use `estado`. No use `atendido` ni `estado_calendario`.**
 
 `estado_calendario` existe en el estante solo para depuración, no para
 reportar. Es el criterio viejo del calendario del coordinador
@@ -107,7 +119,7 @@ las 3pm y son las 9pm, su jornada duró hasta las 3pm, no seis horas más.
 
 **Verificado 2026-08-12.** El dato vive en `HistoriaClinica.genero_biologico` y
 llega como `'F'` / `'M'`, con una fila suelta escrita `'Femenino'`. El estante
-lo entrega ya unificado como `Femenino` / `Masculino`, así que **nunca agrupes
+lo entrega ya unificado como `Femenino` / `Masculino`, así que **nunca agrupe
 por la columna cruda**: en un `GROUP BY` sin normalizar, esa fila sale como una
 tercera categoría de un solo paciente.
 
@@ -128,12 +140,12 @@ de antecedentes.
 ### Hora y fecha → siempre Colombia (UTC-5)
 
 El servidor de producción corre en UTC. `bv_citas.fecha_local` ya viene
-convertida a hora Colombia; usála en vez de `fecha_atencion` para agrupar por
+convertida a hora Colombia; úsela en vez de `fecha_atencion` para agrupar por
 día, o los registros de la noche se van al día siguiente.
 
 ---
 
-## 3. Huecos de datos conocidos
+## 4. Huecos de datos conocidos
 
 Esto es lo que **no se puede reportar**, por más que lo pidan. Decirlo de
 entrada ahorra un tablero inútil.
@@ -191,7 +203,7 @@ mire meses anteriores sale inflada.
 
 ---
 
-## 4. Escala real de la plataforma
+## 5. Escala real de la plataforma
 
 **Verificado 2026-08-11.** Conviene saberlo porque cambia qué reportes tienen
 sentido.
@@ -212,20 +224,20 @@ videollamadas, 23 evaluaciones de calidad.
 
 ---
 
-## 5. Cicatrices
+## 6. Cicatrices
 
 Cosas que ya salieron mal. No están en el código; están acá porque son la
 diferencia entre un app que funciona y uno que causa un problema.
 
-### No sugieras reasignar citas de Trepsi
+### No sugiera reasignar citas de Trepsi
 
 Reasignar el profesional de una cita que vino de Trepsi **la desincroniza con
 el sistema del otro lado**: Trepsi le sigue avisando al coach viejo y la cita no
 le aparece al nuevo. Ya pasó con 14 citas y la decisión fue dejarlas quietas
 porque arreglarlas era peor.
 
-Un app no puede reasignar nada (es de solo lectura), pero **tampoco debe
-recomendarlo** en un texto ni presentarlo como acción sugerida.
+Una aplicación no puede reasignar nada (es de solo lectura), pero **tampoco
+debe recomendarlo** en un texto ni presentarlo como acción sugerida.
 
 ### Las tablas `citas` y `ordenes` no existen
 
@@ -248,7 +260,7 @@ llamada activa.
 
 ---
 
-## 6. Pendiente de escribir
+## 7. Pendiente de escribir
 
 Este archivo está incompleto a propósito: lo de arriba es lo que se pudo
 verificar contra la base. Falta lo que solo está en la cabeza del autor.
@@ -265,7 +277,7 @@ note.
 
 ---
 
-## 7. Quién puede construir, y por qué son pocos
+## 8. Quién puede construir, y por qué son pocos
 
 BodyVibeTech usa **la misma llave de Anthropic que el resto de la plataforma**,
 con un tope de gasto compartido. Cada app que se genera consume de ese mismo

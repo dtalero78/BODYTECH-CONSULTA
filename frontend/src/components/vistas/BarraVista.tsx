@@ -159,7 +159,7 @@ export function BarraVista({
           <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
             {vistas.length === 0 && (
               <p className="px-2 py-1.5 text-[12px] text-zinc-500">
-                Todavía no guardaste ninguna. Acomodá las columnas y usá «Guardar vista».
+                Todavía no ha guardado ninguna. Acomode las columnas y use «Guardar vista».
               </p>
             )}
             {vistas.map((v) => (

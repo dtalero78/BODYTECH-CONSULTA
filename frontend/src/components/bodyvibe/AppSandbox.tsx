@@ -135,14 +135,14 @@ export function AppSandbox({
             responder(id, {
               ok: false,
               mensaje:
-                'Este app ya hizo demasiadas consultas. Recargalo, y si vuelve a pasar es que tiene un ciclo mal escrito.',
+                'Este app ya hizo demasiadas consultas. Recárguelo, y si vuelve a pasar es que tiene un ciclo mal escrito.',
             });
             return;
           }
           if (enVuelo.current >= MAX_CONCURRENTES) {
             responder(id, {
               ok: false,
-              mensaje: 'Demasiadas consultas al mismo tiempo. Pedí los datos de a poco.',
+              mensaje: 'Demasiadas consultas al mismo tiempo. Pida los datos de a pocos.',
             });
             return;
           }

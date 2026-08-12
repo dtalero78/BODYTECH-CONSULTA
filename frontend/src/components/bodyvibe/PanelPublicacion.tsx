@@ -55,16 +55,16 @@ export function Publicar({ app, onCambio }: PropsPublicar) {
       setMensaje('Publicado. Como no cambiaron ni los datos ni la audiencia, no hizo falta aprobación.');
       onCambio();
     } else {
-      setMensaje('Queda esperando aprobación. Mientras tanto seguís pudiendo iterarlo.');
+      setMensaje('Queda esperando aprobación. Mientras tanto puede seguir ajustándolo.');
       onCambio();
     }
     setEnviando(false);
   };
 
   const despublicar = async () => {
-    const motivo = window.prompt('¿Por qué lo bajás? (queda registrado)') ?? '';
+    const motivo = window.prompt('¿Por qué lo baja? (queda registrado)') ?? '';
     if (await bodyvibeService.despublicar(app.id, motivo)) {
-      setMensaje('Despublicado. Volvió a ser tu borrador, con su código y su historial intactos.');
+      setMensaje('Despublicado. Volvió a ser su borrador, con su código y su historial intactos.');
       onCambio();
     }
   };
@@ -80,7 +80,7 @@ export function Publicar({ app, onCambio }: PropsPublicar) {
       </div>
 
       <p className="mb-3 text-[12.5px] text-zinc-500">
-        Mientras sea borrador solo lo ves vos. Al publicarlo elegís quién más puede abrirlo.
+        Mientras sea borrador solo lo ve usted. Al publicarlo elige quién más puede abrirlo.
       </p>
 
       <div className="mb-3">
@@ -128,7 +128,7 @@ export function Publicar({ app, onCambio }: PropsPublicar) {
         </div>
         {alcance === 'global' && (
           <p className="mt-1.5 text-[11.5px] text-amber-700 dark:text-amber-400">
-            Publicar a todas las sedes es un permiso aparte. Si no lo tenés, el sistema te lo va a decir.
+            Publicar a todas las sedes es un permiso aparte. Si no lo tiene, el sistema se lo dirá.
           </p>
         )}
       </div>
@@ -212,8 +212,8 @@ export function Bandeja({ onCambio }: { onCambio: () => void }) {
     <section>
       <p className="mb-3 text-[13px] text-zinc-500">
         {solicitudes.length === 1
-          ? 'Una publicación espera tu visto bueno.'
-          : `${solicitudes.length} publicaciones esperan tu visto bueno.`}
+          ? 'Una publicación espera su visto bueno.'
+          : `${solicitudes.length} publicaciones esperan su visto bueno.`}
       </p>
 
       <ul className="flex flex-col gap-2">
@@ -275,7 +275,7 @@ export function Bandeja({ onCambio }: { onCambio: () => void }) {
               </button>
               <button
                 onClick={async () => {
-                  const motivo = window.prompt('¿Por qué lo rechazás? Se lo mostramos a quien lo pidió.');
+                  const motivo = window.prompt('¿Por qué lo rechaza? Se lo mostramos a quien lo pidió.');
                   if (!motivo?.trim()) return;
                   await bodyvibeService.rechazar(s.id, motivo);
                   recargar();

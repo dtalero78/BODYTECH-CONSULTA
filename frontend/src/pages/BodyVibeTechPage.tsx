@@ -1,7 +1,7 @@
 // ============================================================================
 // BodyVibeTechPage — donde se construyen los apps.
 //
-// La pantalla se organiza alrededor de UNA pregunta ("¿qué querés hacer?") y no
+// La pantalla se organiza alrededor de UNA pregunta ("¿qué quiere hacer?") y no
 // alrededor de todo lo que el sistema sabe hacer. Antes mostraba a la vez el
 // recinto, la conversación, las versiones, la publicación y la apariencia:
 // cinco cosas compitiendo por atención cuando en realidad se hace una a la vez.
@@ -195,7 +195,7 @@ export default function BodyVibeTechPage() {
   const alternarInterruptor = useCallback(async () => {
     if (!estado) return;
     if (estado.activo) {
-      const motivo = window.prompt('¿Por qué lo estás apagando? (queda registrado)') ?? '';
+      const motivo = window.prompt('¿Por qué lo está apagando? (queda registrado)') ?? '';
       setEstado(await bodyvibeService.apagar(motivo));
     } else {
       setEstado(await bodyvibeService.encender());
@@ -214,15 +214,25 @@ export default function BodyVibeTechPage() {
   return (
     <div className="flex min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       {/* ================= Barra lateral ================= */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
         <button
           onClick={() => {
             setActivo(null);
             setVista('inicio');
           }}
-          className="px-4 py-4 text-left"
+          className="flex items-center gap-2.5 px-4 py-5 text-left"
         >
-          <span className="text-[14.5px] font-semibold tracking-tight">BodyVibeTech</span>
+          {/* El archivo original es negro sobre fondo blanco opaco; acá se usa
+              la versión en silueta con alfa, así `invert` lo vuelve blanco en
+              modo oscuro sin dejar un recuadro. */}
+          <img
+            src="/logo-bodytech.png"
+            alt="Bodytech"
+            className="h-9 w-auto shrink-0 dark:invert"
+          />
+          <span className="text-[15px] font-semibold leading-tight tracking-tight">
+            BodyVibeTech
+          </span>
         </button>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
@@ -327,7 +337,7 @@ export default function BodyVibeTechPage() {
         {vista === 'inicio' && (
           <div className="mx-auto max-w-2xl px-6 pt-24">
             <h1 className="mb-8 text-center text-[26px] font-semibold tracking-tight">
-              ¿Qué querés hacer?
+              ¿Qué quiere hacer?
             </h1>
             <div className="grid gap-3 sm:grid-cols-2">
               <button
@@ -355,7 +365,7 @@ export default function BodyVibeTechPage() {
         {vista === 'construir' && (
           <div className="mx-auto max-w-2xl px-6 pt-24">
             <h1 className="mb-6 text-center text-[26px] font-semibold tracking-tight">
-              Contá qué necesitás ver.
+              Cuéntenos qué necesita ver.
             </h1>
 
             <textarea
@@ -405,7 +415,7 @@ export default function BodyVibeTechPage() {
             <div className="mt-6 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
               <span className="block text-[14px] font-medium">Agregar algo a una pantalla</span>
               <p className="mt-1 text-[12.5px] text-zinc-500">
-                Se construye igual que cualquier app; al publicarlo elegís en qué pantalla queda
+                Se construye igual que cualquier app; al publicarlo usted elige en qué pantalla queda
                 incrustado, al pie.
               </p>
               <button
@@ -450,7 +460,7 @@ export default function BodyVibeTechPage() {
                 <AppSandbox codigo={activo.codigo} ejecutarConsulta={ejecutarConsulta} />
               ) : (
                 <p className="p-12 text-center text-[13px] text-zinc-500">
-                  Todavía no hay nada. Contá abajo qué querés que muestre.
+                  Todavía no hay nada. Cuéntele abajo qué quiere que muestre.
                 </p>
               )}
             </div>
@@ -486,7 +496,7 @@ export default function BodyVibeTechPage() {
                   rows={2}
                   disabled={generando || apagado}
                   placeholder={
-                    activo.codigo ? 'Qué querés cambiar…' : 'Contá qué querés que muestre…'
+                    activo.codigo ? '¿Qué quiere cambiar?' : 'Cuéntenos qué quiere que muestre'
                   }
                   className="min-w-0 flex-1 resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13.5px] outline-none focus:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
                 />
@@ -500,7 +510,7 @@ export default function BodyVibeTechPage() {
               </div>
               <p className="mt-1 text-[11px] text-zinc-400">
                 {generando
-                  ? 'Puede tardar un par de minutos; el trabajo sigue en el servidor aunque cierres la pestaña.'
+                  ? 'Puede tardar un par de minutos; el trabajo sigue en el servidor aunque cierre la pestaña.'
                   : '⌘/Ctrl + Enter también funciona.'}
               </p>
             </div>

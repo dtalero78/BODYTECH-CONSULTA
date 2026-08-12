@@ -1241,7 +1241,7 @@ class PostgresService {
         `CREATE INDEX IF NOT EXISTS idx_bv_apps_creador ON bodyvibe_apps (creador_id, updated_at DESC)`
       );
 
-      // Cada iteración queda guardada. Sin esto, "volvé a como estaba antes"
+      // Cada iteración queda guardada. Sin esto, "vuelva a como estaba antes"
       // no tiene respuesta, y ese pedido llega el primer día.
       await this.query(`
         CREATE TABLE IF NOT EXISTS bodyvibe_app_versiones (

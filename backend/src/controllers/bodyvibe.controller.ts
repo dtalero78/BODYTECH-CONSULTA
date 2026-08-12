@@ -181,7 +181,7 @@ class BodyVibeController {
       }
       const app = await bodyvibeAppsService.obtener(req.params.id, sesion.userId);
       if (!app) {
-        res.status(404).json({ ok: false, mensaje: 'Ese app no existe o no es tuyo.' });
+        res.status(404).json({ ok: false, mensaje: 'Esa aplicación no existe o no es suya.' });
         return;
       }
       res.json(app);
@@ -271,7 +271,7 @@ class BodyVibeController {
 
       const pedido = typeof req.body?.pedido === 'string' ? req.body.pedido.trim() : '';
       if (!pedido) {
-        res.status(400).json({ ok: false, mensaje: 'Contame qué querés construir.' });
+        res.status(400).json({ ok: false, mensaje: 'Cuéntenos qué quiere construir.' });
         return;
       }
 
@@ -460,7 +460,7 @@ class BodyVibeController {
       }
       const app = await bodyvibePublicacionService.obtenerPublicado(req.params.id, actor);
       if (!app) {
-        res.status(404).json({ ok: false, mensaje: 'Ese app no está publicado para vos.' });
+        res.status(404).json({ ok: false, mensaje: 'Esa aplicación no está publicada para usted.' });
         return;
       }
       res.json(app);

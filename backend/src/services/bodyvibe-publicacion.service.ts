@@ -108,11 +108,11 @@ class BodyVibePublicacionService {
       return {
         ok: false,
         mensaje:
-          'Publicar a todas las sedes es un permiso aparte. Podés publicarlo en tu sede, o pedirle a quien tenga alcance global que lo amplíe.',
+          'Publicar a todas las sedes es un permiso aparte. Puede publicarlo en su sede, o pedirle a quien tenga alcance global que lo amplíe.',
       };
     }
     if (audiencia.roles.length === 0) {
-      return { ok: false, mensaje: 'Elegí al menos un rol que pueda verlo.' };
+      return { ok: false, mensaje: 'Elija al menos un rol que pueda verlo.' };
     }
     if (!anclajeValido(audiencia.anclaje)) {
       return {
@@ -126,7 +126,7 @@ class BodyVibePublicacionService {
       [appId, actor.usuarioId]
     );
     const app = filas?.[0];
-    if (!app) return { ok: false, mensaje: 'Ese app no existe o no es tuyo.' };
+    if (!app) return { ok: false, mensaje: 'Esa aplicación no existe o no es suya.' };
     if (!app.codigo) return { ok: false, mensaje: 'El borrador está vacío: no hay nada que publicar.' };
 
     // Cuando el alcance es la sede propia y no se indicó cuál, se toman las del

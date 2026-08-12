@@ -68,7 +68,7 @@ export default function AppsPublicadosPage() {
         {!cargando && apps.length === 0 && (
           <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
             <p className="text-[13.5px] text-zinc-500">
-              Todavía no hay ninguna aplicación publicada para vos.
+              Todavía no hay ninguna aplicación publicada para usted.
             </p>
           </div>
         )}

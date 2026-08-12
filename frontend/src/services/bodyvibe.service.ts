@@ -234,7 +234,7 @@ class BodyVibeService {
     return {
       ok: false,
       mensaje:
-        'La generación se pasó de ocho minutos. Puede haber terminado igual — revisá las versiones del app antes de volver a pedirla, para no pagarla dos veces.',
+        'La generación se pasó de ocho minutos. Puede haber terminado igual — revise las versiones de la aplicación antes de volver a pedirla, para no pagarla dos veces.',
     };
   }
 

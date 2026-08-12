@@ -866,7 +866,7 @@ export function MedicalPanelPage() {
                 <button
                   onClick={() => { window.location.href = '/apps'; }}
                   className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
-                  title="Aplicaciones publicadas para vos"
+                  title="Aplicaciones publicadas para usted"
                 >
                   <span className="hidden sm:inline">Aplicaciones</span>
                   <span className="sm:hidden">Apps</span>

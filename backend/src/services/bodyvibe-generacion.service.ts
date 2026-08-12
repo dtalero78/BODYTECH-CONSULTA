@@ -52,7 +52,7 @@ class BodyVibeGeneracionService {
     historial: { pedido: string; titulo: string }[]
   ): Promise<{ ok: true; id: number } | { ok: false; mensaje: string }> {
     const app = await bodyvibeAppsService.obtener(appId, usuarioId);
-    if (!app) return { ok: false, mensaje: 'Ese app no existe o no es tuyo.' };
+    if (!app) return { ok: false, mensaje: 'Esa aplicación no existe o no es suya.' };
 
     // Dos generaciones a la vez sobre el mismo app se pisarían la versión.
     const enCurso = await postgresService.query(
@@ -63,7 +63,7 @@ class BodyVibeGeneracionService {
       [appId]
     );
     if (enCurso?.[0]) {
-      return { ok: false, mensaje: 'Ya hay una generación en curso para este app. Esperá a que termine.' };
+      return { ok: false, mensaje: 'Ya hay una generación en curso para este app. Espere a que termine.' };
     }
 
     const filas = await postgresService.query(
@@ -157,7 +157,7 @@ class BodyVibeGeneracionService {
       appId: f.app_id,
       estado: viejo ? 'error' : f.estado,
       mensaje: viejo
-        ? 'La generación se interrumpió (probablemente el servidor se reinició). Volvé a intentarlo.'
+        ? 'La generación se interrumpió (probablemente el servidor se reinició). Vuelva a intentarlo.'
         : (f.mensaje ?? null),
       notas: f.notas ?? null,
       costoUsd: f.costo_usd !== null && f.costo_usd !== undefined ? Number(f.costo_usd) : null,

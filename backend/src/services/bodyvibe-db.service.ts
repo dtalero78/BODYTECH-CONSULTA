@@ -316,9 +316,9 @@ class BodyVibeDbService {
 
       const message =
         code === 'timeout'
-          ? `La consulta se pasó de ${BV_TIMEOUT_MS / 1000} segundos y se cortó. Agrupá o filtrá más.`
+          ? `La consulta se pasó de ${BV_TIMEOUT_MS / 1000} segundos y se cortó. Agrupe o filtre más.`
           : code === 'denied'
-            ? 'Esa consulta pide datos que no están en los estantes disponibles.'
+            ? 'Esa consulta pide datos que no están disponibles.'
             : (error?.message ?? 'Error ejecutando la consulta.');
 
       this.logQuery(actor, sql, 0, ms, code, error?.message);

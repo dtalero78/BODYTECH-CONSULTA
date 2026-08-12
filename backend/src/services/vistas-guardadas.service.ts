@@ -62,7 +62,7 @@ class VistasGuardadasService {
     config: Record<string, unknown>
   ): Promise<{ ok: true; vista: VistaGuardada } | { ok: false; mensaje: string }> {
     const limpio = nombre.trim().slice(0, 80);
-    if (!limpio) return { ok: false, mensaje: 'Ponele un nombre a la vista.' };
+    if (!limpio) return { ok: false, mensaje: 'Póngale un nombre a la vista.' };
 
     const actuales = await postgresService.query(
       `SELECT COUNT(*)::int AS n FROM vistas_guardadas
@@ -72,7 +72,7 @@ class VistasGuardadasService {
     if ((actuales?.[0]?.n ?? 0) >= MAX_POR_TABLA) {
       return {
         ok: false,
-        mensaje: `Ya tenés ${MAX_POR_TABLA} vistas guardadas en esta tabla. Borrá alguna antes de crear otra.`,
+        mensaje: `Ya tiene ${MAX_POR_TABLA} vistas guardadas en esta tabla. Borre alguna antes de crear otra.`,
       };
     }
 

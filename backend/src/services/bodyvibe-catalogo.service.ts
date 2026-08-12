@@ -189,7 +189,7 @@ class BodyVibeCatalogoService {
     // -- Estantes ------------------------------------------------------------
     p.push('## Datos disponibles\n');
     p.push(
-      'Estos son los ÚNICOS datos que podés consultar. Son vistas de solo lectura.\n' +
+      'Estos son los ÚNICOS datos que puede consultar. Son vistas de solo lectura.\n' +
         'No existe forma de escribir, y no hay acceso a ninguna otra tabla.\n'
     );
 
@@ -210,11 +210,11 @@ class BodyVibeCatalogoService {
     // -- Tablas base ---------------------------------------------------------
     p.push('## Las tablas completas\n');
     p.push(
-      'Además de los estantes podés consultar cualquier tabla de la plataforma,\n' +
+      'Además de los estantes puede consultar cualquier tabla de la plataforma,\n' +
         'siempre en solo lectura. Los estantes siguen siendo el camino preferido:\n' +
-        'traen resueltas las definiciones que acá tenés que resolver vos (qué cuenta\n' +
+        'traen resueltas las definiciones que acá tiene que resolver usted (qué cuenta\n' +
         'como cita atendida, cómo se normaliza el género, la hora de Colombia).\n' +
-        'Usá las tablas crudas para lo que el estante no cubra.\n'
+        'Use las tablas crudas para lo que el estante no cubra.\n'
     );
     p.push(
       'De cada tabla se listan las columnas QUE TIENEN DATOS. Las que existen pero\n' +
@@ -232,7 +232,7 @@ class BodyVibeCatalogoService {
 
     // -- Pantallas -----------------------------------------------------------
     p.push('## Pantallas que ya existen\n');
-    p.push('Para ubicarte. No podés modificarlas desde acá salvo en apariencia.\n');
+    p.push('Para ubicarse. No puede modificarlas desde acá salvo en apariencia.\n');
     p.push('| ruta | pantalla | quién entra |');
     p.push('|---|---|---|');
     for (const s of c.pantallas) {
@@ -245,9 +245,9 @@ class BodyVibeCatalogoService {
     // -- Anclajes ------------------------------------------------------------
     p.push('## Dónde puede terminar viviendo lo que construís\n');
     p.push(
-      'Un app puede quedar suelto (en la pantalla de Aplicaciones) o INCRUSTADO al pie\n' +
-        'de una pantalla que ya existe. Quien publica lo elige. Si va incrustado, tu app\n' +
-        'comparte pantalla con lo que ya está ahí: mantenelo compacto, sin encabezados\n' +
+      'Una aplicación puede quedar suelta (en la pantalla de Aplicaciones) o INCRUSTADA al pie\n' +
+        'de una pantalla que ya existe. Quien publica lo elige. Si va incrustada, su aplicación\n' +
+        'comparte pantalla con lo que ya está ahí: manténgala compacta, sin encabezados\n' +
         'gigantes ni márgenes enormes, y que se entienda sin contexto previo.\n'
     );
     p.push('| punto | dónde queda |');
@@ -258,7 +258,7 @@ class BodyVibeCatalogoService {
     // -- Lenguaje visual -----------------------------------------------------
     p.push('## Lenguaje visual\n');
     p.push(
-      'Usá estos valores para que lo que construyas se vea parte de la plataforma\n' +
+      'Use estos valores para que lo que construya se vea parte de la plataforma\n' +
         'y no una pantalla pegada al lado. Dentro del recinto ya están disponibles\n' +
         'como variables CSS `--bv-*`; esta tabla es la referencia de origen.\n'
     );

@@ -1,7 +1,7 @@
 // ============================================================================
 // vistas-guardadas.controller — "Mi vista" de cualquier tabla.
 //
-// Abierto a cualquier sesión válida: guardar cómo querés ver una tabla no es un
+// Abierto a cualquier sesión válida: guardar cómo quiere ver una tabla no es un
 // privilegio, es lo mínimo. Cada persona ve y toca solo las suyas.
 // ============================================================================
 

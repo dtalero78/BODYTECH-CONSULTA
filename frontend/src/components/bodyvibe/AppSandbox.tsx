@@ -47,6 +47,15 @@ interface Props {
   onError?: (mensaje: string) => void;
   altoMinimo?: number;
   altoMaximo?: number;
+  /**
+   * Ocupar todo el alto disponible en vez de crecer con el contenido.
+   *
+   * El alto automático es lo correcto cuando el app va incrustado al pie de una
+   * pantalla existente: ahí no puede quedar cortado ni dejar un hueco. En la
+   * vista previa es al revés — el panel manda el alto y lo que sobre se
+   * desplaza dentro del iframe, como en cualquier vista previa.
+   */
+  llenarAlto?: boolean;
 }
 
 function temaDeLaPlataforma(): 'claro' | 'oscuro' {
@@ -64,6 +73,7 @@ export function AppSandbox({
   onError,
   altoMinimo = 180,
   altoMaximo = 2400,
+  llenarAlto = false,
 }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const enVuelo = useRef(0);
@@ -189,7 +199,7 @@ export function AppSandbox({
   }, [listo, documento]);
 
   return (
-    <div className="relative w-full">
+    <div className={`relative w-full ${llenarAlto ? 'h-full' : ''}`}>
       {!listo && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 dark:bg-zinc-900/70">
           <span className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
@@ -206,8 +216,8 @@ export function AppSandbox({
         sandbox="allow-scripts"
         srcDoc={documento}
         title="Aplicación de BodyVibeTech"
-        className="w-full block border-0 bg-transparent"
-        style={{ height: alto }}
+        className={`block w-full border-0 bg-transparent ${llenarAlto ? 'h-full' : ''}`}
+        style={llenarAlto ? undefined : { height: alto }}
       />
 
       {falla && (

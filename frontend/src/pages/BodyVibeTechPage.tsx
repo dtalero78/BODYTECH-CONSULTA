@@ -19,7 +19,7 @@
 // se pueden usar.
 // ============================================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/auth.service';
@@ -113,6 +113,8 @@ export default function BodyVibeTechPage() {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [vista, setVista] = useState<Vista>('inicio');
 
+  const [menuBorradores, setMenuBorradores] = useState(false);
+  const cajaBorradores = useRef<HTMLDivElement | null>(null);
   const [anclajes, setAnclajes] = useState<AnclajeDisponible[]>([]);
   /**
    * Dónde va a quedar lo que se está construyendo. Se elige en «Modificar lo
@@ -144,6 +146,20 @@ export default function BodyVibeTechPage() {
       /* Informativo: si falla no bloquea el trabajo. */
     }
   }, []);
+
+  // El desplegable se cierra al hacer clic afuera; si no, queda abierto tapando
+  // justo lo que se acaba de elegir.
+  useEffect(() => {
+    if (!menuBorradores) return;
+    // Solo los clics de AFUERA cierran. Cerrar con cualquier `mousedown`
+    // desmonta el menú antes de que el `click` llegue al borrador elegido, y
+    // entonces elegir uno no hace nada: se cierra y ya.
+    const alClic = (e: MouseEvent) => {
+      if (!cajaBorradores.current?.contains(e.target as Node)) setMenuBorradores(false);
+    };
+    document.addEventListener('mousedown', alClic);
+    return () => document.removeEventListener('mousedown', alClic);
+  }, [menuBorradores]);
 
   useEffect(() => {
     bodyvibeService.listarApps().then(setApps).catch(() => setApps([]));
@@ -293,8 +309,8 @@ export default function BodyVibeTechPage() {
 
   const apagado = estado ? !estado.activo : false;
 
-  const itemLateral = (activa: boolean) =>
-    `w-full text-left rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
+  const itemBarra = (activa: boolean) =>
+    `shrink-0 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
       activa
         ? 'bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
         : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
@@ -326,62 +342,57 @@ export default function BodyVibeTechPage() {
   );
 
   return (
-    <div className="flex min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {/* ================= Barra lateral ================= */}
+    <div className="flex min-h-screen flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* ================= Barra superior ================= */}
       {conBarra && (
-        <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-zinc-200 px-4 dark:border-zinc-800">
           <button
             onClick={() => {
               setActivo(null);
               setVista('inicio');
             }}
-            className="flex items-center gap-2.5 px-4 py-5 text-left"
+            className="mr-2 flex shrink-0 items-center gap-2.5"
           >
             {marca(false)}
           </button>
 
-          <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-            {/* Las dos decisiones que no son el pedido: cómo se ve y para quién
-                es. Todo lo demás de esta barra es historial o interruptores. */}
-            <div className="space-y-0.5">
-              <button
-                onClick={() => setVista('diseno')}
-                className={itemLateral(vista === 'diseno')}
-              >
-                Diseño
-              </button>
-              <button
-                onClick={() => setVista('aquien')}
-                className={itemLateral(vista === 'aquien')}
-              >
-                A quién
-              </button>
-            </div>
+          <button
+            onClick={() => {
+              setActivo(null);
+              setPedido('');
+              setAnclajePreferido(null);
+              setVista('construir');
+            }}
+            className={itemBarra(vista === 'construir' && !activo)}
+          >
+            + Nuevo
+          </button>
 
-            {apps.length > 0 && (
-              <div>
-                <span className="mb-1.5 block px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                  Mis borradores
-                </span>
-                <ul className="space-y-0.5">
-                  <li>
-                    <button
-                      onClick={() => {
-                        setActivo(null);
-                        setPedido('');
-                        setAnclajePreferido(null);
-                        setVista('construir');
-                      }}
-                      className={`${itemLateral(vista === 'construir' && !activo)} text-zinc-500`}
-                    >
-                      + Nuevo
-                    </button>
-                  </li>
+          {/* Los borradores en un desplegable y no en fila: en una barra
+              horizontal, cinco títulos largos empujan todo lo demás fuera de la
+              pantalla. */}
+          {apps.length > 0 && (
+            <div className="relative" ref={cajaBorradores}>
+              <button
+                onClick={() => setMenuBorradores((v) => !v)}
+                className={itemBarra(vista === 'app')}
+              >
+                {activo ? activo.titulo : 'Mis borradores'}
+                <span className="ml-1.5 text-[10px] text-zinc-400">{apps.length}</span>
+              </button>
+              {menuBorradores && (
+                <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                   {apps.map((a) => (
-                    <li key={a.id} className="group flex items-center gap-1">
+                    <div
+                      key={a.id}
+                      className="group flex items-center gap-1 rounded px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    >
                       <button
-                        onClick={() => abrir(a.id)}
-                        className={`${itemLateral(activo?.id === a.id && vista === 'app')} min-w-0 flex-1 truncate`}
+                        onClick={() => {
+                          setMenuBorradores(false);
+                          abrir(a.id);
+                        }}
+                        className="min-w-0 flex-1 truncate text-left text-[12.5px]"
                       >
                         {a.titulo}
                         {a.estado === 'publicado' && (
@@ -397,70 +408,68 @@ export default function BodyVibeTechPage() {
                       >
                         &#10005;
                       </button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* La bandeja solo existe si hay algo que aprobar, y solo para quien
-                aprueba: al resto la API le devuelve vacío. */}
-            {pendientes > 0 && (
-              <button
-                onClick={() => {
-                  setActivo(null);
-                  setVista('aprobaciones');
-                }}
-                className={itemLateral(vista === 'aprobaciones')}
-              >
-                Aprobaciones
-                <span className="ml-1.5 rounded-full bg-zinc-900 px-1.5 text-[10.5px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-                  {pendientes}
-                </span>
-              </button>
-            )}
-          </nav>
+          <button onClick={() => setVista('diseno')} className={itemBarra(vista === 'diseno')}>
+            Diseño
+          </button>
+          <button onClick={() => setVista('aquien')} className={itemBarra(vista === 'aquien')}>
+            A quién
+          </button>
 
-          <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          {/* La bandeja solo existe si hay algo que aprobar, y solo para quien
+              aprueba: al resto la API le devuelve vacío. */}
+          {pendientes > 0 && (
+            <button
+              onClick={() => {
+                setActivo(null);
+                setVista('aprobaciones');
+              }}
+              className={itemBarra(vista === 'aprobaciones')}
+            >
+              Aprobaciones
+              <span className="ml-1.5 rounded-full bg-zinc-900 px-1.5 text-[10.5px] font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+                {pendientes}
+              </span>
+            </button>
+          )}
+
+          <div className="ml-auto flex shrink-0 items-center gap-3">
             {gasto && (
-              <div className="mb-2 font-mono text-[10.5px] text-zinc-400">
-                {dinero(gasto.gastadoUsd)} de {dinero(gasto.topeUsd)} este mes
-              </div>
+              <span className="hidden font-mono text-[10.5px] text-zinc-400 lg:inline">
+                {dinero(gasto.gastadoUsd)} de {dinero(gasto.topeUsd)}
+              </span>
             )}
             <button
               onClick={alternarInterruptor}
-              className="flex w-full items-center gap-2 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+              title={apagado ? 'BodyVibeTech está apagado' : 'BodyVibeTech está encendido'}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${apagado ? 'bg-amber-500' : 'bg-emerald-500'}`}
               />
-              {apagado ? 'Apagado · encender' : 'Encendido · apagar todo'}
+              <span className="hidden sm:inline">{apagado ? 'Apagado' : 'Encendido'}</span>
             </button>
-
-            {/* Quién está adentro y cómo salir. Faltaba: BodyVibeTech construye
-                cosas que quedan a nombre de quien las hizo, así que no saber
-                con qué cuenta se está trabajando importa más acá que en otras
-                pantallas. */}
             {usuario && (
-              <div className="mt-3 flex items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-medium text-zinc-700 dark:text-zinc-300">
-                    {usuario.nombre || usuario.email}
-                  </div>
-                  <div className="truncate text-[10.5px] text-zinc-400">{usuario.email}</div>
-                </div>
+              <>
+                <span className="hidden text-[12px] text-zinc-500 lg:inline">{usuario.email}</span>
                 <button
                   onClick={salir}
-                  className="shrink-0 rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   title="Salir"
                   aria-label="Salir"
                 >
                   <LogOut className="h-[14px] w-[14px]" />
                 </button>
-              </div>
+              </>
             )}
           </div>
-        </aside>
+        </header>
       )}
 
       {/* ================= Zona principal ================= */}
@@ -700,106 +709,148 @@ export default function BodyVibeTechPage() {
         )}
 
         {vista === 'app' && activo && (
-          <div className="mx-auto max-w-4xl px-6 py-6">
-            <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h1 className="text-[19px] font-semibold tracking-tight">{activo.titulo}</h1>
-              <span className="font-mono text-[11px] text-zinc-400">v{activo.version}</span>
-              <button
-                onClick={() => setVista('aquien')}
-                className="ml-auto rounded-md border border-zinc-200 px-3 py-1.5 text-[12.5px] dark:border-zinc-700"
-              >
-                {activo.estado === 'publicado' ? 'Publicado · en vivo' : 'A quién'}
-              </button>
+          // Dos columnas: a la izquierda lo que se pide y lo que contesta, a la
+          // derecha el resultado corriendo de verdad. Antes era una sola
+          // columna con el app arriba y la caja abajo, así que al pedir un
+          // cambio había que bajar a escribir y volver a subir a mirar.
+          <div className="flex h-[calc(100vh-3.5rem)]">
+            {/* ---------- Conversación ---------- */}
+            <div className="flex w-[38%] min-w-[340px] flex-col border-r border-zinc-200 dark:border-zinc-800">
+              <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+                {turnos.length === 0 && !generando && (
+                  <p className="text-[13px] text-zinc-500">
+                    Pide un cambio y aparece a la derecha.
+                  </p>
+                )}
+
+                {turnos.map((t, i) => (
+                  <div key={i} className="space-y-2">
+                    {/* Lo que pidió la persona, a la derecha; lo que contestó,
+                        a la izquierda. Es la convención de cualquier chat. */}
+                    <div className="flex justify-end">
+                      <p className="max-w-[88%] rounded-2xl rounded-br-md bg-zinc-900 px-3.5 py-2 text-[13px] text-white dark:bg-zinc-100 dark:text-zinc-900">
+                        {t.pedido}
+                      </p>
+                    </div>
+                    {t.notas && (
+                      <div className="flex justify-start">
+                        <p className="max-w-[92%] rounded-2xl rounded-bl-md bg-zinc-100 px-3.5 py-2 text-[13px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {t.notas}
+                        </p>
+                      </div>
+                    )}
+                    {typeof t.costoUsd === 'number' && (
+                      <p className="pl-1 font-mono text-[10.5px] text-zinc-400">
+                        {dinero(t.costoUsd)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                {generando && <VentanaAvance avance={avance} />}
+
+                {error && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                    {error}
+                  </div>
+                )}
+
+                {versiones.length > 1 && (
+                  <details className="pt-2">
+                    <summary className="cursor-pointer text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                      Versiones ({versiones.length})
+                    </summary>
+                    <ul className="mt-2">
+                      {versiones.map((v) => (
+                        <li
+                          key={v.version}
+                          className="flex items-center gap-3 border-b border-zinc-100 py-1.5 text-[12.5px] dark:border-zinc-800"
+                        >
+                          <span className="font-mono text-[11px] text-zinc-400">v{v.version}</span>
+                          <span className="min-w-0 flex-1 truncate text-zinc-600 dark:text-zinc-400">
+                            {v.pedido ?? '—'}
+                          </span>
+                          {v.version !== activo.version && (
+                            <button
+                              onClick={() => restaurar(v.version)}
+                              className="shrink-0 text-[12px] text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                            >
+                              Volver a esta
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+
+              <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
+                <div className="rounded-xl border border-zinc-200 focus-within:border-zinc-400 dark:border-zinc-700">
+                  <textarea
+                    value={pedido}
+                    onChange={(e) => setPedido(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        generar();
+                      }
+                    }}
+                    rows={2}
+                    disabled={generando || apagado}
+                    placeholder={
+                      activo.codigo ? '¿Qué quieres cambiar?' : 'Cuéntanos qué quieres que muestre'
+                    }
+                    className="w-full resize-none rounded-t-xl bg-transparent px-3 py-2.5 text-[13.5px] outline-none disabled:opacity-50"
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <span className="pl-1 text-[11px] text-zinc-400">
+                      {generando ? 'Sigue en el servidor aunque cierres la pestaña.' : 'Enter envía'}
+                    </span>
+                    <button
+                      onClick={generar}
+                      disabled={generando || apagado || !pedido.trim()}
+                      className="rounded-full bg-zinc-900 px-4 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-30 dark:bg-zinc-100 dark:text-zinc-900"
+                    >
+                      {generando ? 'Construyendo…' : 'Enviar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-              {activo.codigo ? (
-                <AppSandbox codigo={activo.codigo} ejecutarConsulta={ejecutarConsulta} />
-              ) : (
-                <p className="p-12 text-center text-[13px] text-zinc-500">
-                  Todavía no hay nada. Cuéntele abajo qué quiere que muestre.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-5">
-              {turnos.map((t, i) => (
-                <div key={i} className="mb-3 border-l-2 border-zinc-200 pl-3 dark:border-zinc-800">
-                  <p className="text-[13px]">{t.pedido}</p>
-                  {t.notas && <p className="mt-1 text-[12.5px] text-zinc-500">{t.notas}</p>}
-                  {typeof t.costoUsd === 'number' && (
-                    <p className="mt-1 font-mono text-[10.5px] text-zinc-400">
-                      {dinero(t.costoUsd)}
-                    </p>
-                  )}
-                </div>
-              ))}
-
-              {error && (
-                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-                  {error}
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <textarea
-                  value={pedido}
-                  onChange={(e) => setPedido(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generar();
-                  }}
-                  rows={2}
-                  disabled={generando || apagado}
-                  placeholder={
-                    activo.codigo ? '¿Qué quiere cambiar?' : 'Cuéntenos qué quiere que muestre'
-                  }
-                  className="min-w-0 flex-1 resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[13.5px] outline-none focus:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
-                />
+            {/* ---------- Vista previa ---------- */}
+            <div className="flex min-w-0 flex-1 flex-col bg-zinc-50 dark:bg-zinc-900/40">
+              <div className="flex h-11 shrink-0 items-center gap-3 px-4">
+                <span className="min-w-0 truncate text-[12.5px] font-medium">{activo.titulo}</span>
+                <span className="shrink-0 font-mono text-[11px] text-zinc-400">
+                  v{activo.version}
+                </span>
                 <button
-                  onClick={generar}
-                  disabled={generando || apagado || !pedido.trim()}
-                  className="self-end rounded-md bg-zinc-900 px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+                  onClick={() => setVista('aquien')}
+                  className="ml-auto shrink-0 rounded-md border border-zinc-200 bg-white px-3 py-1 text-[12px] dark:border-zinc-700 dark:bg-zinc-900"
                 >
-                  {generando ? 'Construyendo…' : 'Construir'}
+                  {activo.estado === 'publicado' ? 'Publicado · en vivo' : 'A quién'}
                 </button>
               </div>
-              <p className="mt-1 text-[11px] text-zinc-400">
-                {generando
-                  ? 'El trabajo sigue en el servidor aunque cierre la pestaña.'
-                  : '⌘/Ctrl + Enter también funciona.'}
-              </p>
 
-              {generando && <VentanaAvance avance={avance} />}
+              <div className="min-h-0 flex-1 overflow-hidden rounded-tl-xl border-l border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                {activo.codigo ? (
+                  <AppSandbox
+                    codigo={activo.codigo}
+                    ejecutarConsulta={ejecutarConsulta}
+                    llenarAlto
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
+                    <p className="text-[14px] text-zinc-500">Tu aplicación va a aparecer acá</p>
+                    <p className="text-[12.5px] text-zinc-400">
+                      Cuéntale a la izquierda qué quieres que muestre.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {versiones.length > 1 && (
-              <details className="mt-8">
-                <summary className="cursor-pointer text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                  Versiones ({versiones.length})
-                </summary>
-                <ul className="mt-2">
-                  {versiones.map((v) => (
-                    <li
-                      key={v.version}
-                      className="flex items-center gap-3 border-b border-zinc-100 py-1.5 text-[12.5px] dark:border-zinc-800"
-                    >
-                      <span className="font-mono text-[11px] text-zinc-400">v{v.version}</span>
-                      <span className="min-w-0 flex-1 truncate text-zinc-600 dark:text-zinc-400">
-                        {v.pedido ?? '—'}
-                      </span>
-                      {v.version !== activo.version && (
-                        <button
-                          onClick={() => restaurar(v.version)}
-                          className="shrink-0 text-[12px] text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100"
-                        >
-                          Volver a esta
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
           </div>
         )}
       </main>

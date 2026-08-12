@@ -45,6 +45,8 @@ export interface EstadoBodyVibe {
   apagadoAt: string | null;
   rolDisponible: boolean;
   configurado: boolean;
+  /** ¿Esta persona puede CONSTRUIR apps? Lo decide el backend, no el rol. */
+  puedoConstruir: boolean;
 }
 
 export interface EstadoGasto {

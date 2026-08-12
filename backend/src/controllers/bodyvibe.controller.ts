@@ -15,6 +15,7 @@ import bodyvibeAppsService from '../services/bodyvibe-apps.service';
 import bodyvibeAgenteService from '../services/bodyvibe-agente.service';
 import bodyvibeTemaService, { Densidad } from '../services/bodyvibe-tema.service';
 import { ANCLAJES } from '../services/bodyvibe-anclajes';
+import { puedeConstruir } from '../services/bodyvibe-acceso';
 import bodyvibePublicacionService, {
   Actor,
   puedeAprobar,
@@ -100,6 +101,9 @@ class BodyVibeController {
         // rol de solo lectura parece un apagado manual.
         rolDisponible: bodyvibeDbService.isEnabled(),
         configurado: bodyvibeDbService.isConfigured(),
+        // El frontend pregunta en vez de repetir la lista de correos: una
+        // segunda copia de esa lista es una copia que se desactualiza.
+        puedoConstruir: puedeConstruir(getSession(_req)?.email),
       });
     } catch (error) {
       next(error);

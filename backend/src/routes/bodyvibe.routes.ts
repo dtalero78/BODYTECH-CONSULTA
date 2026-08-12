@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import bodyvibeController from '../controllers/bodyvibe.controller';
-import { requireRole, getSession } from '../middleware/rbac.middleware';
+import { getSession } from '../middleware/rbac.middleware';
+import { puedeConstruir } from '../services/bodyvibe-acceso';
 
 // /api/bodyvibe — BodyVibeTech.
 //
@@ -26,7 +27,24 @@ function requireSesion(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-const admin = requireRole('admin');
+/**
+ * Construir apps. Ser `admin` es necesario pero no suficiente: además hay que
+ * estar en la lista de constructores, porque cada generación consume del cupo
+ * de Anthropic compartido con el resto de la plataforma.
+ */
+function requireConstructor(req: Request, res: Response, next: NextFunction): void {
+  const sesion = getSession(req);
+  if (!sesion || sesion.role !== 'admin' || !puedeConstruir(sesion.email)) {
+    res.status(403).json({
+      ok: false,
+      mensaje: 'BodyVibeTech está habilitado para un grupo reducido de personas por ahora.',
+    });
+    return;
+  }
+  next();
+}
+
+
 
 // --- Cualquier sesión ---------------------------------------------------------
 router.get('/estado', requireSesion, bodyvibeController.estado);
@@ -40,32 +58,32 @@ router.post('/query', requireSesion, bodyvibeController.query);
 router.get('/tema', requireSesion, bodyvibeController.tema);
 router.get('/anclajes', requireSesion, bodyvibeController.anclajes);
 
-// --- Construcción (admin) -----------------------------------------------------
-router.get('/catalogo', admin, bodyvibeController.catalogo);
-router.get('/gasto', admin, bodyvibeController.gasto);
-router.put('/tema', admin, bodyvibeController.guardarTema);
+// --- Construcción (admin + lista de constructores) -----------------------------------------------------
+router.get('/catalogo', requireConstructor, bodyvibeController.catalogo);
+router.get('/gasto', requireConstructor, bodyvibeController.gasto);
+router.put('/tema', requireConstructor, bodyvibeController.guardarTema);
 
 // Los apps filtran por creador dentro del servicio: un borrador es privado
 // aunque quien lo pida también sea administrador.
-router.get('/apps', admin, bodyvibeController.listarApps);
-router.post('/apps', admin, bodyvibeController.crearApp);
-router.get('/apps/:id', admin, bodyvibeController.obtenerApp);
-router.delete('/apps/:id', admin, bodyvibeController.eliminarApp);
-router.get('/apps/:id/versiones', admin, bodyvibeController.versionesApp);
-router.post('/apps/:id/restaurar', admin, bodyvibeController.restaurarApp);
-router.post('/apps/:id/generar', admin, bodyvibeController.generar);
-router.post('/apps/:id/publicar', admin, bodyvibeController.publicar);
+router.get('/apps', requireConstructor, bodyvibeController.listarApps);
+router.post('/apps', requireConstructor, bodyvibeController.crearApp);
+router.get('/apps/:id', requireConstructor, bodyvibeController.obtenerApp);
+router.delete('/apps/:id', requireConstructor, bodyvibeController.eliminarApp);
+router.get('/apps/:id/versiones', requireConstructor, bodyvibeController.versionesApp);
+router.post('/apps/:id/restaurar', requireConstructor, bodyvibeController.restaurarApp);
+router.post('/apps/:id/generar', requireConstructor, bodyvibeController.generar);
+router.post('/apps/:id/publicar', requireConstructor, bodyvibeController.publicar);
 // Despublicar no exige ser el dueño: cualquier admin puede bajar cualquier app
 // (decisión 10). No destruye nada — vuelve a ser borrador de su dueño.
-router.post('/apps/:id/despublicar', admin, bodyvibeController.despublicar);
+router.post('/apps/:id/despublicar', requireConstructor, bodyvibeController.despublicar);
 
 // --- Aprobación ---------------------------------------------------------------
-router.get('/solicitudes', admin, bodyvibeController.solicitudes);
-router.post('/solicitudes/:id/aprobar', admin, bodyvibeController.aprobar);
-router.post('/solicitudes/:id/rechazar', admin, bodyvibeController.rechazar);
+router.get('/solicitudes', requireConstructor, bodyvibeController.solicitudes);
+router.post('/solicitudes/:id/aprobar', requireConstructor, bodyvibeController.aprobar);
+router.post('/solicitudes/:id/rechazar', requireConstructor, bodyvibeController.rechazar);
 
 // --- Interruptor general ------------------------------------------------------
-router.post('/apagar', admin, bodyvibeController.apagar);
-router.post('/encender', admin, bodyvibeController.encender);
+router.post('/apagar', requireConstructor, bodyvibeController.apagar);
+router.post('/encender', requireConstructor, bodyvibeController.encender);
 
 export default router;

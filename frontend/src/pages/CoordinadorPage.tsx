@@ -101,9 +101,18 @@ export function CoordinadorPage() {
 
   // "Mapa de Rutas": botón privado, visible solo para emails autorizados.
   const MAPA_ALLOWED = ['danieltalero78@gmail.com', 'nikolay.correal@bodytechcorp.com'];
-  // BodyVibeTech: construir es de `admin`. La entrada no se muestra a quien no
-  // puede entrar — un ítem que lleva a un 403 es peor que no tenerlo.
-  const esAdmin = useMemo(() => authService.getUser()?.role === 'admin', []);
+  // BodyVibeTech: la entrada no se muestra a quien no puede entrar — un ítem
+  // que lleva a un 403 es peor que no tenerlo. Quién puede construir lo decide
+  // el backend (rol + lista de constructores), así que se pregunta en vez de
+  // deducirlo acá: una segunda copia de esa regla es una copia que se
+  // desactualiza.
+  const [puedeConstruir, setPuedeConstruir] = useState(false);
+  useEffect(() => {
+    bodyvibeService
+      .estado()
+      .then((e) => setPuedeConstruir(Boolean(e.puedoConstruir)))
+      .catch(() => setPuedeConstruir(false));
+  }, []);
 
   // "Aplicaciones" solo aparece si hay al menos una publicada para esta
   // persona. Mismo criterio que los anclajes: nada que lleve a una pantalla
@@ -247,7 +256,7 @@ export function CoordinadorPage() {
               active={view === 'usuarios'}
               onClick={() => setView('usuarios')}
             />
-            {esAdmin && (
+            {puedeConstruir && (
               <NavItem
                 icon={<Sparkles className="w-[15px] h-[15px]" />}
                 label="BodyVibeTech"

@@ -208,3 +208,18 @@ verificar contra la base. Falta lo que solo está en la cabeza del autor.
 
 Cada uno de estos huecos es un reporte que puede salir mal sin que nadie lo
 note.
+
+---
+
+## 7. Quién puede construir, y por qué son pocos
+
+BodyVibeTech usa **la misma llave de Anthropic que el resto de la plataforma**,
+con un tope de gasto compartido. Cada app que se genera consume de ese mismo
+cupo, el mismo que alimenta las sugerencias clínicas y el Bot Trepsi.
+
+Por eso construir no está abierto a todos los administradores: la lista vive en
+la variable `BODYVIBE_CONSTRUCTORES` y hoy tiene una sola persona. El tope
+mensual de BodyVibeTech (`BODYVIBE_TOPE_USD`) cuenta **solo lo que gasta
+BodyVibeTech** — no ve el consumo del resto de la plataforma, así que no protege
+del tope global de la cuenta. Sumar constructores antes de separar la llave es
+subir el riesgo de que la plataforma entera se quede sin cupo a mitad de mes.

@@ -45,7 +45,14 @@ interface Turno {
 }
 
 /** Qué ocupa la zona principal. */
-type Vista = 'inicio' | 'modificar' | 'app' | 'diseno' | 'aquien' | 'aprobaciones';
+type Vista =
+  | 'inicio'
+  | 'construir'
+  | 'modificar'
+  | 'app'
+  | 'diseno'
+  | 'aquien'
+  | 'aprobaciones';
 
 const dinero = (usd: number) => `USD ${usd.toFixed(2)}`;
 
@@ -240,7 +247,7 @@ export default function BodyVibeTechPage() {
       setApps((a) => a.filter((x) => x.id !== app.id));
       setActivo(null);
       setPedido(texto);
-      setVista('inicio');
+      setVista('construir');
     },
     [generando, correrGeneracion]
   );
@@ -363,9 +370,9 @@ export default function BodyVibeTechPage() {
                         setActivo(null);
                         setPedido('');
                         setAnclajePreferido(null);
-                        setVista('inicio');
+                        setVista('construir');
                       }}
-                      className={`${itemLateral(false)} text-zinc-500`}
+                      className={`${itemLateral(vista === 'construir' && !activo)} text-zinc-500`}
                     >
                       + Nuevo
                     </button>
@@ -497,79 +504,89 @@ export default function BodyVibeTechPage() {
                 servicio.
               </p>
 
-              {/* Quien llegó desde «Modificar» ya eligió pantalla. Se lo recuerda
-                  acá —y se lo deja soltar— para que no escriba a ciegas creyendo
-                  que está haciendo algo suelto. */}
-              {anclajePreferido && (
-                <p className="mt-6 flex items-center justify-center gap-2 text-[12.5px] text-zinc-600 dark:text-zinc-300">
-                  Va a quedar en:{' '}
-                  <span className="font-medium">
-                    {anclajes.find((a) => a.id === anclajePreferido)?.nombre ?? anclajePreferido}
+              <div className="mt-10 grid gap-3 sm:grid-cols-2">
+                <button
+                  onClick={() => setVista('construir')}
+                  className="rounded-2xl bg-white p-5 text-left shadow-[0_14px_40px_-14px_rgba(24,24,27,0.3)] transition-transform hover:-translate-y-0.5 dark:bg-zinc-900"
+                >
+                  <span className="block text-[15px] font-medium">Construir algo nuevo</span>
+                  <span className="mt-1 block text-[13px] text-zinc-500">
+                    Un tablero, un reporte, una utilidad que hoy no existe.
                   </span>
-                  <button
-                    onClick={() => setAnclajePreferido(null)}
-                    className="text-[11.5px] underline"
-                  >
-                    quitar
-                  </button>
-                </p>
-              )}
-
-              <div className="mt-8 rounded-[22px] bg-white p-2 shadow-[0_18px_50px_-12px_rgba(24,24,27,0.28)] dark:bg-zinc-900">
-                <textarea
-                  value={pedido}
-                  onChange={(e) => setPedido(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter construye; Shift+Enter hace salto de línea, como en
-                    // cualquier caja de chat.
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      empezar(pedido);
-                    }
-                  }}
-                  rows={2}
-                  autoFocus
-                  disabled={apagado}
-                  placeholder="Pídele a BodyVibeTech un tablero que…"
-                  className="w-full resize-none bg-transparent px-4 pb-2 pt-3 text-[15px] outline-none placeholder:text-zinc-400 disabled:opacity-50"
-                />
-                <div className="flex items-center justify-between px-2 pb-1">
-                  <button
-                    onClick={() => setVista('modificar')}
-                    className="rounded-full px-3 py-1.5 text-[12.5px] text-zinc-500 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  >
-                    Modificar una pantalla que ya existe
-                  </button>
-                  <button
-                    onClick={() => empezar(pedido)}
-                    disabled={!pedido.trim() || apagado}
-                    className="rounded-full bg-zinc-900 px-4 py-1.5 text-[13px] font-medium text-white transition-opacity disabled:opacity-30 dark:bg-zinc-100 dark:text-zinc-900"
-                  >
-                    Construir
-                  </button>
-                </div>
+                </button>
+                <button
+                  onClick={() => setVista('modificar')}
+                  className="rounded-2xl bg-white p-5 text-left shadow-[0_14px_40px_-14px_rgba(24,24,27,0.3)] transition-transform hover:-translate-y-0.5 dark:bg-zinc-900"
+                >
+                  <span className="block text-[15px] font-medium">Modificar lo que ya existe</span>
+                  <span className="mt-1 block text-[13px] text-zinc-500">
+                    Agregar algo dentro de una pantalla actual de la plataforma.
+                  </span>
+                </button>
               </div>
-
-              <ul className="mt-6 flex flex-wrap justify-center gap-2">
-                {SUGERENCIAS.map((s) => (
-                  <li key={s.titulo}>
-                    <button
-                      onClick={() => empezar(s.pedido)}
-                      disabled={apagado}
-                      className="rounded-full border border-zinc-900/10 bg-white/70 px-3.5 py-1.5 text-[12.5px] text-zinc-700 backdrop-blur transition-colors hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
-                      {s.titulo}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              {error && (
-                <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[12.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-                  {error}
-                </p>
-              )}
             </div>
+          </div>
+        )}
+
+        {vista === 'construir' && (
+          <div className="mx-auto max-w-2xl px-6 pt-24">
+            <h1 className="mb-6 text-center text-[26px] font-semibold tracking-tight">
+              Cuéntanos qué quieres construir
+            </h1>
+
+            {/* Quien llegó desde «Modificar» ya eligió pantalla. Se lo recuerda
+                acá —y se lo deja soltar— para que no escriba a ciegas creyendo
+                que está haciendo un app suelto. */}
+            {anclajePreferido && (
+              <p className="mb-3 flex items-center gap-2 text-[12.5px] text-zinc-500">
+                Va a quedar en:{' '}
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  {anclajes.find((a) => a.id === anclajePreferido)?.nombre ?? anclajePreferido}
+                </span>
+                <button
+                  onClick={() => setAnclajePreferido(null)}
+                  className="text-[11.5px] underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  quitar
+                </button>
+              </p>
+            )}
+
+            <textarea
+              value={pedido}
+              onChange={(e) => setPedido(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) empezar(pedido);
+              }}
+              rows={3}
+              autoFocus
+              placeholder="Por ejemplo: las citas de esta semana por sede, con cuántas se atendieron."
+              className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 text-[14px] outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                onClick={() => empezar(pedido)}
+                disabled={!pedido.trim() || apagado}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-[13px] font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                Construir
+              </button>
+              <span className="text-[11.5px] text-zinc-400">&#8984;/Ctrl + Enter</span>
+            </div>
+
+            <ul className="mt-10 space-y-1">
+              {SUGERENCIAS.map((s) => (
+                <li key={s.titulo}>
+                  <button
+                    onClick={() => empezar(s.pedido)}
+                    className="w-full rounded-lg px-3 py-2.5 text-left text-[13.5px] text-zinc-600 transition-colors hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  >
+                    {s.titulo}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -610,7 +627,7 @@ export default function BodyVibeTechPage() {
                             onClick={() => {
                               setAnclajePreferido(a.id);
                               setPedido('');
-                              setVista('inicio');
+                              setVista('construir');
                             }}
                             className="w-full rounded-lg border border-zinc-200 p-3.5 text-left transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
                           >

@@ -72,9 +72,6 @@ export function Publicar({ app, onCambio }: PropsPublicar) {
   return (
     <section className="mt-6 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
       <div className="mb-3 flex items-center gap-3">
-        <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-          Publicación
-        </span>
         {publicado && (
           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
             en vivo · v{app.version}
@@ -212,12 +209,14 @@ export function Bandeja({ onCambio }: { onCambio: () => void }) {
   if (solicitudes.length === 0) return null;
 
   return (
-    <section className="mt-8">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-        Esperando tu aprobación ({solicitudes.length})
-      </span>
+    <section>
+      <p className="mb-3 text-[13px] text-zinc-500">
+        {solicitudes.length === 1
+          ? 'Una publicación espera tu visto bueno.'
+          : `${solicitudes.length} publicaciones esperan tu visto bueno.`}
+      </p>
 
-      <ul className="mt-2 flex flex-col gap-2">
+      <ul className="flex flex-col gap-2">
         {solicitudes.map((s) => (
           <li
             key={s.id}

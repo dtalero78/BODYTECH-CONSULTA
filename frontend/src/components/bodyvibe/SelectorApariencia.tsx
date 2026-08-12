@@ -60,12 +60,8 @@ export function SelectorApariencia() {
   if (paletas.length === 0) return null;
 
   return (
-    <section className="mt-6 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-        Apariencia de la plataforma
-      </span>
-
-      <p className="mb-4 mt-1 text-[12.5px] text-zinc-500">
+    <section>
+      <p className="mb-5 text-[13px] text-zinc-500">
         Se elige una paleta completa, no colores sueltos: el panel médico comparte pantalla con la
         consulta en vivo y todas estas están verificadas para que el texto clínico se lea. Durante
         una videollamada la personalización se retira sola y vuelve al colgar.

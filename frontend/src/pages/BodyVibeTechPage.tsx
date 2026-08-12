@@ -20,6 +20,9 @@
 // ============================================================================
 
 import { useCallback, useEffect, useState } from 'react';
+import { LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/auth.service';
 import AppSandbox, { ResultadoConsulta } from '../components/bodyvibe/AppSandbox';
 import { Bandeja, Publicar } from '../components/bodyvibe/PanelPublicacion';
 import { SelectorApariencia } from '../components/bodyvibe/SelectorApariencia';
@@ -93,6 +96,16 @@ const SUGERENCIAS = [
 ];
 
 export default function BodyVibeTechPage() {
+  const navigate = useNavigate();
+  // Se lee una vez: si la sesión se venció, quien avisa es el interceptor de
+  // `sesion-vencida`, no un cartel acá.
+  const [usuario] = useState(() => authService.getUser());
+
+  const salir = useCallback(() => {
+    authService.logout();
+    navigate('/login', { replace: true });
+  }, [navigate]);
+
   const [apps, setApps] = useState<App[]>([]);
   const [activo, setActivo] = useState<App | null>(null);
   const [versiones, setVersiones] = useState<VersionApp[]>([]);
@@ -422,12 +435,51 @@ export default function BodyVibeTechPage() {
               />
               {apagado ? 'Apagado · encender' : 'Encendido · apagar todo'}
             </button>
+
+            {/* Quién está adentro y cómo salir. Faltaba: BodyVibeTech construye
+                cosas que quedan a nombre de quien las hizo, así que no saber
+                con qué cuenta se está trabajando importa más acá que en otras
+                pantallas. */}
+            {usuario && (
+              <div className="mt-3 flex items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] font-medium text-zinc-700 dark:text-zinc-300">
+                    {usuario.nombre || usuario.email}
+                  </div>
+                  <div className="truncate text-[10.5px] text-zinc-400">{usuario.email}</div>
+                </div>
+                <button
+                  onClick={salir}
+                  className="shrink-0 rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  title="Salir"
+                  aria-label="Salir"
+                >
+                  <LogOut className="h-[14px] w-[14px]" />
+                </button>
+              </div>
+            )}
           </div>
         </aside>
       )}
 
       {/* ================= Zona principal ================= */}
-      <main className="min-w-0 flex-1">
+      <main className="relative min-w-0 flex-1">
+        {/* En la portada no hay barra lateral, así que la sesión vive acá. Sin
+            esto, la primera pantalla de todas no tiene forma de salir. */}
+        {vista === 'inicio' && usuario && (
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <span className="text-[12px] text-zinc-500">{usuario.email}</span>
+            <button
+              onClick={salir}
+              className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              title="Salir"
+              aria-label="Salir"
+            >
+              <LogOut className="h-[14px] w-[14px]" />
+            </button>
+          </div>
+        )}
+
         {estado && !estado.rolDisponible && (
           <p className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-[12.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
             El usuario de solo lectura de la base no está disponible: ningún app puede consultar

@@ -10,10 +10,21 @@
 // ============================================================================
 
 import { useCallback, useEffect, useState } from 'react';
+import { LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import authService from '../services/auth.service';
 import AppSandbox, { ResultadoConsulta } from '../components/bodyvibe/AppSandbox';
 import bodyvibeService, { AppPublicado } from '../services/bodyvibe.service';
 
 export default function AppsPublicadosPage() {
+  const navigate = useNavigate();
+  const usuario = authService.getUser();
+
+  const salir = useCallback(() => {
+    authService.logout();
+    navigate('/login', { replace: true });
+  }, [navigate]);
+
   const [apps, setApps] = useState<AppPublicado[]>([]);
   const [activo, setActivo] = useState<AppPublicado | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -51,14 +62,27 @@ export default function AppsPublicadosPage() {
       <header className="border-b border-zinc-200 bg-white px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mx-auto flex max-w-[1200px] items-center gap-4">
           <h1 className="text-[15px] font-semibold tracking-tight">Aplicaciones</h1>
-          {activo && apps.length > 1 && (
-            <button
-              onClick={() => setActivo(null)}
-              className="ml-auto text-[12.5px] text-zinc-500 underline"
-            >
-              Ver todas
-            </button>
-          )}
+
+          <div className="ml-auto flex items-center gap-3">
+            {activo && apps.length > 1 && (
+              <button onClick={() => setActivo(null)} className="text-[12.5px] text-zinc-500 underline">
+                Ver todas
+              </button>
+            )}
+            {usuario && (
+              <>
+                <span className="hidden text-[12px] text-zinc-500 sm:inline">{usuario.email}</span>
+                <button
+                  onClick={salir}
+                  className="rounded p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  title="Salir"
+                  aria-label="Salir"
+                >
+                  <LogOut className="h-[14px] w-[14px]" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 

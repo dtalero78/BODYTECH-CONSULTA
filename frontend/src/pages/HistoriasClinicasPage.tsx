@@ -1,7 +1,35 @@
 import { useState } from 'react';
+import { Anclaje } from '../components/bodyvibe/Anclaje';
+import { BarraVista, ColumnaVista } from '../components/vistas/BarraVista';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import apiService from '../services/api.service';
+
+// Catálogo de columnas de esta tabla. El id se usa también como clave al
+// exportar, así que el Excel sale con exactamente lo que se ve en pantalla.
+const COLUMNAS: ColumnaVista[] = [
+  { id: 'afiliado', label: 'Afiliado', fija: true },
+  { id: 'numeroId', label: 'Documento' },
+  { id: 'codEmpresa', label: 'Empresa' },
+  { id: 'medico', label: 'Médico' },
+  { id: 'fechaConsulta', label: 'Fecha consulta' },
+  { id: 'mdConceptoFinal', label: 'Concepto' },
+  { id: 'mdDx1', label: 'Dx' },
+  { id: 'celular', label: 'Celular' },
+  { id: 'email', label: 'Correo' },
+  { id: 'cargo', label: 'Cargo' },
+  { id: 'tipoExamen', label: 'Tipo de examen' },
+];
+
+const COLUMNAS_POR_DEFECTO = [
+  'afiliado',
+  'numeroId',
+  'codEmpresa',
+  'medico',
+  'fechaConsulta',
+  'mdConceptoFinal',
+  'mdDx1',
+];
 
 interface HistoriaClinicaItem {
   _id: string;
@@ -263,6 +291,10 @@ export function HistoriasClinicasPage() {
   const [buscar, setBuscar] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [selectedHistoria, setSelectedHistoria] = useState<HistoriaClinicaItem | null>(null);
+  const [columnasVisibles, setColumnasVisibles] = useState<string[]>(COLUMNAS_POR_DEFECTO);
+
+  /** ¿Se muestra esta columna? */
+  const ver = (id: string) => columnasVisibles.includes(id);
   const limit = 20;
 
   // queryKey incluye page + buscar — al cambiar cualquiera, TanStack Query
@@ -359,6 +391,33 @@ export function HistoriasClinicasPage() {
           </div>
         )}
 
+        {/* Mi vista: columnas, vistas guardadas y exportar. */}
+        {!isLoading && historias.length > 0 && (
+          <div className="mb-3">
+            <BarraVista
+              tablaId="historias"
+              columnas={COLUMNAS}
+              visibles={columnasVisibles}
+              onVisiblesChange={setColumnasVisibles}
+              nombreArchivo="historias_clinicas"
+              // Se exporta lo mismo que se ve: mismas filas, mismo orden.
+              filas={historias.map((h) => ({
+                afiliado: `${h.primerNombre ?? ''} ${h.primerApellido ?? ''}`.trim(),
+                numeroId: h.numeroId,
+                codEmpresa: h.codEmpresa ?? '',
+                medico: h.medico ?? '',
+                fechaConsulta: formatDate(h.fechaConsulta),
+                mdConceptoFinal: h.mdConceptoFinal ?? '',
+                mdDx1: h.mdDx1 ?? '',
+                celular: h.celular ?? '',
+                email: h.email ?? '',
+                cargo: h.cargo ?? '',
+                tipoExamen: h.tipoExamen ?? '',
+              }))}
+            />
+          </div>
+        )}
+
         {/* Table */}
         {!isLoading && historias.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -366,19 +425,18 @@ export function HistoriasClinicasPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Afiliado</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Documento</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Empresa</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Medico</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha Consulta</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Concepto</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Dx</th>
+                    {COLUMNAS.filter((c) => ver(c.id)).map((c) => (
+                      <th key={c.id} className="text-left px-4 py-3 font-medium text-gray-600">
+                        {c.label}
+                      </th>
+                    ))}
                     <th className="text-center px-4 py-3 font-medium text-gray-600">Ficha</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {historias.map((h) => (
                     <tr key={h._id} className="hover:bg-gray-50 transition-colors">
+                      {ver('afiliado') && (
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {h.foto ? (
@@ -393,18 +451,29 @@ export function HistoriasClinicasPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{h.numeroId}</td>
-                      <td className="px-4 py-3 text-gray-600">{h.codEmpresa || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">{h.medico || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600">{formatDate(h.fechaConsulta)}</td>
+                      )}
+                      {ver('numeroId') && <td className="px-4 py-3 text-gray-600">{h.numeroId}</td>}
+                      {ver('codEmpresa') && <td className="px-4 py-3 text-gray-600">{h.codEmpresa || '—'}</td>}
+                      {ver('medico') && <td className="px-4 py-3 text-gray-600">{h.medico || '—'}</td>}
+                      {ver('fechaConsulta') && (
+                        <td className="px-4 py-3 text-gray-600">{formatDate(h.fechaConsulta)}</td>
+                      )}
+                      {ver('mdConceptoFinal') && (
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${conceptoColor(h.mdConceptoFinal)}`}>
                           {h.mdConceptoFinal || '—'}
                         </span>
                       </td>
+                      )}
+                      {ver('mdDx1') && (
                       <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={h.mdDx1 || ''}>
                         {h.mdDx1 || '—'}
                       </td>
+                      )}
+                      {ver('celular') && <td className="px-4 py-3 text-gray-600">{h.celular || '—'}</td>}
+                      {ver('email') && <td className="px-4 py-3 text-gray-600">{h.email || '—'}</td>}
+                      {ver('cargo') && <td className="px-4 py-3 text-gray-600">{h.cargo || '—'}</td>}
+                      {ver('tipoExamen') && <td className="px-4 py-3 text-gray-600">{h.tipoExamen || '—'}</td>}
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => setSelectedHistoria(h)}
@@ -454,6 +523,9 @@ export function HistoriasClinicasPage() {
           </div>
         )}
       </div>
+
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="historias.pie" />
 
       {/* Ficha Modal */}
       {selectedHistoria && (

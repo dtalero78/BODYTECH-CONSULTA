@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Anclaje } from '../bodyvibe/Anclaje';
+import { BarraVista, ColumnaVista } from '../vistas/BarraVista';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -28,6 +30,20 @@ interface Props {
   reportCount?: (count: number | null) => void;
 }
 
+const COLUMNAS: ColumnaVista[] = [
+  { id: 'profesional', label: 'Profesional', fija: true },
+  { id: 'rol', label: 'Rol' },
+  { id: 'especialidad', label: 'Especialidad' },
+  { id: 'consulta', label: 'Consulta' },
+  { id: 'sede', label: 'Sede' },
+  { id: 'estado', label: 'Estado' },
+  { id: 'codigo', label: 'Código' },
+  { id: 'email', label: 'Correo' },
+  { id: 'celular', label: 'Celular' },
+];
+
+const COLUMNAS_POR_DEFECTO = ['profesional', 'rol', 'especialidad', 'consulta', 'sede', 'estado'];
+
 function nombreCompleto(p: Profesional): string {
   if (p.alias) return p.alias;
   return [p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
@@ -36,6 +52,8 @@ function nombreCompleto(p: Profesional): string {
 }
 
 export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) {
+  const [columnasVisibles, setColumnasVisibles] = useState<string[]>(COLUMNAS_POR_DEFECTO);
+  const ver = (id: string) => columnasVisibles.includes(id);
   const navigate = useNavigate();
   const [profesionales, setProfesionales] = useState<Profesional[]>([]);
   const [sedes, setSedes] = useState<Sede[]>([]);
@@ -264,27 +282,39 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <div className="px-[14px] pb-2">
+              <BarraVista
+                tablaId="profesionales"
+                columnas={COLUMNAS}
+                visibles={columnasVisibles}
+                onVisiblesChange={setColumnasVisibles}
+                nombreArchivo="profesionales"
+                filas={profesionales.map((p) => ({
+                  profesional: nombreCompleto(p),
+                  rol: p.rol === 'medico' ? 'Médico' : 'Coach',
+                  especialidad: p.especialidad ?? '',
+                  consulta: `${p.tiempoConsulta} min`,
+                  sede: p.sedeId ? sedeNombre(p.sedeId) : '',
+                  estado: p.activo ? 'Activo' : 'Inactivo',
+                  codigo: p.codigo ?? '',
+                  email: p.email ?? '',
+                  celular: p.celular ?? '',
+                }))}
+              />
+            </div>
             <table className="w-full text-[13px]" style={{ fontFamily: FONT_INTER }}>
               <thead className="bg-[#fcfcfb] border-b border-zinc-200">
                 <tr className={SECTION_LABEL.replace('text-[10.5px]', '')}>
-                  <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold w-[32%]">
-                    Profesional
-                  </th>
-                  <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Rol
-                  </th>
-                  <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Especialidad
-                  </th>
-                  <th className="text-right px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Consulta
-                  </th>
-                  <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Sede
-                  </th>
-                  <th className="text-left px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
-                    Estado
-                  </th>
+                  {COLUMNAS.filter((c) => ver(c.id)).map((c) => (
+                    <th
+                      key={c.id}
+                      className={`px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold ${
+                        c.id === 'consulta' ? 'text-right' : 'text-left'
+                      } ${c.id === 'profesional' ? 'w-[32%]' : ''}`}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
                   <th className="text-right px-[14px] py-[10px] text-[10.5px] uppercase tracking-[0.08em] text-zinc-400 font-semibold">
                     Acciones
                   </th>
@@ -331,12 +361,17 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                           </div>
                         </div>
                       </td>
+                      {ver('rol') && (
                       <td className={`px-[14px] py-2.5 ${inactivo ? 'text-zinc-400' : 'text-zinc-700'}`}>
                         {p.rol === 'medico' ? 'Médico' : 'Coach'}
                       </td>
+                      )}
+                      {ver('especialidad') && (
                       <td className={`px-[14px] py-2.5 ${inactivo ? 'text-zinc-400' : 'text-zinc-700'}`}>
                         {p.especialidad || '—'}
                       </td>
+                      )}
+                      {ver('consulta') && (
                       <td
                         className={`px-[14px] py-2.5 text-right tabular-nums ${
                           inactivo ? 'text-zinc-400' : 'text-zinc-700'
@@ -344,6 +379,8 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                       >
                         {p.tiempoConsulta} min
                       </td>
+                      )}
+                      {ver('sede') && (
                       <td className="px-[14px] py-2.5">
                         {p.sedeId ? (
                           <span
@@ -359,6 +396,8 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
+                      )}
+                      {ver('estado') && (
                       <td className="px-[14px] py-2.5">
                         {p.activo ? (
                           <Pill variant="ok">Activo</Pill>
@@ -366,6 +405,18 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
                           <Pill variant="mute">Inactivo</Pill>
                         )}
                       </td>
+                      )}
+                      {ver('codigo') && (
+                        <td className="px-[14px] py-2.5 font-mono text-[11.5px] text-zinc-500">
+                          {p.codigo || '—'}
+                        </td>
+                      )}
+                      {ver('email') && (
+                        <td className="px-[14px] py-2.5 text-zinc-600">{p.email || '—'}</td>
+                      )}
+                      {ver('celular') && (
+                        <td className="px-[14px] py-2.5 text-zinc-600">{p.celular || '—'}</td>
+                      )}
                       <td className="px-[14px] py-2.5 text-right">
                         {p.activo ? (
                           <div className="inline-flex items-center gap-1">
@@ -490,6 +541,9 @@ export function ProfesionalesView({ reloadKey, showToast, reportCount }: Props) 
           </div>
         </div>
       )}
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="coordinador.profesionales.pie" />
+
     </div>
   );
 }

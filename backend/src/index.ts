@@ -28,6 +28,8 @@ import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
 import auditRoutes from './routes/audit.routes';
+import bodyvibeRoutes from './routes/bodyvibe.routes';
+import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -192,6 +194,15 @@ app.use('/api/calidad', requireRole('coordinador', 'admin'), calidadRoutes);
 app.use('/api/admin/trepsi-webhook', requireRole('admin', 'coordinador'), trepsiWebhookAdminRoutes);
 // Bitácora de auditoría global (audit_log) — solo admin/coordinador.
 app.use('/api/admin/audit', requireRole('admin', 'coordinador'), auditRoutes);
+
+// BodyVibeTech — construcción, publicación y consumo de apps internos.
+// El RBAC va por ruta dentro del router: construir es de `admin`, pero VER un
+// app publicado lo hace su audiencia, que no es administradora.
+app.use('/api/bodyvibe', bodyvibeRoutes);
+
+// "Mi vista" de cualquier tabla. Cualquier sesión válida: recordar cómo querés
+// ver una tabla no es un privilegio.
+app.use('/api/vistas', vistasGuardadasRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
 // Público (sin auth): Twilio toma el PNG del tablero de aquí como media.
 app.use('/api/public/gestion-report-image', gestionReportImageRoutes);
@@ -227,9 +238,23 @@ app.use(errorHandler);
 import postgresService from './services/postgres.service';
 import usuariosService from './services/usuarios.service';
 import { chimeRecordingService } from './services/video/chime-recording.service';
+import bodyvibeDbService from './services/bodyvibe-db.service';
+import bodyvibeEstantesService from './services/bodyvibe-estantes.service';
+import bodyvibeCatalogoService from './services/bodyvibe-catalogo.service';
 postgresService
   .runMigrations()
   .then(() => usuariosService.seedBootstrapAdmin())
+  // Cerrojo 1 de BodyVibeTech: crea/actualiza el rol de solo lectura y levanta
+  // su pool aparte. Va DESPUÉS de las migraciones porque los GRANT del bloque 1
+  // se otorgan sobre vistas que las migraciones crean. Si falla, BodyVibeTech
+  // queda apagado y el resto de la plataforma sigue igual.
+  .then(() => bodyvibeDbService.ensureReadOnlyRole())
+  // Los estantes solo se construyen si el rol quedó listo: sin rol al que
+  // otorgarle SELECT, crear las vistas no sirve de nada.
+  .then((rolListo) => (rolListo ? bodyvibeEstantesService.ensureEstantes() : undefined))
+  // Rehacer los estantes cambia sus columnas: el catálogo en memoria queda
+  // viejo y describiría una vista que ya no es.
+  .then(() => bodyvibeCatalogoService.invalidar())
   .catch((e) => console.error('❌ [bootstrap] Error en migraciones/siembra:', e?.message ?? e));
 
 // Worker del outbox del webhook Trepsi: cada 30 s recorre la cola y reenvía

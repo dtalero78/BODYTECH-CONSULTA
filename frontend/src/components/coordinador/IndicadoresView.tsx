@@ -12,6 +12,8 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
+import { BarraVista, ColumnaVista } from '../vistas/BarraVista';
+import { Anclaje } from '../bodyvibe/Anclaje';
 import { ChevronDown, ChevronRight, X, Download, LineChart, Users } from 'lucide-react';
 import calendarioService, {
   IndicadoresResumen,
@@ -119,7 +121,23 @@ function presetRange(preset: Preset): { from: string; to: string } {
 
 // ---------------------------------------------------------------------------
 
+// Las columnas de esta tabla ya son todas numéricas y caben juntas, así que no
+// hay set "por defecto" reducido: se muestran todas y quien quiera simplifica.
+const COLUMNAS: ColumnaVista[] = [
+  { id: 'profesional', label: 'Profesional', fija: true },
+  { id: 'agendadas', label: 'Agendadas' },
+  { id: 'atendidas', label: 'Atendidas' },
+  { id: 'pendientes', label: 'Pendientes' },
+  { id: 'noContesta', label: 'No contesta' },
+  { id: 'noContacto', label: 'No contactó' },
+  { id: 'porcentaje', label: '% Atención' },
+];
+
 export function IndicadoresView({ showToast }: Props) {
+  const [columnasVisibles, setColumnasVisibles] = useState<string[]>(
+    COLUMNAS.map((c) => c.id)
+  );
+  const verCol = (id: string) => columnasVisibles.includes(id);
   const [{ from, to }, setRange] = useState(() => presetRange('hoy'));
   const [activePreset, setActivePreset] = useState<Preset | null>('hoy');
   const [data, setData] = useState<IndicadoresResumen | null>(null);
@@ -468,29 +486,54 @@ export function IndicadoresView({ showToast }: Props) {
           <Users className="w-4 h-4 text-zinc-400" />
           <span className={SECTION_LABEL}>Desglose por profesional</span>
         </div>
+        <div className="mb-2">
+          <BarraVista
+            tablaId="indicadores-por-profesional"
+            columnas={COLUMNAS}
+            visibles={columnasVisibles}
+            onVisiblesChange={setColumnasVisibles}
+            nombreArchivo="indicadores_por_profesional"
+            // "Pendientes" se toma del mismo helper que usa la tabla, no de una
+            // resta escrita otra vez acá: dos copias de la misma fórmula es
+            // exactamente cómo el Excel termina diciendo algo distinto que la
+            // pantalla.
+            filas={(data?.porMedico ?? []).map((m) => ({
+              profesional: m.nombre || m.medicoCodigo,
+              agendadas: m.agendadas,
+              atendidas: m.atendidas,
+              pendientes: pendientesDe(m),
+              noContesta: m.noContactadas,
+              noContacto: m.noContacto,
+              porcentaje: m.agendadas ? Math.round((m.atendidas / m.agendadas) * 100) : 0,
+            }))}
+          />
+        </div>
         <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
           <table className="w-full text-[13px]" style={{ fontFamily: FONT_INTER }}>
             <thead>
               <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 text-[11px] uppercase tracking-[0.06em]">
-                <th className="text-left font-semibold px-4 py-2.5">Profesional</th>
-                <th className="text-right font-semibold px-4 py-2.5">Agendadas</th>
-                <th className="text-right font-semibold px-4 py-2.5">Atendidas</th>
-                <th className="text-right font-semibold px-4 py-2.5">Pendientes</th>
-                <th className="text-right font-semibold px-4 py-2.5">No contesta</th>
-                <th className="text-right font-semibold px-4 py-2.5">No contactó</th>
-                <th className="text-right font-semibold px-4 py-2.5">% Atención</th>
+                {COLUMNAS.filter((c) => verCol(c.id)).map((c) => (
+                  <th
+                    key={c.id}
+                    className={`font-semibold px-4 py-2.5 ${
+                      c.id === 'profesional' ? 'text-left' : 'text-right'
+                    }`}
+                  >
+                    {c.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={columnasVisibles.length} className="px-4 py-8 text-center text-zinc-400">
                     Cargando…
                   </td>
                 </tr>
               ) : !data || data.porMedico.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={columnasVisibles.length} className="px-4 py-8 text-center text-zinc-400">
                     No hay citas en el rango seleccionado.
                   </td>
                 </tr>
@@ -546,7 +589,7 @@ export function IndicadoresView({ showToast }: Props) {
                     </tr>
                     {isOpen && (
                       <tr className="bg-zinc-50/70">
-                        <td colSpan={7} className="px-4 pb-3 pt-1">
+                        <td colSpan={columnasVisibles.length} className="px-4 pb-3 pt-1">
                           <NoContactoDetail
                             loading={det?.loading ?? true}
                             items={det?.items ?? []}
@@ -647,6 +690,9 @@ export function IndicadoresView({ showToast }: Props) {
           </div>
         </div>
       )}
+      {/* Apps publicados en este punto. Si no hay ninguno, no pinta nada. */}
+      <Anclaje id="coordinador.indicadores.pie" />
+
     </div>
   );
 }

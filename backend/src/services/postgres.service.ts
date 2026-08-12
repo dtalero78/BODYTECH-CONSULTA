@@ -1155,6 +1155,247 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "video_room_name" TEXT
       `);
 
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — bitácora de LECTURAS.
+      //
+      // `audit_log` solo registra escrituras (POST/PUT/PATCH/DELETE). Con apps
+      // que consultan condiciones médicas de pacientes hace falta el otro lado:
+      // quién consultó qué, cuándo y cuántas filas se llevó. En datos de salud
+      // eso no es opcional.
+      //
+      // La escribe `bodyvibe-db.service` con el pool principal — el rol de solo
+      // lectura, por definición, no puede escribir ni su propia bitácora.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_query_log (
+          id          BIGSERIAL PRIMARY KEY,
+          usuario_id  INTEGER,
+          email       TEXT,
+          app_id      TEXT,
+          sql_texto   TEXT NOT NULL,
+          filas       INTEGER NOT NULL DEFAULT 0,
+          duracion_ms INTEGER NOT NULL DEFAULT 0,
+          resultado   TEXT NOT NULL,
+          error       TEXT,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_query_log_created ON bodyvibe_query_log (created_at DESC)`
+      );
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_query_log_usuario ON bodyvibe_query_log (usuario_id, created_at DESC)`
+      );
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_query_log_app ON bodyvibe_query_log (app_id, created_at DESC)`
+      );
+
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — interruptor general (decisión 10, nivel 3).
+      //
+      // Una sola fila. Cuando `activo = false`, TODA la superficie de
+      // BodyVibeTech deja de responder y la plataforma queda exactamente como
+      // está hoy. Es lo que hace aceptable todo lo demás: si esto sale mal de
+      // una forma que no previmos, hay un botón que lo devuelve en 5 segundos.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_config (
+          id           SMALLINT PRIMARY KEY DEFAULT 1,
+          activo       BOOLEAN NOT NULL DEFAULT TRUE,
+          motivo       TEXT,
+          apagado_por  TEXT,
+          apagado_at   TIMESTAMPTZ,
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT bodyvibe_config_una_fila CHECK (id = 1)
+        )
+      `);
+      await this.query(
+        `INSERT INTO bodyvibe_config (id, activo) VALUES (1, TRUE) ON CONFLICT (id) DO NOTHING`
+      );
+
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — los apps y su historial.
+      //
+      // `codigo` es el JavaScript que corre dentro del recinto aislado. Se
+      // guarda como texto y nunca se ejecuta del lado del servidor.
+      //
+      // El estado arranca en `borrador`: privado de quien lo creó, sin pedirle
+      // permiso a nadie (decisión 05). Publicar es otra cosa y llega después.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_apps (
+          id             TEXT PRIMARY KEY,
+          titulo         TEXT NOT NULL,
+          creador_id     INTEGER,
+          creador_email  TEXT,
+          sede_id        TEXT,
+          estado         TEXT NOT NULL DEFAULT 'borrador',
+          codigo         TEXT NOT NULL DEFAULT '',
+          notas          TEXT,
+          version        INTEGER NOT NULL DEFAULT 1,
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_apps_creador ON bodyvibe_apps (creador_id, updated_at DESC)`
+      );
+
+      // Cada iteración queda guardada. Sin esto, "volvé a como estaba antes"
+      // no tiene respuesta, y ese pedido llega el primer día.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_app_versiones (
+          id          BIGSERIAL PRIMARY KEY,
+          app_id      TEXT NOT NULL,
+          version     INTEGER NOT NULL,
+          pedido      TEXT,
+          codigo      TEXT NOT NULL,
+          notas       TEXT,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT bv_app_version_uq UNIQUE (app_id, version)
+        )
+      `);
+
+      // ----------------------------------------------------------------------
+      // Consumo del modelo. Se registra por generación para poder cortar al
+      // llegar al tope mensual (decisión 11).
+      //
+      // El tope no está para controlar a la gente: está para que un error de
+      // programación que reintente en bucle no despierte con una factura
+      // absurda. Por eso el corte es duro y no una alerta.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_uso (
+          id             BIGSERIAL PRIMARY KEY,
+          app_id         TEXT,
+          usuario_id     INTEGER,
+          email          TEXT,
+          modelo         TEXT NOT NULL,
+          input_tokens   INTEGER NOT NULL DEFAULT 0,
+          cache_write    INTEGER NOT NULL DEFAULT 0,
+          cache_read     INTEGER NOT NULL DEFAULT 0,
+          output_tokens  INTEGER NOT NULL DEFAULT 0,
+          costo_usd      NUMERIC(12, 6) NOT NULL DEFAULT 0,
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_uso_created ON bodyvibe_uso (created_at DESC)`
+      );
+
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — publicación (decisiones 04, 05 y 06).
+      //
+      // `codigo` es el BORRADOR, privado de quien lo creó. `publicado_codigo`
+      // es una FOTO de lo que está en vivo. Son dos cosas distintas a propósito:
+      // si el público leyera `codigo`, editar el borrador cambiaría en silencio
+      // lo que ve todo el mundo — exactamente el atajo que la re-aprobación
+      // existe para cerrar.
+      //
+      // `huella_aprobada` resume QUÉ DATOS consulta la versión aprobada. Si un
+      // cambio no la mueve y no toca la audiencia, es cosmético y se republica
+      // solo. Si la mueve, vuelve a aprobación.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        ALTER TABLE bodyvibe_apps
+          ADD COLUMN IF NOT EXISTS alcance           TEXT NOT NULL DEFAULT 'privado',
+          ADD COLUMN IF NOT EXISTS audiencia_roles   TEXT[] NOT NULL DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS audiencia_sedes   TEXT[] NOT NULL DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS publicado_codigo  TEXT,
+          ADD COLUMN IF NOT EXISTS publicado_version INTEGER,
+          ADD COLUMN IF NOT EXISTS huella_aprobada   TEXT,
+          ADD COLUMN IF NOT EXISTS publicado_sqls    TEXT[] NOT NULL DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS publicado_at      TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS publicado_por     TEXT,
+          ADD COLUMN IF NOT EXISTS despublicado_por  TEXT,
+          ADD COLUMN IF NOT EXISTS despublicado_motivo TEXT,
+          -- Dónde queda incrustado el app. NULL = suelto, en /apps.
+          ADD COLUMN IF NOT EXISTS anclaje           TEXT
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_apps_publicados ON bodyvibe_apps (estado) WHERE estado = 'publicado'`
+      );
+
+      // Solicitudes de publicación. Se guarda la FOTO del código y la audiencia
+      // pedida: el revisor aprueba lo que vio, no lo que el borrador sea al
+      // momento de hacer clic.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_solicitudes (
+          id               BIGSERIAL PRIMARY KEY,
+          app_id           TEXT NOT NULL,
+          version          INTEGER NOT NULL,
+          codigo           TEXT NOT NULL,
+          huella           TEXT NOT NULL,
+          estantes         TEXT[] NOT NULL DEFAULT '{}',
+          alcance          TEXT NOT NULL,
+          audiencia_roles  TEXT[] NOT NULL DEFAULT '{}',
+          audiencia_sedes  TEXT[] NOT NULL DEFAULT '{}',
+          estado           TEXT NOT NULL DEFAULT 'pendiente',
+          solicitante_id   INTEGER,
+          solicitante      TEXT,
+          revisor          TEXT,
+          motivo           TEXT,
+          anclaje          TEXT,
+          created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          resuelto_at      TIMESTAMPTZ
+        )
+      `);
+      await this.query(`ALTER TABLE bodyvibe_solicitudes ADD COLUMN IF NOT EXISTS anclaje TEXT`);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_bv_solicitudes_pendientes
+           ON bodyvibe_solicitudes (created_at DESC) WHERE estado = 'pendiente'`
+      );
+
+      // ----------------------------------------------------------------------
+      // BodyVibeTech — apariencia (decisión 07, puerta 2).
+      //
+      // Una sola fila: la apariencia es de la plataforma, no de cada persona.
+      // Guarda el ID de una paleta preaprobada, nunca colores sueltos. El panel
+      // médico comparte pantalla con una consulta en vivo, y ahí un color mal
+      // elegido no es un detalle estético.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS bodyvibe_tema (
+          id               SMALLINT PRIMARY KEY DEFAULT 1,
+          paleta           TEXT NOT NULL DEFAULT 'bodytech',
+          densidad         TEXT NOT NULL DEFAULT 'normal',
+          actualizado_por  TEXT,
+          actualizado_at   TIMESTAMPTZ,
+          CONSTRAINT bodyvibe_tema_una_fila CHECK (id = 1)
+        )
+      `);
+      await this.query(`INSERT INTO bodyvibe_tema (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
+
+      // ----------------------------------------------------------------------
+      // Vistas guardadas. No es BodyVibeTech: no genera nada, no necesita
+      // aprobación, no consulta el modelo.
+      //
+      // Es la función aburrida que probablemente elimine más pedidos que el
+      // agente entero: cuando alguien pide "modificame este panel", casi
+      // siempre quiere ver otras columnas, filtrar distinto, ordenar distinto o
+      // sacarlo a Excel. Eso no necesita construir nada nuevo — necesita que
+      // cada tabla recuerde cómo la quiere ver cada persona.
+      //
+      // `config` es JSONB a propósito: cada tabla guarda lo suyo (columnas
+      // visibles, orden, filtros) sin que este esquema tenga que enterarse.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS vistas_guardadas (
+          id          BIGSERIAL PRIMARY KEY,
+          usuario_id  INTEGER NOT NULL,
+          tabla_id    TEXT NOT NULL,
+          nombre      TEXT NOT NULL,
+          config      JSONB NOT NULL DEFAULT '{}',
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT vistas_guardadas_uq UNIQUE (usuario_id, tabla_id, nombre)
+        )
+      `);
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_vistas_usuario_tabla
+           ON vistas_guardadas (usuario_id, tabla_id, updated_at DESC)`
+      );
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

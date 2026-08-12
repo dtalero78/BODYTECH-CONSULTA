@@ -4,6 +4,8 @@ import {
   CheckCircle2,
   AlertCircle,
   UsersRound,
+  Sparkles,
+  LayoutGrid,
   CalendarDays,
   FileText,
   LineChart,
@@ -16,6 +18,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import authService from '../services/auth.service';
+import bodyvibeService from '../services/bodyvibe.service';
 import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
@@ -98,6 +101,30 @@ export function CoordinadorPage() {
 
   // "Mapa de Rutas": botón privado, visible solo para emails autorizados.
   const MAPA_ALLOWED = ['danieltalero78@gmail.com', 'nikolay.correal@bodytechcorp.com'];
+  // BodyVibeTech: la entrada no se muestra a quien no puede entrar — un ítem
+  // que lleva a un 403 es peor que no tenerlo. Quién puede construir lo decide
+  // el backend (rol + lista de constructores), así que se pregunta en vez de
+  // deducirlo acá: una segunda copia de esa regla es una copia que se
+  // desactualiza.
+  const [puedeConstruir, setPuedeConstruir] = useState(false);
+  useEffect(() => {
+    bodyvibeService
+      .estado()
+      .then((e) => setPuedeConstruir(Boolean(e.puedoConstruir)))
+      .catch(() => setPuedeConstruir(false));
+  }, []);
+
+  // "Aplicaciones" solo aparece si hay al menos una publicada para esta
+  // persona. Mismo criterio que los anclajes: nada que lleve a una pantalla
+  // vacía. Si falla la consulta, tampoco aparece.
+  const [hayApps, setHayApps] = useState(false);
+  useEffect(() => {
+    bodyvibeService
+      .publicados('sueltos')
+      .then((lista) => setHayApps(lista.length > 0))
+      .catch(() => setHayApps(false));
+  }, []);
+
   const isMapaUser = useMemo(
     () => MAPA_ALLOWED.includes((authService.getUser()?.email || '').toLowerCase()),
     [],
@@ -212,6 +239,13 @@ export function CoordinadorPage() {
               disabled
               tooltip="Próximamente"
             />
+            {hayApps && (
+              <NavItem
+                icon={<LayoutGrid className="w-[15px] h-[15px]" />}
+                label="Aplicaciones"
+                onClick={() => navigate('/apps')}
+              />
+            )}
           </div>
 
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
@@ -222,6 +256,13 @@ export function CoordinadorPage() {
               active={view === 'usuarios'}
               onClick={() => setView('usuarios')}
             />
+            {puedeConstruir && (
+              <NavItem
+                icon={<Sparkles className="w-[15px] h-[15px]" />}
+                label="BodyVibeTech"
+                onClick={() => navigate('/bodyvibetech')}
+              />
+            )}
             {isMapaUser && (
               <NavItem
                 icon={<Map className="w-[15px] h-[15px]" />}

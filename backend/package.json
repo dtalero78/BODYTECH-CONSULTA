@@ -5,6 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
+    "catalogo": "node scripts/generar-catalogo.js",
+    "prebuild": "npm run catalogo",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",

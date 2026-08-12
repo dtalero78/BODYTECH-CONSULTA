@@ -11,6 +11,13 @@ COPY backend/package*.json ./
 RUN npm ci
 
 COPY backend/ .
+
+# El catálogo de BodyVibeTech (npm run prebuild) lee el código del FRONTEND para
+# saber qué pantallas y qué lenguaje visual existen. Cada etapa del build ve
+# solo su propio directorio, así que hay que traerlo acá: sin esto el catálogo
+# se genera a medias y el agente queda ciego sobre la mitad de la plataforma.
+COPY frontend/src /frontend-src
+
 RUN npm run build
 
 # Stage 2: Build Frontend

@@ -204,8 +204,19 @@ class MedicalPanelService {
   /**
    * Marca un paciente como "No Contesta"
    */
-  async markAsNoAnswer(patientId: string): Promise<void> {
-    await this.client.patch(`/api/medical-panel/patients/${patientId}/no-answer`);
+  async markAsNoAnswer(patientId: string, fechaAtencion?: Date | string): Promise<void> {
+    // Mandamos la cita que el coach TIENE EN PANTALLA: si el afiliado la
+    // reprogramó mientras tanto, el servidor responde 409 y no marca nada
+    // (si marcara, escondería la cita nueva).
+    const iso =
+      fechaAtencion instanceof Date
+        ? fechaAtencion.toISOString()
+        : fechaAtencion
+          ? new Date(fechaAtencion).toISOString()
+          : undefined;
+    await this.client.patch(`/api/medical-panel/patients/${patientId}/no-answer`, {
+      ...(iso ? { fechaAtencion: iso } : {}),
+    });
   }
 
   /**

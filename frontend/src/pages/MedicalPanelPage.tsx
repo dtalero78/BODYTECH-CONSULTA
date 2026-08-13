@@ -96,10 +96,15 @@ function NoContestaAccion({
   patientId: string;
   nombre: string;
   fechaAtencion: Date | string;
-  onConfirmar: (patientId: string, nombre: string) => void;
+  onConfirmar: (
+    patientId: string,
+    nombre: string,
+    fechaAtencion: Date | string
+  ) => Promise<string | null>;
 }) {
-  const [paso, setPaso] = useState<'idle' | 'confirmar' | 'antesDeHora'>('idle');
+  const [paso, setPaso] = useState<'idle' | 'confirmar' | 'antesDeHora' | 'conflicto'>('idle');
   const [horaCita, setHoraCita] = useState('');
+  const [mensaje, setMensaje] = useState('');
 
   const alTocar = () => {
     const t = new Date(fechaAtencion).getTime();
@@ -133,14 +138,33 @@ function NoContestaAccion({
     );
   }
 
+  if (paso === 'conflicto') {
+    return (
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        <span className="text-amber-400 text-[11px] md:text-xs text-right">{mensaje}</span>
+        <button
+          onClick={() => setPaso('idle')}
+          className="text-gray-400 hover:text-white px-3 py-1.5 transition text-xs font-medium"
+        >
+          Entendido
+        </button>
+      </div>
+    );
+  }
+
   if (paso === 'confirmar') {
     return (
       <div className="flex items-center justify-end gap-2 flex-wrap">
         <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
         <button
-          onClick={() => {
+          onClick={async () => {
+            const error = await onConfirmar(patientId, nombre, fechaAtencion);
+            if (error) {
+              setMensaje(error);
+              setPaso('conflicto');
+              return;
+            }
             setPaso('idle');
-            onConfirmar(patientId, nombre);
           }}
           className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition text-xs font-medium"
         >
@@ -450,17 +474,30 @@ export function MedicalPanelPage() {
     }
   };
 
-  const handleNoAnswer = async (patientId: string, nombre = 'El afiliado') => {
+  const handleNoAnswer = async (
+    patientId: string,
+    nombre = 'El afiliado',
+    fechaAtencion?: Date | string
+  ): Promise<string | null> => {
     try {
-      await medicalPanelService.markAsNoAnswer(patientId);
+      await medicalPanelService.markAsNoAnswer(patientId, fechaAtencion);
       setCollapsedItems({ ...collapsedItems, [patientId]: true });
       setUndoNoAnswer({ id: patientId, nombre });
       // Recargar datos: invalidar las queries principales para que TanStack
       // Query refetchee con los valores actuales.
       queryClient.invalidateQueries({ queryKey: ['daily-stats', medicoCode] });
       queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
+      return null;
     } catch (err) {
+      // 409 = la cita se reprogramó mientras el panel estaba abierto. No se
+      // marcó nada; le mostramos al coach la fecha nueva.
+      const e = err as { response?: { status?: number; data?: { message?: string } } };
+      if (e?.response?.status === 409) {
+        queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
+        return e.response?.data?.message ?? 'Esta cita fue reprogramada.';
+      }
       console.error('Error marcando como no contesta:', err);
+      return 'No se pudo marcar. Intentá de nuevo.';
     }
   };
 

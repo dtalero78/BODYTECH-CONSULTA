@@ -61,6 +61,13 @@ const patientIdParamsSchema = z.object({
   patientId: z.string().min(1),
 });
 
+// La cita que el coach tiene EN PANTALLA al marcar "No Contesta". Opcional a
+// propósito: una pestaña con el bundle viejo no la manda y debe seguir
+// funcionando (sin la guarda, como antes).
+const noAnswerBodySchema = z.object({
+  fechaAtencion: z.string().datetime().optional(),
+});
+
 const ordenIdParamsSchema = z.object({
   id: z.string().min(1),
 });
@@ -177,6 +184,19 @@ async function resolveMiProfesional(
   return { id: prof.data.id, sedeId };
 }
 
+/** Fecha de una cita en hora Colombia, legible para el coach ("14 de agosto, 3:40 p. m."). */
+function formatearCitaCol(fechaAtencion: string): string {
+  const d = new Date(fechaAtencion);
+  if (Number.isNaN(d.getTime())) return fechaAtencion;
+  return d.toLocaleString('es-CO', {
+    timeZone: 'America/Bogota',
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 class MedicalPanelController {
   /**
    * Obtiene estadísticas del día para un médico
@@ -260,16 +280,41 @@ class MedicalPanelController {
       return validationResponse(res, parsed.error);
     }
     const { patientId } = parsed.data;
+    const body = noAnswerBodySchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      return validationResponse(res, body.error);
+    }
 
     try {
-      const updated = await medicalPanelService.markPatientAsNoAnswer(patientId);
+      const r = await medicalPanelService.markPatientAsNoAnswer(
+        patientId,
+        body.data.fechaAtencion
+      );
 
-      if (!updated) {
+      if (r.ok) {
+        res.json({ success: true, message: 'Paciente marcado como "No Contesta"' });
+        return;
+      }
+
+      if (r.motivo === 'REPROGRAMADA') {
+        // 409: la cita se movió entre que se pintó el panel y el clic. NO se
+        // marcó nada — si se marcara, el "No Contesta" caería sobre la cita
+        // nueva y la escondería de la lista del coach.
+        res.status(409).json({
+          success: false,
+          error: 'CITA_REPROGRAMADA',
+          fechaAtencion: r.fechaAtencion,
+          message: `Esta cita fue reprogramada para el ${formatearCitaCol(r.fechaAtencion)}.`,
+        });
+        return;
+      }
+
+      if (r.motivo === 'NOT_FOUND') {
         res.status(404).json({ error: 'Paciente no encontrado' });
         return;
       }
 
-      res.json({ success: true, message: 'Paciente marcado como "No Contesta"' });
+      res.status(500).json({ error: 'No se pudo marcar como "No Contesta"' });
     } catch (error) {
       next(error);
     }

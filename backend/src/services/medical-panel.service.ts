@@ -153,6 +153,15 @@ function colombiaDay(yyyy_mm_dd: string): { start: Date; end: Date } {
   };
 }
 
+/**
+ * Resultado de marcar "No Contesta". `REPROGRAMADA` significa que la cita se
+ * movió desde que el coach vio el panel — no se marcó nada (ver el método).
+ */
+export type MarcarNoAnswerResult =
+  | { ok: true }
+  | { ok: false; motivo: 'NOT_FOUND' | 'ERROR' }
+  | { ok: false; motivo: 'REPROGRAMADA'; fechaAtencion: string };
+
 class MedicalPanelService {
   constructor() {
     console.log('🔗 Medical Panel Service conectado a PostgreSQL');
@@ -406,20 +415,47 @@ class MedicalPanelService {
    *   - "pvEstado" = 'No Contesta'  → estado usado por el panel.
    * (Antes se ponía "medico" = 'RESERVA', lo que borraba el coach; ya no.)
    */
-  async markPatientAsNoAnswer(patientId: string): Promise<boolean> {
+  async markPatientAsNoAnswer(
+    patientId: string,
+    fechaAtencionEsperada?: string
+  ): Promise<MarcarNoAnswerResult> {
     try {
+      // `fechaAtencionEsperada` es la cita que el coach TIENE EN PANTALLA. Si la
+      // fila ya no apunta a esa fecha, alguien la reprogramó entre que se pintó
+      // el panel y el clic — marcar ahí estamparía el "No Contesta" sobre la
+      // cita NUEVA y la escondería. Pasó tres veces en tres días, siempre igual:
+      // el afiliado reprograma desde el link de WhatsApp y el coach, que seguía
+      // esperándolo, marca minutos después.
+      //
+      // La comparación es por INSTANTE, no por texto: `fechaAtencion` es TEXT
+      // con formatos mezclados (ISO con 'T' y offset, o con 'Z'), así que un
+      // igual de strings daría falsos negativos.
+      //
+      // Sin el parámetro (pestaña vieja, bundle anterior) se comporta como antes.
       const result = await postgresService.query(
         `UPDATE "HistoriaClinica"
          SET "pvEstado" = 'No Contesta', "atendido" = 'NO CONTESTA'
          WHERE "_id" = $1
+           AND ($2::text IS NULL
+                OR ("fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                    AND "fechaAtencion"::timestamptz = $2::timestamptz))
          RETURNING "_id"`,
+        [patientId, fechaAtencionEsperada ?? null]
+      );
+      if (result === null) return { ok: false, motivo: 'ERROR' };
+      if (result.length > 0) return { ok: true };
+
+      // No actualizó: o la historia no existe, o la cita se movió.
+      const row = await postgresService.query(
+        `SELECT "fechaAtencion" FROM "HistoriaClinica" WHERE "_id" = $1`,
         [patientId]
       );
-
-      return result !== null && result.length > 0;
+      if (row === null) return { ok: false, motivo: 'ERROR' };
+      if (row.length === 0) return { ok: false, motivo: 'NOT_FOUND' };
+      return { ok: false, motivo: 'REPROGRAMADA', fechaAtencion: String(row[0].fechaAtencion ?? '') };
     } catch (error) {
       console.error('❌ Error marcando paciente como No Contesta en PostgreSQL:', error);
-      return false;
+      return { ok: false, motivo: 'ERROR' };
     }
   }
 

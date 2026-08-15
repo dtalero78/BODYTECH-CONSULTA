@@ -13,6 +13,7 @@ import medicalPanelRoutes from './routes/medical-panel.routes';
 import twilioVoiceRoutes from './routes/twilio-voice.routes';
 import calidadRoutes from './routes/calidad.routes';
 import trepsiRoutes from './routes/trepsi.routes';
+import mybodytechRoutes from './routes/mybodytech.routes';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
 import torniqueteRoutes from './routes/torniquete.routes';
@@ -219,6 +220,16 @@ app.use(
   requireApiKey('TREPSI_API_KEY', 'trepsi'),
   trepsiMonitorMiddleware,
   trepsiRoutes
+);
+
+// Integración mybodytech (B2B, API Key). Mismo patrón que Trepsi: mismo origen
+// sirve staging y prod, la API Key se rota por ambiente (MYBODYTECH_API_KEY).
+// Scaffold: por ahora solo /health responde; los endpoints de negocio se
+// agregan al cerrar el contrato.
+app.use(
+  '/api/v1/integrations/mybodytech',
+  requireApiKey('MYBODYTECH_API_KEY', 'mybodytech'),
+  mybodytechRoutes
 );
 
 // Monitor de integración (sin JWT, token simple). Pensado para uso del owner

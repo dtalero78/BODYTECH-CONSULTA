@@ -222,15 +222,11 @@ app.use(
   trepsiRoutes
 );
 
-// Integración mybodytech (B2B, API Key). Mismo patrón que Trepsi: mismo origen
-// sirve staging y prod, la API Key se rota por ambiente (MYBODYTECH_API_KEY).
-// Scaffold: por ahora solo /health responde; los endpoints de negocio se
-// agregan al cerrar el contrato.
-app.use(
-  '/api/v1/integrations/mybodytech',
-  requireApiKey('MYBODYTECH_API_KEY', 'mybodytech'),
-  mybodytechRoutes
-);
+// Integración mybodytech (B2B, OAuth2 client_credentials). La seguridad vive
+// DENTRO del router: /oauth/token es público (ahí se obtiene el access_token) y
+// el resto exige `Authorization: Bearer <token>`. Credenciales por ambiente
+// (MYBODYTECH_CLIENT_ID / MYBODYTECH_CLIENT_SECRET).
+app.use('/api/v1/integrations/mybodytech', mybodytechRoutes);
 
 // Monitor de integración (sin JWT, token simple). Pensado para uso del owner
 // durante pruebas — el dashboard en /monitor-integracion consume estos endpoints.

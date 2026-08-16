@@ -68,6 +68,9 @@ export function requireMybodytechToken(
       });
       return;
     }
+    // Un token con firma/estructura inválida no lo produce el cliente legítimo:
+    // suele ser sondeo. Se registra (sin el token) para monitoreo.
+    console.warn(`[mybodytech] token rechazado (INVALID_TOKEN) desde IP ${req.ip}`);
     res.status(401).json({
       ok: false,
       error: { code: 'INVALID_TOKEN', message: 'access_token inválido.' },

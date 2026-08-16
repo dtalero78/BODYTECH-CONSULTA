@@ -21,6 +21,7 @@
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   isConfigured,
   verifyCredentials,
@@ -30,12 +31,30 @@ import { requireMybodytechToken } from '../middleware/mybodytech-auth.middleware
 
 const router = Router();
 
+// Rate limit del endpoint de token: es público y valida el client_secret, así
+// que lo protegemos contra fuerza bruta / credential stuffing / DoS. El uso
+// legítimo pide un token ~cada 10h, así que 30 intentos por IP cada 15 min es
+// de sobra para el cliente real y frena a un atacante.
+const tokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    ok: false,
+    error: {
+      code: 'RATE_LIMIT',
+      message: 'Demasiados intentos de autenticación. Espera unos minutos.',
+    },
+  },
+});
+
 // ---------------------------------------------------------------------------
 // PÚBLICO — obtener el access_token (OAuth2 client_credentials).
 // Espeja el contrato del validador de ellos: POST JSON con grant_type,
 // client_id y client_secret; responde { access_token, token_type, expires_in }.
 // ---------------------------------------------------------------------------
-router.post('/oauth/token', (req: Request, res: Response) => {
+router.post('/oauth/token', tokenLimiter, (req: Request, res: Response) => {
   if (!isConfigured()) {
     return res.status(503).json({
       ok: false,
@@ -72,6 +91,13 @@ router.post('/oauth/token', (req: Request, res: Response) => {
   }
 
   if (!verifyCredentials(String(client_id), String(client_secret))) {
+    // Auditoría: registrar el intento fallido (IP + client_id truncado) para
+    // detectar fuerza bruta. NUNCA se loguea el client_secret.
+    console.warn(
+      `[mybodytech] auth fallida (INVALID_CLIENT) desde IP ${req.ip} · client_id=${String(
+        client_id
+      ).slice(0, 40)}`
+    );
     return res.status(401).json({
       ok: false,
       error: { code: 'INVALID_CLIENT', message: 'client_id o client_secret inválidos.' },

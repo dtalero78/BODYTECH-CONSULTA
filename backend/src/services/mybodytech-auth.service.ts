@@ -13,9 +13,11 @@
 //
 // Credenciales y firma vienen de env vars:
 //   MYBODYTECH_CLIENT_ID       — el "usuario" de sistema que le damos a mybodytech
-//   MYBODYTECH_CLIENT_SECRET   — la "clave" de sistema (secreta)
-//   MYBODYTECH_TOKEN_SECRET    — (opcional) secreto para firmar los JWT; si no
-//                                está, se usa MYBODYTECH_CLIENT_SECRET
+//   MYBODYTECH_CLIENT_SECRET   — la "clave" de sistema (secreta, la conoce el cliente)
+//   MYBODYTECH_TOKEN_SECRET    — secreto REQUERIDO para firmar los JWT. Debe ser
+//                                distinto del client_secret y NUNCA se comparte con
+//                                el cliente (si el cliente conociera la llave de
+//                                firma, podría fabricarse sus propios tokens).
 // ============================================================================
 
 import jwt from 'jsonwebtoken';
@@ -26,20 +28,26 @@ export const TOKEN_TTL_SECONDS = 36000;
 const AUDIENCE = 'mybodytech';
 const ISSUER = 'bodytech-consulta';
 
-/** ¿Están configuradas las credenciales? Si no, los endpoints responden 503. */
+/**
+ * ¿Están configuradas las credenciales? Si no, los endpoints responden 503.
+ * Se exige también MYBODYTECH_TOKEN_SECRET: sin una llave de firma dedicada
+ * preferimos fallar cerrado (503) antes que firmar con algo inseguro.
+ */
 export function isConfigured(): boolean {
   return Boolean(
-    process.env.MYBODYTECH_CLIENT_ID && process.env.MYBODYTECH_CLIENT_SECRET
+    process.env.MYBODYTECH_CLIENT_ID &&
+      process.env.MYBODYTECH_CLIENT_SECRET &&
+      process.env.MYBODYTECH_TOKEN_SECRET
   );
 }
 
-/** Secreto con el que se firman/verifican los access_token. */
+/**
+ * Secreto con el que se firman/verifican los access_token. SOLO desde
+ * MYBODYTECH_TOKEN_SECRET — sin fallback al client_secret, para que la llave de
+ * firma nunca sea un valor conocido por el cliente.
+ */
 function signingSecret(): string {
-  return (
-    process.env.MYBODYTECH_TOKEN_SECRET ||
-    process.env.MYBODYTECH_CLIENT_SECRET ||
-    ''
-  );
+  return process.env.MYBODYTECH_TOKEN_SECRET || '';
 }
 
 /** Comparación en tiempo constante (mitiga ataques por tiempo). */
@@ -63,6 +71,7 @@ export function verifyCredentials(clientId: string, clientSecret: string): boole
 /** Emite un access_token nuevo (JWT firmado). */
 export function issueToken(): { accessToken: string; expiresIn: number } {
   const accessToken = jwt.sign({ scope: 'mybodytech' }, signingSecret(), {
+    algorithm: 'HS256',
     expiresIn: TOKEN_TTL_SECONDS,
     audience: AUDIENCE,
     issuer: ISSUER,
@@ -77,5 +86,9 @@ export function issueToken(): { accessToken: string; expiresIn: number } {
  *   - jwt.JsonWebTokenError  → firma/estructura inválida
  */
 export function verifyToken(token: string): void {
-  jwt.verify(token, signingSecret(), { audience: AUDIENCE, issuer: ISSUER });
+  jwt.verify(token, signingSecret(), {
+    algorithms: ['HS256'], // fija el algoritmo: evita ataques de confusión de alg
+    audience: AUDIENCE,
+    issuer: ISSUER,
+  });
 }

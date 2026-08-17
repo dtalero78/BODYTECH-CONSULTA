@@ -63,7 +63,9 @@ class MonitorIntegracionController {
         sinceId = Number(raw);
       }
       const limit = Math.min(Number(req.query.limit) || 200, 500);
-      const rows = await integrationLogService.listSince(sinceId, limit);
+      const integracion =
+        typeof req.query.integracion === 'string' ? req.query.integracion : 'trepsi';
+      const rows = await integrationLogService.listSince(sinceId, limit, integracion);
       res.status(200).json({
         ok: true,
         serverTime: new Date().toISOString(),
@@ -459,6 +461,8 @@ class MonitorIntegracionController {
     if (!checkToken(req, res)) return;
     try {
       const sinceHours = Math.min(Number(req.query.hours) || 24, 168);
+      const integracion =
+        typeof req.query.integracion === 'string' ? req.query.integracion : 'trepsi';
 
       const stats = await postgresService.query(
         `SELECT
@@ -468,9 +472,9 @@ class MonitorIntegracionController {
            COUNT(*) FILTER (WHERE ok = FALSE)::int AS errores,
            AVG(latency_ms)::int AS latencia_promedio_ms
          FROM trepsi_integration_log
-         WHERE created_at > NOW() - ($1 || ' hours')::interval
+         WHERE integracion = $2 AND created_at > NOW() - ($1 || ' hours')::interval
          GROUP BY direccion`,
-        [String(sinceHours)]
+        [String(sinceHours), integracion]
       );
 
       const porTipo = await postgresService.query(
@@ -479,18 +483,23 @@ class MonitorIntegracionController {
            COUNT(*)::int AS total,
            COUNT(*) FILTER (WHERE ok = FALSE)::int AS errores
          FROM trepsi_integration_log
-         WHERE created_at > NOW() - ($1 || ' hours')::interval
+         WHERE integracion = $2 AND created_at > NOW() - ($1 || ' hours')::interval
          GROUP BY tipo, direccion
          ORDER BY total DESC`,
-        [String(sinceHours)]
+        [String(sinceHours), integracion]
       );
 
-      const outbox = await postgresService.query(
-        `SELECT estado, COUNT(*)::int AS total
-           FROM trepsi_webhook_outbox
-           GROUP BY estado`,
-        []
-      );
+      // El outbox es específico de Trepsi (webhook de salida). mybodytech aún no
+      // tiene cola de salida, así que solo se incluye para trepsi.
+      const outbox =
+        integracion === 'trepsi'
+          ? await postgresService.query(
+              `SELECT estado, COUNT(*)::int AS total
+                 FROM trepsi_webhook_outbox
+                 GROUP BY estado`,
+              []
+            )
+          : [];
 
       res.status(200).json({
         ok: true,

@@ -14,6 +14,7 @@ import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
 import { BotTrepsiPage } from './pages/BotTrepsiPage';
 import { MonitorIntegracionPage } from './pages/MonitorIntegracionPage';
+import { MonitorMybodytechPage } from './pages/MonitorMybodytechPage';
 import { ReprogramarPage } from './pages/ReprogramarPage';
 import { TerminosPage } from './pages/TerminosPage';
 import { LoginPage } from './pages/LoginPage';
@@ -104,6 +105,7 @@ function App() {
           <Route path="/panel-medico/patient/:roomName" element={<PatientPage />} />
           <Route path="/bot-trepsi" element={<BotTrepsiPage />} />
           <Route path="/monitor-integracion" element={<MonitorIntegracionPage />} />
+          <Route path="/monitor-mybodytech" element={<MonitorMybodytechPage />} />
           <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
           <Route path="/terminos" element={<TerminosPage />} />
           <Route path="/terminos-y-condiciones" element={<Navigate to="/terminos" replace />} />

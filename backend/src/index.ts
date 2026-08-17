@@ -33,6 +33,7 @@ import bodyvibeRoutes from './routes/bodyvibe.routes';
 import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
+import { mybodytechMonitorMiddleware } from './middleware/mybodytech-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
 import { telemedicineSocketService } from './services/telemedicine-socket.service';
 import { sessionTracker } from './services/session-tracker.service';
@@ -226,7 +227,9 @@ app.use(
 // DENTRO del router: /oauth/token es público (ahí se obtiene el access_token) y
 // el resto exige `Authorization: Bearer <token>`. Credenciales por ambiente
 // (MYBODYTECH_CLIENT_ID / MYBODYTECH_CLIENT_SECRET).
-app.use('/api/v1/integrations/mybodytech', mybodytechRoutes);
+// El `mybodytechMonitorMiddleware` registra CADA request (incluidos los 401)
+// en trepsi_integration_log con integracion='mybodytech' para /monitor-mybodytech.
+app.use('/api/v1/integrations/mybodytech', mybodytechMonitorMiddleware, mybodytechRoutes);
 
 // Monitor de integración (sin JWT, token simple). Pensado para uso del owner
 // durante pruebas — el dashboard en /monitor-integracion consume estos endpoints.

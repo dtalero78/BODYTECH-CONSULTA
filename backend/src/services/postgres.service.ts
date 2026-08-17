@@ -1034,6 +1034,17 @@ class PostgresService {
         CREATE INDEX IF NOT EXISTS idx_trepsi_integration_log_cita
           ON trepsi_integration_log (cita_id)
       `);
+      // La misma tabla sirve para varias integraciones (trepsi, mybodytech…).
+      // Columna `integracion` con default 'trepsi' → retrocompatible con las
+      // filas existentes. El monitor filtra por esta columna.
+      await this.query(`
+        ALTER TABLE trepsi_integration_log
+          ADD COLUMN IF NOT EXISTS integracion VARCHAR(20) NOT NULL DEFAULT 'trepsi'
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_trepsi_integration_log_integ
+          ON trepsi_integration_log (integracion, id DESC)
+      `);
       // Purga eventos viejos (>14 días) para no llenar la DB
       await this.query(`
         DELETE FROM trepsi_integration_log

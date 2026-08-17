@@ -11,6 +11,7 @@ import postgresService from './postgres.service';
 export type Direccion = 'inbound' | 'outbound';
 
 export interface LogInput {
+  integracion?: string; // 'trepsi' (default) | 'mybodytech' | …
   direccion: Direccion;
   tipo: string; // Ej: 'listMedicos', 'createAppointment', 'webhook.consultationResults'
   metodo?: string | null;
@@ -29,6 +30,7 @@ export interface LogInput {
 
 export interface LogRow {
   id: number;
+  integracion: string;
   direccion: Direccion;
   tipo: string;
   metodo: string | null;
@@ -74,12 +76,13 @@ class IntegrationLogService {
       const resBody = truncate(input.responseBody);
       const rows = await postgresService.query(
         `INSERT INTO trepsi_integration_log (
-           direccion, tipo, metodo, path, cita_id, status_code, ok,
+           integracion, direccion, tipo, metodo, path, cita_id, status_code, ok,
            latency_ms, request_body, response_body, error_code, error_message,
            ip, user_agent
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id`,
         [
+          (input.integracion ?? 'trepsi').slice(0, 20),
           input.direccion,
           input.tipo.slice(0, 80),
           input.metodo?.slice(0, 10) ?? null,
@@ -113,22 +116,27 @@ class IntegrationLogService {
    * con milisegundos (toISOString) → si se usara `created_at > $since`,
    * el mismo evento volvería a aparecer indefinidamente.
    */
-  async listSince(sinceId: number | null, limit = 200): Promise<LogRow[]> {
+  async listSince(
+    sinceId: number | null,
+    limit = 200,
+    integracion = 'trepsi'
+  ): Promise<LogRow[]> {
     let rows;
     if (sinceId !== null && sinceId >= 0) {
       rows = await postgresService.query(
         `SELECT * FROM trepsi_integration_log
-           WHERE id > $1
+           WHERE integracion = $1 AND id > $2
            ORDER BY id ASC
-           LIMIT $2`,
-        [sinceId, limit]
+           LIMIT $3`,
+        [integracion, sinceId, limit]
       );
     } else {
       rows = await postgresService.query(
         `SELECT * FROM trepsi_integration_log
+           WHERE integracion = $1
            ORDER BY id DESC
-           LIMIT $1`,
-        [limit]
+           LIMIT $2`,
+        [integracion, limit]
       );
       if (rows) rows.reverse();
     }

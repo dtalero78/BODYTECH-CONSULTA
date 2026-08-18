@@ -346,6 +346,10 @@ class PostgresService {
           -- Examen físico — stretching numérico
           ADD COLUMN IF NOT EXISTS "hallazgos_stretching_cm" NUMERIC(5,2),
 
+          -- Cuántas veces se reprogramó ESTA cita desde el link del afiliado.
+          -- Sostiene el tope de auto-reprogramaciones (ver TOPE_REPROGRAMACIONES).
+          ADD COLUMN IF NOT EXISTS "reprogramaciones" INTEGER NOT NULL DEFAULT 0,
+
           -- ===== Phase 3 — Transcripción post-llamada =====
           ADD COLUMN IF NOT EXISTS "transcription_status" TEXT,
           ADD COLUMN IF NOT EXISTS "transcription_text" TEXT,
@@ -1443,6 +1447,22 @@ class PostgresService {
         `CREATE INDEX IF NOT EXISTS idx_bv_generaciones_app
            ON bodyvibe_generaciones (app_id, created_at DESC)`
       );
+
+      // Backfill del contador de reprogramaciones desde la bitácora.
+      // La columna nace en 0, así que sin esto quien ya venía reprogramando
+      // arrancaría con el cupo entero. Solo toca las filas en 0: una vez que el
+      // contador empieza a subir por sí solo, no se vuelve a pisar. Idempotente.
+      await this.query(`
+        UPDATE "HistoriaClinica" h
+           SET "reprogramaciones" = v.n
+          FROM (
+            SELECT entidad_id, COUNT(*)::int AS n
+              FROM audit_log
+             WHERE accion = 'reprogramar' AND status_code = 200
+             GROUP BY entidad_id
+          ) v
+         WHERE h."_id" = v.entidad_id AND h."reprogramaciones" = 0
+      `);
 
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {

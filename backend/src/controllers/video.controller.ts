@@ -145,6 +145,21 @@ function validationResponse(res: Response, err: ZodError): void {
   });
 }
 
+/**
+ * Cuántas veces puede el AFILIADO mover su propia cita desde el link de WhatsApp.
+ *
+ * Reprogramar no tenía tope y era gratis: en 14 días, 135 citas se movieron al
+ * menos una vez y solo el 33% terminó atendida; de las que se movieron dos
+ * veces, el 18%. Hubo casos de reprogramar 60 segundos después de que el coach
+ * marcara "No Contesta". A partir del tercer intento la cita la reagenda una
+ * persona, que puede preguntar qué está pasando.
+ *
+ * NO aplica a coordinadores ni coaches (ellos reagendan desde el panel, que no
+ * pasa por acá) ni a Trepsi (su endpoint es otro: cambiarlo rompería el
+ * contrato B2B).
+ */
+const TOPE_REPROGRAMACIONES = 2;
+
 class VideoController {
   /**
    * Generar token de acceso para una sala de video
@@ -673,6 +688,11 @@ class VideoController {
         primerNombre: cita.primerNombre,
         fechaAtencion: cita.fechaAtencion,
         horaAtencion: cita.horaAtencion,
+        // La página muestra el aviso en vez del formulario cuando ya no queda
+        // cupo, así el afiliado no elige un horario para que se lo rechacen.
+        reprogramaciones: cita.reprogramaciones,
+        topeReprogramaciones: TOPE_REPROGRAMACIONES,
+        puedeReprogramar: !cita.yaAtendida && cita.reprogramaciones < TOPE_REPROGRAMACIONES,
       });
     } catch (error) {
       next(error);
@@ -714,6 +734,17 @@ class VideoController {
         return;
       }
 
+      if (cita.reprogramaciones >= TOPE_REPROGRAMACIONES) {
+        res.status(409).json({
+          success: false,
+          error: 'LIMITE_REPROGRAMACIONES',
+          message:
+            `Ya reprogramaste esta cita ${cita.reprogramaciones} veces, que es el máximo. ` +
+            'Escríbenos por WhatsApp y con gusto te ayudamos a reagendarla.',
+        });
+        return;
+      }
+
       // Validar que el slot elegido siga disponible para el MISMO médico de la
       // cita (evita doble reserva si alguien tomó el cupo entre que se listó y
       // que el paciente eligió). Se usa la sede EFECTIVA del coach (no la de la
@@ -750,6 +781,10 @@ class VideoController {
         res.status(500).json({ success: false, error: 'No se pudo reprogramar la cita.' });
         return;
       }
+
+      // Consume cupo solo cuando el cambio quedó efectivamente guardado.
+      const usadas = await medicalPanelService.incrementarReprogramaciones(id);
+      console.log(`[Reprogramar] ${id}: ${usadas}/${TOPE_REPROGRAMACIONES} auto-reprogramaciones`);
 
       // Si la cita es de Trepsi, notificamos el reschedule por webhook.
       // Fire-and-forget — no bloquea la respuesta al paciente.

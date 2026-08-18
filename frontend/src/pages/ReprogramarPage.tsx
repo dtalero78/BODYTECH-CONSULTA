@@ -51,6 +51,10 @@ export function ReprogramarPage() {
   const [submitting, setSubmitting] = useState<string | null>(null); // hora en curso
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ fecha: string; hora: string } | null>(null);
+  // Cuando el afiliado ya agotó su cupo de auto-reprogramaciones, la página
+  // muestra el aviso en vez del selector: elegir un horario para que el
+  // servidor lo rechace después es peor experiencia que decirlo de entrada.
+  const [sinCupo, setSinCupo] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -65,7 +69,10 @@ export function ReprogramarPage() {
           setError('No encontramos tu cita. Verifica el enlace o contáctanos.');
           return;
         }
-        if (info) setNombre(info.primerNombre);
+        if (info) {
+          setNombre(info.primerNombre);
+          if (info.puedeReprogramar === false) setSinCupo(true);
+        }
         const ds = horarios?.dias ?? [];
         setDias(ds);
         setSelectedDay(ds[0]?.fecha ?? null);
@@ -86,8 +93,14 @@ export function ReprogramarPage() {
       const res = await apiService.reprogramarCita(id, fecha, hora);
       setDone({ fecha: res.fecha, hora: res.hora });
     } catch (err: any) {
+      const data = err?.response?.data;
+      if (data?.error === 'LIMITE_REPROGRAMACIONES') {
+        setSinCupo(true);
+        return;
+      }
       setError(
-        err?.response?.data?.error ||
+        data?.message ||
+          data?.error ||
           'No pudimos reprogramar tu cita. Intenta con otro horario o contáctanos.'
       );
     } finally {
@@ -122,6 +135,35 @@ export function ReprogramarPage() {
               <strong>{done.hora}</strong>.
             </p>
             <p className="text-sm text-gray-400">Recibirás la confirmación por WhatsApp.</p>
+          </div>
+        ) : sinCupo ? (
+          <div className="text-center space-y-3">
+            <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
+              <svg className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v3m0 3h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-gray-800">
+              Esta cita ya no se puede reprogramar en línea
+            </h2>
+            <p className="text-gray-600">
+              Ya la moviste el máximo de veces permitido. Escríbenos por WhatsApp y con gusto te
+              ayudamos a reagendarla.
+            </p>
+            <a
+              href="https://wa.me/5716284820"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-2 px-5 py-2.5 rounded-lg text-white font-medium"
+              style={{ backgroundColor: '#25D366' }}
+            >
+              Escribir por WhatsApp
+            </a>
           </div>
         ) : error && dias.length === 0 ? (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">

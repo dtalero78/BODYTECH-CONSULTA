@@ -789,10 +789,13 @@ class MedicalPanelService {
     // para rechazar reagendar una consulta cerrada (si no, queda "fantasma":
     // atendida pero con fecha futura, inflando contadores y agendas).
     yaAtendida: boolean;
+    /** Veces que el AFILIADO ya movió esta cita desde el link (ver TOPE_REPROGRAMACIONES). */
+    reprogramaciones: number;
   } | null> {
     const rows = await postgresService.query(
       `SELECT "medico", COALESCE("sede_id", 'bsl') AS sede_id, "primerNombre",
-              "celular", "fechaAtencion", "horaAtencion", "fechaConsulta"
+              "celular", "fechaAtencion", "horaAtencion", "fechaConsulta",
+              COALESCE("reprogramaciones", 0) AS reprogramaciones
          FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
       [id]
     );
@@ -801,6 +804,7 @@ class MedicalPanelService {
     return {
       medico: r.medico ? String(r.medico) : null,
       sedeId: String(r.sede_id ?? 'bsl'),
+      reprogramaciones: Number(r.reprogramaciones ?? 0),
       primerNombre: r.primerNombre ? String(r.primerNombre) : null,
       celular: r.celular ? String(r.celular) : null,
       fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
@@ -812,6 +816,24 @@ class MedicalPanelService {
   /**
    * Actualiza campos arbitrarios de una orden existente.
    */
+  /**
+   * Suma 1 al contador de auto-reprogramaciones y devuelve el total.
+   *
+   * Va aparte de `updateOrden` a propósito: solo cuenta cuando el AFILIADO mueve
+   * su cita desde el link de WhatsApp. Si un coordinador o un coach la reagenda
+   * —decisión de una persona, con contexto— no consume cupo.
+   */
+  async incrementarReprogramaciones(id: string): Promise<number> {
+    const rows = await postgresService.query(
+      `UPDATE "HistoriaClinica"
+          SET "reprogramaciones" = COALESCE("reprogramaciones", 0) + 1
+        WHERE "_id" = $1
+      RETURNING "reprogramaciones"`,
+      [id]
+    );
+    return Number(rows?.[0]?.reprogramaciones ?? 0);
+  }
+
   async updateOrden(
     id: string,
     fields: OrdenUpdateInput,

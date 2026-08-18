@@ -350,6 +350,10 @@ class ApiService {
     primerNombre: string | null;
     fechaAtencion: string | null;
     horaAtencion: string | null;
+    /** Veces que el afiliado ya movió la cita, y si le queda cupo. */
+    reprogramaciones?: number;
+    topeReprogramaciones?: number;
+    puedeReprogramar?: boolean;
   }> {
     const res = await this.client.get(`/api/video/reprogramar/${id}`);
     return res.data;

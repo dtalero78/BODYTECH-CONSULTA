@@ -389,11 +389,19 @@ export function MedicalPanelPage() {
     console.log('[MedicalPanel] Connecting to Socket.io at:', socketUrl);
 
     // Crear conexión Socket.io
+    // reconnectionAttempts era 5, con backoff de 1s: el cliente se rendía a los
+    // ~17 segundos. Un despliegue tarda minutos, así que el panel abierto durante
+    // una actualización perdía el socket PARA SIEMPRE — sin avisar. Como el
+    // único re-sync de presencia colgaba del evento 'connect', el coach dejaba de
+    // ver a los afiliados que llegaban y solo se arreglaba recargando la página.
+    // (Pasó el 18-ago: cuatro despliegues en la mañana, y a las 11:41 y 12:01 dos
+    // afiliadas esperaban sin que a la coach le apareciera nadie conectado.)
     const newSocket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
 
     newSocket.on('connect', () => {
@@ -452,9 +460,18 @@ export function MedicalPanelPage() {
       });
     });
 
+    // Red de seguridad que NO depende del socket: aunque la conexión en tiempo
+    // real esté caída, el panel vuelve a preguntar por REST quién está esperando.
+    // La presencia es lo que le dice al coach que puede entrar a atender; no
+    // puede quedar colgando de un solo canal.
+    const resync = setInterval(() => {
+      syncConnectedPatients();
+    }, 30000);
+
     // Cleanup al desmontar
     return () => {
       console.log('[MedicalPanel] Disconnecting Socket.io');
+      clearInterval(resync);
       newSocket.disconnect();
     };
   }, [isLoggedIn, medicoCode]);

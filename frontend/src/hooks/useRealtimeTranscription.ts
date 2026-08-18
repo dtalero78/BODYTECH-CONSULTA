@@ -46,6 +46,8 @@ export function useRealtimeTranscription(room: VideoEngine | null) {
   const muteRef = useRef<GainNode | null>(null);
   const sourcesRef = useRef<MediaStreamAudioSourceNode[]>([]);
   const connectedTrackIds = useRef<Set<string>>(new Set());
+  // Clones que alimentan el procesador: se detienen al parar la transcripción.
+  const clonesRef = useRef<MediaStreamTrack[]>([]);
   // El motor es provider-agnostic: en vez de escuchar 'trackSubscribed' (Twilio),
   // poleamos los tracks de audio y los agregamos idempotentemente (ver recorder).
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -58,16 +60,26 @@ export function useRealtimeTranscription(room: VideoEngine | null) {
     setInterim('');
   }, []);
 
-  /** Conecta un track de audio (mic local o remoto) al mismo ScriptProcessor (se suman). */
+  /**
+   * Conecta un track de audio (mic local o remoto) al mismo ScriptProcessor (se suman).
+   *
+   * Igual que en el grabador: entra un CLON, no la pista original. La remota es
+   * la que el <audio> del motor está reproduciendo para el coach, y procesarla
+   * directo en Web Audio es la única vía por la que transcribir podría afectar
+   * lo que se oye. El clon es independiente. La deduplicación va por el id de la
+   * pista ORIGINAL (el clon tiene id propio).
+   */
   const attachTrack = useCallback((mst?: MediaStreamTrack | null) => {
     const ctx = ctxRef.current;
     const proc = procRef.current;
     if (!ctx || !proc || !mst || mst.kind !== 'audio') return;
     if (connectedTrackIds.current.has(mst.id)) return;
     try {
-      const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+      const clon = mst.clone();
+      const src = ctx.createMediaStreamSource(new MediaStream([clon]));
       src.connect(proc);
       sourcesRef.current.push(src);
+      clonesRef.current.push(clon);
       connectedTrackIds.current.add(mst.id);
     } catch (e) {
       console.warn('[Realtime] no se pudo conectar un track:', e);
@@ -101,6 +113,14 @@ export function useRealtimeTranscription(room: VideoEngine | null) {
       /* noop */
     }
     sourcesRef.current = [];
+    clonesRef.current.forEach((t) => {
+      try {
+        t.stop();
+      } catch {
+        /* noop */
+      }
+    });
+    clonesRef.current = [];
     procRef.current = null;
     muteRef.current = null;
     try {

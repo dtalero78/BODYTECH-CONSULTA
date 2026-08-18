@@ -56,6 +56,9 @@ export function useConsultationRecorder(
   const audioCtxRef = useRef<AudioContext | null>(null);
   const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const connectedTrackIds = useRef<Set<string>>(new Set());
+  // Clones que alimentan la mezcla: hay que detenerlos al terminar (si no,
+  // quedan capturando del dispositivo aunque nadie los escuche).
+  const clonesRef = useRef<MediaStreamTrack[]>([]);
   // El motor de video es provider-agnostic y no expone un evento "track nuevo".
   // En vez de escuchar 'trackSubscribed' (API de Twilio), poleamos los tracks de
   // audio (local + remoto) cada 2s y los agregamos de forma idempotente: así
@@ -65,16 +68,31 @@ export function useConsultationRecorder(
   const mimeRef = useRef<string>('audio/webm');
   const startedRef = useRef(false);
 
-  /** Conecta un MediaStreamTrack de audio a la mezcla (idempotente por id). */
+  /**
+   * Conecta un MediaStreamTrack de audio a la mezcla (idempotente por id).
+   *
+   * Se conecta un CLON de la pista, nunca la original. La pista remota es la
+   * misma que el <audio> oculto del motor está reproduciendo para que el coach
+   * oiga al paciente; meterla además a un grafo de Web Audio es la única vía
+   * por la que grabar podría afectar lo que se escucha. Un clon es un consumidor
+   * independiente de la misma fuente: se puede procesar sin tocar cómo suena la
+   * original. (El 5-ago se conectó la original y coincidió con reportes de audio
+   * que se cortaba; no llegó a comprobarse, pero no se repite el experimento.)
+   *
+   * La deduplicación usa el id de la pista ORIGINAL: el clon tiene id propio y
+   * cada poll crearía uno nuevo.
+   */
   const addAudioTrack = useCallback((mst: MediaStreamTrack | null | undefined) => {
     const ctx = audioCtxRef.current;
     const dest = destRef.current;
     if (!ctx || !dest || !mst || mst.kind !== 'audio') return;
     if (connectedTrackIds.current.has(mst.id)) return;
     try {
-      const source = ctx.createMediaStreamSource(new MediaStream([mst]));
+      const clon = mst.clone();
+      const source = ctx.createMediaStreamSource(new MediaStream([clon]));
       source.connect(dest);
       connectedTrackIds.current.add(mst.id);
+      clonesRef.current.push(clon);
     } catch (e) {
       console.warn('[ConsultaRecorder] No se pudo conectar un track a la mezcla:', e);
     }
@@ -163,6 +181,14 @@ export function useConsultationRecorder(
     }
     destRef.current = null;
     connectedTrackIds.current.clear();
+    clonesRef.current.forEach((t) => {
+      try {
+        t.stop();
+      } catch {
+        /* noop */
+      }
+    });
+    clonesRef.current = [];
   }, []);
 
   const stopAndUpload = useCallback(async (): Promise<void> => {

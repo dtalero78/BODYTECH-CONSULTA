@@ -41,6 +41,7 @@ import {
   DefaultVideoTransformDevice,
   BackgroundBlurVideoFrameProcessor,
   BackgroundReplacementVideoFrameProcessor,
+  VideoFxProcessor,
 } from 'amazon-chime-sdk-js';
 import type {
   AudioVideoObserver,
@@ -49,6 +50,7 @@ import type {
   MeetingSession,
   Device,
   VideoFrameProcessor,
+  VideoFxConfig,
 } from 'amazon-chime-sdk-js';
 import {
   VideoEngine,
@@ -677,7 +679,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
       | 'background-disabled'
       | 'session-info'
       | 'connection-poor'
-      | 'background-downgraded',
+      | 'background-downgraded'
+      | 'background-engine',
     datos: Record<string, string | number | boolean>
   ): void {
     if (!this.roomName) return;
@@ -764,36 +767,102 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     if (!this.session) return;
     await this.disposeVideoTransform();
     this.reiniciarEscalera();
-    const processor = await BackgroundBlurVideoFrameProcessor.create(undefined, {
-      filterCPUUtilization: FILTRO_CPU_MAX,
-    });
-    if (!processor) throw new Error('El desenfoque de fondo no está soportado en este navegador.');
-    this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
-    await this.startVideoTransform([processor]);
+    const config: VideoFxConfig = {
+      backgroundBlur: { isEnabled: true, strength: 'high' },
+      backgroundReplacement: { isEnabled: false, backgroundImageURL: undefined, defaultColor: undefined },
+    };
+    await this.aplicarFondo(config, () => this.crearBlurCpu());
   }
 
   async applyVirtualBackground(imageUrl: string): Promise<void> {
     if (!this.session) return;
     await this.disposeVideoTransform();
     this.reiniciarEscalera();
+    const config: VideoFxConfig = {
+      backgroundBlur: { isEnabled: false, strength: 'high' },
+      backgroundReplacement: { isEnabled: true, backgroundImageURL: imageUrl, defaultColor: undefined },
+    };
     try {
-      const imageBlob = await (await fetch(imageUrl)).blob();
-      const processor = await BackgroundReplacementVideoFrameProcessor.create(undefined, {
-        imageBlob,
-        filterCPUUtilization: FILTRO_CPU_MAX,
-      });
-      if (!processor) throw new Error('El fondo virtual no está soportado en este navegador.');
-      this.attachDegradationObserver(processor as unknown as { addObserver: (o: Record<string, unknown>) => void });
-      await this.startVideoTransform([processor]);
+      await this.aplicarFondo(config, () => this.crearReemplazoCpu(imageUrl));
     } catch (err) {
-      // Si el procesador falla (navegador sin soporte, WASM que no carga, equipo
-      // lento), ya soltamos el device anterior: hay que devolver la cámara SIN
-      // efecto. Quedarse sin video publicado es mucho peor que perder el fondo.
+      // Ni GPU ni CPU pudieron crear el filtro (navegador sin WebGL2 NI WASM,
+      // caso raro): ya soltamos el device anterior, así que devolvemos la cámara
+      // SIN efecto — quedarse sin video publicado es peor. (Endurecer a "cámara
+      // apagada" para nunca exponer el cuarto es un follow-up aparte.)
       if (this.chosenVideoDeviceId) {
         await this.session.audioVideo.startVideoInput(this.chosenVideoDeviceId).catch(() => undefined);
       }
       throw err;
     }
+  }
+
+  /**
+   * Aplica un efecto de fondo con la mejor tecnología disponible.
+   *
+   * 1º intenta el `VideoFxProcessor` de Chime, que corre en GPU (WebGL2): pesa
+   *    poquísimo en CPU —igual que hacía el fondo de Twilio— así que no se ahoga
+   *    en máquinas flojas ni hay que quitar el fondo bajo carga. Es el arreglo de
+   *    fondo al problema histórico: antes SIEMPRE usábamos el procesador de CPU
+   *    (`BackgroundBlur/ReplacementVideoFrameProcessor`), que satura el hilo
+   *    principal al 85-95% en equipos flojos y termina quitando el fondo.
+   * 2º si el equipo no soporta el de GPU (`isSupported=false`) o falla la carga
+   *    de sus assets, cae al procesador de CPU (con su auto-degradación).
+   *
+   * La telemetría `background-engine` deja en el log cuál se usó, para verificar
+   * en producción que de verdad se está usando la GPU.
+   */
+  private async aplicarFondo(
+    config: VideoFxConfig,
+    crearCpuFallback: () => Promise<VideoFrameProcessor>
+  ): Promise<void> {
+    if (!this.session) return;
+
+    // 1) GPU — VideoFxProcessor (WebGL2). `isSupported(_, false)` solo chequea
+    //    capacidad del navegador (no baja assets); si falla la carga real, el
+    //    catch de create() nos manda al fallback de CPU.
+    try {
+      const soportado = await VideoFxProcessor.isSupported(undefined, false);
+      if (soportado) {
+        const logger = new ConsoleLogger('bsl-chime-fx', LogLevel.WARN);
+        const fx = await VideoFxProcessor.create(logger, config);
+        await this.startVideoTransform([fx as unknown as VideoFrameProcessor]);
+        // Solo tras aplicarse de verdad (create + startVideoInput OK).
+        this.reportar('background-engine', { motor: 'gpu-videofx' });
+        return;
+      }
+      this.reportar('background-engine', { motor: 'cpu-fallback', razon: 'no-soporta-gpu' });
+    } catch (err) {
+      this.reportar('background-engine', {
+        motor: 'cpu-fallback',
+        razon: 'error-gpu',
+        detalle: String((err as Error)?.message || '').slice(0, 120),
+      });
+    }
+
+    // 2) CPU — procesador viejo + auto-degradación (solo aquí tiene sentido).
+    const cpu = await crearCpuFallback();
+    this.attachDegradationObserver(cpu as unknown as { addObserver: (o: Record<string, unknown>) => void });
+    await this.startVideoTransform([cpu]);
+  }
+
+  /** Fallback de CPU para el desenfoque. */
+  private async crearBlurCpu(): Promise<VideoFrameProcessor> {
+    const p = await BackgroundBlurVideoFrameProcessor.create(undefined, {
+      filterCPUUtilization: FILTRO_CPU_MAX,
+    });
+    if (!p) throw new Error('El desenfoque de fondo no está soportado en este navegador.');
+    return p as unknown as VideoFrameProcessor;
+  }
+
+  /** Fallback de CPU para el fondo con imagen. */
+  private async crearReemplazoCpu(imageUrl: string): Promise<VideoFrameProcessor> {
+    const imageBlob = await (await fetch(imageUrl)).blob();
+    const p = await BackgroundReplacementVideoFrameProcessor.create(undefined, {
+      imageBlob,
+      filterCPUUtilization: FILTRO_CPU_MAX,
+    });
+    if (!p) throw new Error('El fondo virtual no está soportado en este navegador.');
+    return p as unknown as VideoFrameProcessor;
   }
 
   async removeVideoEffect(): Promise<void> {

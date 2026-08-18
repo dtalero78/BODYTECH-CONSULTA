@@ -222,7 +222,8 @@ class ApiService {
       | 'background-disabled'
       | 'session-info'
       | 'connection-poor'
-      | 'background-downgraded',
+      | 'background-downgraded'
+      | 'background-engine',
     datos?: Record<string, string | number | boolean>,
     identity?: string,
     role?: 'doctor' | 'patient'

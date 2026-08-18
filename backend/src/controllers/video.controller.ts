@@ -67,6 +67,7 @@ const clientDiagSchema = z.object({
     'session-info',
     'connection-poor',
     'background-downgraded',
+    'background-engine',
   ]),
   datos: z.record(z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
 });

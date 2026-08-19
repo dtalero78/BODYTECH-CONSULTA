@@ -719,10 +719,21 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
     const filled = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== '';
     setAiProcessing(true);
     try {
+      // El autollenado por IA es BEST-EFFORT: si falla, se guarda igual con lo
+      // que anotó el coach. Antes esta llamada estaba dentro del try grande, así
+      // que un 502 de OpenAI saltaba al catch y `handleSave` NUNCA corría: la
+      // consulta quedaba sin `fechaConsulta` y el afiliado seguía apareciendo
+      // como pendiente aunque ya lo hubieran atendido. Pasó el 19-ago a tres
+      // coaches en cuatro minutos. Perder el autollenado se tolera; perder la
+      // consulta entera no.
       let fields: Record<string, string> = {};
       if (transcript && transcript.trim()) {
-        const r = await apiService.extractFields(historiaId, transcript, 'nutricional');
-        fields = r.fields || {};
+        try {
+          const r = await apiService.extractFields(historiaId, transcript, 'nutricional');
+          fields = r.fields || {};
+        } catch (e: any) {
+          console.warn('[finalizeWithAI] extracción falló, guardo lo del coach:', e?.message);
+        }
       }
       const newDatos: any = { ...datosNutricionales };
       let newPeso = peso;
@@ -742,8 +753,9 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
       setTalla(newTalla);
       await handleSave({ datosNutricionales: newDatos, peso: newPeso, talla: newTalla });
     } catch (err: any) {
+      // Llegar acá ya significa que falló el GUARDADO, no la IA.
       console.error('[finalizeWithAI] error:', err);
-      alert('No se pudo procesar la transcripción. Revisa los campos y guarda manualmente.');
+      alert('No se pudo guardar la historia clínica. Revisa los campos e inténtalo de nuevo.');
     } finally {
       setAiProcessing(false);
     }

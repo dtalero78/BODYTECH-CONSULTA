@@ -22,14 +22,36 @@
 
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { z, ZodError } from 'zod';
 import {
   isConfigured,
   verifyCredentials,
   issueToken,
 } from '../services/mybodytech-auth.service';
 import { requireMybodytechToken } from '../middleware/mybodytech-auth.middleware';
+import mybodytechService from '../services/mybodytech.service';
 
 const router = Router();
+
+// Esquema del payload de alta de afiliado (espejo de lo que envía mybodytech).
+const afiliadoSchema = z.object({
+  eventoId: z.string().min(1),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha debe ser YYYY-MM-DD.'),
+  hora: z.string().regex(/^\d{2}:\d{2}$/, 'hora debe ser HH:MM.'),
+  professionalName: z.string().min(1),
+  afiliado: z.object({
+    numeroId: z.string().min(1),
+    tipoDocumento: z.string().min(1),
+    primerNombre: z.string().min(1),
+    segundoNombre: z.string().optional(),
+    primerApellido: z.string().min(1),
+    segundoApellido: z.string().optional(),
+    fechaNacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fechaNacimiento debe ser YYYY-MM-DD.'),
+    sexo: z.string().optional(),
+    celular: z.string().min(1),
+    email: z.string().optional(),
+  }),
+});
 
 // Rate limit del endpoint de token: es público y valida el client_secret, así
 // que lo protegemos contra fuerza bruta / credential stuffing / DoS. El uso
@@ -126,6 +148,64 @@ router.get('/health', (_req: Request, res: Response) => {
     integration: 'mybodytech',
     version: '1.0',
     timestamp: new Date().toISOString(),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 1 — Alta del afiliado + agendamiento de la consulta.
+// mybodytech envía fecha/hora + el NOMBRE del profesional (agenda no
+// sincronizada). Idempotente por eventoId.
+// ---------------------------------------------------------------------------
+router.post('/afiliados', async (req: Request, res: Response) => {
+  let input;
+  try {
+    input = afiliadoSchema.parse(req.body);
+  } catch (e) {
+    if (e instanceof ZodError) {
+      return res.status(400).json({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: e.errors.map((x) => `${x.path.join('.')}: ${x.message}`).join('; '),
+        },
+      });
+    }
+    throw e;
+  }
+
+  const result = await mybodytechService.createAfiliado(input);
+  if (!result.ok || !result.data) {
+    return res.status(result.status).json({ ok: false, error: result.error });
+  }
+  const d = result.data;
+  return res.status(result.status).json({
+    ok: true,
+    afiliadoId: d.afiliadoId,
+    cita: {
+      eventoId: d.eventoId,
+      estado: d.estado,
+      fechaAtencion: d.fechaAtencion,
+      professionalName: d.professionalName,
+    },
+  });
+});
+
+// Consultar el estado de un afiliado/cita por eventoId.
+router.get('/afiliados/:eventoId', async (req: Request, res: Response) => {
+  const result = await mybodytechService.getAfiliado(req.params.eventoId);
+  if (!result.ok || !result.data) {
+    return res.status(result.status).json({ ok: false, error: result.error });
+  }
+  const d = result.data;
+  return res.status(200).json({
+    ok: true,
+    afiliadoId: d.afiliadoId,
+    cita: {
+      eventoId: d.eventoId,
+      estado: d.estado,
+      fechaAtencion: d.fechaAtencion,
+      professionalName: d.professionalName,
+    },
   });
 });
 

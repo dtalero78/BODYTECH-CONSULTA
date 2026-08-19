@@ -1055,6 +1055,28 @@ class PostgresService {
           WHERE created_at < NOW() - INTERVAL '14 days'
       `);
 
+      // ===== Integración mybodytech — afiliados/citas =====
+      // A diferencia de Trepsi, la agenda NO está sincronizada: mybodytech nos
+      // envía directamente fecha/hora + el NOMBRE del profesional (texto libre),
+      // y creamos el paciente + la cita. `evento_id` es la llave de idempotencia.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS mybodytech_afiliados (
+          evento_id          VARCHAR(120) PRIMARY KEY,
+          historia_id        VARCHAR(64),
+          numero_id          VARCHAR(40),
+          professional_name  VARCHAR(200),
+          fecha_atencion     TIMESTAMPTZ,
+          estado             VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+          payload            JSONB,
+          created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_mybodytech_afiliados_numero
+          ON mybodytech_afiliados (numero_id)
+      `);
+
       // ===== WhatsApp Leads — captura de la "entidad" =====
       // Estado efímero por chat para capturar la ENTIDAD que el cliente responde
       // tras la pregunta "¿Para qué entidad?". Cuando el operador envía esa

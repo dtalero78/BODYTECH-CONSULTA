@@ -139,6 +139,13 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
       "roles": null
     },
     {
+      "ruta": "/monitor-mybodytech",
+      "componente": "MonitorMybodytechPage",
+      "redirigeA": null,
+      "protegida": false,
+      "roles": null
+    },
+    {
       "ruta": "/reprogramar/:id",
       "componente": "ReprogramarPage",
       "redirigeA": null,
@@ -358,6 +365,10 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
     },
     {
       "ruta": "/api/v1/integrations/trepsi",
+      "roles": null
+    },
+    {
+      "ruta": "/api/v1/integrations/mybodytech",
       "roles": null
     },
     {

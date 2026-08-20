@@ -1066,11 +1066,17 @@ class CalendarioService {
       // guardan con sede_id='trepsi' (placeholder), no con la sede real del
       // coach; si sólo filtramos por la sede real, quedan invisibles y el cupo
       // aparece libre → doble-agendamiento. Por eso incluimos 'trepsi'.
+      // 'mybodytech' va por la misma razón, PERO hoy no llega a coincidir: ese
+      // alta guarda en "medico" el NOMBRE del profesional, no su `codigo`
+      // (decisión deliberada de la Fase 1, ver mybodytech.service.ts:1-14), así
+      // que el `AND "medico" = $4` nunca casa. Queda puesto a propósito para que
+      // el día que la agenda se sincronice (Fase 2) el hueco no se abra en
+      // silencio — que es exactamente como apareció con Trepsi.
       // La hora ocupada se deriva de fechaAtencion (COT) para no depender de
       // que horaAtencion esté poblada.
       `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE (sede_id = $1 OR sede_id = 'trepsi')
+         WHERE (sede_id = $1 OR sede_id IN ('trepsi', 'mybodytech'))
            AND "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
            AND "fechaAtencion"::timestamptz >= $2::timestamptz
@@ -1183,11 +1189,13 @@ class CalendarioService {
 
     // 1) Citas pendientes del mismo médico ese día → ocupan slots.
     const ocupRows = await postgresService.query(
-      // Ver nota en getHorariosDisponibles: incluir sede_id='trepsi' para que
-      // las citas Trepsi cuenten como cupo ocupado (si no, se agenda encima).
+      // Ver nota en getHorariosDisponibles: incluir 'trepsi' (y 'mybodytech',
+      // hoy inerte) para que esas citas cuenten como cupo ocupado en vez de
+      // dejar agendar encima. Las dos queries tienen que quedar iguales: si
+      // divergen, el cupo que se ofrece deja de ser el cupo que se valida.
       `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE (sede_id = $1 OR sede_id = 'trepsi')
+         WHERE (sede_id = $1 OR sede_id IN ('trepsi', 'mybodytech'))
            AND "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
            AND "fechaAtencion"::timestamptz >= $2::timestamptz

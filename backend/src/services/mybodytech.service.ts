@@ -67,6 +67,63 @@ function rowToRecord(row: any): AfiliadoRecord {
   };
 }
 
+/**
+ * Normaliza un nombre para compararlo: sin tildes, sin puntuación, sin títulos
+ * ("Dr.", "Dra."), espacios colapsados, en mayúsculas. mybodytech manda el
+ * nombre con formato inconsistente ("Alejandra Perez", "PAULA ANDREA MORA
+ * PINZON"), así que comparar en crudo no sirve.
+ */
+export function normalizarNombreProfesional(nombre: string): string {
+  return nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // tildes
+    .replace(/\b(dr|dra|doctor|doctora|lic)\.?\b/gi, '')
+    .replace(/[^A-Za-z\s]/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
+/**
+ * Busca el `codigo` del profesional cuyo nombre coincida con el que manda
+ * mybodytech. Devuelve `null` si no hay ninguno, y `'AMBIGUO'` si hay más de uno
+ * (mismo nombre en dos sedes) — en ese caso adivinar pegaría la cita al coach
+ * equivocado, que es peor que dejarla sin resolver.
+ *
+ * OJO: hoy esto es SOLO OBSERVABILIDAD. No cambia lo que se guarda en "medico"
+ * (sigue siendo el nombre en texto libre, ver la cabecera de este archivo). Sirve
+ * para que una cita que apunta a un profesional inexistente se note en los logs
+ * en lugar de acumularse en silencio. Al 2026-08-20 ninguno de los nombres que
+ * manda mybodytech existe en `profesionales`, así que siempre da `null`.
+ */
+export async function buscarCodigoProfesional(
+  professionalName: string
+): Promise<string | null | 'AMBIGUO'> {
+  const objetivo = normalizarNombreProfesional(professionalName);
+  if (!objetivo) return null;
+
+  const rows = await postgresService.query(
+    `SELECT codigo,
+            concat_ws(' ', primer_nombre, segundo_nombre, primer_apellido, segundo_apellido) AS nombre,
+            alias
+       FROM profesionales
+      WHERE activo = TRUE`
+  );
+  if (rows === null) return null; // la BD falló: no es motivo para tumbar el alta
+
+  const coincidencias = new Set<string>();
+  for (const r of rows) {
+    const nombre = normalizarNombreProfesional(String(r.nombre ?? ''));
+    const alias = normalizarNombreProfesional(String(r.alias ?? ''));
+    if (objetivo === nombre || (alias && objetivo === alias)) {
+      coincidencias.add(String(r.codigo));
+    }
+  }
+  if (coincidencias.size === 0) return null;
+  if (coincidencias.size > 1) return 'AMBIGUO';
+  return [...coincidencias][0];
+}
+
 class MybodytechService {
   /**
    * Crea (o devuelve, si ya existe) el afiliado como paciente + su cita.
@@ -89,6 +146,30 @@ class MybodytechService {
     const fechaAtencion = `${input.fecha}T${input.hora}:00-05:00`;
     const a = input.afiliado;
     const historiaId = generateHistoriaId();
+
+    // 2.b) ¿El profesional que manda mybodytech existe en `profesionales`?
+    //      NO cambiamos lo que se guarda (sigue el nombre en texto libre), pero
+    //      si no existe la cita queda huérfana: nadie la ve en el panel médico ni
+    //      puede atenderla desde la plataforma. Se avisa para que se note.
+    //      Envuelto en try/catch: esto es observabilidad, jamás debe tumbar un
+    //      alta de un socio B2B.
+    try {
+      const codigo = await buscarCodigoProfesional(input.professionalName);
+      if (codigo === null) {
+        console.warn(
+          `[mybodytech] Profesional no registrado: "${input.professionalName}" ` +
+            `(evento ${input.eventoId}). La cita queda huérfana: no aparecerá en el ` +
+            `panel médico. Darlo de alta en \`profesionales\` para poder atenderla.`
+        );
+      } else if (codigo === 'AMBIGUO') {
+        console.warn(
+          `[mybodytech] Nombre ambiguo: "${input.professionalName}" coincide con más de ` +
+            `un profesional activo (evento ${input.eventoId}). No se resuelve.`
+        );
+      }
+    } catch (e) {
+      console.warn('[mybodytech] Fallo la verificación de profesional (no bloquea):', e);
+    }
 
     // 3) Crear la HistoriaClinica (paciente + cita). Se espeja el MISMO set de
     //    columnas que usa el alta de Trepsi (probado en prod) para evitar

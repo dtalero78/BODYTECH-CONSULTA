@@ -11,8 +11,14 @@ import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 
-const PROPIOCEPCION_OPTS: ReadonlyArray<DropdownOption> = [
-  'Buena', 'Regular', 'Deficiente',
+// Escala de estabilidad unipodal que usa el equipo médico. El texto de cada
+// opción ya trae el rango en segundos, así que el campo numérico aparte sobra.
+// Los valores caben en el VARCHAR(30) de `mc_propiocepcion` (el más largo son
+// 26 caracteres); si se agrega uno más largo hay que ampliar la columna.
+const ESTABILIDAD_UNIPODAL_OPTS: ReadonlyArray<DropdownOption> = [
+  'Bajo: Mayor a 30 seg',
+  'Medio: 11 a 29 seg',
+  'Riesgo Alto: menor a 5 seg',
 ].map((v) => ({ value: v, label: v }));
 
 const FORMULAS_SIGNOS: ReadonlyArray<FormulaDef> = [
@@ -514,27 +520,16 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         size="wide"
       >
         {/* El ICC se movió a Composición corporal (es una medida de composición y
-            necesita el perímetro de cadera). Aquí quedó la propiocepción. */}
+            necesita el perímetro de cadera). Aquí quedó la estabilidad unipodal. */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
           <SelectField
             historiaId={historiaId}
             field="mc_propiocepcion"
             initialValue={data?.mcPropiocepcion}
             onSaved={onPatchLocal}
-            label="Propiocepción"
-            options={PROPIOCEPCION_OPTS}
+            label="Estabilidad unipodal"
+            options={ESTABILIDAD_UNIPODAL_OPTS}
             placeholder="Seleccionar..."
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_propiocepcion_segundos"
-            initialValue={data?.mcPropiocepcionSegundos}
-            onSaved={onPatchLocal}
-            label="Estabilidad unipodal (segundos)"
-            type="number"
-            min={0}
-            max={300}
-            placeholder="Medición objetiva"
           />
           <TextField
             historiaId={historiaId}

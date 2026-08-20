@@ -530,7 +530,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             field="mc_propiocepcion_segundos"
             initialValue={data?.mcPropiocepcionSegundos}
             onSaved={onPatchLocal}
-            label="Estabilidad unipodal (s)"
+            label="Estabilidad unipodal (segundos)"
             type="number"
             min={0}
             max={300}

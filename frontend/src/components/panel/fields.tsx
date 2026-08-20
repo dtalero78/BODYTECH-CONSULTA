@@ -47,22 +47,24 @@ export function TextField(
     setV(props.initialValue == null ? '' : String(props.initialValue));
   }, [props.initialValue]);
 
-  // El equipo médico escribe los decimales con coma ("24,5"), pero las columnas
-  // son `numeric` y sólo entienden el punto. Se normaliza acá, antes de guardar;
-  // el input sigue mostrando lo que la persona tecleó.
   const isNumeric = props.type === 'number';
-  const normalized = isNumeric ? v.trim().replace(',', '.') : v;
+
+  // Mientras se teclea, un decimal a medias ("24." o sólo "-") no es un número
+  // y el servidor lo rechazaría con 400. `enabled: false` evita el PATCH y deja
+  // intacto lo último guardado hasta que el valor esté completo.
+  const isCompleteNumber = /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(v.trim());
 
   useFieldAutoSave({
     historiaId: props.historiaId,
     field: props.field,
-    value: normalized === '' ? null : normalized,
+    value: v.trim() === '' ? null : v.trim(),
     onSaved: props.onSaved,
+    enabled: isNumeric ? v.trim() === '' || isCompleteNumber : true,
   });
 
   const rangeError: string | null = (() => {
     if (!isNumeric || v === '') return null;
-    const num = Number(normalized);
+    const num = Number(v.trim());
     if (isNaN(num)) return null;
     if (props.min !== undefined && num < props.min) return `Valor mínimo: ${props.min}`;
     if (props.max !== undefined && num > props.max) return `Valor máximo: ${props.max}`;
@@ -86,7 +88,11 @@ export function TextField(
         type={isNumeric ? 'text' : (props.type ?? 'text')}
         inputMode={isNumeric ? 'decimal' : undefined}
         value={v}
-        onChange={(e) => setV(e.target.value)}
+        // La coma se normaliza a punto en el propio campo, al teclear: lo que se
+        // ve es exactamente lo que se guarda, sin una coma en pantalla y un punto
+        // en la base. El equipo médico escribe "24,5" y las columnas son `numeric`,
+        // que sólo entiende el punto.
+        onChange={(e) => setV(isNumeric ? e.target.value.replace(/,/g, '.') : e.target.value)}
         placeholder={props.placeholder}
         min={isNumeric ? undefined : props.min}
         max={isNumeric ? undefined : props.max}

@@ -127,6 +127,23 @@ describe("coerceValue('number', ...) sobre 'cc_imc_nuevo'", () => {
     expect(coerceValue(F, '1.5e2')).toEqual({ ok: true, value: 150 });
   });
 
+  test('coma decimal (es-CO) se normaliza a punto', () => {
+    // El equipo médico escribe "24,5"; la columna es `numeric` y sólo acepta punto.
+    expect(coerceValue(F, '24,5')).toEqual({ ok: true, value: 24.5 });
+    expect(coerceValue(F, '-5,0')).toEqual({ ok: true, value: -5 });
+    expect(coerceValue(F, ',5')).toEqual({ ok: true, value: 0.5 });
+    expect(coerceValue(F, ' 24,5 ')).toEqual({ ok: true, value: 24.5 });
+  });
+
+  test('separador ambiguo (miles + decimal) → INVALID_VALUE', () => {
+    // "1,234.56" y "1.234,56" no se interpretan: se rechazan. Adivinar mal
+    // convertiría un typo en un dato clínico silenciosamente equivocado.
+    expect(coerceValue(F, '1,234.56')).toEqual({ ok: false, error: 'INVALID_VALUE' });
+    expect(coerceValue(F, '1.234,56')).toEqual({ ok: false, error: 'INVALID_VALUE' });
+    expect(coerceValue(F, '24,,5')).toEqual({ ok: false, error: 'INVALID_VALUE' });
+    expect(coerceValue(F, '24,')).toEqual({ ok: false, error: 'INVALID_VALUE' });
+  });
+
   test("string 'abc' → INVALID_VALUE", () => {
     expect(coerceValue(F, 'abc')).toEqual({ ok: false, error: 'INVALID_VALUE' });
   });

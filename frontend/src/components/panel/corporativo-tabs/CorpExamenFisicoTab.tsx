@@ -308,7 +308,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
               <TextField historiaId={historiaId} field="mc_frec_resp" initialValue={data?.mcFrecResp} onSaved={onPatchLocal} label="Frecuencia respiratoria (rpm)" type="number" min={5} max={60} />
               <TextField historiaId={historiaId} field="mc_sato2" initialValue={data?.mcSato2} onSaved={onPatchLocal} label="SatO2 (%)" type="number" min={50} max={100} />
               <TextField historiaId={historiaId} field="mc_perimetro_abdominal" initialValue={data?.mcPerimetroAbdominal} onSaved={onPatchLocal} label="Perímetro abdominal (cm)" type="number" min={40} max={200} />
-              <TextField historiaId={historiaId} field="mc_talla" initialValue={data?.mcTalla} onSaved={onPatchLocal} label="Talla (m)" type="number" min={1} max={2.5} placeholder="Ej. 1.65" error={talla !== null && (talla < 1 || talla > 2.5) ? "En metros, con punto decimal (ej. 1.65)" : undefined} />
+              <TextField historiaId={historiaId} field="mc_talla" initialValue={data?.mcTalla} onSaved={onPatchLocal} label="Talla (m)" type="number" min={1} max={2.5} placeholder="Ej. 1.65" error={talla !== null && (talla < 1 || talla > 2.5) ? "En metros (ej. 1.65 o 1,65)" : undefined} />
             </div>
           </div>
           <div className="pt-4 border-t border-dashed border-[var(--p-line)]">

@@ -47,16 +47,22 @@ export function TextField(
     setV(props.initialValue == null ? '' : String(props.initialValue));
   }, [props.initialValue]);
 
+  // El equipo médico escribe los decimales con coma ("24,5"), pero las columnas
+  // son `numeric` y sólo entienden el punto. Se normaliza acá, antes de guardar;
+  // el input sigue mostrando lo que la persona tecleó.
+  const isNumeric = props.type === 'number';
+  const normalized = isNumeric ? v.trim().replace(',', '.') : v;
+
   useFieldAutoSave({
     historiaId: props.historiaId,
     field: props.field,
-    value: v === '' ? null : v,
+    value: normalized === '' ? null : normalized,
     onSaved: props.onSaved,
   });
 
   const rangeError: string | null = (() => {
-    if (props.type !== 'number' || v === '') return null;
-    const num = Number(v);
+    if (!isNumeric || v === '') return null;
+    const num = Number(normalized);
     if (isNaN(num)) return null;
     if (props.min !== undefined && num < props.min) return `Valor mínimo: ${props.min}`;
     if (props.max !== undefined && num > props.max) return `Valor máximo: ${props.max}`;
@@ -72,12 +78,18 @@ export function TextField(
         </label>
       )}
       <input
-        type={props.type ?? 'text'}
+        // Los numéricos se renderizan como `text` + `inputMode="decimal"`: con
+        // `type="number"` el navegador considera "24," inválido y devuelve string
+        // vacío en `e.target.value`, así que la coma se perdía de camino y el campo
+        // se vaciaba solo. `inputMode` conserva el teclado numérico en móvil, y el
+        // rango se sigue validando abajo en JS (min/max de HTML no aplican a text).
+        type={isNumeric ? 'text' : (props.type ?? 'text')}
+        inputMode={isNumeric ? 'decimal' : undefined}
         value={v}
         onChange={(e) => setV(e.target.value)}
         placeholder={props.placeholder}
-        min={props.min}
-        max={props.max}
+        min={isNumeric ? undefined : props.min}
+        max={isNumeric ? undefined : props.max}
         className={`w-full bg-[var(--p-input)] border text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] ${
           displayError ? 'border-[var(--p-danger)]' : 'border-[var(--p-line)] focus:border-[var(--p-accent)]'
         }`}

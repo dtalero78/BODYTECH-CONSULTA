@@ -540,12 +540,17 @@ export function coerceValue(
       if (typeof raw === 'string') {
         const trimmed = raw.trim();
         if (trimmed === '') return { ok: true, value: null };
+        // Se acepta coma o punto como separador decimal: el equipo médico escribe
+        // "24,5" (convención es-CO) y las columnas son `numeric`, que sólo entiende
+        // el punto. Se admite UN solo separador, así que "1,234.56" (miles + decimal)
+        // se rechaza en vez de interpretarse mal: es ambiguo y un error de digitación
+        // silencioso en un dato clínico es peor que un 400.
         // Rechazar strings no numéricos. `Number('')` daría 0 pero ya filtramos arriba.
         // `Number('abc')` → NaN.
-        if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+        if (!/^-?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
           return { ok: false, error: 'INVALID_VALUE' };
         }
-        const n = Number(trimmed);
+        const n = Number(trimmed.replace(',', '.'));
         if (!Number.isFinite(n)) return { ok: false, error: 'INVALID_VALUE' };
         return { ok: true, value: n };
       }

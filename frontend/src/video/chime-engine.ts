@@ -127,12 +127,37 @@ const DECAY_AVISOS_MS = 12000;
  * `navigator.connection` es la estimación del navegador (solo Chrome). La medida
  * de verdad la da Chime durante la llamada — ver `connection-poor`.
  */
-function infoDelEquipo(): Record<string, string | number> {
+/**
+ * ¿La página corre dentro del navegador embebido de otra app (el que se abre al
+ * tocar un link en WhatsApp, Instagram, Facebook…)?
+ *
+ * Importa porque es el peor escenario para una videollamada: muchas veces no
+ * concede micrófono y el audio del otro lado no arranca sin un toque explícito.
+ * Cuando un afiliado reporta "no me oyen", esto es lo primero que hay que saber
+ * — y hasta ahora no quedaba registrado en ningún lado.
+ *
+ * En Android el WebView se delata con `Version/4.0` y con `; wv)`. En iOS no hay
+ * marca fiable, así que se detectan las apps por su token propio (FBAN/FBAV de
+ * Facebook, Instagram, Line).
+ */
+export function esNavegadorEmbebido(ua: string = navigator.userAgent || ''): boolean {
+  // `Version/4.0` es la marca del WebView de Android. No la usan los navegadores
+  // reales de hoy: Chrome de Android no emite `Version/`, y Safari de iOS emite
+  // la suya propia (Version/17, 18, 26…). Los stock browsers viejos que sí la
+  // usaban no corren WebRTC, así que no hay a quién marcar de más.
+  return /\bwv\b|Version\/4\.0|FBAN|FBAV|Instagram|Line\//i.test(ua);
+}
+
+function infoDelEquipo(micro?: boolean): Record<string, string | number | boolean> {
   const nav = navigator as Navigator & {
     deviceMemory?: number;
     connection?: { effectiveType?: string; downlink?: number; rtt?: number };
   };
-  const out: Record<string, string | number> = {
+  const out: Record<string, string | number | boolean> = {
+    // Si el micrófono quedó tomado. Es EL dato que faltaba: sin esto, cada
+    // reporte de "no me oyen" se resolvía por inferencia.
+    ...(micro === undefined ? {} : { micro }),
+    embebido: esNavegadorEmbebido(),
     nucleos: nav.hardwareConcurrency ?? 0,
     ramGb: nav.deviceMemory ?? 0,
     pantalla: `${window.screen?.width ?? 0}x${window.screen?.height ?? 0}`,
@@ -443,7 +468,7 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.pendingInitialRemotes = [];
 
     // Foto del equipo y la red con que entra esta persona. Una sola vez.
-    this.reportar('session-info', infoDelEquipo());
+    this.reportar('session-info', infoDelEquipo(this.getLocalAudioTracks().length > 0));
 
     return { localParticipant, remoteParticipants };
   }

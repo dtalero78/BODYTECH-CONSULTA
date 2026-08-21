@@ -3,6 +3,7 @@ import { marcarLlamadaActiva } from '../state/llamadaActiva';
 import { useVideoRoom } from '../hooks/useVideoRoom';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { useConsultationRecorder } from '../hooks/useConsultationRecorder';
+import { esNavegadorEmbebido } from '../video/chime-engine';
 import { usePosturalAnalysis } from '../hooks/usePosturalAnalysis';
 import { Participant } from './Participant';
 import { VideoControls } from './VideoControls';
@@ -138,6 +139,22 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     endSession,
     sendPoseData,
   } = posturalAnalysis;
+
+  // Aviso al AFILIADO cuando su navegador no le va a dejar hablar: el embebido
+  // de WhatsApp/Instagram suele no conceder micrófono, y sin micrófono la
+  // consulta no sirve. Hasta ahora no se enteraba nadie —ni él ni el coach— y
+  // los dos terminaban reintentando a ciegas. Se evalúa una vez conectado,
+  // cuando ya se sabe si el micrófono quedó tomado.
+  const [avisoMicro, setAvisoMicro] = useState<'embebido' | 'sin-micro' | null>(null);
+  useEffect(() => {
+    if (role !== 'patient' || !isConnected || !room) return;
+    const t = setTimeout(() => {
+      const sinMicro = room.getLocalAudioTracks().length === 0;
+      if (sinMicro) setAvisoMicro(esNavegadorEmbebido() ? 'embebido' : 'sin-micro');
+      else if (esNavegadorEmbebido()) setAvisoMicro('embebido');
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [role, isConnected, room]);
 
   const handleLeave = async () => {
     // El médico graba el audio de la consulta en el navegador. Subimos ANTES de
@@ -461,6 +478,35 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
             onEndSession={endSession}
             onAppendToObservaciones={null}
           />
+        )}
+        {role === 'patient' && avisoMicro && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md">
+            <div className="bg-amber-500 text-black rounded-xl shadow-xl px-4 py-3 flex items-start gap-3">
+              <span className="text-xl leading-none">⚠️</span>
+              <div className="flex-1 text-sm leading-snug">
+                {avisoMicro === 'embebido' ? (
+                  <>
+                    <strong>Abre este enlace en Chrome.</strong> Lo estás viendo dentro de
+                    otra aplicación y puede que el profesional no te escuche. Toca los tres
+                    puntos (⋮) arriba a la derecha y elige “Abrir en Chrome”.
+                  </>
+                ) : (
+                  <>
+                    <strong>No tenemos acceso a tu micrófono.</strong> El profesional no va a
+                    escucharte. Permite el micrófono en tu navegador y vuelve a entrar al
+                    enlace.
+                  </>
+                )}
+              </div>
+              <button
+                onClick={() => setAvisoMicro(null)}
+                className="text-black/60 hover:text-black text-lg leading-none px-1"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+          </div>
         )}
         {role === 'patient' && sessionActive && (
           <PosturalAnalysisPatient

@@ -14,6 +14,7 @@ import pdfService from '../services/pdf.service';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
+import historiaMutationService from '../services/historia-mutation.service';
 import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
 
 // ============================================================================
@@ -676,6 +677,31 @@ class VideoController {
    * GET /reprogramar/:id — datos mínimos de la cita para la página pública de
    * reprogramación (nombre + fecha/hora actuales). Público (sin JWT).
    */
+  /**
+   * Marca la consulta como ATENDIDA. El panel de 7 pestañas auto-guarda campo a
+   * campo y no tenía ningún momento donde cerrarla (ver marcarAtendida); el
+   * nutricional sí, porque conservó su botón "Finalizar y guardar".
+   *
+   * POST /api/video/medical-history/:historiaId/finalizar
+   */
+  async finalizarConsulta(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { historiaId } = req.params;
+    if (!historiaId) {
+      res.status(400).json({ success: false, error: 'historiaId requerido' });
+      return;
+    }
+    try {
+      const ok = await historiaMutationService.marcarAtendida(historiaId);
+      if (!ok) {
+        res.status(404).json({ success: false, error: 'Historia no encontrada' });
+        return;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getReprogramarInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { id } = req.params;
     try {

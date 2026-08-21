@@ -116,6 +116,14 @@ router.get(
 );
 router.get('/medical-history/:historiaId', clinico, videoController.getMedicalHistory);
 router.post('/medical-history', clinico, videoController.updateMedicalHistory);
+// Cierre de la consulta. El panel de 7 pestañas auto-guarda campo a campo y no
+// tenía cómo marcarla atendida: eso vivía en el botón "Guardar" que el refactor
+// eliminó. El nutricional lo conservó, por eso allá sí funcionaba.
+router.post(
+  '/medical-history/:historiaId/finalizar',
+  clinico,
+  videoController.finalizarConsulta
+);
 // Phase 1 — auto-save por field (PATCH)
 router.patch(
   '/medical-history/:historiaId/field',

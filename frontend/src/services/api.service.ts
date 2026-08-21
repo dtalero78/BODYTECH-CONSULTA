@@ -433,6 +433,11 @@ class ApiService {
   /**
    * Actualizar historia clínica de un paciente
    */
+  /** Cierra la consulta: marca `fechaConsulta` + atendido. Idempotente. */
+  async finalizarConsulta(historiaId: string): Promise<void> {
+    await this.client.post(`/api/video/medical-history/${historiaId}/finalizar`);
+  }
+
   async updateMedicalHistory(payload: {
     historiaId: string;
     mdAntecedentes?: string;

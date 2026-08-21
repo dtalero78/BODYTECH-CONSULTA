@@ -1,3 +1,4 @@
+import postgresService from './postgres.service';
 import historiaClinicaPostgresService from './historia-clinica-postgres.service';
 import { historiaClinicaRepository } from '../repositories';
 import historiaQueryService from './historia-query.service';
@@ -35,6 +36,33 @@ export interface UpdateMedicalHistoryPayload {
 }
 
 class HistoriaMutationService {
+  /**
+   * Marca la consulta como ATENDIDA (`fechaConsulta` + `atendido`).
+   *
+   * Existe porque el panel de 7 pestañas no tenía cómo cerrar una consulta. Al
+   * refactorizarlo (may-2026) se cambió el "botón Guardar que mandaba todo" por
+   * auto-guardado campo a campo — y marcar la consulta como atendida iba pegado
+   * a ese botón, así que se perdió con él. El panel nutricional, recuperado
+   * después tal cual estaba, conservó el botón y por eso sí marca.
+   *
+   * Resultado: un médico llenaba la historia entera y la cita seguía en
+   * PENDIENTE para siempre. Con el volumen actual (todo nutrición) casi no se
+   * veía; el primer coach que entró por el panel equivocado lo destapó.
+   *
+   * Idempotente: si ya está marcada NO se pisa la fecha original.
+   */
+  async marcarAtendida(historiaId: string): Promise<boolean> {
+    const rows = await postgresService.query(
+      `UPDATE "HistoriaClinica"
+          SET "fechaConsulta" = COALESCE("fechaConsulta", NOW()),
+              "atendido" = 'ATENDIDO'
+        WHERE "_id" = $1
+      RETURNING "_id"`,
+      [historiaId]
+    );
+    return rows !== null && rows.length > 0;
+  }
+
   /**
    * Actualiza un solo campo de la historia clínica (auto-save por field).
    * Phase 1 — Foundation.

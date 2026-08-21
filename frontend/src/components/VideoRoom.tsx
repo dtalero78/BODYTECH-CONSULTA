@@ -161,6 +161,15 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     // desconecta; el room lo cierra el médico.
     if (role === 'doctor') {
       apiService.endRoom(roomName).catch(() => {});
+      // Cierra la consulta en el MISMO momento en que el coach de nutrición la
+      // cierra con su "Finalizar y guardar": cuando el profesional termina.
+      // El panel de 7 pestañas auto-guarda campo a campo y no tenía este paso
+      // —vivía en el botón Guardar que el refactor eliminó—, así que sus citas
+      // quedaban en PENDIENTE para siempre. El nutricional ya se marca solo al
+      // guardar, y la llamada es idempotente, así que no lo pisa.
+      if (historiaId && panelVariant !== 'nutricional') {
+        apiService.finalizarConsulta(historiaId).catch(() => {});
+      }
       if (historiaId && documento) {
         apiService.downloadRips(historiaId, documento).catch(() => {});
       }

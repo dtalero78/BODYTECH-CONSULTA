@@ -170,6 +170,7 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
           celular: form.celular.trim() || null,
           esGlobal: form.esGlobal,
           sedes: form.esGlobal ? [] : form.sedes,
+          profesionalId: ROLES_CLINICOS.includes(form.rol) ? form.profesionalId : null,
         });
         showToast({ type: 'success', message: 'Usuario actualizado.' });
       }
@@ -359,7 +360,12 @@ export function UsuariosView({ reloadKey = 0, showToast, reportCount }: Props) {
                 ))}
               </select>
             </Field>
-            {form.id === null && ROLES_CLINICOS.includes(form.rol) && (
+            {/* También al EDITAR: un usuario clínico creado sin vincular no tenía
+                forma de arreglarse desde la interfaz, y sin ficha de profesional su
+                agenda sale vacía (el backend cae a un centinela que devuelve cero
+                filas, a propósito, para que un clínico sin código no vea las citas
+                de todos). Le pasó a un coach que llevaba desde julio así. */}
+            {ROLES_CLINICOS.includes(form.rol) && (
               <Field label="Vincular a profesional (opcional)">
                 <select
                   value={form.profesionalId ?? ''}

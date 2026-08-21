@@ -48,6 +48,8 @@ export interface UpdateUsuarioInput {
   celular?: string | null;
   sedes?: string[];
   esGlobal?: boolean;
+  /** Ficha de profesional del usuario clínico. El backend ya lo aceptaba; faltaba acá. */
+  profesionalId?: number | null;
 }
 
 class UsuariosApi {

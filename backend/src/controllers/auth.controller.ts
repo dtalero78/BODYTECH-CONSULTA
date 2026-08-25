@@ -99,16 +99,16 @@ class AuthController {
       }
 
       // Puerta única: si no es un usuario de consulta (credenciales inválidas
-      // aquí), probar contra la app hermana "prepagadas". Si autentica, el
-      // frontend redirige a prepagadas con el token en el fragmento (#…).
+      // aquí), probar contra las apps hermanas (prepagadas, acc). Si alguna
+      // autentica, el frontend redirige allá con el token en el fragmento (#…).
       if (result.error === 'INVALID_CREDENTIALS') {
-        const prepa = await authService.loginPrepagadas(email, password);
-        if (prepa.ok) {
+        const hermana = await authService.loginHermanas(email, password);
+        if (hermana.ok) {
           res.status(200).json({
             success: true,
-            program: 'prepagadas',
-            token: prepa.token,
-            redirectUrl: prepa.redirectUrl,
+            program: hermana.programa,
+            token: hermana.token,
+            redirectUrl: hermana.redirectUrl,
           });
           return;
         }

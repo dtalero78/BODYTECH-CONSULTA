@@ -41,12 +41,19 @@ export interface SessionUser {
 
 /**
  * Resultado del login unificado. `consulta` = usuario de esta app (sesión ya
- * persistida). `prepagadas` = usuario de la app hermana; el caller redirige a
- * `redirectUrl` entregando `token` en el fragmento (#).
+ * persistida). Cualquier otro `program` es una app hermana: el caller redirige
+ * a `redirectUrl` entregando `token` en el fragmento (#).
+ *
+ * La lista de hermanas vive en el backend; acá se enumeran para que la unión
+ * siga discriminando por `program` (con un `string` abierto, TypeScript no
+ * puede descartar la rama 'consulta' y se pierde el chequeo). Registrar una
+ * app nueva es agregarla también acá.
  */
+export type ProgramaHermano = 'prepagadas' | 'acc';
+
 export type PasswordLoginOutcome =
   | { program: 'consulta'; user: SessionUser }
-  | { program: 'prepagadas'; token: string; redirectUrl: string };
+  | { program: ProgramaHermano; token: string; redirectUrl: string };
 
 /** Mensaje legible para errores del login por email+contraseña. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,12 +179,14 @@ class AuthService {
     });
     const data = res.data || {};
 
-    // Usuario de la app hermana: handoff SSO (no toca el localStorage de consulta).
-    if (data.program === 'prepagadas') {
+    // Usuario de una app hermana: handoff SSO (no toca el localStorage de
+    // consulta). Se acepta cualquier `program` distinto de 'consulta' para que
+    // registrar una app nueva sea un cambio solo del backend.
+    if (data.program && data.program !== 'consulta') {
       if (!data.token || !data.redirectUrl) {
-        throw new Error('Login prepagadas inválido');
+        throw new Error(`Login ${data.program} inválido`);
       }
-      return { program: 'prepagadas', token: data.token, redirectUrl: data.redirectUrl };
+      return { program: data.program as ProgramaHermano, token: data.token, redirectUrl: data.redirectUrl };
     }
 
     const { token, user } = data;

@@ -46,9 +46,11 @@ export function LoginPage() {
     setError(null);
     try {
       const outcome = await authService.passwordLogin(email.trim(), password, remember);
-      if (outcome.program === 'prepagadas') {
-        // Handoff a la app hermana: el token va en el fragmento (# no viaja al
-        // servidor ni a los logs). prepagadas.bodytech.app/sso lo consume.
+      if (outcome.program !== 'consulta') {
+        // Handoff a una app hermana (prepagadas, acc…): el token va en el
+        // fragmento (# no viaja al servidor ni a los logs). El /sso de esa app
+        // lo consume, lo valida contra su propio backend y lo borra del
+        // historial.
         window.location.href = `${outcome.redirectUrl}#t=${encodeURIComponent(outcome.token)}`;
         return;
       }

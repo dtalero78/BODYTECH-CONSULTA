@@ -148,15 +148,19 @@ export function esNavegadorEmbebido(ua: string = navigator.userAgent || ''): boo
   return /\bwv\b|Version\/4\.0|FBAN|FBAV|Instagram|Line\//i.test(ua);
 }
 
-function infoDelEquipo(micro?: boolean): Record<string, string | number | boolean> {
+function infoDelEquipo(micro?: boolean, camara?: boolean): Record<string, string | number | boolean> {
   const nav = navigator as Navigator & {
     deviceMemory?: number;
     connection?: { effectiveType?: string; downlink?: number; rtt?: number };
   };
   const out: Record<string, string | number | boolean> = {
-    // Si el micrófono quedó tomado. Es EL dato que faltaba: sin esto, cada
-    // reporte de "no me oyen" se resolvía por inferencia.
+    // Si el micrófono y la cámara quedaron tomados. Sin estos dos, cada reporte
+    // de "no me oyen" o "no me ven" se resolvía por inferencia — y el 25-ago un
+    // diagnóstico salió mal justamente por eso: se usó la ausencia de
+    // `background-applied` como si probara que la cámara falló, cuando ese
+    // evento lo emite una sonda tardía que se calla si no encuentra la pista.
     ...(micro === undefined ? {} : { micro }),
+    ...(camara === undefined ? {} : { camara }),
     embebido: esNavegadorEmbebido(),
     nucleos: nav.hardwareConcurrency ?? 0,
     ramGb: nav.deviceMemory ?? 0,
@@ -468,7 +472,13 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.pendingInitialRemotes = [];
 
     // Foto del equipo y la red con que entra esta persona. Una sola vez.
-    this.reportar('session-info', infoDelEquipo(this.getLocalAudioTracks().length > 0));
+    this.reportar(
+      'session-info',
+      infoDelEquipo(
+        this.getLocalAudioTracks().length > 0,
+        !!this.getLocalVideoStream()?.getVideoTracks?.().length
+      )
+    );
 
     return { localParticipant, remoteParticipants };
   }

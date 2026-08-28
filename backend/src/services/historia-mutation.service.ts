@@ -3,6 +3,7 @@ import historiaClinicaPostgresService from './historia-clinica-postgres.service'
 import { historiaClinicaRepository } from '../repositories';
 import historiaQueryService from './historia-query.service';
 import trepsiWebhookService from './trepsi-webhook.service';
+import mybodytechRipsService from './mybodytech-rips.service';
 import {
   EDITABLE_FIELDS,
   EDITABLE_FIELD_TYPE_MAP,
@@ -227,6 +228,21 @@ class HistoriaMutationService {
         })
         .catch((e) => {
           console.error(`⚠️  [Trepsi-Webhook] Error encolando: ${e?.message ?? e}`);
+        });
+
+      // PASO 3: Si la cita es de mybodytech, enviar el RIPS a su validador
+      // (Fase 2). Fire-and-forget: la HC ya quedó guardada.
+      mybodytechRipsService
+        .enviarRips(payload.historiaId)
+        .then((res) => {
+          if (res.sent) {
+            console.log(`📨 [mybodytech-RIPS] Enviado (${res.status}) para historia ${payload.historiaId}`);
+          } else if (res.reason && res.reason !== 'NOT_MYBODYTECH') {
+            console.log(`ℹ️  [mybodytech-RIPS] No enviado: ${res.reason}`);
+          }
+        })
+        .catch((e) => {
+          console.error(`⚠️  [mybodytech-RIPS] Error: ${e?.message ?? e}`);
         });
 
       return { success: true };

@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'crypto';
 import integrationLogService from '../services/integration-log.service';
 import postgresService from '../services/postgres.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
+import mybodytechRipsService from '../services/mybodytech-rips.service';
 
 function constantTimeEquals(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
@@ -447,6 +448,38 @@ class MonitorIntegracionController {
         trepsi_appointments: trepsiAppt ?? [],
         outbox_lastRows: outboxRows ?? [],
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /mybodytech-rips-test?token=...
+   * Body: { eventoId: string }
+   *
+   * Dispara manualmente el envío del RIPS a mybodytech para el afiliado con ese
+   * eventoId (sin pasar por el cierre de la HC en el panel). Equivale al
+   * "Probar outbound" de Trepsi. El resultado queda en el monitor (outbound).
+   */
+  mybodytechRipsTest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const eventoId = typeof req.body?.eventoId === 'string' ? req.body.eventoId : '';
+      if (!eventoId) {
+        res.status(400).json({ ok: false, error: { code: 'NO_EVENTO_ID', message: 'eventoId requerido.' } });
+        return;
+      }
+      const rows = await postgresService.query(
+        'SELECT historia_id FROM mybodytech_afiliados WHERE evento_id = $1',
+        [eventoId]
+      );
+      if (!rows || rows.length === 0) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'eventoId no existe.' } });
+        return;
+      }
+      const historiaId = String(rows[0].historia_id);
+      const result = await mybodytechRipsService.enviarRips(historiaId);
+      res.status(200).json({ ok: true, historiaId, result });
     } catch (err) {
       next(err);
     }

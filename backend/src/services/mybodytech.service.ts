@@ -34,6 +34,9 @@ export interface CreateAfiliadoInput {
   fecha: string; // YYYY-MM-DD
   hora: string; // HH:MM (hora Colombia)
   professionalName: string;
+  // Documento del profesional que atiende — necesario para el RIPS (Fase 2).
+  userDocumentType?: string;
+  userDocumentNumber?: string;
   afiliado: AfiliadoInput;
 }
 
@@ -218,16 +221,21 @@ class MybodytechService {
     }
 
     // 4) Registrar en mybodytech_afiliados (+ payload crudo para auditoría).
+    //    Se guarda el documento del profesional para poder enviar el RIPS en
+    //    la Fase 2 (external-rips lo exige).
     const appt = await postgresService.query(
       `INSERT INTO mybodytech_afiliados (
-         evento_id, historia_id, numero_id, professional_name, fecha_atencion, estado, payload
-       ) VALUES ($1, $2, $3, $4, $5, 'scheduled', $6)
+         evento_id, historia_id, numero_id, professional_name,
+         user_document_type, user_document_number, fecha_atencion, estado, payload
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled', $8)
        RETURNING *`,
       [
         input.eventoId,
         historiaId,
         a.numeroId,
         input.professionalName,
+        input.userDocumentType ?? null,
+        input.userDocumentNumber ?? null,
         fechaAtencion,
         JSON.stringify(input),
       ]

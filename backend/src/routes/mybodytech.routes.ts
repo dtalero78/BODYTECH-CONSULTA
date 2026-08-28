@@ -39,6 +39,10 @@ const afiliadoSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha debe ser YYYY-MM-DD.'),
   hora: z.string().regex(/^\d{2}:\d{2}$/, 'hora debe ser HH:MM.'),
   professionalName: z.string().min(1),
+  // Documento del profesional que atiende (necesario para el RIPS). El número
+  // puede venir como number o string en el JSON de mybodytech.
+  user_document_type: z.string().optional(),
+  user_document_number: z.union([z.string(), z.number()]).optional(),
   afiliado: z.object({
     numeroId: z.string().min(1),
     tipoDocumento: z.string().min(1),
@@ -173,7 +177,16 @@ router.post('/afiliados', async (req: Request, res: Response) => {
     throw e;
   }
 
-  const result = await mybodytechService.createAfiliado(input);
+  const result = await mybodytechService.createAfiliado({
+    eventoId: input.eventoId,
+    fecha: input.fecha,
+    hora: input.hora,
+    professionalName: input.professionalName,
+    userDocumentType: input.user_document_type,
+    userDocumentNumber:
+      input.user_document_number != null ? String(input.user_document_number) : undefined,
+    afiliado: input.afiliado,
+  });
   if (!result.ok || !result.data) {
     return res.status(result.status).json({ ok: false, error: result.error });
   }

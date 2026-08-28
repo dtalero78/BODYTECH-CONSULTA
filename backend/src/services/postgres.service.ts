@@ -1061,17 +1061,26 @@ class PostgresService {
       // y creamos el paciente + la cita. `evento_id` es la llave de idempotencia.
       await this.query(`
         CREATE TABLE IF NOT EXISTS mybodytech_afiliados (
-          evento_id          VARCHAR(120) PRIMARY KEY,
-          historia_id        VARCHAR(64),
-          numero_id          VARCHAR(40),
-          professional_name  VARCHAR(200),
-          fecha_atencion     TIMESTAMPTZ,
-          estado             VARCHAR(20) NOT NULL DEFAULT 'scheduled',
-          payload            JSONB,
-          created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          evento_id            VARCHAR(120) PRIMARY KEY,
+          historia_id          VARCHAR(64),
+          numero_id            VARCHAR(40),
+          professional_name    VARCHAR(200),
+          user_document_type   VARCHAR(10),
+          user_document_number VARCHAR(40),
+          fecha_atencion       TIMESTAMPTZ,
+          estado               VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+          rips_estado          VARCHAR(20),
+          payload              JSONB,
+          created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
+      // Columnas agregadas después de la primera versión de la tabla:
+      // documento del profesional que atiende (lo necesita el RIPS de Fase 2) +
+      // estado del envío del RIPS.
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS user_document_type   VARCHAR(10)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS user_document_number VARCHAR(40)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS rips_estado          VARCHAR(20)`);
       await this.query(`
         CREATE INDEX IF NOT EXISTS idx_mybodytech_afiliados_numero
           ON mybodytech_afiliados (numero_id)

@@ -15,6 +15,7 @@ import {
   Sparkles,
   Stethoscope,
 } from 'lucide-react';
+import { ORIGEN_META, resolverOrigen, type Origen } from './origen';
 import authService from '../../services/auth.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import calendarioService, {
@@ -40,6 +41,8 @@ function authHeaders() {
 
 interface OrdenItem {
   _id: string;
+  /** Departamento / vía de entrada, tal como lo guardó quien creó la historia. */
+  origen?: string | null;
   numeroId: string;
   primerNombre: string;
   segundoNombre?: string;
@@ -161,10 +164,12 @@ function nombreCompleto(o: OrdenItem) {
     .join(' ');
 }
 
-// Una orden viene de Trepsi si su historia (`_id`) tiene el prefijo `trepsi_`
-// que asigna la integración (las nativas usan UUID).
 function isTrepsi(o: OrdenItem): boolean {
-  return typeof o._id === 'string' && o._id.startsWith('trepsi_');
+  return origenDe(o) === 'trepsi';
+}
+
+function origenDe(o: OrdenItem): Origen {
+  return resolverOrigen(o.origen, o._id);
 }
 
 // "ORD-YYYY-XXXX" derivado del _id + createdAt (estética; el ID real es _id).
@@ -667,15 +672,18 @@ export function OrdenesView({ reloadKey = 0, showToast, reportCount }: Props) {
                           <div className="min-w-0">
                             <div className="text-[14px] font-medium text-zinc-900 truncate flex items-center gap-1.5">
                               <span className="truncate">{o.primerNombre} {o.primerApellido}</span>
-                              {isTrepsi(o) && (
-                                <span
-                                  className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200"
-                                  style={{ fontFamily: FONT_MONO }}
-                                  title="Orden originada en Trepsi"
-                                >
-                                  Trepsi
-                                </span>
-                              )}
+                              {(() => {
+                                const meta = ORIGEN_META[origenDe(o)];
+                                return meta ? (
+                                  <span
+                                    className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${meta.cls}`}
+                                    style={{ fontFamily: FONT_MONO }}
+                                    title={`Orden originada en ${meta.label}`}
+                                  >
+                                    {meta.label}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                             <div
                               className="text-[11px] text-zinc-500 truncate"

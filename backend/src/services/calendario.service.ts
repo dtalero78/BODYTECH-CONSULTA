@@ -200,6 +200,8 @@ export interface CitaListItem {
   empresa: string | null;
   motivoConsulta: string | null;
   sedeId: string | null;
+  /** Departamento / vía de entrada: 'trepsi' | 'umv' | 'mybodytech' | 'nativa'. */
+  origen: string | null;
 }
 
 export interface DiaDetalle {
@@ -309,6 +311,7 @@ function rowToCitaListItem(row: Record<string, unknown>): CitaListItem {
     empresa: row.empresa ? String(row.empresa) : null,
     motivoConsulta: row.motivo_consulta_texto ? String(row.motivo_consulta_texto) : null,
     sedeId: row.sede_id ? String(row.sede_id) : null,
+    origen: row.origen ? String(row.origen) : null,
   };
 }
 
@@ -465,7 +468,7 @@ class CalendarioService {
         "_id", "numeroId", "primerNombre", "segundoNombre",
         "primerApellido", "segundoApellido",
         "celular", "email", "medico", "horaAtencion", "fechaAtencion",
-        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id",
+        "atendido", "empresa", "motivo_consulta_texto", "tipo_consulta", "sede_id", "origen",
         ${CLASE_CITA_SQL} AS clase
       FROM "HistoriaClinica"
       WHERE (${EFFECTIVE_SEDE_SQL}) = ANY($1::text[])

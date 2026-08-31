@@ -62,6 +62,8 @@ export interface CitaListItem {
   empresa: string | null;
   motivoConsulta: string | null;
   sedeId: string | null;
+  /** Departamento / vía de entrada: 'trepsi' | 'umv' | 'mybodytech' | 'nativa'. */
+  origen: string | null;
 }
 
 export interface DiaDetalle {

@@ -185,11 +185,11 @@ class MybodytechService {
          "celular", "email", "medico", "ciudad", "eps", "fechaAtencion", "fecha_nacimiento",
          "tipo_documento", "genero_biologico", "motivoConsulta", "motivo_consulta_texto",
          "tipo_consulta", "ant_familiares_obs", "peso", "talla", "horaAtencion", "codEmpresa",
-         "atendido", "sede_id"
+         "atendido", "sede_id", "origen"
        ) VALUES (
          $1, NOW(), NOW(),
          $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'nutricion',
-         $18, $19, $20, $21, $22, 'PENDIENTE', 'mybodytech'
+         $18, $19, $20, $21, $22, 'PENDIENTE', 'mybodytech', 'mybodytech'
        ) RETURNING "_id"`,
       [
         historiaId,

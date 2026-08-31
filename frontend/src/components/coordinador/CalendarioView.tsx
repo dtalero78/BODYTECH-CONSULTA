@@ -25,6 +25,7 @@ import profesionalesService, { Profesional } from '../../services/profesionales.
 import authService, { Sede } from '../../services/auth.service';
 import { ReasignarModal } from './ReasignarModal';
 import { DisponibilidadDiaModal } from './DisponibilidadDiaModal';
+import { ORIGEN_META, resolverOrigen, type Origen } from './origen';
 import { AgendarCitaModal } from '../AgendarCitaModal';
 import {
   FONT_INTER,
@@ -1671,6 +1672,11 @@ function Bloque({
   );
 }
 
+/** Origen de una cita del calendario. Misma regla que la vista de Afiliados. */
+function origenDeCita(c: CitaListItem): Origen {
+  return resolverOrigen(c.origen, c.id);
+}
+
 function CitaRow({
   c,
   prof,
@@ -1692,10 +1698,25 @@ function CitaRow({
       </div>
       <div className="min-w-0 flex-1">
         <div
-          className="text-[13px] font-medium text-zinc-900 truncate"
+          className="text-[13px] font-medium text-zinc-900 truncate flex items-center gap-1.5"
           style={{ fontFamily: FONT_INTER }}
         >
-          {c.nombre}
+          <span className="truncate">{c.nombre}</span>
+          {/* El chip va SIEMPRE, no sólo en vista multi-sede como la etiqueta de
+              sede: Trepsi y UMV son departamentos distintos de Bodytech y hay que
+              poder separarlos también estando filtrado a una sola sede. */}
+          {(() => {
+            const meta = ORIGEN_META[origenDeCita(c)];
+            return meta ? (
+              <span
+                className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${meta.cls}`}
+                style={{ fontFamily: FONT_MONO }}
+                title={`Cita originada en ${meta.label}`}
+              >
+                {meta.label}
+              </span>
+            ) : null;
+          })()}
         </div>
         <div
           className="text-[11px] text-zinc-500 truncate"

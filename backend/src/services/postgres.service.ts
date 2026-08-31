@@ -607,6 +607,40 @@ class PostgresService {
           ALTER COLUMN "mc_per_alcohol" DROP DEFAULT;
       `);
 
+      // ===== Origen de la cita (departamento / integración) =====
+      // Hasta ahora el origen se DEDUCÍA, y cada vista lo deducía distinto: la de
+      // Afiliados miraba el prefijo del `_id` ("trepsi_"), el calendario miraba
+      // `sede_id`. Las dos reglas ya divergieron — las citas de MyBodytech tienen
+      // prefijo `mbt_`, así que Afiliados las mostraba como "Nativa", indistinguibles
+      // de las propias. Además `sede_id` estaba haciendo doble trabajo (tenencia
+      // multi-sede + origen), lo que obliga a reconstruir la sede real de las Trepsi
+      // con un subquery al médico.
+      //
+      // `origen` es ahora un dato explícito, que cada vía de entrada escribe al crear
+      // la historia. UMV (Unidad Médica Virtual) y Trepsi son departamentos distintos
+      // de Bodytech y deben poder separarse sin ambigüedad.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "origen" VARCHAR(20);
+      `);
+
+      // Backfill de lo ya existente, con las mismas señales que usaban las vistas.
+      // Sólo toca filas con origen NULL, así que es idempotente y no pisa nada
+      // que se haya clasificado a mano después.
+      await this.query(`
+        UPDATE "HistoriaClinica"
+           SET "origen" = CASE
+             WHEN "sede_id" = 'trepsi'     OR "_id" LIKE 'trepsi_%' THEN 'trepsi'
+             WHEN "sede_id" = 'mybodytech' OR "_id" LIKE 'mbt_%'    THEN 'mybodytech'
+             ELSE 'nativa'
+           END
+         WHERE "origen" IS NULL;
+      `);
+
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_historia_origen ON "HistoriaClinica" ("origen");
+      `);
+
       // ===== Run 4 — Multi-tenancy Foundation =====
       // sede_id en HistoriaClinica (snake_case con doble comillas, convención
       // de las columnas nuevas Phase 1+). DEFAULT 'bsl' garantiza que las

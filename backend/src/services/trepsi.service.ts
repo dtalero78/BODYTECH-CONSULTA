@@ -509,10 +509,11 @@ class TrepsiService {
          "horaAtencion",
          "codEmpresa",
          "atendido",
-         "sede_id"
+         "sede_id",
+         "origen"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'PENDIENTE', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'PENDIENTE', 'trepsi', 'trepsi'
        ) RETURNING "_id"`,
       [
         historiaId,

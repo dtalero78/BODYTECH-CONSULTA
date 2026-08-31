@@ -80,6 +80,11 @@ export interface OrdenItem {
   ciudad?: string;
   /** Timestamp de creación de la fila (`_createdDate`). Ordena el listado. */
   createdAt?: string;
+  /**
+   * Departamento / vía de entrada: 'trepsi' | 'umv' | 'mybodytech' | 'nativa'.
+   * Lo escribe cada vía al crear la historia; antes cada vista lo deducía sola.
+   */
+  origen?: string | null;
   // Calidad: última evaluación (cualquier estado) ligada a esta historia.
   // Si no hay ninguna, los tres campos van null.
   calidadEvalId?: number | null;
@@ -645,6 +650,7 @@ class MedicalPanelService {
         `SELECT h."_id", h."numeroId", h."primerNombre", h."segundoNombre", h."primerApellido", h."segundoApellido",
                 h."celular", h."empresa", h."codEmpresa", h."tipoExamen", h."examenes", h."medico",
                 h."fechaAtencion", h."horaAtencion", h."atendido", h."ciudad", h."_createdDate",
+                h."origen",
                 ce.id           AS calidad_eval_id,
                 ce.puntaje_total AS calidad_puntaje,
                 ce.estado       AS calidad_estado
@@ -664,6 +670,7 @@ class MedicalPanelService {
 
       const ordenes: OrdenItem[] = (rows ?? []).map((row: Record<string, unknown>) => ({
         _id: row._id as string,
+        origen: (row.origen as string) ?? null,
         numeroId: row.numeroId as string,
         primerNombre: (row.primerNombre as string) ?? '',
         segundoNombre: (row.segundoNombre as string) ?? undefined,
@@ -703,6 +710,26 @@ class MedicalPanelService {
   }
 
   /**
+   * ¿El profesional con este código atiende con el panel de Médico Corporativo?
+   * Mismo criterio que usa el frontend (`authService.isMedicoCorporativo`):
+   * comparación normalizada de la especialidad, que es texto libre.
+   */
+  private async esMedicoCorporativo(codigo: string | null | undefined): Promise<boolean> {
+    if (!codigo) return false;
+    const rows = await postgresService.query(
+      'SELECT especialidad FROM profesionales WHERE codigo = $1 AND activo = TRUE LIMIT 1',
+      [codigo]
+    );
+    const esp = rows?.[0]?.especialidad;
+    if (typeof esp !== 'string') return false;
+    return esp
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase() === 'medico corporativo';
+  }
+
+  /**
    * Crea una nueva orden (fila) en HistoriaClinica.
    */
   async createOrden(data: OrdenCreateInput, sedeId = 'bsl'): Promise<OrdenItem> {
@@ -715,13 +742,21 @@ class MedicalPanelService {
       const [y, m, d] = data.fechaAtencion.split('-').map(Number);
       const fechaTs = new Date(Date.UTC(y, m - 1, d, h + 5, min, 0));
 
+      // El origen se RESUELVE y GUARDA al crear, no se deduce después. UMV
+      // (Unidad Médica Virtual) y las citas propias son departamentos distintos,
+      // y hoy lo único que los separa es a qué profesional se asignan: el examen
+      // ocupacional de UMV lo atiende un Médico Corporativo, con el panel propio.
+      // Guardarlo acá evita que cada vista invente su propia regla, que es como
+      // llegamos a que las citas de MyBodytech se mostraran como "Nativa".
+      const origen = (await this.esMedicoCorporativo(data.medico)) ? 'umv' : 'nativa';
+
       const result = await postgresService.query(
         `INSERT INTO "HistoriaClinica" (
            "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
            "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
-           "fechaAtencion", "horaAtencion", "atendido", "ciudad", "sede_id"
+           "fechaAtencion", "horaAtencion", "atendido", "ciudad", "sede_id", "origen"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                    "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
                    "fechaAtencion", "horaAtencion", "atendido", "ciudad"`,
@@ -743,6 +778,7 @@ class MedicalPanelService {
           'PENDIENTE',
           data.ciudad ?? null,
           sedeId,
+          origen,
         ]
       );
 

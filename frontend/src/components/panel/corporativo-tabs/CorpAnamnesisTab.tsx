@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ClipboardList, HeartPulse } from 'lucide-react';
+import { ClipboardList, HeartPulse, Stethoscope } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
-import { TextareaField, PillToggleField } from '../fields';
+import { TextField, TextareaField, PillToggleField } from '../fields';
 import { TemplateTextareaField } from './TemplateTextareaField';
 import type { MedicalHistoryFull } from '../types';
 
@@ -12,7 +12,7 @@ interface CorpAnamnesisTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'motivo' | 'sintomas' | null;
+type ModalKey = 'motivo' | 'sintomas' | 'sistemas' | null;
 
 const ENFERMEDAD_ACTUAL_TEMPLATE =
   'Paciente femenina/masculino de años de edad, quien asiste a valoración médico ' +
@@ -43,6 +43,15 @@ function isFilled(v: unknown): boolean {
 
 export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnesisTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
+
+  const sistemasVals = [
+    data?.mcRsCabeza, data?.mcRsParesCraneales, data?.mcRsCara, data?.mcRsAbdPelvis,
+    data?.mcRsCuello, data?.mcRsTorax, data?.mcRsPiel, data?.mcRsAbdomen, data?.mcRsPulsos,
+    data?.mcRsFuerzaMmss, data?.mcRsFuerzaMmii, data?.mcRsPushUps, data?.mcRsAbdominales,
+    data?.mcRsOsteomuscular,
+  ];
+  const sistemasFilled = sistemasVals.filter(isFilled).length;
+
 
   const motivoVals = [data?.motivoConsultaTexto, data?.mcEnfermedadActual];
   const motivoFilled = motivoVals.filter(isFilled).length;
@@ -78,6 +87,14 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
         completionPct={100}
         onEdit={() => setOpenModal('sintomas')}
       />
+      <Card
+        icon={<Stethoscope size={16} />}
+        title="Revisión por sistemas"
+        subtitle={sistemasFilled === 0 ? 'Sin hallazgos registrados' : `${sistemasFilled} de ${sistemasVals.length} campos completos`}
+        state={sistemasFilled === 0 ? 'empty' : sistemasFilled === sistemasVals.length ? 'complete' : 'partial'}
+        completionPct={Math.round((sistemasFilled / sistemasVals.length) * 100)}
+        onEdit={() => setOpenModal('sistemas')}
+      />
 
       <Modal
         open={openModal === 'motivo'}
@@ -109,6 +126,38 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
             template={ENFERMEDAD_ACTUAL_TEMPLATE}
             placeholder="Descripción de la enfermedad actual..."
           />
+        </div>
+      </Modal>
+
+      {/* ============ Revisión por sistemas ============ */}
+      <Modal
+        open={openModal === 'sistemas'}
+        onClose={() => setOpenModal(null)}
+        crumb="Anamnesis · Revisión por sistemas"
+        title="Revisión por sistemas"
+        icon={<Stethoscope size={18} />}
+        isMaxed
+        showEyePill={false}
+        size="wide"
+      >
+        {/* 3 columnas en pantallas anchas: son 14 campos cortos, así baja de 7 a 5 filas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+          <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
+          <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
+          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmss" initialValue={data?.mcRsFuerzaMmss} onSaved={onPatchLocal} label="Fuerza muscular MMSS" placeholder="5 de 5" />
+          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
+          <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
+          <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
+          <div>
+            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
+          </div>
         </div>
       </Modal>
 

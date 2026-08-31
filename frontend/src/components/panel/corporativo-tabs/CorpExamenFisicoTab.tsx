@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Scale, HeartPulse, Stethoscope, Gauge, Hand } from 'lucide-react';
+import { Activity, Scale, HeartPulse, Gauge, Hand } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
@@ -106,7 +106,7 @@ interface CorpExamenFisicoTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'signos' | 'fc' | 'sistemas' | 'ruffier' | 'handgrip' | 'obs' | null;
+type ModalKey = 'signos' | 'fc'  | 'ruffier' | 'handgrip' | 'obs' | null;
 
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -213,14 +213,6 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   const fcVals = [data?.mcFcPicoPruebaEsfuerzo];
   const fcFilled = fcVals.filter(isFilled).length;
 
-  const sistemasVals = [
-    data?.mcRsCabeza, data?.mcRsParesCraneales, data?.mcRsFuerzaMmss, data?.mcRsFuerzaMmii,
-    data?.mcRsCara, data?.mcRsAbdPelvis, data?.mcRsPushUps, data?.mcRsCuello, data?.mcRsGenitales,
-    data?.mcRsAbdominales, data?.mcRsTorax, data?.mcRsPiel, data?.mcRsAbdomen, data?.mcRsPulsos,
-    data?.mcRsCorazon, data?.mcRsRespiratorio, data?.mcRsOsteomuscular,
-  ];
-  const sistemasFilled = sistemasVals.filter(isFilled).length;
-
   // FC1 se deriva de la FC en reposo, así que cuenta como diligenciada si esta existe.
   const ruffierVals = [data?.mcFrecCard, data?.mcRuffierFc2, data?.mcRuffierFc3];
   const ruffierFilled = ruffierVals.filter(isFilled).length;
@@ -252,14 +244,6 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         state={fcFilled === 0 ? 'empty' : 'complete'}
         completionPct={fcFilled === 0 ? 0 : 100}
         onEdit={() => setOpenModal('fc')}
-      />
-      <Card
-        icon={<Stethoscope size={16} />}
-        title="Revisión por sistemas"
-        subtitle={sistemasFilled === 0 ? 'Sin hallazgos registrados' : `${sistemasFilled} de ${sistemasVals.length} campos completos`}
-        state={sistemasFilled === 0 ? 'empty' : sistemasFilled === sistemasVals.length ? 'complete' : 'partial'}
-        completionPct={Math.round((sistemasFilled / sistemasVals.length) * 100)}
-        onEdit={() => setOpenModal('sistemas')}
       />
       <Card
         icon={<Gauge size={16} />}
@@ -401,38 +385,6 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
             <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_75" value={fcReservaPct(0.75)} serverValue={data?.mcFcReserva75 ?? null} onPatchLocal={onPatchLocal} />
             <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_70" value={fcReservaPct(0.7)} serverValue={data?.mcFcReserva70 ?? null} onPatchLocal={onPatchLocal} />
             <CalcAutosave historiaId={historiaId} field="mc_fc_reserva_60" value={fcReservaPct(0.6)} serverValue={data?.mcFcReserva60 ?? null} onPatchLocal={onPatchLocal} />
-          </div>
-        </div>
-      </Modal>
-
-      {/* ============ Revisión por sistemas ============ */}
-      <Modal
-        open={openModal === 'sistemas'}
-        onClose={() => setOpenModal(null)}
-        crumb="Examen Físico · Revisión por sistemas"
-        title="Revisión por sistemas"
-        icon={<Stethoscope size={18} />}
-        isMaxed
-        showEyePill={false}
-        size="wide"
-      >
-        {/* 3 columnas en pantallas anchas: son 14 campos cortos, así baja de 7 a 5 filas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-          <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
-          <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
-          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmss" initialValue={data?.mcRsFuerzaMmss} onSaved={onPatchLocal} label="Fuerza muscular MMSS" placeholder="5 de 5" />
-          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
-          <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
-          <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
-          <div>
-            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
           </div>
         </div>
       </Modal>

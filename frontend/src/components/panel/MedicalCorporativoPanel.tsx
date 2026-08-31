@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
-import { Cloud, CloudOff } from 'lucide-react';
+import { Cloud, CloudOff, CheckCircle2, Loader2 } from 'lucide-react';
+import apiService from '../../services/api.service';
 import { PatientStrip } from './PatientStrip';
 import { PanelSideNav, type TabDef } from './PanelSideNav';
 import { SaveProvider, useSaveCtx } from './SaveContext';
 import { useMedicalHistory } from './hooks/useMedicalHistory';
 import { useContainerWidth } from './hooks/useContainerWidth';
 import type { MedicalHistoryFull, SaveStatus } from './types';
+import { resumirCompletitud, tieneValor, type CampoCompletitud } from './corporativo-tabs/completitud';
 import { CorpIdentificacionTab } from './corporativo-tabs/CorpIdentificacionTab';
 import { CorpAnamnesisTab } from './corporativo-tabs/CorpAnamnesisTab';
 import { CorpAntecedentesTab } from './corporativo-tabs/CorpAntecedentesTab';
@@ -32,54 +34,108 @@ const TAB_LABELS: Record<CorpTabId, string> = {
   c7: 'Análisis y prescripción',
 };
 
-function isFilled(v: unknown): boolean {
-  return v !== null && v !== undefined && v !== '';
+/**
+ * Campos que cuentan para la completitud de cada sección, con su etiqueta.
+ *
+ * Antes esto era una muestra arbitraria de columnas: la sección Antecedentes,
+ * por ejemplo, contaba 4 campos de texto e ignoraba los 22 toggles Sí/No, así
+ * que se podía diligenciar todo y seguir viendo 0/4. El equipo médico reportó
+ * exactamente eso — "salen incompletas y no tienes cómo saber cuál falta" —
+ * porque el número no correspondía a nada visible en pantalla.
+ *
+ * Ahora cada sección declara sus campos reales y devuelve además CUÁLES faltan,
+ * que es lo que alimenta el tooltip del sidebar.
+ */
+function camposPorSeccion(
+  data: MedicalHistoryFull | null
+): Record<CorpTabId, ReadonlyArray<CampoCompletitud>> {
+  const d = data;
+  return {
+    c1: [
+      { label: 'Fecha de nacimiento', value: d?.fechaNacimiento },
+      { label: 'Género', value: d?.generoBiologico },
+      { label: 'Ocupación', value: d?.ocupacion },
+      { label: 'EPS', value: d?.eps },
+      { label: 'Teléfono', value: d?.telefonoResidencia },
+      { label: 'Tipo de consulta', value: d?.tipoConsulta },
+      { label: 'Dirección', value: d?.mcDireccion, opcional: true },
+      { label: 'Correo', value: d?.email, opcional: true },
+      { label: 'RH', value: d?.grupoSanguineo, opcional: true },
+    ],
+    c2: [
+      { label: 'Motivo de consulta', value: d?.motivoConsultaTexto },
+      { label: 'Enfermedad actual', value: d?.mcEnfermedadActual },
+      { label: 'Síntomas en ejercicio', value: d?.mcSintDolorToracico },
+      { label: 'Revisión por sistemas', value: d?.mcRsTorax },
+    ],
+    c3: [
+      { label: 'Antecedentes familiares', value: d?.mcFamCardiaca },
+      { label: 'Antecedentes personales', value: d?.mcPerCardiaca },
+      { label: 'Osteomusculares', value: d?.mcPerOsteomuscular },
+      { label: 'Quirúrgicos', value: d?.mcPerQuirurgicos },
+      { label: 'Alérgicos', value: d?.mcPerAlergicos },
+      { label: 'Farmacológicos', value: d?.mcPerFarmacologicos },
+    ],
+    c4: [
+      { label: 'Minutos por sesión', value: d?.mcAfMinutosSesion },
+      { label: 'Sesiones por semana', value: d?.mcAfSesionesSemana },
+      { label: 'Meses de práctica', value: d?.mcAfMeses },
+      { label: 'Experiencia en gimnasio', value: d?.mcAfExperienciaGym },
+      { label: 'Modalidad', value: d?.mcAfModalidad },
+      { label: 'Objetivo', value: d?.mcAfObjetivo },
+    ],
+    c5: [
+      { label: 'Peso', value: d?.mcPeso },
+      { label: 'Talla', value: d?.mcTalla },
+      { label: 'TAS', value: d?.tas },
+      { label: 'TAD', value: d?.tad },
+      { label: 'Frecuencia cardiaca', value: d?.mcFrecCard },
+      { label: 'Test de Ruffier', value: d?.mcRuffierFc2 },
+      { label: 'Handgrip', value: d?.mcHandgripDer1 },
+      // Opcionales por decisión del equipo médico: no se toman de rutina.
+      { label: 'SatO2', value: d?.mcSato2, opcional: true },
+      { label: 'Frecuencia respiratoria', value: d?.mcFrecResp, opcional: true },
+      { label: 'Perímetro abdominal', value: d?.mcPerimetroAbdominal, opcional: true },
+      { label: 'Observaciones del examen', value: d?.mcExamenObservaciones, opcional: true },
+    ],
+    c6: [
+      { label: 'Dx nutricional', value: d?.mcDxNutricional },
+      { label: 'Dx cardiovascular', value: d?.mcDxCardiovascular },
+      { label: 'Dx osteomuscular', value: d?.mcDxOsteomuscular },
+      { label: 'Riesgo ACSM', value: d?.mcRiesgoAcsm },
+      { label: 'Riesgo Bodytech', value: d?.mcRiesgoBodytech },
+      { label: 'Índice Downton', value: d?.downtonRiesgo },
+      { label: 'Aptitud', value: d?.aptitud },
+    ],
+    c7: [
+      { label: 'Análisis', value: d?.mcAnalisis },
+      { label: 'Recomendaciones generales', value: d?.prescGenerales },
+      { label: 'Cardio', value: d?.prescCardioIntensidad },
+      { label: 'Fuerza', value: d?.prescFuerzaIntensidad },
+      { label: 'Flexibilidad', value: d?.prescFlexTipo },
+      { label: 'Clase grupal', value: d?.prescClaseModalidad, opcional: true },
+      { label: 'Remisión', value: d?.mcRemision, opcional: true },
+    ],
+  };
 }
 
 function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<TabDef<CorpTabId>> {
-  const t1 = [data?.mcDireccion, data?.email, data?.grupoSanguineo, data?.ocupacion, data?.eps, data?.fechaNacimiento, data?.telefonoResidencia].filter(isFilled).length;
-  const t2 = [data?.motivoConsultaTexto, data?.mcEnfermedadActual].filter(isFilled).length;
-  const t3 = [data?.mcFamObservaciones, data?.mcPerOsteomuscular, data?.mcPerQuirurgicos, data?.mcPerAlergicos].filter(isFilled).length;
-  const t4 = [
-    data?.mcAfMinutosSesion,
-    data?.mcAfSesionesSemana,
-    data?.mcAfMeses,
-    data?.mcAfExperienciaGym,
-    data?.mcAfModalidad,
-    data?.mcAfObjetivo,
-  ].filter(isFilled).length;
-  const t5 = [data?.mcPeso, data?.mcTalla, data?.tas, data?.tad, data?.mcRuffierFc1, data?.mcHandgripDer1, data?.mcExamenObservaciones].filter(isFilled).length;
-  const t6 = [
-    data?.mcDxNutricional,
-    data?.mcDxCardiovascular,
-    data?.mcDxOsteomuscular,
-    data?.mcRiesgoAcsm,
-    data?.mcRiesgoBodytech,
-    data?.downtonRiesgo,
-    data?.aptitud,
-  ].filter(isFilled).length;
-  // La prescripción de ejercicio pasó a las columnas `presc_*` del panel del rol
-  // Médico (mismo componente), así que el contador mira una sección de cada
-  // bloque de ese tab más lo propio del examen ocupacional.
-  const t7 = [
-    data?.mcAnalisis,
-    data?.prescGenerales,
-    data?.prescCardioIntensidad,
-    data?.prescFuerzaIntensidad,
-    data?.prescFlexTipo,
-    data?.prescClaseModalidad,
-    data?.mcRemision,
-  ].filter(isFilled).length;
-
-  return [
-    { id: 'c1', label: TAB_LABELS.c1, filled: t1, total: 7 },
-    { id: 'c2', label: TAB_LABELS.c2, filled: t2, total: 2 },
-    { id: 'c3', label: TAB_LABELS.c3, filled: t3, total: 4 },
-    { id: 'c4', label: TAB_LABELS.c4, filled: t4, total: 6 },
-    { id: 'c5', label: TAB_LABELS.c5, filled: t5, total: 7 },
-    { id: 'c6', label: TAB_LABELS.c6, shortLabel: 'Diagnóstico', filled: t6, total: 7 },
-    { id: 'c7', label: TAB_LABELS.c7, shortLabel: 'Prescripción', filled: t7, total: 7 },
-  ];
+  const campos = camposPorSeccion(data);
+  const short: Partial<Record<CorpTabId, string>> = {
+    c6: 'Diagnóstico',
+    c7: 'Prescripción',
+  };
+  return (Object.keys(campos) as CorpTabId[]).map((id) => {
+    const r = resumirCompletitud(campos[id]);
+    return {
+      id,
+      label: TAB_LABELS[id],
+      shortLabel: short[id],
+      filled: r.llenos,
+      total: r.total,
+      faltantes: r.faltantes,
+    };
+  });
 }
 
 function relativeTime(date: Date | null): string {
@@ -141,6 +197,34 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const tabs = computeCorpTabsCount(data);
   const sectionTitle = TAB_LABELS[activeTab];
 
+  // ---- Finalizar la consulta ----
+  // El panel del rol Médico marca la cita como atendida al colgar la
+  // videollamada (VideoRoom). Acá no hay llamada, así que ese momento no existe
+  // y la consulta se quedaba abierta para siempre: el examen ocupacional es
+  // presencial. Además el equipo médico reportó que "en ningún lado me sale
+  // grabar" — con auto-guardado campo a campo no había ningún cierre visible,
+  // así que trabajaban creyendo que perdían todo.
+  const [finalizando, setFinalizando] = useState(false);
+  const [finalizadaLocal, setFinalizadaLocal] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const yaFinalizada = finalizadaLocal || tieneValor(data?.fechaConsulta);
+  const pendientes = tabs.flatMap((t) => t.faltantes ?? []);
+
+  async function finalizar() {
+    if (!historiaId || finalizando) return;
+    setFinalizando(true);
+    try {
+      await apiService.finalizarConsulta(historiaId);
+      setFinalizadaLocal(true);
+      setConfirmOpen(false);
+    } catch {
+      // El botón vuelve a habilitarse; el estado de guardado del header sigue
+      // siendo la fuente de verdad de que los campos sí quedaron persistidos.
+    } finally {
+      setFinalizando(false);
+    }
+  }
+
   return (
     <div
       ref={rootRef}
@@ -171,6 +255,31 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
             brandTitle="Médico Corporativo"
             brandSubtitle="examen ocupacional"
             collapsed={navCollapsed}
+            footer={
+              yaFinalizada ? (
+                <div
+                  className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold text-[var(--p-ok)] bg-[rgba(var(--p-ok-rgb),0.10)] border border-[rgba(var(--p-ok-rgb),0.30)] ${
+                    navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
+                  }`}
+                  title="La consulta quedó registrada como atendida"
+                >
+                  <CheckCircle2 size={15} className="shrink-0" />
+                  {!navCollapsed && 'Consulta finalizada'}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmOpen(true)}
+                  title="Finalizar consulta"
+                  className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition ${
+                    navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
+                  }`}
+                >
+                  <CheckCircle2 size={15} className="shrink-0" />
+                  {!navCollapsed && 'Finalizar consulta'}
+                </button>
+              )
+            }
           />
         )}
 
@@ -215,6 +324,56 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
           </div>
         </div>
       </div>
+
+      {/* Confirmación de cierre. Lista lo que falta pero NO bloquea: hay campos
+          que legítimamente no aplican a cada paciente, y el criterio de si la
+          historia está completa es del médico, no del formulario. */}
+      {confirmOpen && (
+        <div className="absolute inset-0 z-50 grid place-items-center bg-[rgba(var(--p-scrim-rgb),0.55)] p-6">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--p-surface)] border border-[var(--p-line)] p-5 shadow-xl">
+            <div className="text-[15px] font-bold text-[var(--p-text)] mb-1">Finalizar consulta</div>
+            <div className="text-[13px] text-[var(--p-text-2)] mb-4">
+              Los datos se guardan solos a medida que los diligencias. Al finalizar, la
+              consulta queda registrada como atendida.
+            </div>
+
+            {pendientes.length > 0 ? (
+              <div className="mb-4 rounded-xl border border-[rgba(var(--p-warn-rgb),0.35)] bg-[rgba(var(--p-warn-rgb),0.08)] p-3">
+                <div className="text-[12px] font-semibold text-[var(--p-warn)] mb-1.5">
+                  Quedan {pendientes.length} campos sin diligenciar
+                </div>
+                <div className="text-[12px] text-[var(--p-text-2)] leading-relaxed">
+                  {pendientes.slice(0, 8).join(', ')}
+                  {pendientes.length > 8 ? ` y ${pendientes.length - 8} más` : ''}
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-xl border border-[rgba(var(--p-ok-rgb),0.30)] bg-[rgba(var(--p-ok-rgb),0.08)] p-3 text-[12px] font-semibold text-[var(--p-ok)]">
+                Todas las secciones están completas.
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="px-3.5 py-2 rounded-md text-[12.5px] font-medium text-[var(--p-text-2)] bg-[var(--p-surface)] border border-[var(--p-line)] hover:bg-[var(--p-input-2)] transition"
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                onClick={finalizar}
+                disabled={finalizando}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[12.5px] font-semibold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition disabled:opacity-60"
+              >
+                {finalizando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                {finalizando ? 'Finalizando…' : 'Finalizar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -159,6 +159,10 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
         size="wide"
       >
         <div className="flex flex-col gap-4">
+          {/* Los dos bloques son de naturaleza distinta y el equipo médico pidió que
+              se notara: arriba lo que se responde Sí/Niega, abajo lo que se escribe.
+              Antes sólo los separaba una línea punteada, sin decir qué era cada cosa. */}
+          <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Antecedentes a interrogar</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {PERSONALES_BOOL.map((f) => (
               <div
@@ -179,7 +183,10 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
             ))}
           </div>
 
-          <div className="pt-4 border-t border-dashed border-[var(--p-line)] grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Detalle y descripción</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <TextField
               historiaId={historiaId}
               field="mc_per_vacunas_covid"

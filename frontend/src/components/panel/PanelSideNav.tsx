@@ -18,6 +18,12 @@ export interface TabDef<T extends string = TabId> {
    * en el header y como tooltip.
    */
   shortLabel?: string;
+  /**
+   * Etiquetas de los campos obligatorios que faltan. Se muestran en el tooltip
+   * del ítem: el equipo médico reportó que veía una sección incompleta sin
+   * ninguna forma de saber qué le faltaba por diligenciar.
+   */
+  faltantes?: ReadonlyArray<string>;
 }
 
 interface PanelSideNavProps<T extends string = TabId> {
@@ -169,7 +175,10 @@ function SideNavItem<T extends string>({
     ? 'bg-[var(--p-surface)] text-[var(--p-text)] shadow-[inset_0_0_0_1px_var(--p-line)]'
     : 'text-[var(--p-text-2)] hover:bg-[var(--p-input-2)] hover:text-[var(--p-text)]';
 
-  const title = `${tab.label} — ${tab.filled}/${tab.total}`;
+  const title =
+    tab.faltantes && tab.faltantes.length > 0
+      ? `${tab.label} — ${tab.filled}/${tab.total}\nFalta: ${tab.faltantes.join(', ')}`
+      : `${tab.label} — ${tab.filled}/${tab.total}${tab.total > 0 ? ' · completo' : ''}`;
 
   return (
     <button

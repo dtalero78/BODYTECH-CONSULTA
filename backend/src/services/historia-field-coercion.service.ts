@@ -222,6 +222,7 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'mc_sint_edema_mmii', type: 'boolean' },
   { field: 'mc_sint_sincope', type: 'boolean' },
   { field: 'mc_sint_claudicacion', type: 'boolean' },
+  { field: 'mc_sint_observaciones', type: 'string' },
   // Antecedentes familiares
   { field: 'mc_fam_cardiaca', type: 'boolean' },
   { field: 'mc_fam_respiratoria', type: 'boolean' },

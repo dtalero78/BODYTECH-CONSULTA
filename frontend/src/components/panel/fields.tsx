@@ -20,14 +20,26 @@ interface CommonProps {
  * Helper para coerce de cualquier raw a boolean — alineado con la coerción del backend.
  * `'true' | true | 'Sí' | 'SI' | 'sí' | 'si' | 1` → true; cualquier otra cosa (incl. null) → false.
  */
-function coerceBool(raw: unknown): boolean {
+/**
+ * Coerción tri-estado de los booleanos de la historia. Devuelve `null` cuando el
+ * campo nunca se respondió, para poder distinguirlo de un "No" explícito: son
+ * cosas clínicamente distintas y antes se veían igual.
+ *
+ * Los positivos llegan como `true`, `'true'`, `'Sí'` o `'SI'` según la vía de
+ * ingesta (ver CONDICIONES_ESPECIALES.md); los negativos, como `false`/`'false'`.
+ */
+function coerceBool(raw: unknown): boolean | null {
   if (raw === true) return true;
+  if (raw === false) return false;
+  if (raw === null || raw === undefined) return null;
   if (typeof raw === 'string') {
     const v = raw.trim();
-    return v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si';
+    if (v === '') return null;
+    if (v === 'true' || v === 'Sí' || v === 'SI' || v === 'sí' || v === 'si') return true;
+    return false;
   }
   if (typeof raw === 'number') return raw !== 0;
-  return false;
+  return null;
 }
 
 export function TextField(
@@ -160,7 +172,7 @@ interface PillToggleFieldProps extends CommonProps {
  * El backend acepta `boolean` directamente; el frontend persiste boolean (no string).
  */
 export function PillToggleField(props: PillToggleFieldProps) {
-  const [v, setV] = useState<boolean>(coerceBool(props.initialValue));
+  const [v, setV] = useState<boolean | null>(coerceBool(props.initialValue));
 
   useEffect(() => {
     setV(coerceBool(props.initialValue));
@@ -243,11 +255,23 @@ export function SelectField(
  * el valor se re-guarda con el nuevo prefijo. Si `dialCode` está vacío (país
  * "Otro" o sin país), se guarda solo el número local.
  */
+/**
+ * Dígitos que admite la parte local del número, según el indicativo. Sólo se
+ * limita donde la longitud es fija y conocida; para el resto no se restringe,
+ * porque el panel del rol Médico usa indicativo variable y un tope global
+ * cortaría números extranjeros válidos.
+ */
+const DIGITOS_POR_INDICATIVO: Record<string, number> = {
+  '+57': 10, // Colombia: celular de 10 dígitos
+};
+
 export function PhoneField(
   props: CommonProps & {
     placeholder?: string;
     /** Código de marcación del país, ej. "+57". Vacío = sin prefijo. */
     dialCode?: string;
+    /** Tope de dígitos; por defecto se deriva del indicativo. */
+    maxDigits?: number;
   }
 ) {
   // Quita cualquier prefijo de marcación inicial (+<dígitos>) del valor guardado
@@ -264,6 +288,8 @@ export function PhoneField(
   }, [props.initialValue]);
 
   const dial = props.dialCode ?? '';
+  const maxDigits = props.maxDigits ?? DIGITOS_POR_INDICATIVO[dial];
+  const digitos = (local.match(/\d/g) ?? []).length;
   const trimmed = local.trim();
   const combined = trimmed === '' ? null : dial ? `${dial} ${trimmed}` : trimmed;
 
@@ -290,11 +316,38 @@ export function PhoneField(
         <input
           type="tel"
           value={local}
-          onChange={(e) => setLocal(e.target.value)}
+          // Se recorta al escribir en vez de sólo avisar: el teléfono es el canal
+          // por el que se contacta al paciente, y un número de 11 dígitos guardado
+          // no sirve para nada. Se cuentan dígitos, no caracteres, para no romper
+          // los espacios y guiones que la gente usa al separar.
+          onChange={(e) => setLocal(recortarADigitos(e.target.value, maxDigits))}
           placeholder={props.placeholder}
           className="flex-1 min-w-0 bg-[var(--p-input)] border border-[var(--p-line)] text-[var(--p-text)] px-3.5 py-2.5 rounded-xl text-[13.5px] outline-none transition placeholder:text-[var(--p-text-3)] focus:bg-[var(--p-input-2)] focus:border-[var(--p-accent)]"
         />
       </div>
+      {maxDigits !== undefined && digitos > 0 && digitos < maxDigits && (
+        <span className="text-[11px] text-[var(--p-text-3)]">
+          {digitos} de {maxDigits} dígitos
+        </span>
+      )}
     </div>
   );
+}
+
+/**
+ * Recorta la entrada al tope de DÍGITOS indicado, conservando los separadores
+ * (espacios, guiones) que la persona haya escrito hasta ese punto.
+ */
+function recortarADigitos(raw: string, max: number | undefined): string {
+  if (max === undefined) return raw;
+  let vistos = 0;
+  let out = '';
+  for (const ch of raw) {
+    if (/\d/.test(ch)) {
+      if (vistos >= max) break;
+      vistos++;
+    }
+    out += ch;
+  }
+  return out;
 }

@@ -141,6 +141,17 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
             </div>
           ))}
         </div>
+        <div className="mt-4 pt-4 border-t border-dashed border-[var(--p-line)]">
+          <TextareaField
+            historiaId={historiaId}
+            field="mc_sint_observaciones"
+            initialValue={data?.mcSintObservaciones}
+            onSaved={onPatchLocal}
+            label="Observaciones"
+            rows={3}
+            placeholder="Detalle de los síntomas referidos: desencadenante, duración, intensidad…"
+          />
+        </div>
       </Modal>
     </div>
   );

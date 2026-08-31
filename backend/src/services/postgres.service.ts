@@ -398,6 +398,7 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "mc_sint_edema_mmii" BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS "mc_sint_sincope" BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS "mc_sint_claudicacion" BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS "mc_sint_observaciones" TEXT,
 
           -- Antecedentes familiares
           ADD COLUMN IF NOT EXISTS "mc_fam_cardiaca" BOOLEAN DEFAULT FALSE,
@@ -571,6 +572,39 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "presc_clase_modalidad" VARCHAR(80),
           ADD COLUMN IF NOT EXISTS "presc_clase_nombre" VARCHAR(120),
           ADD COLUMN IF NOT EXISTS "presc_clase_reemplaza" VARCHAR(80)
+      `);
+
+      // Los antecedentes del examen ocupacional nacían con DEFAULT FALSE, así que
+      // una historia recién creada mostraba "No" en los 22 toggles como si alguien
+      // ya los hubiera respondido. El equipo médico no podía distinguir "no
+      // pregunté" de "el paciente dijo que no", ni ver qué le faltaba diligenciar.
+      // Se quita el default para que las historias NUEVAS nazcan en NULL (= sin
+      // responder). Las filas existentes conservan su `false`: pasarlas a NULL
+      // borraría negativos que sí se respondieron a conciencia.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ALTER COLUMN "mc_sint_dolor_toracico" DROP DEFAULT,
+          ALTER COLUMN "mc_sint_palpitaciones" DROP DEFAULT,
+          ALTER COLUMN "mc_sint_disnea" DROP DEFAULT,
+          ALTER COLUMN "mc_sint_edema_mmii" DROP DEFAULT,
+          ALTER COLUMN "mc_sint_sincope" DROP DEFAULT,
+          ALTER COLUMN "mc_sint_claudicacion" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_cardiaca" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_respiratoria" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_msc_iam" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_hta" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_cerebrovascular" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_otros" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_diabetes" DROP DEFAULT,
+          ALTER COLUMN "mc_fam_cancer" DROP DEFAULT,
+          ALTER COLUMN "mc_per_cardiaca" DROP DEFAULT,
+          ALTER COLUMN "mc_per_respiratoria" DROP DEFAULT,
+          ALTER COLUMN "mc_per_tabaquismo" DROP DEFAULT,
+          ALTER COLUMN "mc_per_renal" DROP DEFAULT,
+          ALTER COLUMN "mc_per_hta" DROP DEFAULT,
+          ALTER COLUMN "mc_per_metabolica" DROP DEFAULT,
+          ALTER COLUMN "mc_per_cerebrovascular" DROP DEFAULT,
+          ALTER COLUMN "mc_per_alcohol" DROP DEFAULT;
       `);
 
       // ===== Run 4 — Multi-tenancy Foundation =====

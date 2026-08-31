@@ -254,6 +254,7 @@ export interface MedicalHistoryFull {
   mcSintEdemaMmii?: boolean;
   mcSintSincope?: boolean;
   mcSintClaudicacion?: boolean;
+  mcSintObservaciones?: string;
   mcFamCardiaca?: boolean;
   mcFamRespiratoria?: boolean;
   mcFamMscIam?: boolean;

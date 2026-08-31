@@ -23,12 +23,18 @@ const TZ = 'America/Bogota';
 const TREPSI_FALLBACK_SEDE = 'bsl';
 
 // Sede "efectiva" de una cita para el filtro multi-sede del coordinador.
-// Las citas Trepsi se persisten con sede_id='trepsi' (placeholder, no es una
-// sede real), así que se atribuyen a la sede del médico asignado; si el médico
-// no está registrado, caen a TREPSI_FALLBACK_SEDE. El resto conserva su sede_id.
+// Las citas de integración se persisten con sede_id='trepsi'/'mybodytech'
+// (placeholders, no son sedes reales), así que se atribuyen a la sede del médico
+// asignado; si el médico no está registrado, caen a TREPSI_FALLBACK_SEDE. El
+// resto conserva su sede_id.
+//
+// 'mybodytech' se sumó a la lista tras verificar que sus citas NO aparecían en el
+// calendario: al no reatribuirse quedaban con una sede que no existe en la tabla
+// `sedes`, así que no pasaban ningún filtro y eran invisibles para el coordinador
+// (2 citas del 31-ago-2026 confirmadas ausentes del panel del día).
 // Asume que la tabla en la query se llama "HistoriaClinica" (sin alias).
 const EFFECTIVE_SEDE_SQL = `
-  CASE WHEN "HistoriaClinica"."sede_id" = 'trepsi'
+  CASE WHEN "HistoriaClinica"."sede_id" IN ('trepsi', 'mybodytech')
        THEN COALESCE(
               (SELECT p.sede_id FROM profesionales p
                 WHERE p.codigo = "HistoriaClinica"."medico" AND p.activo = TRUE

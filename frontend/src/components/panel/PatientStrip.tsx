@@ -1,5 +1,6 @@
 import type { MedicalHistoryFull } from './types';
 import { VisitTimeline } from './VisitTimeline';
+import { edadEfectiva } from './edad';
 
 interface PatientStripProps {
   data: MedicalHistoryFull | null;
@@ -12,7 +13,7 @@ function getInitials(d: MedicalHistoryFull | null): string {
   return (a + b).toUpperCase() || 'PA';
 }
 
-function formatAge(age?: number): string {
+function formatAge(age?: number | null): string {
   if (!age && age !== 0) return '— años';
   return `${age} años`;
 }
@@ -32,7 +33,11 @@ export function PatientStrip({ data }: PatientStripProps) {
   const initials = getInitials(data);
   const fullName = [data?.primerNombre, data?.primerApellido].filter(Boolean).join(' ') || 'Afiliado';
   const subtitleParts = [
-    formatAge(data?.edad),
+    // `edadEfectiva` y no `data.edad`: si el médico corrige la fecha de
+    // nacimiento, el strip tiene que moverse con ella. Antes mostraba la edad
+    // congelada de la ficha del afiliado y quedaba contradiciendo al campo Edad
+    // de Identificación, que sí se recalcula.
+    formatAge(edadEfectiva(data)),
     formatGenero(data?.genero),
     data?.grupoSanguineo,
     data?.numeroId ? `CC ${data.numeroId}` : '',

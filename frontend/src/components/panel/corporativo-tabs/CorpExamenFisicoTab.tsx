@@ -6,7 +6,7 @@ import { Calculated } from '../Calculated';
 import { TextField, TextareaField, SelectField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import { ComparacionAnterior } from './ComparacionAnterior';
-import { edadEfectiva } from './edad';
+import { edadEfectiva } from '../edad';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';

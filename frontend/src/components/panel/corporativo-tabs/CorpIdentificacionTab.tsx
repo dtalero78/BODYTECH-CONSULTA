@@ -4,7 +4,7 @@ import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
 import { TextField, SelectField, PhoneField } from '../fields';
-import { edadEfectiva } from './edad';
+import { edadEfectiva } from '../edad';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 

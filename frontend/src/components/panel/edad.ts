@@ -1,4 +1,4 @@
-import type { MedicalHistoryFull } from '../types';
+import type { MedicalHistoryFull } from './types';
 
 /** Edad en años cumplidos a partir de una fecha de nacimiento. */
 export function calcularEdad(fecha: unknown): number | null {
@@ -16,8 +16,9 @@ export function calcularEdad(fecha: unknown): number | null {
  * Edad efectiva del afiliado: la derivada de la fecha de nacimiento diligenciada
  * en Identificación y, sólo si no hay fecha, la que traiga la ficha.
  *
- * Vive aquí porque la usan dos tabs: Identificación (la muestra) y Examen
- * físico (la necesita para la FC predicha de Tanaka). Antes el examen leía solo
+ * Vive en la raíz del panel porque la usan tres componentes: Identificación (la
+ * muestra), Examen físico (la necesita para la FC predicha de Tanaka) y el
+ * PatientStrip, que es compartido por los dos paneles. Antes el examen leía solo
  * `data.edad`, así que en historias sin ese campo la FC predicha quedaba vacía
  * sin que se entendiera por qué.
  */

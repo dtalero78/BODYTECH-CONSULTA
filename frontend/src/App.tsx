@@ -9,8 +9,6 @@ import { MedicalPanelPage } from './pages/MedicalPanelPage';
 import { HistoriasClinicasPage } from './pages/HistoriasClinicasPage';
 import { HistoriaDetallePage } from './pages/HistoriaDetallePage';
 import { CorporativoConsultaPage } from './pages/CorporativoConsultaPage';
-import { AccAgendaPage } from './pages/AccAgendaPage';
-import { AccValoracionPage } from './pages/AccValoracionPage';
 import { OrdenesPage } from './pages/OrdenesPage';
 import { CalidadPage } from './pages/CalidadPage';
 import { CoordinadorPage } from './pages/CoordinadorPage';
@@ -141,33 +139,6 @@ function App() {
             element={
               <RequireRole roles={['medico', 'coordinador', 'admin']}>
                 <CorporativoConsultaPage />
-              </RequireRole>
-            }
-          />
-          {/* Valoración Corporal ACC — la captura la hace el fisioterapeuta
-              desde el celular, con el paciente enfrente. `/acc` es la puerta de
-              entrada: a quién le toca hoy. */}
-          <Route
-            path="/acc"
-            element={
-              <RequireRole roles={['coach', 'medico', 'coordinador', 'admin']}>
-                <AccAgendaPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/acc/valoracion"
-            element={
-              <RequireRole roles={['coach', 'medico', 'coordinador', 'admin']}>
-                <AccValoracionPage />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/acc/valoracion/:id"
-            element={
-              <RequireRole roles={['coach', 'medico', 'coordinador', 'admin']}>
-                <AccValoracionPage />
               </RequireRole>
             }
           />

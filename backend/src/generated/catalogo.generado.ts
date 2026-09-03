@@ -214,42 +214,6 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
       ]
     },
     {
-      "ruta": "/acc",
-      "componente": "AccAgendaPage",
-      "redirigeA": null,
-      "protegida": true,
-      "roles": [
-        "coach",
-        "medico",
-        "coordinador",
-        "admin"
-      ]
-    },
-    {
-      "ruta": "/acc/valoracion",
-      "componente": "AccValoracionPage",
-      "redirigeA": null,
-      "protegida": true,
-      "roles": [
-        "coach",
-        "medico",
-        "coordinador",
-        "admin"
-      ]
-    },
-    {
-      "ruta": "/acc/valoracion/:id",
-      "componente": "AccValoracionPage",
-      "redirigeA": null,
-      "protegida": true,
-      "roles": [
-        "coach",
-        "medico",
-        "coordinador",
-        "admin"
-      ]
-    },
-    {
       "ruta": "/ordenes",
       "componente": "OrdenesPage",
       "redirigeA": null,
@@ -415,10 +379,6 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
     },
     {
       "ruta": "/api/monitor-integracion",
-      "roles": null
-    },
-    {
-      "ruta": "/api/acc",
       "roles": null
     }
   ],

@@ -20,7 +20,6 @@ BSL Consulta Video is a medical telemedicine platform built around Twilio Video.
 - Nutritional panel (`/nutricion/:roomName`): a separate variant of the call panel (somatocarta, ISAK anthropometry, Heath-Carter somatotype, AI nutrition plan)
 - Trepsi integration (bidirectional B2B): inbound API to create/reschedule/cancel appointments + historias from Trepsi, and an outbound webhook (BSL → Trepsi) that pushes consultation results once the historia is saved
 - Bot Trepsi (`/bot-trepsi`): a public, scope-restricted GPT-4o-mini assistant that helps the Trepsi team with the integration
-- Valoración Corporal ACC (`/acc/valoracion`): a mobile-first anthropometric capture panel for physiotherapists, with a tested calculation engine, a PDF report ("Hoja de Valoración ACC") and export to the client's Google Sheet
 
 Two halves of the app share one Express server in production: API + WebSocket on `/api/*` and `/socket.io/*`, static React build on everything else.
 
@@ -266,38 +265,6 @@ Idempotency is keyed on `cita_id` — resends never duplicate. Trepsi citas appe
 - `dispatchPending()` POSTs up to 25 ready rows with `Bearer TREPSI_WEBHOOK_API_KEY` (10s timeout). On failure it applies exponential backoff (1s/5s/30s/5min/30min/2h); after 6 attempts the row goes `dead`. `index.ts` runs `dispatchPending()` every 30s via `setInterval` for retries.
 - Admin endpoints at `/api/admin/trepsi-webhook` (JWT): `GET /queue?limit=50`, `POST /queue/:id/retry`, `POST /dispatch`.
 
-### Valoración Corporal ACC
-
-Programa vendido a Sol Médica (base de Novo Nordisk). Bodytech cobra **por atención efectiva**, así que el embudo de no-show no es reportería: alimenta la facturación.
-
-Flujo: se carga una cohorte de pacientes → se los contacta y agenda → el fisioterapeuta toma medidas antropométricas presenciales **desde el celular** → la plataforma calcula la composición corporal → se emite la "Hoja de Valoración ACC" en PDF → la fila se vuelca al Excel que consulta el cliente.
-
-**El motor de cálculo vive en el backend** ([backend/src/helpers/antropometria.ts](backend/src/helpers/antropometria.ts)), no en el panel. Las fórmulas de pliegues (Yuhasz —el protocolo Bodytech—, Faulkner, Durnin-Womersley) se portaron **verbatim** desde `MedicalHistoryPanel.tsx`, donde estaban embebidas en un componente de ~2.000 líneas y sin tests porque el frontend no tiene runner. Un número mal calculado sale impreso con el logo de Bodytech y la cédula del paciente, así que el motor está donde hay jest y el panel consume `POST /api/acc/calcular`.
-
-⚠️ **Deuda conocida:** el panel nutricional conserva su propia copia de esas fórmulas. Son dos implementaciones que deben moverse juntas. Migrarlo a este endpoint está pendiente y es deliberado — tocarlo mientras se construía ACC arriesgaba un panel en uso.
-
-**Fórmulas nuevas** (no existían en el repo): TMB por Harris-Benedict revisada, y masa muscular esquelética por **Lee et al. (2000)** con perímetros corregidos por pliegue.
-
-⚠️ **Rangos provisionales.** `RANGOS_PROVISIONALES` en `antropometria.ts` clasifica Bajo/Normal/Alto con referencias estándar (OMS, ACE) porque Bodytech todavía no entregó los rangos oficiales del programa. Están todos en un solo objeto: reemplazarlos es editar ese bloque. La fórmula de masa muscular también está pendiente de confirmación.
-
-**Tablas** (separadas de `HistoriaClinica`, mismo patrón que `trepsi_appointments`):
-- `acc_pacientes` — la cohorte y su estado en el embudo (`cargado → contactado → agendado → asistio | no_show`). Único por `(numero_id, cohorte)`: recargar la base no duplica ni pisa a quien ya asistió.
-- `acc_valoraciones` — medidas y resultados. Los calculados se **persisten**, no se recalculan al imprimir: el informe muestra el número que el fisioterapeuta vio y aceptó, y si mañana cambia una fórmula las valoraciones viejas conservan lo que se entregó.
-
-**El vínculo con la cohorte no depende de la UI.** `guardarBorrador()` resuelve `paciente_id` desde la cédula cuando no viene en el request (`resolverPacienteId`), y en el UPDATE lo ata con `COALESCE` sin pisar un vínculo ya establecido. Sin ese vínculo, cerrar la valoración no marca al paciente como «asistió» y el embudo —o sea la facturación— no avanza. La agenda manda `pacienteId` en la URL, pero el botón "Nueva valoración" no, así que el servidor no puede depender de eso.
-
-**Cerrar una valoración es irreversible y valida primero.** Si falta IMC, % graso, TMB, ICC o perímetro abdominal, el endpoint devuelve 422 con el detalle en vez de emitir un PDF con celdas vacías — el fisio todavía tiene al paciente enfrente.
-
-**Excel** ([backend/src/services/acc-sheets.service.ts](backend/src/services/acc-sheets.service.ts)): se escribe con un JWT RS256 firmado con `crypto` y dos llamadas REST, **sin `googleapis`** (pesa ~100 MB y el tamaño de imagen es una restricción real). El orden de columnas es un contrato con el cliente y está congelado por tests: agregar al final es seguro, reordenar no. Sin `ACC_SHEETS_ID` / `GOOGLE_SERVICE_ACCOUNT_JSON_B64` el módulo funciona completo y solo el volcado queda inactivo.
-
-**Dos caras, un solo panel.** El fisioterapeuta usa `/acc` (agenda del día, mobile) y `/acc/valoracion` (captura). El coordinador usa la sección **Valoración ACC** dentro de `/coordinador` — `AccOperacionView.tsx`, con los tokens de `_tokens.tsx`. No se construyó un panel nuevo: no existe un coordinador aparte para nutrición ni para ACC, es uno solo, y sumar la sección fue `'acc'` en el union `View`, un `NavItem` y la vista.
-
-**`cita_fecha` es la bisagra entre las dos caras.** La escribe el coordinador con "Citar" (`marcarEstado` → `agendado` + fecha a las 08:00 −05:00) y la lee el filtro "Hoy" de la agenda vía `rangoDiaColombia()`. Sin nadie que cite, el fisioterapeuta abre `/acc` y ve una lista vacía — por eso la agenda conserva buscador, filtro "Todos" y el botón suelto de "Nueva valoración".
-
-**La base se carga desde el Excel que manda Sol Médica**, no a mano: `AccOperacionView` lo lee con SheetJS (import diferido — pesa ~430 KB), mapea los encabezados por sinónimos y **muestra qué detectó antes de enviar nada**. Cargar 300 pacientes con la columna equivocada se limpia a mano.
-
-**RBAC**: la captura es de `coach`/`medico`/`coordinador`/`admin`; cargar la cohorte, mover el embudo y exportar al Excel es solo de `coordinador`/`admin` — un evaluador no decide quién entra al programa ni qué se le factura al cliente.
-
 ### Bot Trepsi
 
 Route: `/bot-trepsi` → `BotTrepsiPage.tsx`. Backend: `bot-trepsi.routes.ts` → `bot-trepsi.service.ts` (`POST /api/bot-trepsi/chat`, public, per-IP rate limit in the controller). A GPT-4o-mini assistant with a very restrictive system prompt that answers **only** about the Trepsi ↔ Bodytech integration — no credentials, internal data, or off-scope topics. Stateless: the frontend passes the conversation history each call. OpenAI is used (not Anthropic) because the prod Anthropic key has a spend cap.
@@ -319,8 +286,6 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 | `/calidad` | Calidad evaluation module |
 | `/coordinador` / `/coordinador-login` | Coordinador panel (profesionales, calendario, ordenes) + its login |
 | `/bot-trepsi` | Public Trepsi integration assistant chat |
-| `/acc` | ACC day agenda: who the physiotherapist has to measure (mobile-first) |
-| `/acc/valoracion` / `/acc/valoracion/:id` | ACC body-composition capture (mobile-first, physiotherapist) |
 | `/reprogramar/:id` | Reschedule-an-appointment page |
 | `/doctor` | Manual room creation page |
 | `/doctor/:roomName?doctor=CODE` | Doctor joins specific room — renders `VideoRoom` + `MedicalConsultationPanel` |

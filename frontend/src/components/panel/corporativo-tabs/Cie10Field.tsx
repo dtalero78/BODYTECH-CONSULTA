@@ -16,6 +16,17 @@ interface Cie10FieldProps {
 /** Máximo de resultados que se pintan por búsqueda: más de esto ya no se lee. */
 const MAX_RESULTADOS = 30;
 
+/**
+ * Sin tildes ni diéresis, en mayúsculas, para comparar. El catálogo viene sin
+ * acentos ("Ciatica", "Radiculopatia") pero el equipo médico escribe con ellos
+ * ("ciática"): sin esto la búsqueda por nombre fallaba justo en las palabras más
+ * comunes. Se aplica a las dos puntas, así también aguanta un catálogo que
+ * algún día venga acentuado.
+ */
+function normalizar(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+}
+
 function parse(raw: string | null | undefined): string[] {
   if (!raw) return [];
   return raw
@@ -87,14 +98,14 @@ export function Cie10Field({ historiaId, field, initialValue, onSaved, label = '
 
   const resultados = useMemo(() => {
     if (!catalogo) return [];
-    const q = query.trim().toUpperCase();
+    const q = normalizar(query.trim());
     if (q.length < 2) return [];
     const esCodigo = /^[A-Z]\d{0,3}$/.test(q);
     const ya = new Set(codigos);
     const out: Cie10Entry[] = [];
     for (const e of catalogo) {
       if (ya.has(e.codigo)) continue;
-      const hit = esCodigo ? e.codigo.startsWith(q) : e.nombre.toUpperCase().includes(q) || e.codigo.startsWith(q);
+      const hit = esCodigo ? e.codigo.startsWith(q) : normalizar(e.nombre).includes(q) || e.codigo.startsWith(q);
       if (hit) {
         out.push(e);
         if (out.length >= MAX_RESULTADOS) break;

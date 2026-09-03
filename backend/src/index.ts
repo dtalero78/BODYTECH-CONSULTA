@@ -25,6 +25,8 @@ import trepsiWebhookService from './services/trepsi-webhook.service';
 import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
 import whatsappLeadsService from './services/whatsapp-leads.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
+import accRoutes from './routes/acc.routes';
+import accSheetsService from './services/acc-sheets.service';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
@@ -235,6 +237,12 @@ app.use('/api/v1/integrations/mybodytech', mybodytechMonitorMiddleware, mybodyte
 // durante pruebas — el dashboard en /monitor-integracion consume estos endpoints.
 app.use('/api/monitor-integracion', monitorIntegracionRoutes);
 
+// Valoración Corporal ACC (programa Sol Médica / Novo Nordisk). El RBAC es por
+// endpoint dentro de acc.routes: la CAPTURA la hace el fisioterapeuta, pero
+// cargar la cohorte, mover el embudo y volcar al Excel del cliente es del
+// coordinador.
+app.use('/api/acc', accRoutes);
+
 // Servir archivos estaticos del frontend (despues de las rutas API)
 const frontendPath = path.join(__dirname, '..', 'frontend-dist');
 app.use(express.static(frontendPath));
@@ -363,6 +371,30 @@ if (process.env.NODE_ENV !== 'test' && chimeRecordingService.enabled) {
   console.log(
     `🎥 [ChimeRecording] Barrido de capturas huérfanas iniciado (cada ${CHIME_SWEEP_INTERVAL_MS / 60000}min, tope ${CHIME_MAX_RECORDING_MIN}min)`
   );
+}
+
+// ---------------------------------------------------------------------------
+// Valoración ACC → Excel de Sol Médica.
+//
+// El volcado principal ocurre al cerrar cada valoración; este barrido es la red
+// de seguridad para cuando esa llamada falla (Sheets devuelve 429/5xx seguido).
+// Las filas ya exportadas llevan marca, así que reintentar no duplica.
+//
+// Si no hay credenciales configuradas el worker ni arranca — no tiene sentido
+// gastar un timer en un contenedor que ya carga Chromium y ffmpeg.
+// ---------------------------------------------------------------------------
+const ACC_SHEETS_SWEEP_MS = 5 * 60_000;
+if (process.env.NODE_ENV !== 'test' && accSheetsService.estaConfigurado()) {
+  setInterval(() => {
+    accSheetsService.exportarPendientes().catch((e) => {
+      console.error('[acc-sheets] barrido:', e?.message ?? e);
+    });
+  }, ACC_SHEETS_SWEEP_MS);
+  console.log(
+    `📊 [ACC] Exportación al Excel de Sol Médica activa (cada ${ACC_SHEETS_SWEEP_MS / 60000}min)`
+  );
+} else if (process.env.NODE_ENV !== 'test') {
+  console.log('ℹ️  [ACC] Exportación al Excel inactiva (falta ACC_SHEETS_ID o la cuenta de servicio)');
 }
 
 // Start server

@@ -16,6 +16,7 @@ import {
   UserCog,
   Map,
   Fingerprint,
+  Ruler,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -24,12 +25,13 @@ import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { TorniqueteView } from '../components/coordinador/TorniqueteView';
+import { AccOperacionView } from '../components/coordinador/AccOperacionView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
-type View = 'profesionales' | 'calendario' | 'torniquete' | 'ordenes' | 'indicadores' | 'usuarios';
+type View = 'profesionales' | 'calendario' | 'torniquete' | 'ordenes' | 'acc' | 'indicadores' | 'usuarios';
 
 interface NavBadge {
   text: string;
@@ -49,6 +51,7 @@ export function CoordinadorPage() {
     profesionales: undefined,
     calendario: undefined,
     torniquete: undefined,
+    acc: undefined,
     ordenes: undefined,
     indicadores: undefined,
     usuarios: undefined,
@@ -222,6 +225,12 @@ export function CoordinadorPage() {
               onClick={() => setView('torniquete')}
               badge={badges.torniquete}
             />
+            <NavItem
+              icon={<Ruler className="w-[15px] h-[15px]" />}
+              label="Valoración ACC"
+              active={view === 'acc'}
+              onClick={() => setView('acc')}
+            />
           </div>
 
           <div className={`${SECTION_LABEL} px-3 pb-2`}>ANÁLISIS</div>
@@ -340,6 +349,9 @@ export function CoordinadorPage() {
           )}
           {view === 'torniquete' && (
             <TorniqueteView key={`torn-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'acc' && (
+            <AccOperacionView key={`acc-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'indicadores' && (
             <IndicadoresView key={`ind-${reloadKey}`} showToast={showToast} />

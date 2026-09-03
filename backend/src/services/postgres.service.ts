@@ -1582,6 +1582,151 @@ class PostgresService {
          WHERE h."_id" = v.entidad_id AND h."reprogramaciones" = 0
       `);
 
+      // ======================================================================
+      // Valoración Corporal ACC
+      //
+      // Programa vendido a Sol Médica (base de Novo Nordisk): se recibe una
+      // cohorte de pacientes, se los contacta y agenda, un fisioterapeuta les
+      // toma medidas antropométricas presenciales y se les entrega un informe.
+      // Bodytech cobra POR ATENCIÓN EFECTIVA, así que el embudo no es
+      // reportería: es la base de la facturación.
+      //
+      // Dos tablas, deliberadamente separadas de "HistoriaClinica":
+      //   acc_pacientes    → la cohorte y su estado en el embudo
+      //   acc_valoraciones → la medición y sus resultados
+      //
+      // Por qué tabla propia y no columnas nuevas en "HistoriaClinica": la
+      // misma persona entra por counter, Trepsi, nutrición o ACC. Los datos
+      // demográficos viven una sola vez; cada servicio agrega SU registro sin
+      // replicar los del otro. Mismo patrón que `trepsi_appointments`.
+      // ======================================================================
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS acc_pacientes (
+          id                    BIGSERIAL PRIMARY KEY,
+          numero_id             TEXT NOT NULL,
+          nombre_completo       TEXT NOT NULL,
+          edad                  INTEGER,
+          sexo                  TEXT,
+          celular               TEXT,
+          email                 TEXT,
+          empresa               TEXT,
+          cohorte               TEXT NOT NULL DEFAULT 'default',
+          origen                TEXT NOT NULL DEFAULT 'sol-medica',
+          estado                TEXT NOT NULL DEFAULT 'cargado',
+          sede                  TEXT,
+          profesional_id        INTEGER,
+          mybodytech_evento_id  TEXT,
+          contactado_at         TIMESTAMPTZ,
+          agendado_at           TIMESTAMPTZ,
+          cita_fecha            TIMESTAMPTZ,
+          asistio_at            TIMESTAMPTZ,
+          no_show_at            TIMESTAMPTZ,
+          created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT acc_pacientes_estado_chk CHECK (estado IN (
+            'cargado', 'contactado', 'agendado', 'confirmado',
+            'asistio', 'no_show', 'descartado'
+          ))
+        )
+      `);
+
+      // Idempotencia de la carga: reenviar la misma base no duplica pacientes.
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_acc_pacientes_doc_cohorte
+          ON acc_pacientes (numero_id, cohorte)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_acc_pacientes_embudo
+          ON acc_pacientes (cohorte, estado)
+      `);
+
+      // Los resultados se PERSISTEN calculados, no se recalculan al imprimir:
+      // el informe tiene que mostrar exactamente el número que el fisioterapeuta
+      // vio y aceptó. Si mañana cambia una fórmula, las valoraciones viejas
+      // conservan lo que se le entregó al paciente — que es lo correcto en un
+      // registro clínico.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS acc_valoraciones (
+          id                            BIGSERIAL PRIMARY KEY,
+          paciente_id                   BIGINT REFERENCES acc_pacientes(id) ON DELETE SET NULL,
+          numero_id                     TEXT NOT NULL,
+          nombre_completo               TEXT,
+          edad                          INTEGER,
+          sexo                          TEXT,
+          fecha_evaluacion              DATE NOT NULL,
+          sede                          TEXT,
+          evaluador                     TEXT,
+          evaluador_usuario_id          INTEGER,
+
+          estatura_cm                   NUMERIC(5,1),
+          peso_kg                       NUMERIC(6,2),
+          perimetro_abdominal           NUMERIC(5,1),
+          perimetro_cadera              NUMERIC(5,1),
+          perimetro_brazo_relajado_der  NUMERIC(5,1),
+          perimetro_brazo_contraido_der NUMERIC(5,1),
+          perimetro_brazo_relajado_izq  NUMERIC(5,1),
+          perimetro_brazo_contraido_izq NUMERIC(5,1),
+          perimetro_muslo_der           NUMERIC(5,1),
+          perimetro_muslo_izq           NUMERIC(5,1),
+          perimetro_pantorrilla         NUMERIC(5,1),
+
+          pliegue_triceps               NUMERIC(4,1),
+          pliegue_subescapular          NUMERIC(4,1),
+          pliegue_biceps                NUMERIC(4,1),
+          pliegue_cresta_iliaca         NUMERIC(4,1),
+          pliegue_supraespinal          NUMERIC(4,1),
+          pliegue_abdominal             NUMERIC(4,1),
+          pliegue_muslo_anterior        NUMERIC(4,1),
+          pliegue_pantorrilla           NUMERIC(4,1),
+
+          imc                           NUMERIC(5,2),
+          imc_estado                    TEXT,
+          pct_grasa                     NUMERIC(5,2),
+          grasa_estado                  TEXT,
+          metodo_grasa                  TEXT,
+          pct_muscular                  NUMERIC(5,2),
+          muscular_estado               TEXT,
+          peso_muscular_kg              NUMERIC(6,2),
+          masa_grasa_kg                 NUMERIC(6,2),
+          masa_libre_grasa_kg           NUMERIC(6,2),
+          imm                           NUMERIC(5,2),
+          tmb_kcal                      INTEGER,
+          icc                           NUMERIC(4,2),
+          icc_estado                    TEXT,
+          ict                           NUMERIC(4,2),
+          ict_estado                    TEXT,
+          perimetro_abdominal_estado    TEXT,
+          sumatoria_6                   NUMERIC(5,1),
+          sumatoria_8                   NUMERIC(5,1),
+
+          origen_datos                  TEXT NOT NULL DEFAULT 'manual',
+          estado                        TEXT NOT NULL DEFAULT 'borrador',
+          observaciones                 TEXT,
+          cerrada_at                    TIMESTAMPTZ,
+          exportada_sheet_at            TIMESTAMPTZ,
+          sheet_fila                    INTEGER,
+          created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT acc_valoraciones_estado_chk CHECK (estado IN ('borrador', 'cerrada')),
+          CONSTRAINT acc_valoraciones_origen_chk CHECK (origen_datos IN ('manual', 'inbody'))
+        )
+      `);
+
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_acc_valoraciones_doc
+          ON acc_valoraciones (numero_id, fecha_evaluacion DESC)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_acc_valoraciones_paciente
+          ON acc_valoraciones (paciente_id, created_at DESC)
+      `);
+      // Pendientes de volcar al Excel acumulado que consulta Sol Médica.
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_acc_valoraciones_sin_exportar
+          ON acc_valoraciones (cerrada_at)
+          WHERE estado = 'cerrada' AND exportada_sheet_at IS NULL
+      `);
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

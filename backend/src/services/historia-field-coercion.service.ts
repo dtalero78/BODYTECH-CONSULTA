@@ -356,6 +356,9 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'mc_riesgo_acsm', type: 'string' },
   { field: 'mc_riesgo_framingham', type: 'string' },
   { field: 'mc_riesgo_bodytech', type: 'string' },
+  { field: 'mc_rb_sintomas_cv', type: 'boolean' },
+  { field: 'mc_rb_razon_no_ejercicio', type: 'boolean' },
+  { field: 'mc_rb_dolor_osteomuscular_af', type: 'boolean' },
   { field: 'mc_nivel', type: 'string' },
   // Análisis y prescripción de ejercicio
   { field: 'mc_analisis', type: 'string' },

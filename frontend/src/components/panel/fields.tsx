@@ -165,6 +165,13 @@ interface PillToggleFieldProps extends CommonProps {
   falseLabel?: string;
   /** Render compacto sin label arriba (útil dentro de filas con header). */
   inline?: boolean;
+  /**
+   * Se dispara EN EL CLIC, antes del auto-guardado. `onSaved` llega ~1 s después
+   * (debounce + red): para un cálculo derivado de varios toggles —como el Riesgo
+   * Bodytech— eso se veía como un badge que reacciona tarde. Con esto el padre
+   * puede recalcular al instante y dejar que la persistencia siga su curso.
+   */
+  onChange?: (next: boolean) => void;
 }
 
 /**
@@ -185,9 +192,14 @@ export function PillToggleField(props: PillToggleFieldProps) {
     onSaved: props.onSaved,
   });
 
+  const cambiar = (next: boolean) => {
+    setV(next);
+    props.onChange?.(next);
+  };
+
   if (props.inline) {
     return (
-      <PillToggle value={v} onChange={setV} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
+      <PillToggle value={v} onChange={cambiar} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
     );
   }
 
@@ -198,7 +210,7 @@ export function PillToggleField(props: PillToggleFieldProps) {
           {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
         </label>
       )}
-      <PillToggle value={v} onChange={setV} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
+      <PillToggle value={v} onChange={cambiar} trueLabel={props.trueLabel} falseLabel={props.falseLabel} />
     </div>
   );
 }

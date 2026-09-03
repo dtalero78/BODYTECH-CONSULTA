@@ -366,6 +366,10 @@ export interface MedicalHistoryFull {
   mcRiesgoAcsm?: string;
   mcRiesgoFramingham?: string;
   mcRiesgoBodytech?: string;
+  /** Cuestionario Riesgo Bodytech (tri-estado: null = sin responder). */
+  mcRbSintomasCv?: boolean | null;
+  mcRbRazonNoEjercicio?: boolean | null;
+  mcRbDolorOsteomuscularAf?: boolean | null;
   mcNivel?: string;
   mcAnalisis?: string;
   mcPrescripcionCardio?: string;

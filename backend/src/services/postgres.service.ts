@@ -615,6 +615,17 @@ class PostgresService {
           ALTER COLUMN "mc_dx_cie10" TYPE TEXT;
       `);
 
+      // Riesgo Bodytech pasa de desplegable manual a CALCULADO desde tres
+      // preguntas Sí/No del cuestionario del equipo médico (Q1 o Q2 en Sí → Alto;
+      // sólo Q3 en Sí → Moderado; las tres en No → Bajo). Sin DEFAULT, igual que
+      // los demás antecedentes: "sin responder" tiene que distinguirse de "No".
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "mc_rb_sintomas_cv" BOOLEAN,
+          ADD COLUMN IF NOT EXISTS "mc_rb_razon_no_ejercicio" BOOLEAN,
+          ADD COLUMN IF NOT EXISTS "mc_rb_dolor_osteomuscular_af" BOOLEAN;
+      `);
+
       // ===== Origen de la cita (departamento / integración) =====
       // Hasta ahora el origen se DEDUCÍA, y cada vista lo deducía distinto: la de
       // Afiliados miraba el prefijo del `_id` ("trepsi_"), el calendario miraba

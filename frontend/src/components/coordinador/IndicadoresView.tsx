@@ -304,9 +304,13 @@ export function IndicadoresView({ showToast }: Props) {
       // Excel real (.xlsx): abre con columnas separadas y `min_desfase` como número.
       // Import dinámico → el chunk de SheetJS solo se descarga al exportar.
       const XLSX = await import('xlsx');
+      // "Enviado por" no es decorativo: desde que la plataforma manda el link
+      // sola, un desfase negativo enorme puede ser el envío automático de la
+      // mañana y no una gestión temprana del coach. Sin esta columna, la
+      // planilla se lee al revés.
       const header = [
         'Cédula', 'Paciente', 'Coach', 'Sede',
-        'Hora cita programada', 'Hora link enviado',
+        'Hora cita programada', 'Hora link enviado', 'Enviado por',
         'Min desfase (link − cita)', 'Hora atendida',
       ];
       const aoa: (string | number | null)[][] = [
@@ -318,6 +322,7 @@ export function IndicadoresView({ showToast }: Props) {
           f.sede ?? '',
           f.hora_cita ?? '',
           f.link_enviado ?? '',
+          f.link_origen === 'auto' ? 'Automático' : 'Coach',
           f.min_desfase ?? null,
           f.hora_atendida ?? '',
         ]),
@@ -325,7 +330,7 @@ export function IndicadoresView({ showToast }: Props) {
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = [
         { wch: 14 }, { wch: 26 }, { wch: 22 }, { wch: 16 },
-        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 20 },
+        { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 24 }, { wch: 20 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Tiempos de atención');

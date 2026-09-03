@@ -201,6 +201,29 @@ no tiene con qué construirse.
 No hubo relleno retroactivo. Cualquier métrica de "citas sin contactar" que
 mire meses anteriores sale inflada.
 
+### `link_enviado_at` ya no significa "el coach gestionó la cita"
+
+La plataforma ahora **envía el link de la videollamada automáticamente**: cada
+mañana sale para toda la agenda del día, sin que nadie tenga que hacer nada. Eso
+quiere decir que casi todas las citas van a tener `link_enviado_at`, y que ese
+campo **dejó de medir el trabajo del coach**.
+
+Lo que distingue una cosa de la otra es `link_enviado_por`:
+
+| Valor      | Significa                                    |
+|------------|----------------------------------------------|
+| `manual`   | El coach apretó "Contactar" en su panel      |
+| `auto`     | Lo envió la plataforma sola                   |
+
+**Para cualquier métrica de gestión —"no contactó", "a cuántos llamó", tiempos
+de respuesta del coach— cuente solo `link_enviado_por = 'manual'`.** Contar
+todos los envíos daría 100% de gestión para todo el mundo, incluidos los coaches
+que no abrieron la plataforma en todo el día.
+
+El estante `bv_citas` ya expone la columna, y su `estado_calendario` ya aplica
+esta distinción. Las filas anteriores al cambio quedaron marcadas `manual`,
+porque en su momento no había otra forma de enviarlo.
+
 ---
 
 ## 5. Escala real de la plataforma

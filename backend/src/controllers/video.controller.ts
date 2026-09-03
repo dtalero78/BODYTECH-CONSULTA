@@ -16,6 +16,7 @@ import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
 import historiaMutationService from '../services/historia-mutation.service';
 import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
+import { enviarLinkPaciente } from '../services/link-paciente.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -549,114 +550,14 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { phone, roomNameWithParams, patientName, appointmentTime, historiaId } = parsed.data;
 
     try {
-      // Enviar la notificación de cita POR la plataforma (mismo Twilio del tenant
-      // BODYTECH → +5716284820) para que quede en el hilo del chat. Si la
-      // plataforma falla, cae al envío directo por Twilio (el paciente igual
-      // recibe, aunque no quede en el chat).
-      const citaTemplateSid =
-        process.env.TWILIO_WHATSAPP_TEMPLATE_SID || 'HX83c2dd7da8954757ee34a310d4f17e62';
-      const citaVars: Record<string, string> = {
-        '1': patientName,
-        '2': appointmentTime,
-        '3': roomNameWithParams,
-        '4': historiaId,
-      };
-      const celularE164 = phone.startsWith('+') ? phone : `+${phone}`;
-      let result: { success: boolean; error?: string; messageSid?: string };
-      const viaPlataforma = await bslPlataformaChatService.enviarPlantilla(
-        celularE164,
-        citaTemplateSid,
-        citaVars
-      );
-      if (viaPlataforma) {
-        result = { success: true };
-      } else {
-        result = await whatsappService.sendTemplateMessage(
-          phone,
-          roomNameWithParams,
-          patientName,
-          appointmentTime,
-          historiaId
-        );
-      }
+      // El envío y sus 4 rastros viven en link-paciente.service, compartidos con
+      // el worker de envío automático. `origen: 'manual'` es lo que distingue
+      // este botón del worker en el indicador "No contactó".
+      const result = await enviarLinkPaciente({ ...parsed.data, origen: 'manual' });
 
       if (result.success) {
-        // Marcar la cita como "link enviado" — alimenta el Informe de Gestión
-        // (distingue "No contactó" = sin link, de "Pendiente" = con link). Solo
-        // el primer envío (link_enviado_at IS NULL). Fire-and-forget: no bloquea
-        // ni rompe la respuesta si falla.
-        postgresService
-          .query(
-            `UPDATE "HistoriaClinica" SET "link_enviado_at" = NOW()
-               WHERE "_id" = $1 AND "link_enviado_at" IS NULL`,
-            [historiaId]
-          )
-          .catch((e) =>
-            console.error('⚠️ Error marcando link_enviado_at:', e?.message ?? e)
-          );
-
-        // Guardar la SALA de la videollamada en el servidor. Es la fuente de
-        // verdad: el nombre de sala vivía solo en la memoria del navegador del
-        // coach, así que al recargar la página "Atender" generaba una sala nueva
-        // distinta a la del paciente. Con esto, "Atender" siempre puede leer la
-        // MISMA sala que se le envió al paciente. `roomNameWithParams` es
-        // "consulta-xxx?nombre=...": la sala es lo de antes del '?'.
-        const videoRoomName = roomNameWithParams.split('?')[0];
-        if (videoRoomName) {
-          postgresService
-            .query(`UPDATE "HistoriaClinica" SET "video_room_name" = $1 WHERE "_id" = $2`, [
-              videoRoomName,
-              historiaId,
-            ])
-            .catch((e) => console.error('⚠️ Error guardando video_room_name:', e?.message ?? e));
-        }
-
-        // Registrar el mensaje directamente en PostgreSQL para que aparezca en el chat
-        try {
-          const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
-          const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
-          const messageBody = `Hola ${patientName},\n\nTe saludamos de VIP Salud Ocupacional.\n\nTienes una consulta médica a las ${appointmentTime}.\n\nPara ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
-
-          // Formatear número de teléfono con prefijo +
-          const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;
-
-          await postgresService.registrarMensajeSaliente(
-            phoneWithPlus,
-            messageBody,
-            result.messageSid || '',
-            patientName
-          );
-
-          console.log(`✅ Mensaje registrado en PostgreSQL para ${phoneWithPlus}`);
-        } catch (registerError) {
-          // No fallar si el registro en PostgreSQL falla
-          console.error('⚠️ Error registrando mensaje en PostgreSQL:', registerError);
-        }
-
-        // Si la cita es de Trepsi, también les enviamos el link por webhook
-        // para que ellos puedan mostrárselo al paciente en su app. Si la HC
-        // no corresponde a una cita Trepsi, el service no hace nada.
-        if (historiaId) {
-          const baseUrl = process.env.BASE_URL || 'https://bodytech.app';
-          const videoCallUrl = `${baseUrl}/panel-medico/patient/${roomNameWithParams}`;
-          const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;
-          trepsiWebhookService
-            .enqueueLink(historiaId, videoCallUrl, phoneWithPlus)
-            .then((r) => {
-              if (r.enqueued) {
-                console.log(`📨 [Trepsi-Webhook] Link encolado para historia ${historiaId}`);
-              } else if (r.reason && r.reason !== 'NOT_TREPSI') {
-                console.log(`ℹ️  [Trepsi-Webhook] Link no encolado: ${r.reason}`);
-              }
-            })
-            .catch((e) => {
-              console.error(`⚠️  [Trepsi-Webhook] Error encolando link: ${e?.message ?? e}`);
-            });
-        }
-
         res.status(200).json({
           success: true,
           message: 'WhatsApp template sent successfully',

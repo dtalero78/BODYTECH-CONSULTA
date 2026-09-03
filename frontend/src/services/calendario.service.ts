@@ -179,6 +179,8 @@ export interface TiempoAtencion {
   sede: string;
   hora_cita: string | null;
   link_enviado: string | null;
+  /** 'manual' = lo envió el coach · 'auto' = lo envió la plataforma sola. */
+  link_origen: string | null;
   min_desfase: number | null;
   hora_atendida: string | null;
 }

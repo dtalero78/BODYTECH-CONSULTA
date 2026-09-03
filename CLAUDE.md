@@ -169,6 +169,23 @@ The module evaluates consultation quality by:
 
 Route: `/ordenes` → `OrdenesPage.tsx`. Full CRUD for medical orders linked to a `historia_id`. JWT must be injected in every request — `OrdenesPage.tsx` explicitly sets the auth header to avoid 401s. No dedicated ordenes service/routes file; uses the video API layer.
 
+### Envío del link de videollamada al paciente
+
+El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):
+
+- **Manual** — el botón "Contactar" de `MedicalPanelPage.tsx` → `POST /api/video/whatsapp/send`. El coach decide cuándo. Además dispara una llamada de voz Twilio.
+- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts), que a `LINK_AUTO_HORA` (07:00 COT) manda el link a toda la agenda del día y sigue barriendo cada 10 min hasta `LINK_AUTO_HORA_FIN` para alcanzar las citas creadas o reprogramadas más tarde. Solo WhatsApp, sin llamada.
+
+`link-paciente.service` tiene tres capas: helpers **puros** (`formatHoraCita`, `formatCelularE164`, `buildRoomNameWithParams`), `prepararLinkDeCita()` (de una fila de `HistoriaClinica` a un envío listo — también pura, y por eso el dry-run del worker corre el mismo código sin escribir nada), y `enviarLinkPaciente()`, que envía (plataforma → fallback Twilio) y deja los **4 rastros**: `link_enviado_at` + `link_enviado_por`, `video_room_name`, el mensaje en el chat, y el webhook a Trepsi.
+
+**`link_enviado_por` ('manual' | 'auto') no es cosmético.** El indicador "No contactó" mide gestión **del coach**; si contara los envíos automáticos daría ~0 para todo el mundo. `CONTACTO_MANUAL_SQL` en [calendario.service.ts](backend/src/services/calendario.service.ts) es la definición única, y la replican los estantes de BodyVibe. El export a Excel de Indicadores muestra la columna "Enviado por" al lado de `min_desfase` por la misma razón.
+
+**Idempotencia: por cita, en `link_auto_envio`** (PK `fecha, historia_id`), con un claim atómico `INSERT … ON CONFLICT DO UPDATE … WHERE`. A propósito **no** se usa `link_enviado_at` como candado: si el proceso muriera entre el claim y el envío, la cita quedaría marcada como contactada para siempre sin que nadie hubiera recibido nada. Esa tabla es además la bitácora ("a quién se le envió hoy y qué falló").
+
+**Filtros que no son negociables** (ver el SQL de `getCandidatas`): la guarda regex sobre `fechaAtencion` antes de cualquier `::timestamptz` (una fila mal formada abortaría la query del día entero), y `NOT EXISTS` sobre `trepsi_appointments` con `estado='cancelled'` — `trepsi.service.cancel()` **no toca `HistoriaClinica`**, así que una cita Trepsi cancelada es indistinguible de una activa, y Trepsi es el 94% del volumen.
+
+Operación (admin): `POST /api/admin/link-auto/dispatch?fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=`. El dry-run no escribe nada y dice a quién le llegaría. Apagado por defecto (`LINK_AUTO_ENABLED`).
+
 ### PDF export (Puppeteer)
 
 `pdf.service.ts` generates PDFs server-side using Puppeteer from the historia clínica HTML template in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts). The template includes sections for Intervención and Conducta tabs. Triggered from the panel header.
@@ -408,6 +425,20 @@ TWILIO_WHATSAPP_GESTION_TEMPLATE_SID=HXxxxx   # Informe de Gestión diario a adm
 GESTION_REPORT_HORA=19:30                      # hora Colombia del envío diario del informe (default 19:30)
 PUBLIC_BASE_URL=https://bodytech.app           # base pública para la URL de la imagen del informe (Twilio la debe alcanzar)
 
+# Envío AUTOMÁTICO del link de videollamada al paciente (worker link-auto).
+# Manda WhatsApp a pacientes reales: APAGADO por defecto, se prende por fases
+# (primero LINK_AUTO_SOLO_CELULARES, después LINK_AUTO_SEDES, después todo).
+LINK_AUTO_ENABLED=false                        # kill switch ('1'/'true' para prender)
+LINK_AUTO_HORA=07:00                           # hora Colombia de la tanda del día
+LINK_AUTO_HORA_FIN=19:00                       # tope: después de esta hora no se envía nada
+LINK_AUTO_INTERVALO_MIN=10                     # cada cuánto barre (alcanza citas creadas más tarde)
+LINK_AUTO_MAX_POR_CORRIDA=60                   # tope de envíos por pasada
+LINK_AUTO_PAUSA_MS=1500                        # pausa entre envíos
+LINK_AUTO_MAX_INTENTOS=3                       # corta el reintento contra un número muerto
+LINK_AUTO_SOLO_CELULARES=                      # lista blanca CSV (modo observación)
+LINK_AUTO_SEDES=                               # CSV de sede_id, para el rollout escalonado
+LINK_AUTO_EXIGIR_PROFESIONAL=false             # exige que el `medico` exista y esté activo
+
 # PostgreSQL (Digital Ocean managed)
 POSTGRES_HOST=...db.ondigitalocean.com
 POSTGRES_PORT=25060
@@ -535,6 +566,7 @@ These docs go deeper than this file — read them when working on a specific are
 - **Panel nutricional**: `/nutricion/:roomName` con `panelVariant="nutricional"` → `MedicalHistoryPanel` (somatocarta, ISAK, Heath-Carter, plan nutricional con IA). Persiste en `datosNutricionales` (JSONB). `MedicalHistoryPanel.tsx` dejó de estar huérfano.
 - **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
 - **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
+- **Envío automático del link de videollamada**: worker `link-auto.service.ts` (tanda 07:00 COT + barrido hasta las 19:00), lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.
 - **Twilio Voice**: TwiML webhook con audio Bodytech, número unificado `+576016284820`.

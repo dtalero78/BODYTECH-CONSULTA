@@ -43,14 +43,23 @@ const EFFECTIVE_SEDE_SQL = `
        ELSE "HistoriaClinica"."sede_id"
   END`;
 
+// ¿El COACH contactó al paciente a mano? Desde que existe el envío automático
+// del link (worker link-auto), `link_enviado_at` ya no equivale a "hubo gestión
+// del coach": el worker lo setea a las 07:00 para toda la agenda del día. Los
+// indicadores miden gestión, así que solo cuenta el envío 'manual'.
+// El COALESCE cubre las filas anteriores a la columna y la ventana de un deploy
+// mixto (un contenedor viejo escribiría link_enviado_at sin link_enviado_por).
+const CONTACTO_MANUAL_SQL = `
+  ("link_enviado_at" IS NOT NULL AND COALESCE("link_enviado_por", 'manual') = 'manual')`;
+
 // Clasificación de una cita. ÚNICA para todo el módulo: la usan el calendario
 // (getMes/getDia) y los indicadores (getIndicadores), así que las tarjetas del
 // calendario y el tablero de indicadores nunca pueden discrepar.
 //   ATENDIDA   = atendido ATENDIDO
 //   NOCONTESTA = atendido NO CONTESTA (el afiliado no respondió)
-//   NOCONTACTO = sin resolver, SIN link enviado y con la hora ya vencida
-//                (el profesional dejó pasar la cita sin contactar)
-//   PENDIENTE  = el resto sin resolver: hora aún por venir, o link ya enviado
+//   NOCONTACTO = sin resolver, SIN contacto manual del coach y con la hora ya
+//                vencida (el profesional dejó pasar la cita sin gestionarla)
+//   PENDIENTE  = el resto sin resolver: hora aún por venir, o ya contactada
 // La comparación con NOW() evita marcar como "no contactó" citas futuras.
 // OJO: `link_enviado_at` solo es fiable desde 2026-07-09 (no hay backfill); en
 // meses anteriores NOCONTACTO sale inflado — mismo caveat que /indicadores.
@@ -58,7 +67,7 @@ const CLASE_CITA_SQL = `
   CASE
     WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
     WHEN UPPER(COALESCE("atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
-    WHEN "link_enviado_at" IS NULL AND "fechaAtencion"::timestamptz < NOW() THEN 'NOCONTACTO'
+    WHEN NOT ${CONTACTO_MANUAL_SQL} AND "fechaAtencion"::timestamptz < NOW() THEN 'NOCONTACTO'
     ELSE 'PENDIENTE'
   END`;
 
@@ -754,6 +763,11 @@ class CalendarioService {
    * (`fechaConsulta`). Solo incluye citas con link enviado. Alimenta el export a
    * Excel del panel Indicadores.
    *
+   * `link_origen` dice si ese envío fue 'manual' (gestión del coach) o 'auto'
+   * (worker link-auto). Se expone en vez de filtrarse: es un export a Excel y
+   * debe mostrar la realidad. Sin esa columna, `min_desfase` se lee como si el
+   * coach hubiera contactado a las 07:00 a todo el mundo.
+   *
    * OJO: `link_enviado_at` solo es fiable desde 2026-07-09 (no hay backfill).
    */
   async getTiemposAtencion(
@@ -768,6 +782,7 @@ class CalendarioService {
       sede: string;
       hora_cita: string | null;
       link_enviado: string | null;
+      link_origen: string | null;
       min_desfase: number | null;
       hora_atendida: string | null;
     }>
@@ -779,6 +794,7 @@ class CalendarioService {
               p.sede_id AS sede,
               to_char(h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS hora_cita,
               to_char(h."link_enviado_at" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS link_enviado,
+              COALESCE(h."link_enviado_por", 'manual') AS link_origen,
               round(extract(epoch FROM (h."link_enviado_at" - h."fechaAtencion"::timestamptz)) / 60)::int AS min_desfase,
               to_char(h."fechaConsulta" AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS hora_atendida
          FROM "HistoriaClinica" h
@@ -796,9 +812,9 @@ class CalendarioService {
 
   /**
    * Listado de personas "No contactó" de UN profesional en un rango: citas sin
-   * resolver (≠ ATENDIDO/NO CONTESTA), SIN link enviado y con la hora YA vencida
-   * — misma definición que la clase NOCONTACTO de getIndicadores. Alimenta la
-   * fila expandible del panel Indicadores.
+   * resolver (≠ ATENDIDO/NO CONTESTA), SIN contacto MANUAL del coach y con la
+   * hora YA vencida — misma definición que la clase NOCONTACTO de
+   * getIndicadores. Alimenta la fila expandible del panel Indicadores.
    */
   async getNoContactoDetalle(
     from: string,
@@ -838,7 +854,7 @@ class CalendarioService {
         AND "fechaAtencion"::timestamptz < $3::timestamptz
         ${medicoCond}
         AND UPPER(COALESCE("atendido", 'PENDIENTE')) NOT IN ('ATENDIDO', 'NO CONTESTA')
-        AND "link_enviado_at" IS NULL
+        AND NOT ${CONTACTO_MANUAL_SQL}
         AND "fechaAtencion"::timestamptz < NOW()
       ORDER BY "fechaAtencion"
     `;

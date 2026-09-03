@@ -1288,6 +1288,60 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "video_room_name" TEXT
       `);
 
+      // ===== Envío AUTOMÁTICO del link de videollamada (worker link-auto) =====
+
+      // Quién envió el link: 'manual' (botón Contactar del panel) vs 'auto' (worker).
+      // Preserva el indicador "No contactó", que mide gestión DEL COACH: sin esta
+      // distinción, el envío automático lo dejaría en ~0 para todo el mundo y el
+      // número dejaría de significar algo.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS "link_enviado_por" TEXT
+      `);
+
+      // Backfill idempotente: todo lo enviado hasta hoy salió del botón manual.
+      await this.query(`
+        UPDATE "HistoriaClinica" SET "link_enviado_por" = 'manual'
+         WHERE "link_enviado_at" IS NOT NULL AND "link_enviado_por" IS NULL
+      `);
+
+      // Una fila por (día de la cita, cita). El worker la reclama con
+      // INSERT ... ON CONFLICT DO UPDATE ... WHERE → un solo envío en vuelo por
+      // cita, aunque corran varias pasadas o varias instancias. Es además la
+      // BITÁCORA: lo único que responde "a quién se le envió hoy, por qué canal
+      // y qué falló".
+      //   claimed = envío en curso (se re-toma si lleva >15 min colgada)
+      //   enviado = aceptada por el canal (NO implica entregada: no hay callback)
+      //   error   = falló; reintentable hasta LINK_AUTO_MAX_INTENTOS con backoff
+      //   omitido = no se intentó (sin médico, celular no reconocido, allowlist)
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS link_auto_envio (
+          fecha        DATE        NOT NULL,
+          historia_id  TEXT        NOT NULL,
+          estado       TEXT        NOT NULL DEFAULT 'claimed',
+          motivo       TEXT,
+          intentos     INTEGER     NOT NULL DEFAULT 0,
+          celular      TEXT,
+          hora_cita    TEXT,
+          room_name    TEXT,
+          message_sid  TEXT,
+          via          TEXT,
+          error        TEXT,
+          claimed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          next_try_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          enviado_at   TIMESTAMPTZ,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (fecha, historia_id),
+          CONSTRAINT link_auto_envio_estado_chk
+            CHECK (estado IN ('claimed', 'enviado', 'error', 'omitido'))
+        )
+      `);
+
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_link_auto_envio_fecha_estado
+          ON link_auto_envio (fecha, estado)
+      `);
+
       // ----------------------------------------------------------------------
       // BodyVibeTech — bitácora de LECTURAS.
       //

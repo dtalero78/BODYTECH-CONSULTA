@@ -29,6 +29,7 @@ import postgresService from './postgres.service';
 import gestionReportImageService from './gestion-report-image.service';
 import { ReportData, CoachRow } from '../helpers/gestion-report-html';
 import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
+import { nowColombia } from '../helpers/colombia-time.helper';
 
 const TITULO = 'Gestión Coaches Bodytech Trepsi';
 const MAX_COACHES = 14; // tope de filas en la imagen; el resto va como "…y N más"
@@ -50,14 +51,6 @@ export interface EnvioResumen {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function nowColombia(): { fecha: string; minutos: number } {
-  const c = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  const y = c.getUTCFullYear();
-  const m = String(c.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(c.getUTCDate()).padStart(2, '0');
-  return { fecha: `${y}-${m}-${d}`, minutos: c.getUTCHours() * 60 + c.getUTCMinutes() };
-}
 
 function formatFechaCorta(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);

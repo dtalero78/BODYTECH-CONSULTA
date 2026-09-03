@@ -216,6 +216,9 @@ class BodyVibeEstantesService {
             ELSE NULLIF(btrim(h."genero_biologico"::text), '')
           END                                       AS genero,
           h."link_enviado_at"                       AS link_enviado_at,
+          -- 'manual' = lo envió el coach; 'auto' = el worker link-auto. Los
+          -- indicadores de gestión solo cuentan el manual.
+          COALESCE(h."link_enviado_por", 'manual')  AS link_enviado_por,
 
           -- Criterio del panel médico. Ver la advertencia de arriba.
           CASE
@@ -228,7 +231,8 @@ class BodyVibeEstantesService {
           CASE
             WHEN UPPER(COALESCE(h."atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
             WHEN UPPER(COALESCE(h."atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
-            WHEN h."link_enviado_at" IS NULL
+            WHEN NOT (h."link_enviado_at" IS NOT NULL
+                      AND COALESCE(h."link_enviado_por", 'manual') = 'manual')
              AND bv_a_fecha(h."fechaAtencion"::text) < NOW() THEN 'NOCONTACTO'
             ELSE 'PENDIENTE'
           END                                       AS estado_calendario,
@@ -243,7 +247,8 @@ class BodyVibeEstantesService {
             CASE
               WHEN UPPER(COALESCE(h."atendido", 'PENDIENTE')) = 'ATENDIDO' THEN 'ATENDIDA'
               WHEN UPPER(COALESCE(h."atendido", 'PENDIENTE')) = 'NO CONTESTA' THEN 'NOCONTESTA'
-              WHEN h."link_enviado_at" IS NULL
+              WHEN NOT (h."link_enviado_at" IS NOT NULL
+                        AND COALESCE(h."link_enviado_por", 'manual') = 'manual')
                AND bv_a_fecha(h."fechaAtencion"::text) < NOW() THEN 'NOCONTACTO'
               ELSE 'PENDIENTE'
             END

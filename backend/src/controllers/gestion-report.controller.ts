@@ -10,15 +10,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import gestionReportService from '../services/gestion-report.service';
-
-/** Fecha de hoy en Colombia (UTC-5) como YYYY-MM-DD. */
-function todayColombia(): string {
-  const c = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  const y = c.getUTCFullYear();
-  const m = String(c.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(c.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+import { nowColombia } from '../helpers/colombia-time.helper';
 
 class GestionReportController {
   /**
@@ -28,7 +20,7 @@ class GestionReportController {
   dispatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const raw = typeof req.query.fecha === 'string' ? req.query.fecha : '';
-      const fecha = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayColombia();
+      const fecha = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : nowColombia().fecha;
 
       if (!process.env.TWILIO_WHATSAPP_GESTION_TEMPLATE_SID) {
         res.status(503).json({

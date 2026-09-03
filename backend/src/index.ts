@@ -29,11 +29,13 @@ import accRoutes from './routes/acc.routes';
 import accSheetsService from './services/acc-sheets.service';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
+import linkAutoAdminRoutes from './routes/link-auto-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
 import auditRoutes from './routes/audit.routes';
 import bodyvibeRoutes from './routes/bodyvibe.routes';
 import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
+import linkAutoService from './services/link-auto.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { mybodytechMonitorMiddleware } from './middleware/mybodytech-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -212,6 +214,7 @@ app.use('/api/bodyvibe', bodyvibeLogMiddleware, bodyvibeRoutes);
 // ver una tabla no es un privilegio.
 app.use('/api/vistas', vistasGuardadasRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
+app.use('/api/admin/link-auto', requireRole('admin'), linkAutoAdminRoutes);
 // Público (sin auth): Twilio toma el PNG del tablero de aquí como media.
 app.use('/api/public/gestion-report-image', gestionReportImageRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
@@ -326,6 +329,25 @@ if (process.env.NODE_ENV !== 'test') {
   console.log(`📊 [Gestión] Worker iniciado (envío diario ~${GESTION_REPORT_HORA} COT)`);
 }
 
+// Worker del envío AUTOMÁTICO del link de videollamada: manda el link a las
+// citas del día que aún no lo tienen. Una tanda a LINK_AUTO_HORA y después un
+// barrido hasta LINK_AUTO_HORA_FIN — el barrido alcanza las citas creadas o
+// reprogramadas más tarde el mismo día, que una única pasada matutina perdería.
+// La idempotencia es POR CITA (claim en `link_auto_envio`), así que repetir
+// pasadas no duplica envíos. Apagado por defecto: sin LINK_AUTO_ENABLED, no-op.
+const LINK_AUTO_INTERVALO_MS = (Number(process.env.LINK_AUTO_INTERVALO_MIN) || 10) * 60_000;
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    linkAutoService.maybeDispatch().catch((e) => {
+      console.error('[link-auto] worker error:', e?.message ?? e);
+    });
+  }, LINK_AUTO_INTERVALO_MS);
+  const estado = process.env.LINK_AUTO_ENABLED === 'true' || process.env.LINK_AUTO_ENABLED === '1'
+    ? `activo ${process.env.LINK_AUTO_HORA || '07:00'}–${process.env.LINK_AUTO_HORA_FIN || '19:00'} COT`
+    : 'APAGADO (LINK_AUTO_ENABLED)';
+  console.log(`🔗 [Link-Auto] Worker iniciado cada ${LINK_AUTO_INTERVALO_MS / 60000}min — ${estado}`);
+}
+
 // Worker del Torniquete: cada 60s cierra las jornadas cuyo último latido superó
 // la ventana de inactividad (cierre de pestaña / equipo suspendido / caída de
 // internet). La "salida efectiva" queda en el último latido conocido. Persistido
@@ -348,6 +370,9 @@ if (process.env.NODE_ENV !== 'test') {
     postgresService
       .query(`DELETE FROM client_diag WHERE created_at < NOW() - INTERVAL '30 days'`)
       .catch((e) => console.error('[client-diag] limpieza falló:', e?.message ?? e));
+    postgresService
+      .query(`DELETE FROM link_auto_envio WHERE created_at < NOW() - INTERVAL '180 days'`)
+      .catch((e) => console.error('[link-auto] limpieza de bitácora falló:', e?.message ?? e));
   }, DIAG_RETENCION_INTERVAL_MS);
 }
 

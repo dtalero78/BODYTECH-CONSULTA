@@ -607,6 +607,14 @@ class PostgresService {
           ALTER COLUMN "mc_per_alcohol" DROP DEFAULT;
       `);
 
+      // El CIE-10 del examen ocupacional pasa a ser multi-selección (varios
+      // diagnósticos por historia, separados por coma: "E669,I10,M545"). El
+      // VARCHAR(20) original apenas cabía uno. ALTER TYPE TEXT es no-op si ya es TEXT.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ALTER COLUMN "mc_dx_cie10" TYPE TEXT;
+      `);
+
       // ===== Origen de la cita (departamento / integración) =====
       // Hasta ahora el origen se DEDUCÍA, y cada vista lo deducía distinto: la de
       // Afiliados miraba el prefijo del `_id` ("trepsi_"), el calendario miraba

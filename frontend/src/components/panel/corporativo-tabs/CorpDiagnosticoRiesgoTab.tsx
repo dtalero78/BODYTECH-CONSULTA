@@ -6,6 +6,7 @@ import { TextField, SelectField } from '../fields';
 import { DowntonCard } from '../DowntonCard';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+import { Cie10Field } from './Cie10Field';
 
 interface CorpDiagnosticoRiesgoTabProps {
   historiaId: string | undefined;
@@ -41,7 +42,7 @@ function isFilled(v: unknown): boolean {
 export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: CorpDiagnosticoRiesgoTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
 
-  const dxVals = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcDxCie10, data?.mcDxOsiics];
+  const dxVals = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcDxCie10];
   const dxFilled = dxVals.filter(isFilled).length;
 
   // Framingham se retiró (requiere paraclínicos que esta consulta no toma) y
@@ -93,8 +94,12 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
           <TextField historiaId={historiaId} field="mc_dx_nutricional" initialValue={data?.mcDxNutricional} onSaved={onPatchLocal} label="Nutricional" />
           <TextField historiaId={historiaId} field="mc_dx_cardiovascular" initialValue={data?.mcDxCardiovascular} onSaved={onPatchLocal} label="Cardiovascular" />
           <TextField historiaId={historiaId} field="mc_dx_osteomuscular" initialValue={data?.mcDxOsteomuscular} onSaved={onPatchLocal} label="Osteomuscular" />
-          <TextField historiaId={historiaId} field="mc_dx_cie10" initialValue={data?.mcDxCie10} onSaved={onPatchLocal} label="CIE-10" placeholder="Ej. Z103" />
-          <TextField historiaId={historiaId} field="mc_dx_osiics" initialValue={data?.mcDxOsiics} onSaved={onPatchLocal} label="OSIICS" />
+          {/* Buscador multi-selección a ancho completo. OSIICS se retiró: el equipo
+              médico lo descartó en la revisión (cambio 3) y su columna queda
+              huérfana pero intacta por si hubiera datos. */}
+          <div className="md:col-span-2">
+            <Cie10Field historiaId={historiaId} field="mc_dx_cie10" initialValue={data?.mcDxCie10} onSaved={onPatchLocal} label="Diagnósticos CIE-10" />
+          </div>
         </div>
       </Modal>
 

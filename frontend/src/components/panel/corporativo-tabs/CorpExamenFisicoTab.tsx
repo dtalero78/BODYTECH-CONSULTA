@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Scale, HeartPulse, Gauge, Hand } from 'lucide-react';
+import { Scale, HeartPulse, Gauge, Hand, Stethoscope } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
@@ -106,7 +106,7 @@ interface CorpExamenFisicoTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'signos' | 'fc'  | 'ruffier' | 'handgrip' | 'obs' | null;
+type ModalKey = 'signos' | 'fc' | 'ruffier' | 'handgrip' | 'examen' | null;
 
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -220,8 +220,18 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   const handgripVals = [data?.mcHandgripDer1, data?.mcHandgripIzq1, data?.mcHandgripDer2, data?.mcHandgripIzq2];
   const handgripFilled = handgripVals.filter(isFilled).length;
 
-  const obsVals = [data?.mcIcc, data?.mcWells, data?.mcExamenObservaciones];
-  const obsFilled = obsVals.filter(isFilled).length;
+  // Card "Examen Físico": revisión por sistemas (14) + estabilidad unipodal,
+  // Wells y observaciones. Antes el contador de Observaciones miraba `mcIcc`,
+  // que ya vive en Composición corporal, en vez de la estabilidad que sí se
+  // muestra en el modal: el card podía verse incompleto con todo diligenciado.
+  const examenVals = [
+    data?.mcRsCabeza, data?.mcRsParesCraneales, data?.mcRsCara, data?.mcRsAbdPelvis,
+    data?.mcRsCuello, data?.mcRsTorax, data?.mcRsPiel, data?.mcRsAbdomen, data?.mcRsPulsos,
+    data?.mcRsFuerzaMmss, data?.mcRsFuerzaMmii, data?.mcRsPushUps, data?.mcRsAbdominales,
+    data?.mcRsOsteomuscular,
+    data?.mcPropiocepcion, data?.mcWells, data?.mcExamenObservaciones,
+  ];
+  const examenFilled = examenVals.filter(isFilled).length;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -268,12 +278,12 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         onEdit={() => setOpenModal('handgrip')}
       />
       <Card
-        icon={<Activity size={16} />}
-        title="Observaciones del examen"
-        subtitle={obsFilled === 0 ? 'Sin observaciones' : `${obsFilled} de ${obsVals.length} campos completos`}
-        state={obsFilled === 0 ? 'empty' : obsFilled === obsVals.length ? 'complete' : 'partial'}
-        completionPct={Math.round((obsFilled / obsVals.length) * 100)}
-        onEdit={() => setOpenModal('obs')}
+        icon={<Stethoscope size={16} />}
+        title="Examen Físico"
+        subtitle={examenFilled === 0 ? 'Sin hallazgos registrados' : `${examenFilled} de ${examenVals.length} campos completos`}
+        state={examenFilled === 0 ? 'empty' : examenFilled === examenVals.length ? 'complete' : 'partial'}
+        completionPct={Math.round((examenFilled / examenVals.length) * 100)}
+        onEdit={() => setOpenModal('examen')}
       />
 
       {/* ============ Signos y composición corporal ============ */}
@@ -461,38 +471,64 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       </Modal>
 
       {/* ============ Observaciones ============ */}
+      {/* ============ Examen Físico (revisión por sistemas + estabilidad/Wells/obs) ============ */}
       <Modal
-        open={openModal === 'obs'}
+        open={openModal === 'examen'}
         onClose={() => setOpenModal(null)}
-        crumb="Examen Físico · Observaciones"
-        title="Observaciones del examen"
-        icon={<Activity size={18} />}
+        crumb="Examen Físico · Revisión y hallazgos"
+        title="Examen Físico"
+        icon={<Stethoscope size={18} />}
         isMaxed
         showEyePill={false}
         size="wide"
       >
-        {/* El ICC se movió a Composición corporal (es una medida de composición y
-            necesita el perímetro de cadera). Aquí quedó la estabilidad unipodal. */}
+        <div className="flex flex-col gap-5">
+          <div>
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Revisión por sistemas</div>
+        {/* 3 columnas en pantallas anchas: son 14 campos cortos, así baja de 7 a 5 filas */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-          <SelectField
-            historiaId={historiaId}
-            field="mc_propiocepcion"
-            initialValue={data?.mcPropiocepcion}
-            onSaved={onPatchLocal}
-            label="Estabilidad unipodal"
-            options={ESTABILIDAD_UNIPODAL_OPTS}
-            placeholder="Seleccionar..."
-          />
-          <TextField
-            historiaId={historiaId}
-            field="mc_wells"
-            initialValue={data?.mcWells}
-            onSaved={onPatchLocal}
-            label="Wells (cm dedos–piso)"
-            placeholder="Prueba modificada"
-          />
-          <div className="md:col-span-2 xl:col-span-3">
-            <TextareaField historiaId={historiaId} field="mc_examen_observaciones" initialValue={data?.mcExamenObservaciones} onSaved={onPatchLocal} label="Observaciones" rows={3} />
+          <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
+          <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
+          <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
+          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmss" initialValue={data?.mcRsFuerzaMmss} onSaved={onPatchLocal} label="Fuerza muscular MMSS" placeholder="5 de 5" />
+          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
+          <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
+          <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
+          <div>
+            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
+          </div>
+        </div>
+          </div>
+          <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Estabilidad, flexibilidad y observaciones</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              <SelectField
+                historiaId={historiaId}
+                field="mc_propiocepcion"
+                initialValue={data?.mcPropiocepcion}
+                onSaved={onPatchLocal}
+                label="Estabilidad unipodal"
+                options={ESTABILIDAD_UNIPODAL_OPTS}
+                placeholder="Seleccionar..."
+              />
+              <TextField
+                historiaId={historiaId}
+                field="mc_wells"
+                initialValue={data?.mcWells}
+                onSaved={onPatchLocal}
+                label="Wells (cm dedos–piso)"
+                placeholder="Prueba modificada"
+              />
+              <div className="md:col-span-2 xl:col-span-3">
+                <TextareaField historiaId={historiaId} field="mc_examen_observaciones" initialValue={data?.mcExamenObservaciones} onSaved={onPatchLocal} label="Observaciones" rows={3} />
+              </div>
+            </div>
           </div>
         </div>
       </Modal>

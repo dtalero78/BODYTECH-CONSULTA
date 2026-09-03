@@ -66,7 +66,6 @@ function camposPorSeccion(
       { label: 'Motivo de consulta', value: d?.motivoConsultaTexto },
       { label: 'Enfermedad actual', value: d?.mcEnfermedadActual },
       { label: 'Síntomas en ejercicio', value: d?.mcSintDolorToracico },
-      { label: 'Revisión por sistemas', value: d?.mcRsTorax },
     ],
     c3: [
       { label: 'Antecedentes familiares', value: d?.mcFamCardiaca },
@@ -96,6 +95,7 @@ function camposPorSeccion(
       { label: 'SatO2', value: d?.mcSato2, opcional: true },
       { label: 'Frecuencia respiratoria', value: d?.mcFrecResp, opcional: true },
       { label: 'Perímetro abdominal', value: d?.mcPerimetroAbdominal, opcional: true },
+      { label: 'Revisión por sistemas', value: d?.mcRsTorax },
       { label: 'Observaciones del examen', value: d?.mcExamenObservaciones, opcional: true },
     ],
     c6: [

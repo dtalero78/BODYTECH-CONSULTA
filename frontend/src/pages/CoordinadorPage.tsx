@@ -16,6 +16,7 @@ import {
   UserCog,
   Map,
   Fingerprint,
+  Database,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -25,11 +26,19 @@ import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { TorniqueteView } from '../components/coordinador/TorniqueteView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
+import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
-type View = 'profesionales' | 'calendario' | 'torniquete' | 'ordenes' | 'indicadores' | 'usuarios';
+type View =
+  | 'profesionales'
+  | 'calendario'
+  | 'torniquete'
+  | 'ordenes'
+  | 'indicadores'
+  | 'usuarios'
+  | 'directorio';
 
 interface NavBadge {
   text: string;
@@ -51,6 +60,7 @@ export function CoordinadorPage() {
     torniquete: undefined,
     ordenes: undefined,
     indicadores: undefined,
+    directorio: undefined,
     usuarios: undefined,
   });
 
@@ -127,6 +137,17 @@ export function CoordinadorPage() {
 
   const isMapaUser = useMemo(
     () => MAPA_ALLOWED.includes((authService.getUser()?.email || '').toLowerCase()),
+    [],
+  );
+
+  // "Base Profesionales": muestra la planta COMPLETA de la cadena, con cédulas,
+  // incluidas regionales donde el usuario no opera. Por eso va por lista de
+  // emails y no por rol — `admin` la abriría a todos los administradores.
+  // Esta lista solo decide si se dibuja el ítem; quien manda es el backend
+  // (directorio.routes.ts), que devuelve 403 a quien no esté.
+  const DIRECTORIO_ALLOWED = ['danieltalero78@gmail.com'];
+  const isDirectorioUser = useMemo(
+    () => DIRECTORIO_ALLOWED.includes((authService.getUser()?.email || '').toLowerCase()),
     [],
   );
 
@@ -272,6 +293,14 @@ export function CoordinadorPage() {
                 }
               />
             )}
+            {isDirectorioUser && (
+              <NavItem
+                icon={<Database className="w-[15px] h-[15px]" />}
+                label="Base Profesionales"
+                active={view === 'directorio'}
+                onClick={() => setView('directorio')}
+              />
+            )}
             <NavItem
               icon={<Building2 className="w-[15px] h-[15px]" />}
               label="Sedes"
@@ -346,6 +375,9 @@ export function CoordinadorPage() {
           )}
           {view === 'usuarios' && (
             <UsuariosView key={`usr-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'directorio' && isDirectorioUser && (
+            <DirectorioView key={`dir-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

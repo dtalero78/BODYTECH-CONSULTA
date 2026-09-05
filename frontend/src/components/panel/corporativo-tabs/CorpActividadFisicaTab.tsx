@@ -3,7 +3,7 @@ import { Dumbbell } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { Calculated } from '../Calculated';
-import { TextField, SelectField, PillToggleField } from '../fields';
+import { TextField, SelectField, PillToggleField, MultiPillField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
@@ -19,8 +19,13 @@ const opt = (vals: string[]): ReadonlyArray<DropdownOption> =>
   vals.map((v) => ({ value: v, label: v }));
 
 /** Dónde entrena. La plantilla traía tipos de deporte; el equipo médico pidió
- *  el lugar, porque en sedes corporativas se mezcla gimnasio y casa. */
-const MODALIDAD_OPTS = opt(['Gym', 'Casa', 'Outdoor']);
+ *  el lugar, porque en sedes corporativas se mezcla gimnasio y casa.
+ *
+ *  Selección múltiple, no una sola: el mismo equipo reportó que hay gente que
+ *  combina (gimnasio y casa, o gimnasio y aire libre) y con una única opción
+ *  quedaba obligado a elegir una y perder la otra. Se guarda separado por coma
+ *  en la misma columna, así que lo ya diligenciado se sigue leyendo. */
+const MODALIDAD_OPTS: ReadonlyArray<string> = ['Gym', 'Casa', 'Outdoor'];
 
 /** Catálogo de la hoja "Listas" del Excel, sin la opción "Otro" (decisión del
  *  equipo médico: "esos son los seis, sin ningún otro"). */
@@ -230,14 +235,13 @@ export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpA
                 min={0}
                 max={24}
               />
-              <SelectField
+              <MultiPillField
                 historiaId={historiaId}
                 field="mc_af_modalidad"
                 initialValue={data?.mcAfModalidad}
                 onSaved={onPatchLocal}
                 label="¿Dónde entrena?"
                 options={MODALIDAD_OPTS}
-                placeholder="Seleccionar..."
               />
               <SelectField
                 historiaId={historiaId}

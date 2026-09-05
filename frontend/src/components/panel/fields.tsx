@@ -215,6 +215,111 @@ export function PillToggleField(props: PillToggleFieldProps) {
   );
 }
 
+interface MultiPillFieldProps extends CommonProps {
+  options: ReadonlyArray<string>;
+  /** Aclaración al lado del label. Por defecto avisa que admite varias. */
+  hint?: string;
+}
+
+/**
+ * Selección MÚLTIPLE sobre un catálogo corto, con la estética segmented de
+ * `PillToggle`: cada opción se prende y se apaga por separado.
+ *
+ * Guarda los valores separados por coma en la MISMA columna de texto que usaba
+ * el `SelectField` de una sola opción, así que las historias ya diligenciadas
+ * ("Gym") se siguen leyendo y editando igual.
+ *
+ * Si la columna trae un valor que ya no está en el catálogo, se pinta igual al
+ * final en vez de ignorarlo: si no, el dato quedaría guardado sin forma de verlo
+ * ni de quitarlo (pasa con los campos cuyo catálogo cambió sobre la marcha).
+ *
+ * No es un `Dropdown` con checkboxes a propósito: con tres o cuatro opciones el
+ * desplegable agrega dos clics y esconde justo lo que hay elegido.
+ */
+export function MultiPillField(props: MultiPillFieldProps) {
+  const [vals, setVals] = useState<string[]>(() => parseLista(props.initialValue));
+
+  useEffect(() => {
+    setVals(parseLista(props.initialValue));
+  }, [props.initialValue]);
+
+  useFieldAutoSave({
+    historiaId: props.historiaId,
+    field: props.field,
+    value: vals.length === 0 ? null : vals.join(', '),
+    onSaved: props.onSaved,
+  });
+
+  /** Catálogo + lo que hubiera guardado fuera de él. */
+  const conExtras = (sel: ReadonlyArray<string>) => [
+    ...props.options,
+    ...sel.filter((v) => !props.options.includes(v)),
+  ];
+  const todas = conExtras(vals);
+
+  // Actualización funcional: dos clics dentro del mismo render (o un doble clic
+  // rápido) leerían el mismo `vals` y el segundo pisaría al primero.
+  // Se reconstruye recorriendo el catálogo para que el orden guardado no dependa
+  // del orden en que la persona fue marcando.
+  const alternar = (op: string) => {
+    setVals((prev) =>
+      conExtras(prev).filter((o) => (o === op ? !prev.includes(op) : prev.includes(o)))
+    );
+  };
+
+  const hint = props.hint ?? 'Puede marcar varias';
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {props.label && (
+        <label className="text-[10.5px] font-semibold text-[var(--p-text-2)] tracking-widest uppercase">
+          {props.label} {props.required && <span className="text-[var(--p-danger)] ml-0.5">*</span>}
+          {hint && (
+            <span className="ml-1.5 normal-case tracking-normal font-medium text-[var(--p-text-3)]">
+              {hint}
+            </span>
+          )}
+        </label>
+      )}
+      <div
+        role="group"
+        aria-label={props.label}
+        className={`inline-flex flex-wrap gap-[3px] bg-[var(--p-input)] rounded-[10px] p-[3px] border ${
+          vals.length === 0 ? 'border-dashed border-[var(--p-line-2)]' : 'border-[var(--p-line)]'
+        }`}
+      >
+        {todas.map((op) => {
+          const on = vals.includes(op);
+          return (
+            <button
+              key={op}
+              type="button"
+              aria-pressed={on}
+              onClick={() => alternar(op)}
+              className={`px-4 py-1.5 rounded-lg text-xs transition ${
+                on
+                  ? 'bg-[var(--p-accent)] text-[var(--p-on-accent)] font-bold'
+                  : 'text-[var(--p-text-2)] font-semibold hover:text-[var(--p-text)]'
+              }`}
+            >
+              {op}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Lista guardada como "A, B" → ["A","B"], sin vacíos ni repetidos. */
+function parseLista(raw: unknown): string[] {
+  if (raw === null || raw === undefined) return [];
+  return String(raw)
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v, i, arr) => v !== '' && arr.indexOf(v) === i);
+}
+
 export function SelectField(
   props: CommonProps & {
     options: ReadonlyArray<DropdownOption>;

@@ -80,7 +80,7 @@ function camposPorSeccion(
       { label: 'Sesiones por semana', value: d?.mcAfSesionesSemana },
       { label: 'Meses de práctica', value: d?.mcAfMeses },
       { label: 'Experiencia en gimnasio', value: d?.mcAfExperienciaGym },
-      { label: 'Modalidad', value: d?.mcAfModalidad },
+      { label: 'Dónde entrena', value: d?.mcAfModalidad },
       { label: 'Objetivo', value: d?.mcAfObjetivo },
     ],
     c5: [

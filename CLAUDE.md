@@ -157,6 +157,11 @@ The module evaluates consultation quality by:
 
 **ffmpeg dependency**: `extraerAudio` writes to a temp file (not a pipe/stdin) to avoid cross-platform stream issues.
 
+**Solo se graba una MUESTRA de consultas** (`CHIME_SAMPLES_PER_MONTH`, default 10 por coach al mes; ver `chime-recording.debeGrabarPorMuestreo`). En 30 días: ~139 grabadas de ~1.127 atendidas. Consecuencias que hay que tener presentes al tocar Calidad:
+
+- Una consulta sin grabación **no es un error**: es lo normal (86%). `ensureComposition` devuelve `'no_recording'` para ese caso y `'processing'` solo cuando el MP4 de verdad viene en camino. Confundirlos dejaba la pantalla girando para siempre — la fila de `chime_recordings` se crea AL EMPEZAR a grabar, así que una sala terminada sin fila no va a tener video nunca.
+- **Casi todas son evaluables igual**: la transcripción del navegador corre en TODAS las consultas (~1.095 de 1.127). `getSession` expone `tieneTranscripcion` y `dispararEvaluacion` acepta evaluar solo con el texto; la pantalla ofrece "Transcripción de la consulta" como fuente cuando no hay video.
+
 **Rúbrica** ([backend/src/helpers/rubrica-calidad.ts](backend/src/helpers/rubrica-calidad.ts)) — la vigente es `RUBRICA_BODYTECH`, la "Auditoría Integral de Calidad": 19 ítems en 6 categorías que suman 100 puntos (Preparación 10, Apertura y conexión 20, Descubrimiento 20, Calidad técnica 20, Gestión comercial 20, Cierre 10). `getRubrica(medico)` la devuelve por defecto; YURI conserva `RUBRICA_PSICOLOGICA` (legacy) y `RUBRICA` (médica ocupacional) quedó fuera de rotación.
 
 - **Escalas.** Cada ítem se califica 1-5. La rúbrica Bodytech usa `escala: 'puntos'` → cada ítem aporta `((puntaje - 1) / 4) × sus puntos`, rango **[0, 100]** (un ítem incumplido vale 0). Las legacy usan `escala: 'x20'` → `suma_ponderada × 20`, rango [20, 100].

@@ -18,6 +18,7 @@ import { MonitorMybodytechPage } from './pages/MonitorMybodytechPage';
 import { ReprogramarPage } from './pages/ReprogramarPage';
 import { TerminosPage } from './pages/TerminosPage';
 import { LoginPage } from './pages/LoginPage';
+import { RegistroPage } from './pages/RegistroPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordPages';
 import BodyVibeTechPage from './pages/BodyVibeTechPage';
 import AppsPublicadosPage from './pages/AppsPublicadosPage';
@@ -82,6 +83,9 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           {/* Login unificado (RBAC). Las páginas de login viejas redirigen aquí. */}
           <Route path="/login" element={<LoginPage />} />
+          {/* Registro de profesionales: la pantalla es de acá, la cuenta se
+              crea en ACC (ver RegistroPage). */}
+          <Route path="/registro" element={<RegistroPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/coordinador-login" element={<Navigate to="/login" replace />} />

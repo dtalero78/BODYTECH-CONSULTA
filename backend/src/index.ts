@@ -116,6 +116,13 @@ app.use(
 );
 
 // Body parser
+//
+// El registro de profesionales manda la foto de perfil como data URL DENTRO
+// del JSON, y no cabe en los 100 KB por defecto. Se le sube el techo solo a esa
+// ruta —montada antes del parser global, que después la ve ya parseada— en vez
+// de a toda la API: el resto de los endpoints reciben formularios, no archivos,
+// y un límite chico ahí es una defensa gratis contra un POST enorme.
+app.use('/api/auth/registro', express.json({ limit: '1mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

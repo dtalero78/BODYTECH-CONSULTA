@@ -73,7 +73,8 @@ class LlamadasVozController {
       if (!r.ok) {
         const status =
           r.error === 'HISTORIA_NO_ENCONTRADA' ? 404
-          : r.error === 'DB_ERROR' || r.error === 'TWILIO_ERROR' || r.error === 'TWILIO_NO_CONFIGURADO' ? 502
+          : r.error === 'DB_ERROR' ? 502
+          : r.error === 'SOFTPHONE_NO_CONFIGURADO' ? 503
           : 409;
         res.status(status).json({ success: false, error: r.error });
         return;
@@ -82,6 +83,17 @@ class LlamadasVozController {
     } catch (e) {
       next(e);
     }
+  };
+
+  /** GET /api/twilio/voz/token — lo que el navegador necesita para conectarse. */
+  token = (req: Request, res: Response): void => {
+    const session = getSession(req);
+    const t = session ? llamadasVozService.tokenVoz(session) : null;
+    if (!t) {
+      res.status(503).json({ success: false, error: 'SOFTPHONE_NO_CONFIGURADO' });
+      return;
+    }
+    res.json({ success: true, ...t });
   };
 
   /** GET /api/twilio/llamadas/:id — estado, para que el panel lo siga en vivo. */
@@ -180,6 +192,49 @@ class LlamadasVozController {
         base: baseUrlPublica(),
       })
     );
+  };
+
+  /**
+   * POST /llamadas/softphone — voice_url de la TwiML App. El navegador del coach
+   * se conectó; Twilio manda `llamadaId` (parámetro del SDK), `From` (la
+   * identidad del token) y `CallSid`. Devuelve el mismo TwiML del <Dial>.
+   */
+  softphone = async (req: Request, res: Response): Promise<void> => {
+    const params = validarFirma(req, res);
+    if (!params) return;
+    const id = Number(params.llamadaId);
+    const llamada =
+      Number.isInteger(id) && id > 0 && params.CallSid
+        ? await llamadasVozService.conectarSoftphone(id, params.CallSid, params.From || '')
+        : null;
+    if (!llamada) {
+      xml(
+        res,
+        `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="es-MX">No encontré la llamada.</Say><Hangup/></Response>`
+      );
+      return;
+    }
+    xml(
+      res,
+      twimlParaCoach({
+        llamadaId: llamada.id,
+        pacienteNombre: llamada.pacienteNombre || '',
+        pacienteCelular: llamada.pacienteCelular,
+        base: baseUrlPublica(),
+      })
+    );
+  };
+
+  /** POST /llamadas/estado-app — status_callback de la TwiML App (tramo del coach, por CallSid). */
+  estadoApp = async (req: Request, res: Response): Promise<void> => {
+    const params = validarFirma(req, res);
+    if (!params) return;
+    res.status(200).send();
+    if (!params.CallSid) return;
+    const dur = params.CallDuration != null ? Number(params.CallDuration) : NaN;
+    llamadasVozService
+      .registrarEstadoPorCallSid(params.CallSid, params.CallStatus || '', Number.isFinite(dur) ? dur : null)
+      .catch((e) => console.error('[llamadas-voz] estado-app falló:', e?.message ?? e));
   };
 
   /** POST /:id/aviso — el paciente contestó: aviso de grabación antes de unir. */

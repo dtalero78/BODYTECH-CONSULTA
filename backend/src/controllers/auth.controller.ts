@@ -31,6 +31,20 @@ const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
+const registroBuscarSchema = z.object({
+  documento: z.string().min(1),
+});
+
+// La validación de fondo (¿existe la cédula? ¿es fisioterapeuta? ¿el correo
+// está libre?) la hace ACC, que es quien tiene el directorio y la tabla. Acá
+// solo se comprueba la forma, para no reenviar basura ni pagar el viaje.
+const registroSchema = z.object({
+  documento: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
+  foto: z.string().startsWith('data:image/', 'La foto no llegó en el formato esperado.'),
+});
+
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
@@ -116,6 +130,65 @@ class AuthController {
 
       const status = result.error === 'DB_ERROR' ? 500 : 401;
       res.status(status).json({ success: false, error: result.error ?? 'UNKNOWN' });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ==========================================================================
+  // Registro de profesionales (público). La pantalla es de acá; la cuenta se
+  // crea en ACC. Ver `authService.proxyRegistro` para por qué es un proxy.
+  // ==========================================================================
+
+  /**
+   * POST /api/auth/registro/buscar — cruza la cédula contra el directorio
+   * compartido y devuelve la ficha para que la persona la confirme.
+   */
+  registroBuscar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = registroBuscarSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(422).json({ ok: false, codigo: 'validacion_fallida', mensaje: 'Falta la cédula.' });
+        return;
+      }
+      const { status, body } = await authService.proxyRegistro('buscar', parsed.data);
+      res.status(status).json(body);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /api/auth/registro — crea la cuenta en ACC y devuelve el handoff.
+   *
+   * La respuesta lleva `redirectUrl` + `token` con la misma forma que un login
+   * hacia una app hermana, así que el frontend termina el registro por el mismo
+   * camino que ya conoce: `${redirectUrl}#t=${token}`.
+   */
+  registro = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parsed = registroSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(422).json({
+          ok: false,
+          codigo: 'validacion_fallida',
+          mensaje: parsed.error.errors[0]?.message ?? 'Datos del registro inválidos.',
+        });
+        return;
+      }
+
+      const { status, body } = await authService.proxyRegistro('crear', parsed.data);
+      const datos = body as { ok?: boolean; token?: string };
+      if (status === 201 && datos?.token) {
+        res.status(201).json({
+          ok: true,
+          program: 'acc',
+          token: datos.token,
+          redirectUrl: authService.ssoUrlAcc(),
+        });
+        return;
+      }
+      res.status(status).json(body);
     } catch (err) {
       next(err);
     }

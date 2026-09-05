@@ -191,9 +191,9 @@ Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&f
 
 Distinta del robot de siempre (`/api/twilio/voice-call`, que reproduce `pbxBody.mp3` sin coach en la línea). Acá el coach **habla** con el paciente y la conversación **queda grabada**. Código en [backend/src/services/llamadas-voz.service.ts](backend/src/services/llamadas-voz.service.ts).
 
-**Puente por celular, dos tramos.** El coach aprieta "Llamar" en el panel → Twilio marca **primero al celular del coach** (sale de `usuarios.celular`) → cuando contesta, `/twiml` le dice "conectando con Juan" y hace `<Dial>` al paciente → el paciente oye el **aviso de grabación** (`/aviso`, obligatorio por Ley 1581, queda dentro del audio) → se unen. `record="record-from-answer-dual"`: dos canales separados, coach y paciente — es lo que le permite a Calidad saber quién dijo qué. Se eligió el celular y no un softphone en el navegador porque no pide micrófono, no depende del wifi del coach, y el panel ya carga la videollamada; el servidor no cambia si algún día se suma el softphone.
+**Softphone en el navegador, un tramo telefónico.** El coach aprieta "Llamar" → `POST /api/twilio/llamadas` crea la fila → el navegador se conecta a Twilio con `@twilio/voice-sdk` (cargado bajo demanda; pide micrófono la primera vez) usando el token de `GET /api/twilio/voz/token` → Twilio pide el `voice_url` de la TwiML App **"Bodytech · Llamada del coach"** (`TWILIO_VOICE_APP_SID`) = `/api/twilio/llamadas/softphone`, que responde "conectando con Juan" y `<Dial callerId=+576016284820>` al paciente → el paciente oye el **aviso de grabación** (`/aviso`, obligatorio por Ley 1581, queda dentro del audio) → se unen. `record="record-from-answer-dual"`: dos canales separados, coach y paciente — es lo que le permite a Calidad saber quién dijo qué. **El paciente siempre ve el número de Bodytech**; el coach no usa su celular (el primer diseño marcaba al celular del coach y se descartó).
 
-**Los celulares los resuelve el servidor**, nunca el cliente: el paciente de `HistoriaClinica.celular`, el coach de `usuarios.celular`. `POST /api/twilio/llamadas` solo recibe `historiaId`. Sin esto, cualquiera con sesión podría usar el número de Bodytech para llamar a quien quiera.
+**El celular del paciente lo resuelve el servidor** (`HistoriaClinica.celular`), nunca el cliente: `POST /api/twilio/llamadas` solo recibe `historiaId`. Sin esto, cualquiera con sesión podría usar el número de Bodytech para llamar a quien quiera. El token de voz es solo-saliente y va atado a la identidad `coach-<userId>`; `/softphone` rechaza una llamada cuyo `From` no sea el coach que la creó. Los estados del tramo del navegador llegan por el `status_callback` de la TwiML App (`/estado-app`), solo con `CallSid`.
 
 **Estados: máquina pura (`aplicarEvento`).** Los webhooks de Twilio llegan repetidos y desordenados; cada `UPDATE` exige el estado previo y nunca retrocede desde un terminal (`completada`, `sin_respuesta`, `coach_no_contesto`, `fallida`). Las llamadas sin cierre a los 20 min se dan por `fallida` al consultar (`cerrarHuerfanas`), así el panel no se queda "en llamada" para siempre.
 
@@ -201,7 +201,7 @@ Distinta del robot de siempre (`/api/twilio/voice-call`, que reproduce `pbxBody.
 
 **Calidad la evalúa como una fuente más.** `Grabacion` en `calidad.service` tiene `kind: 'voz'`; `getSession` devuelve `llamadasVoz` y la pantalla deja elegir "video de la consulta" o "llamada del dd/mm". El MP3 va derecho a Whisper (sin ffmpeg: son archivos chicos). `consulta_evaluaciones.fuente` ('video'|'voz'|'transcript') y `llamada_id` dicen qué se evaluó. Si la historia no tiene video pero sí una llamada grabada, se evalúa la llamada por defecto.
 
-**Router `/api/twilio` sin middleware en el mount, a propósito**: los webhooks deben entrar sin JWT. El RBAC va por ruta, y los webhooks validan la firma de Twilio con el token de **voz** (`TWILIO_VOICE_AUTH_TOKEN`, con fallback al general): Twilio firma con el token de la cuenta que hizo la llamada.
+**Router `/api/twilio` sin middleware en el mount, a propósito**: los webhooks deben entrar sin JWT. El RBAC va por ruta, y los webhooks validan la firma de Twilio con el token de **voz** (`TWILIO_VOICE_AUTH_TOKEN`, con fallback al general): Twilio firma con el token de la cuenta que hizo la llamada. `/llamadas/softphone` y `/llamadas/estado-app` van declarados **antes** de `/llamadas/:id/…` para que no se lean como un id.
 
 ### PDF export (Puppeteer)
 
@@ -434,6 +434,8 @@ LINK_AUTO_EXIGIR_PROFESIONAL=false             # exige que el `medico` exista y 
 TWILIO_VOICE_ACCOUNT_SID=                      # opcional; default TWILIO_ACCOUNT_SID
 TWILIO_VOICE_AUTH_TOKEN=                       # opcional; default TWILIO_AUTH_TOKEN
 TWILIO_VOICE_FROM=+576016284820                # número saliente (el que ya conoce el paciente)
+TWILIO_VOICE_APP_SID=APcfe7cad0b40333dda10b8e744b9f0b2e   # TwiML App "Bodytech · Llamada del coach" (voice_url=/softphone)
+# El token de voz lo firma la API Key de siempre (TWILIO_API_KEY_SID/SECRET, Standard).
 # PUBLIC_BASE_URL también la usan estos webhooks (Twilio tiene que alcanzarnos).
 
 # PostgreSQL (Digital Ocean managed)
@@ -564,7 +566,7 @@ These docs go deeper than this file — read them when working on a specific are
 - **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
 - **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
 - **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link `LINK_AUTO_MINUTOS_ANTES` antes de cada cita (Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
-- **Llamada del coach al paciente, grabada**: botón "Llamar" en el panel (reemplaza al robot de "Rellamar"), puente por celular con Twilio Voice (`llamadas-voz.service.ts`), aviso de grabación al paciente, tabla `llamadas_voz`, audio solo para coordinador/admin en la historia, y evaluable desde Calidad como fuente `voz`.
+- **Llamada del coach al paciente, grabada**: botón "Llamar" en el panel (reemplaza al robot de "Rellamar"), softphone en el navegador con Twilio Voice (`llamadas-voz.service.ts`; el paciente ve el número de Bodytech), aviso de grabación al paciente, tabla `llamadas_voz`, audio solo para coordinador/admin en la historia, y evaluable desde Calidad como fuente `voz`.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.
 - **Twilio Voice**: TwiML webhook con audio Bodytech, número unificado `+576016284820`.

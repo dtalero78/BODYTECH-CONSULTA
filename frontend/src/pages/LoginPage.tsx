@@ -158,6 +158,27 @@ export function LoginPage() {
             ¿Olvidaste tu contraseña?
           </a>
         </form>
+
+        {/*
+          Registro de profesionales. Fuera del <form> y con separador: es otra
+          acción, no un campo más del login, y meterlo adentro hacía que Enter
+          en la contraseña pudiera activarlo.
+
+          Hoy solo crea cuentas de Composición Corporal —el único programa que
+          se da de alta contra el directorio de RRHH— y por eso lo dice: quien
+          venga de telemedicina o prepagadas no debe intentarlo y descubrir que
+          no era para él después de teclear su cédula.
+        */}
+        <div className="mt-6 pt-5 border-t border-zinc-100 text-center">
+          <p className="text-[13px] text-zinc-500">¿Sos fisioterapeuta del programa de Composición Corporal?</p>
+          <button
+            type="button"
+            onClick={() => navigate('/registro')}
+            className="mt-2 w-full py-2.5 rounded-md text-[13px] font-medium text-[#1f3a8a] bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors"
+          >
+            Regístrate aquí
+          </button>
+        </div>
       </div>
     </div>
   );

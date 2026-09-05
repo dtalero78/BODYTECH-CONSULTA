@@ -120,6 +120,37 @@ export interface Sede {
   ciudad: string;
 }
 
+// ── Registro de profesionales ───────────────────────────────────────────────
+//
+// La cuenta se crea en ACC (Composición Corporal); acá vive la pantalla porque
+// bodytech.app es la puerta única. El backend hace de proxy — ver
+// `authService.proxyRegistro` del lado del servidor.
+
+/** Lo que devuelve el paso 1: la ficha del directorio, para confirmar. */
+export interface FichaRegistro {
+  documento: string;
+  nombre: string;
+  cargo: string;
+  sedes: Array<{ slug: string; nombre: string }>;
+}
+
+/**
+ * Mensaje legible para los errores del registro.
+ *
+ * ACC devuelve 422 con un `mensaje` escrito para la persona ("esa cédula ya
+ * tiene una cuenta", "tu ficha no tiene sedes asignadas"). Se muestra tal cual:
+ * traducirlo a un error genérico acá tiraría justo la parte accionable.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function registroErrorMessage(err: any): string {
+  const data = err?.response?.data;
+  if (typeof data?.mensaje === 'string' && data.mensaje) return data.mensaje;
+  if (err?.response?.status === 429) {
+    return 'Demasiados intentos. Esperá un rato o pedile la cuenta a tu coordinador.';
+  }
+  return 'No se pudo completar el registro. Intentá de nuevo en unos minutos.';
+}
+
 class AuthService {
   /**
    * Lista pública de sedes activas (para el <select> del form de login).
@@ -275,6 +306,35 @@ class AuthService {
   isMedicoCorporativo(): boolean {
     const esp = this.getUser()?.especialidad ?? localStorage.getItem(ESP_KEY);
     return normalizeEsp(esp) === 'medico corporativo';
+  }
+
+  /**
+   * Registro paso 1: busca la cédula en el directorio compartido de Bodytech.
+   * Lanza si no aparece, si el rol no es fisioterapeuta o si ya tiene cuenta;
+   * el mensaje del backend explica cuál de los tres.
+   */
+  async registroBuscar(documento: string): Promise<FichaRegistro> {
+    const res = await axios.post(`${API_BASE_URL}/api/auth/registro/buscar`, { documento });
+    const ficha = res.data?.ficha;
+    if (!ficha) throw new Error('Respuesta de registro inválida');
+    return ficha as FichaRegistro;
+  }
+
+  /**
+   * Registro paso 2: crea la cuenta. Devuelve el handoff SSO con la misma forma
+   * que `passwordLogin` para una app hermana, así que la pantalla termina el
+   * registro por el mismo camino: `${redirectUrl}#t=${token}`.
+   */
+  async registroCrear(datos: {
+    documento: string;
+    email: string;
+    password: string;
+    foto: string;
+  }): Promise<{ token: string; redirectUrl: string }> {
+    const res = await axios.post(`${API_BASE_URL}/api/auth/registro`, datos);
+    const { token, redirectUrl } = res.data || {};
+    if (!token || !redirectUrl) throw new Error('Respuesta de registro inválida');
+    return { token, redirectUrl };
   }
 
   getToken(): string | null {

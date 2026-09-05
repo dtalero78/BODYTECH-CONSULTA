@@ -487,6 +487,12 @@ class ApiService {
     return data.llamada;
   }
 
+  /** Token de voz: lo que el navegador necesita para hablar por Twilio. */
+  async getVozToken(): Promise<{ token: string; identity: string; ttl: number }> {
+    const { data } = await this.client.get('/api/twilio/voz/token');
+    return data;
+  }
+
   /** Estado en vivo, para seguirla desde el panel. */
   async getLlamada(id: number): Promise<LlamadaVoz> {
     const { data } = await this.client.get(`/api/twilio/llamadas/${id}`);

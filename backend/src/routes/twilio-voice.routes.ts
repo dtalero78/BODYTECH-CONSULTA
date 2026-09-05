@@ -6,6 +6,7 @@
 // poder entrar sin JWT):
 //
 //   · Llamada del coach al paciente (en vivo, grabada) — ver llamadas-voz.
+//       GET  /voz/token                token del softphone   clínico
 //       POST /llamadas                 iniciar          clínico
 //       GET  /llamadas/:id             estado en vivo   clínico (solo la propia)
 //       GET  /llamadas?historiaId=     historial        coordinador/admin
@@ -30,12 +31,17 @@ const auditoria = requireRole('coordinador', 'admin');
 
 // --- Llamada en vivo ---------------------------------------------------------
 
+router.get('/voz/token', clinico, llamadasVozController.token);
 router.post('/llamadas', clinico, llamadasVozController.iniciar);
 router.get('/llamadas', auditoria, llamadasVozController.listar);
 router.get('/llamadas/:id', clinico, llamadasVozController.get);
 router.get('/llamadas/:id/audio', auditoria, llamadasVozController.audio);
 
-// Webhooks (públicos; validan la firma de Twilio adentro).
+// Webhooks (públicos; validan la firma de Twilio adentro). Los dos primeros
+// los llama la TwiML App "Bodytech · Llamada del coach" (voice_url y
+// status_callback); van ANTES de /:id/… para que "softphone" no se lea como id.
+router.post('/llamadas/softphone', llamadasVozController.softphone);
+router.post('/llamadas/estado-app', llamadasVozController.estadoApp);
 router.post('/llamadas/:id/twiml', llamadasVozController.twiml);
 router.post('/llamadas/:id/aviso', llamadasVozController.aviso);
 router.post('/llamadas/:id/estado', llamadasVozController.estado);

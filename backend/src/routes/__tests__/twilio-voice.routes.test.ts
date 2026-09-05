@@ -21,6 +21,9 @@ jest.mock('../../services/llamadas-voz.service', () => ({
     registrarEstadoLeg: jest.fn().mockResolvedValue(undefined),
     registrarDialFin: jest.fn().mockResolvedValue(undefined),
     registrarGrabacion: jest.fn().mockResolvedValue(undefined),
+    tokenVoz: jest.fn(),
+    conectarSoftphone: jest.fn(),
+    registrarEstadoPorCallSid: jest.fn().mockResolvedValue(undefined),
   },
   credencialesVoz: () => ({ accountSid: 'ACtest', authToken: 'token-de-prueba' }),
   baseUrlPublica: () => 'https://bodytech.app',
@@ -81,9 +84,31 @@ describe('/api/twilio/llamadas', () => {
     });
 
     it('traduce los motivos de rechazo a 409', async () => {
-      svc.iniciar.mockResolvedValue({ ok: false, error: 'SIN_CELULAR_COACH' });
+      svc.iniciar.mockResolvedValue({ ok: false, error: 'SIN_CELULAR_PACIENTE' });
       const res = await request(appConRol('coach')).post('/api/twilio/llamadas').send({ historiaId: 'hc-1' }).expect(409);
-      expect(res.body.error).toBe('SIN_CELULAR_COACH');
+      expect(res.body.error).toBe('SIN_CELULAR_PACIENTE');
+    });
+
+    it('sin TwiML App configurada responde 503, no 500', async () => {
+      svc.iniciar.mockResolvedValue({ ok: false, error: 'SOFTPHONE_NO_CONFIGURADO' });
+      await request(appConRol('coach')).post('/api/twilio/llamadas').send({ historiaId: 'hc-1' }).expect(503);
+    });
+  });
+
+  describe('token del softphone', () => {
+    it('401 sin sesión', async () => {
+      await request(appConRol()).get('/api/twilio/voz/token').expect(401);
+    });
+
+    it('un coach recibe su token', async () => {
+      svc.tokenVoz.mockReturnValue({ token: 'jwt', identity: 'coach-7', ttl: 3600 });
+      const res = await request(appConRol('coach', 7)).get('/api/twilio/voz/token').expect(200);
+      expect(res.body).toMatchObject({ token: 'jwt', identity: 'coach-7' });
+    });
+
+    it('503 si falta la TwiML App o la API Key', async () => {
+      svc.tokenVoz.mockReturnValue(null);
+      await request(appConRol('coach')).get('/api/twilio/voz/token').expect(503);
     });
   });
 
@@ -114,6 +139,17 @@ describe('/api/twilio/llamadas', () => {
   });
 
   describe('webhooks de Twilio', () => {
+    it.each(['softphone', 'estado-app'])('POST /llamadas/%s (TwiML App) sin firma válida → 403', async (hook) => {
+      await request(appConRol())
+        .post(`/api/twilio/llamadas/${hook}`)
+        .set('X-Twilio-Signature', 'falsa')
+        .type('form')
+        .send({ llamadaId: '1', CallSid: 'CAx', From: 'client:coach-7', CallStatus: 'completed' })
+        .expect(403);
+      expect(svc.conectarSoftphone).not.toHaveBeenCalled();
+      expect(svc.registrarEstadoPorCallSid).not.toHaveBeenCalled();
+    });
+
     it.each(['twiml', 'aviso', 'estado', 'dial-fin', 'grabacion'])(
       'POST /llamadas/1/%s sin firma válida → 403 y no toca nada',
       async (hook) => {

@@ -1410,6 +1410,11 @@ class PostgresService {
         CREATE INDEX IF NOT EXISTS idx_llamadas_voz_coach
           ON llamadas_voz (coach_usuario_id, iniciada_at DESC)
       `);
+      // El coach llama desde el navegador (softphone): ya no hay celular del
+      // coach que guardar. Idempotente (DROP NOT NULL sobre nullable es no-op).
+      await this.query(`
+        ALTER TABLE llamadas_voz ALTER COLUMN coach_celular DROP NOT NULL
+      `);
 
       // Calidad puede evaluar una LLAMADA además del video de la consulta.
       // `fuente` dice de dónde salió el transcript; `llamada_id` la ata.

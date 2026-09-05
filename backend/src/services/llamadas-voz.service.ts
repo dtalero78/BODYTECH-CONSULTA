@@ -5,11 +5,14 @@
 // reproducía un audio pregrabado; el coach nunca estaba en la línea. Esto es
 // otra cosa: una conversación real, y con grabación.
 //
-// Cómo se arma (puente por celular, dos tramos):
+// Cómo se arma (softphone en el navegador + un tramo telefónico):
 //
-//   1. El coach aprieta "Llamar". Twilio marca PRIMERO al celular del coach.
-//   2. Cuando el coach contesta, Twilio pide el TwiML de /twiml: le dice
-//      "conectando con Juan" y hace <Dial> al paciente.
+//   1. El coach aprieta "Llamar". El navegador se conecta a Twilio con el SDK
+//      de voz (audífonos, sin celular). Twilio pide el TwiML de /softphone:
+//      "conectando con Juan" y <Dial> al paciente DESDE el número de Bodytech.
+//   2. (El primer diseño marcaba antes al celular del coach. Se descartó: el
+//      coach no debe depender de su teléfono, y el paciente debe ver siempre
+//      el número de Bodytech — que es lo que hace el callerId del <Dial>.)
 //   3. Cuando el paciente contesta, ANTES de unirlos, oye el aviso de /aviso:
 //      "esta llamada será grabada". Es obligatorio (Ley 1581): no es opcional.
 //   4. Quedan unidos. La grabación arranca al contestar el paciente, en dos
@@ -18,10 +21,9 @@
 //   5. Cuelga cualquiera → /dial-fin cierra el estado, y un rato después llega
 //      /grabacion con el audio listo.
 //
-// Por qué al celular y no al navegador: cero permisos de micrófono, no depende
-// del wifi del coach, y el panel ya carga la videollamada — meterle otro motor
-// de audio es riesgo que hoy no hace falta. El servidor queda igual para un
-// softphone después: solo cambiaría el primer tramo.
+// El navegador necesita un token de voz (API Key + TwiML App) que emite
+// `tokenVoz`; la TwiML App tiene voice_url=/softphone y status_callback=
+// /estado-app, así los estados del tramo del coach llegan por CallSid.
 //
 // Los webhooks de Twilio llegan desordenados y repetidos. Por eso las
 // transiciones son una función pura (`aplicarEvento`) y los UPDATE nunca
@@ -32,7 +34,6 @@ import twilio from 'twilio';
 import axios from 'axios';
 import type { Readable } from 'stream';
 import postgresService from './postgres.service';
-import usuariosService from './usuarios.service';
 import { formatCelularE164 } from './link-paciente.service';
 import type { SessionPayload } from './auth.service';
 
@@ -43,8 +44,7 @@ import type { SessionPayload } from './auth.service';
 /** Número saliente unificado de Bodytech — el mismo que ya conoce el paciente. */
 const FROM = process.env.TWILIO_VOICE_FROM || '+576016284820';
 
-/** Segundos que suena el celular del coach / del paciente antes de rendirse. */
-const TIMEOUT_COACH_SEG = 25;
+/** Segundos que suena el celular del paciente antes de rendirse. */
 const TIMEOUT_PACIENTE_SEG = 30;
 
 /** Una llamada sin cierre por webhook después de esto se da por caída. */
@@ -60,6 +60,26 @@ export function credencialesVoz(): { accountSid: string; authToken: string } {
     accountSid: process.env.TWILIO_VOICE_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '',
     authToken: process.env.TWILIO_VOICE_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '',
   };
+}
+
+/** Lo que necesita el navegador para hablar: API Key (firma el token) + TwiML App. */
+export function configSoftphone(): {
+  accountSid: string;
+  apiKeySid: string;
+  apiKeySecret: string;
+  appSid: string;
+} {
+  return {
+    accountSid: process.env.TWILIO_VOICE_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '',
+    apiKeySid: process.env.TWILIO_API_KEY_SID || '',
+    apiKeySecret: process.env.TWILIO_API_KEY_SECRET || '',
+    appSid: process.env.TWILIO_VOICE_APP_SID || '',
+  };
+}
+
+/** Identidad del coach dentro de Twilio: es lo que llega como `From: client:…`. */
+export function identidadCoach(userId: number): string {
+  return `coach-${userId}`;
 }
 
 /** Base pública que Twilio puede alcanzar (en local no hay forma; es prod/staging). */
@@ -269,7 +289,7 @@ export interface LlamadaVoz {
   coachCodigo: string | null;
   coachUsuarioId: number | null;
   coachNombre: string | null;
-  coachCelular: string;
+  coachCelular: string | null;
   sedeId: string | null;
   estado: EstadoLlamada;
   motivoFin: string | null;
@@ -301,7 +321,7 @@ function filaALlamada(r: Record<string, unknown>): LlamadaVoz {
     coachCodigo: r.coach_codigo ? String(r.coach_codigo) : null,
     coachUsuarioId: r.coach_usuario_id != null ? Number(r.coach_usuario_id) : null,
     coachNombre: r.coach_nombre ? String(r.coach_nombre) : null,
-    coachCelular: String(r.coach_celular),
+    coachCelular: r.coach_celular ? String(r.coach_celular) : null,
     sedeId: r.sede_id ? String(r.sede_id) : null,
     estado: String(r.estado) as EstadoLlamada,
     motivoFin: r.motivo_fin ? String(r.motivo_fin) : null,
@@ -321,10 +341,8 @@ function filaALlamada(r: Record<string, unknown>): LlamadaVoz {
 export type ErrorInicio =
   | 'HISTORIA_NO_ENCONTRADA'
   | 'SIN_CELULAR_PACIENTE'
-  | 'SIN_CELULAR_COACH'
   | 'LLAMADA_EN_CURSO'
-  | 'TWILIO_NO_CONFIGURADO'
-  | 'TWILIO_ERROR'
+  | 'SOFTPHONE_NO_CONFIGURADO'
   | 'DB_ERROR';
 
 export type ResultadoInicio =
@@ -337,14 +355,32 @@ export type ResultadoInicio =
 
 class LlamadasVozService {
   /**
-   * Arranca una llamada. Los celulares se resuelven ACÁ, del servidor: el del
-   * paciente de la historia y el del coach de su usuario. El cliente solo manda
-   * la cita — nunca un número, para que nadie pueda usar el número de Bodytech
-   * para llamar a quien quiera.
+   * Token de voz para el navegador del coach. Solo puede hacer llamadas
+   * SALIENTES por la TwiML App de Bodytech; no recibe. Vence en una hora y el
+   * SDK avisa antes (`tokenWillExpire`) para pedir otro.
+   */
+  tokenVoz(session: SessionPayload): { token: string; identity: string; ttl: number } | null {
+    const c = configSoftphone();
+    if (!c.accountSid || !c.apiKeySid || !c.apiKeySecret || !c.appSid) return null;
+    const ttl = 3600;
+    const identity = identidadCoach(session.userId);
+    const { AccessToken } = twilio.jwt;
+    const token = new AccessToken(c.accountSid, c.apiKeySid, c.apiKeySecret, { identity, ttl });
+    token.addGrant(
+      new AccessToken.VoiceGrant({ outgoingApplicationSid: c.appSid, incomingAllow: false })
+    );
+    return { token: token.toJwt(), identity, ttl };
+  }
+
+  /**
+   * Crea la llamada. El celular del PACIENTE se resuelve acá, del servidor: el
+   * cliente solo manda la cita — nunca un número, para que nadie pueda usar el
+   * número de Bodytech para llamar a quien quiera. Después de esto, el
+   * navegador se conecta con el SDK y Twilio pide /softphone.
    */
   async iniciar(historiaId: string, session: SessionPayload): Promise<ResultadoInicio> {
-    const { accountSid, authToken } = credencialesVoz();
-    if (!accountSid || !authToken) return { ok: false, error: 'TWILIO_NO_CONFIGURADO' };
+    const c = configSoftphone();
+    if (!c.appSid || !c.apiKeySid) return { ok: false, error: 'SOFTPHONE_NO_CONFIGURADO' };
 
     const hc = await postgresService.query(
       `SELECT "_id", "numeroId", "primerNombre", "primerApellido", "celular", "medico", "sede_id"
@@ -357,10 +393,6 @@ class LlamadasVozService {
 
     const pacienteCelular = formatCelularE164(String(h.celular || ''));
     if (!pacienteCelular) return { ok: false, error: 'SIN_CELULAR_PACIENTE' };
-
-    const usuario = await usuariosService.findActiveById(session.userId);
-    const coachCelular = formatCelularE164(usuario?.celular || '');
-    if (!coachCelular) return { ok: false, error: 'SIN_CELULAR_COACH' };
 
     // Un coach, una llamada a la vez. Las filas que quedaron colgadas (nunca
     // llegó el cierre de Twilio) se dan por caídas antes de contar.
@@ -383,7 +415,7 @@ class LlamadasVozService {
       `INSERT INTO llamadas_voz
          (historia_id, numero_id, paciente_nombre, paciente_celular,
           coach_codigo, coach_usuario_id, coach_nombre, coach_celular, sede_id, estado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'iniciando')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,'iniciando')
        RETURNING *`,
       [
         historiaId,
@@ -393,43 +425,53 @@ class LlamadasVozService {
         session.codigo ?? (h.medico ? String(h.medico) : null),
         session.userId,
         session.nombre ?? null,
-        coachCelular,
         h.sede_id ? String(h.sede_id) : null,
       ]
     );
     if (!creada || creada.length === 0) return { ok: false, error: 'DB_ERROR' };
-    const llamada = filaALlamada(creada[0]);
+    return { ok: true, llamada: filaALlamada(creada[0]) };
+  }
 
-    // Primer tramo: el celular del coach. Cuando conteste, Twilio pide /twiml.
-    const base = baseUrlPublica();
-    try {
-      const client = twilio(accountSid, authToken);
-      const call = await client.calls.create({
-        to: coachCelular,
-        from: FROM,
-        url: `${base}/api/twilio/llamadas/${llamada.id}/twiml`,
-        method: 'POST',
-        statusCallback: `${base}/api/twilio/llamadas/${llamada.id}/estado?leg=coach`,
-        statusCallbackMethod: 'POST',
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        timeout: TIMEOUT_COACH_SEG,
-      });
-      await postgresService.query(
-        `UPDATE llamadas_voz SET call_sid = $2, estado = 'llamando_coach', updated_at = NOW()
-          WHERE id = $1 AND estado = 'iniciando'`,
-        [llamada.id, call.sid]
-      );
-      return { ok: true, llamada: { ...llamada, callSid: call.sid, estado: 'llamando_coach' } };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error(`❌ [llamadas-voz] Twilio no pudo iniciar la llamada #${llamada.id}: ${msg}`);
-      await postgresService.query(
-        `UPDATE llamadas_voz SET estado = 'fallida', error = $2, finalizada_at = NOW(), updated_at = NOW()
-          WHERE id = $1`,
-        [llamada.id, msg.slice(0, 500)]
-      );
-      return { ok: false, error: 'TWILIO_ERROR', detalle: msg };
+  /**
+   * El navegador del coach se conectó y Twilio pide qué hacer (/softphone).
+   * Solo el coach que creó la llamada puede manejarla: la identidad del token
+   * (`From: client:coach-<id>`) tiene que coincidir con la fila. Marca el
+   * tramo del coach como contestado y guarda el CallSid, que es la única
+   * llave con la que después llegan los estados de la TwiML App.
+   */
+  async conectarSoftphone(
+    id: number,
+    callSid: string,
+    fromIdentity: string
+  ): Promise<LlamadaVoz | null> {
+    const actual = await this.get(id);
+    if (!actual) return null;
+    if (fromIdentity !== `client:${identidadCoach(actual.coachUsuarioId ?? -1)}`) {
+      console.warn(`[llamadas-voz] softphone #${id}: identidad ${fromIdentity} no es la del coach`);
+      return null;
     }
+    if (actual.estado !== 'iniciando' && actual.estado !== 'llamando_coach') return null;
+    const rows = await postgresService.query(
+      `UPDATE llamadas_voz
+          SET call_sid = COALESCE(call_sid, $2), estado = 'llamando_paciente',
+              contestada_coach_at = COALESCE(contestada_coach_at, NOW()), updated_at = NOW()
+        WHERE id = $1 AND estado IN ('iniciando', 'llamando_coach') RETURNING *`,
+      [id, callSid]
+    );
+    return rows && rows.length > 0 ? filaALlamada(rows[0]) : null;
+  }
+
+  /** Estado del tramo del coach, que la TwiML App reporta solo con el CallSid. */
+  async registrarEstadoPorCallSid(
+    callSid: string,
+    status: string,
+    duracionSeg: number | null
+  ): Promise<void> {
+    const rows = await postgresService.query(`SELECT id FROM llamadas_voz WHERE call_sid = $1 LIMIT 1`, [
+      callSid,
+    ]);
+    if (!rows || rows.length === 0) return;
+    await this.registrarEstadoLeg(Number(rows[0].id), 'coach', status, { duracionSeg });
   }
 
   async get(id: number): Promise<LlamadaVoz | null> {
@@ -546,12 +588,21 @@ class LlamadasVozService {
    * perdido). Se dan por fallidas para que el coach pueda volver a llamar.
    */
   async cerrarHuerfanas(): Promise<void> {
+    const terminales = ESTADOS_TERMINALES.map((e) => `'${e}'`).join(',');
     await postgresService.query(
       `UPDATE llamadas_voz
           SET estado = 'fallida', motivo_fin = COALESCE(motivo_fin, 'huerfana'),
               finalizada_at = COALESCE(finalizada_at, NOW()), updated_at = NOW()
-        WHERE estado NOT IN (${ESTADOS_TERMINALES.map((e) => `'${e}'`).join(',')})
+        WHERE estado NOT IN (${terminales})
           AND iniciada_at < NOW() - INTERVAL '${MINUTOS_LLAMADA_HUERFANA} minutes'`
+    );
+    // Creada pero el navegador nunca se conectó (micrófono negado, pestaña
+    // cerrada): no vale la pena esperar 20 min para dejar llamar de nuevo.
+    await postgresService.query(
+      `UPDATE llamadas_voz
+          SET estado = 'fallida', motivo_fin = COALESCE(motivo_fin, 'sin_conexion_navegador'),
+              finalizada_at = COALESCE(finalizada_at, NOW()), updated_at = NOW()
+        WHERE estado = 'iniciando' AND iniciada_at < NOW() - INTERVAL '3 minutes'`
     );
   }
 

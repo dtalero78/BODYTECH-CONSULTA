@@ -271,6 +271,74 @@ class AuthService {
   }
 
   // ==========================================================================
+  // Registro de profesionales — puente hacia ACC.
+  //
+  // La PANTALLA vive acá (bodytech.app es la puerta única, y es donde la gente
+  // llega), pero la CUENTA se crea en ACC: su tabla `usuarios`, su `JWT_SECRET`,
+  // su rol `fisioterapeuta`. Acá solo se reenvía, igual que con el login.
+  //
+  // Por qué proxy y no que el navegador llame a ACC directo:
+  //   1. ACC no tiene CORS abierto a bodytech.app en producción (frontend y API
+  //      comparten origen allá), así que la llamada del navegador moriría en el
+  //      preflight.
+  //   2. El rate-limit tiene que aplicarse donde se ve la IP del navegador, y
+  //      eso es acá. Del lado de ACC todo llega desde una sola IP —la nuestra—
+  //      y limitar por IP allá no distinguiría a nadie.
+  //
+  // Hoy solo se registran fisioterapeutas de ACC (el resto de los roles del
+  // directorio ya tienen su acceso por otro lado). Cuando otra app hermana
+  // acepte registro, esto pasa a elegir destino por el rol del directorio; no
+  // conviene generalizarlo antes, porque el mapeo rol-directorio → rol-app es
+  // una definición de negocio distinta en cada app.
+  // ==========================================================================
+
+  /** A dónde apunta el registro. Misma URL que la hermana 'acc' del login. */
+  private accUrl(): string {
+    return (process.env.ACC_URL || 'https://bodytech-acc-f9hd6.ondigitalocean.app').replace(/\/+$/, '');
+  }
+
+  /**
+   * Reenvía a ACC y devuelve su respuesta TAL CUAL, con su status.
+   *
+   * Se pasa el cuerpo sin reinterpretarlo a propósito: los mensajes de ACC son
+   * los que saben por qué se rechazó ("esa cédula ya tiene cuenta", "tu ficha
+   * no tiene sedes asignadas"), y traducirlos acá a un error genérico dejaría
+   * a la persona sin saber qué hacer. Un 502 solo cuando ACC no responde.
+   */
+  async proxyRegistro(
+    ruta: 'buscar' | 'crear',
+    cuerpo: unknown
+  ): Promise<{ status: number; body: unknown }> {
+    const url = `${this.accUrl()}/api/auth/registro${ruta === 'buscar' ? '/buscar' : ''}`;
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+        // Más generoso que los 8 s del login: crear la cuenta sube la foto al
+        // bucket antes de responder.
+        signal: AbortSignal.timeout(20000),
+      });
+      return { status: resp.status, body: await resp.json() };
+    } catch (e) {
+      console.error('[registro] ACC no respondió:', e instanceof Error ? e.message : e);
+      return {
+        status: 502,
+        body: {
+          ok: false,
+          codigo: 'acc_no_disponible',
+          mensaje: 'La plataforma de Composición Corporal no está respondiendo. Intentá en unos minutos.',
+        },
+      };
+    }
+  }
+
+  /** URL /sso de ACC, donde el frontend entrega el token en el fragmento. */
+  ssoUrlAcc(): string {
+    return `${this.accUrl()}/sso`;
+  }
+
+  // ==========================================================================
   // RBAC — Reset de contraseña por email (Resend). El token se firma con una
   // clave derivada del hash ACTUAL de la contraseña, así que apenas el usuario
   // cambia su contraseña, cualquier enlace de reset previo deja de servir

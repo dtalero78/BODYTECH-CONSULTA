@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { LLAMADA_ESTADOS_TERMINALES, type LlamadaVoz } from '../services/api.service';
+import type { Device as TwilioDevice, Call as TwilioCall } from '@twilio/voice-sdk';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
@@ -233,6 +234,12 @@ export function MedicalPanelPage() {
     error: string | null;
   } | null>(null);
   const [, setTick] = useState(0);
+  /**
+   * El softphone: un Device de Twilio por pestaña (se crea al primer "Llamar",
+   * con el SDK cargado bajo demanda para no engordar el panel) y la llamada
+   * activa, para poder colgar desde el botón.
+   */
+  const softphoneRef = useRef<{ device: TwilioDevice; call: TwilioCall | null } | null>(null);
   // "No Contesta" pedía confirmación a nadie y era irreversible: estaba pegado a
   // "Atender" (misma grilla, 8px) y un toque de más borraba al afiliado de la
   // lista sin vuelta atrás. Estos dos estados sostienen el paso de confirmación
@@ -653,28 +660,83 @@ export function MedicalPanelPage() {
    * celular del coach y, cuando contesta, al paciente. Reemplaza al robot de
    * "Rellamar" (audio pregrabado, sin coach). Ver llamadas-voz.service.
    */
+  /** Crea el Device de Twilio una sola vez; renueva el token solo cuando avisa. */
+  const obtenerDevice = async (): Promise<TwilioDevice> => {
+    if (softphoneRef.current?.device) return softphoneRef.current.device;
+    const { Device } = await import('@twilio/voice-sdk');
+    const { token } = await apiService.getVozToken();
+    const device = new Device(token, { logLevel: 'error' });
+    device.on('tokenWillExpire', async () => {
+      try {
+        const t = await apiService.getVozToken();
+        device.updateToken(t.token);
+      } catch {
+        /* la próxima llamada pedirá uno nuevo */
+      }
+    });
+    softphoneRef.current = { device, call: null };
+    return device;
+  };
+
+  /**
+   * Llamada EN VIVO del coach al paciente, desde el navegador, grabada. El
+   * servidor crea la llamada y el navegador se conecta a Twilio con el SDK;
+   * Twilio marca al paciente desde el número de Bodytech. Reemplaza al robot
+   * de "Rellamar" (audio pregrabado, sin coach). Ver llamadas-voz.service.
+   */
   const handleLlamar = async (patient: Patient) => {
     setLlamada({ patientId: patient._id, data: null, error: null });
+    const mensajes: Record<string, string> = {
+      SIN_CELULAR_PACIENTE: 'El paciente no tiene un celular válido en la historia.',
+      LLAMADA_EN_CURSO: 'Ya tenés una llamada en curso.',
+      SOFTPHONE_NO_CONFIGURADO: 'La llamada desde el navegador no está configurada en este ambiente.',
+      HISTORIA_NO_ENCONTRADA: 'No encontré la cita.',
+    };
     try {
       const data = await apiService.iniciarLlamada(patient._id);
       setLlamada({ patientId: patient._id, data, error: null });
+
+      const device = await obtenerDevice();
+      // Acá el navegador pide permiso de micrófono la primera vez.
+      const call = await device.connect({ params: { llamadaId: String(data.id) } });
+      softphoneRef.current = { device, call };
+      call.on('disconnect', () => {
+        if (softphoneRef.current) softphoneRef.current.call = null;
+      });
+      call.on('error', (e: { message?: string }) => {
+        setLlamada((prev) =>
+          prev && prev.patientId === patient._id ? { ...prev, error: `Problema de audio: ${e?.message || ''}` } : prev
+        );
+      });
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
+      const e = err as { response?: { data?: { error?: string } }; name?: string; message?: string; code?: number };
       const code = e?.response?.data?.error;
-      const mensajes: Record<string, string> = {
-        SIN_CELULAR_COACH:
-          'Tu usuario no tiene celular registrado. Pedile al coordinador que lo agregue.',
-        SIN_CELULAR_PACIENTE: 'El paciente no tiene un celular válido en la historia.',
-        LLAMADA_EN_CURSO: 'Ya tenés una llamada en curso.',
-        TWILIO_NO_CONFIGURADO: 'La llamada no está configurada en este ambiente.',
-      };
+      const micNegado = e?.name === 'NotAllowedError' || e?.code === 31401 || /permission/i.test(e?.message || '');
       setLlamada({
         patientId: patient._id,
         data: null,
-        error: (code && mensajes[code]) || 'No se pudo iniciar la llamada. Intentá de nuevo.',
+        error:
+          (code && mensajes[code]) ||
+          (micNegado
+            ? 'El navegador no dejó usar el micrófono. Permitilo y volvé a intentar.'
+            : 'No se pudo iniciar la llamada. Intentá de nuevo.'),
       });
     }
   };
+
+  /** Colgar desde el panel: corta el tramo del navegador; Twilio cierra el del paciente. */
+  const colgar = () => {
+    softphoneRef.current?.call?.disconnect();
+  };
+
+  // Al salir del panel, soltar el micrófono y la conexión con Twilio.
+  useEffect(() => {
+    return () => {
+      softphoneRef.current?.call?.disconnect();
+      softphoneRef.current?.device?.destroy();
+      softphoneRef.current = null;
+    };
+  }, []);
 
   // Seguir la llamada mientras esté viva.
   const llamadaId = llamada?.data?.id;
@@ -710,7 +772,7 @@ export function MedicalPanelPage() {
     switch (d.estado) {
       case 'iniciando':
       case 'llamando_coach':
-        return 'Sonando tu celular…';
+        return 'Conectando tu audio…';
       case 'llamando_paciente':
         return `Llamando a ${p.primerNombre}…`;
       case 'en_llamada': {
@@ -727,7 +789,7 @@ export function MedicalPanelPage() {
       case 'sin_respuesta':
         return 'No contestó';
       case 'coach_no_contesto':
-        return 'No contestaste tu celular';
+        return 'No se conectó tu audio';
       case 'fallida':
         return 'Falló la llamada';
       default:
@@ -758,6 +820,14 @@ export function MedicalPanelPage() {
           )}
           {etiquetaLlamada(p)}
         </button>
+        {esEsta && ocupado && llamada?.data && (
+          <button
+            onClick={colgar}
+            className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded-lg text-[11px] font-medium"
+          >
+            Colgar
+          </button>
+        )}
         {esEsta && llamada?.error && (
           <span className="text-[11px] text-red-600 leading-tight max-w-[220px]">{llamada.error}</span>
         )}

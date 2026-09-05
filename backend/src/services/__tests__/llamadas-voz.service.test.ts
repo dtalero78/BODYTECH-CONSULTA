@@ -11,8 +11,9 @@ jest.mock('../postgres.service', () => ({ __esModule: true, default: { query: je
 jest.mock('../usuarios.service', () => ({ __esModule: true, default: { findActiveById: jest.fn() } }));
 jest.mock('../link-paciente.service', () => ({ __esModule: true, formatCelularE164: jest.fn() }));
 
-import {
+import llamadasVozService, {
   aplicarEvento,
+  identidadCoach,
   esTerminal,
   twimlParaCoach,
   twimlAvisoPaciente,
@@ -121,5 +122,36 @@ describe('TwiML', () => {
     expect(twimlDialFin('busy')).toContain('ocupada');
     expect(twimlDialFin('completed')).not.toContain('<Say');
     expect(twimlDialFin('completed')).toContain('<Hangup/>');
+  });
+});
+
+describe('token de voz (softphone)', () => {
+  const envOriginal = process.env;
+  const sesion = { kind: 'session', userId: 7, email: 'c@x', nombre: 'Coach', role: 'coach', sedes: [], esGlobal: false } as const;
+  afterEach(() => {
+    process.env = envOriginal;
+  });
+
+  it('sin TwiML App o API Key no emite token', () => {
+    process.env = { ...envOriginal, TWILIO_ACCOUNT_SID: 'ACx', TWILIO_API_KEY_SID: 'SKx', TWILIO_API_KEY_SECRET: 's', TWILIO_VOICE_APP_SID: '' };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(llamadasVozService.tokenVoz(sesion as any)).toBeNull();
+  });
+
+  // El token es lo único que le da al navegador permiso de hablar por Twilio:
+  // tiene que ser del coach, solo saliente y atado a la TwiML App de Bodytech.
+  it('emite un token solo-saliente, con la identidad del coach y la TwiML App', () => {
+    process.env = { ...envOriginal, TWILIO_ACCOUNT_SID: 'ACx', TWILIO_API_KEY_SID: 'SKx', TWILIO_API_KEY_SECRET: 'secreto', TWILIO_VOICE_APP_SID: 'APbodytech' };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = llamadasVozService.tokenVoz(sesion as any)!;
+    expect(t.identity).toBe('coach-7');
+    const payload = JSON.parse(Buffer.from(t.token.split('.')[1], 'base64url').toString());
+    expect(payload.grants.identity).toBe('coach-7');
+    expect(payload.grants.voice.outgoing.application_sid).toBe('APbodytech');
+    expect(payload.grants.voice.incoming).toBeUndefined();
+  });
+
+  it('la identidad del coach es estable por usuario', () => {
+    expect(identidadCoach(7)).toBe('coach-7');
   });
 });

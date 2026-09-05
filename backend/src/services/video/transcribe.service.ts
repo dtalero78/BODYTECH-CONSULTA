@@ -60,7 +60,8 @@ class TranscribeService {
   async getOrStartFromS3(
     jobName: string,
     s3Uri: string,
-    mediaFormat: 'mp4' | 'webm' | 'ogg' | 'mp3' | 'wav' | 'flac' | 'm4a'
+    mediaFormat: 'mp4' | 'webm' | 'ogg' | 'mp3' | 'wav' | 'flac' | 'm4a',
+    opts: { canales?: { ch0: string; ch1: string } } = {}
   ): Promise<TranscribeResult> {
     const safeName = jobName.replace(/[^0-9a-zA-Z._-]/g, '-').slice(0, 200);
     let job;
@@ -82,7 +83,15 @@ class TranscribeService {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             MediaFormat: mediaFormat as any,
             Media: { MediaFileUri: s3Uri },
-            Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 },
+            // Dos modos, y la diferencia importa:
+            //  · ChannelIdentification — el audio YA trae una persona por canal
+            //    (grabación telefónica dual). Exacto: no se infiere nada, y
+            //    quien llama sabe qué canal es quién.
+            //  · ShowSpeakerLabels — un solo canal mezclado (el navegador).
+            //    Transcribe separa las voces, pero no sabe cuál es cuál.
+            Settings: opts.canales
+              ? { ChannelIdentification: true }
+              : { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 },
           })
         );
       } catch (err: any) {
@@ -92,7 +101,7 @@ class TranscribeService {
       }
       return { status: 'in_progress' };
     }
-    return this.leerJob(job);
+    return this.leerJob(job, opts.canales);
   }
 
   async getOrStartTranscription(roomName: string): Promise<TranscribeResult> {
@@ -145,7 +154,10 @@ class TranscribeService {
 
   /** Estado de un job existente → resultado uniforme para los dos caminos. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async leerJob(job: any): Promise<TranscribeResult> {
+  private async leerJob(
+    job: any,
+    canales?: { ch0: string; ch1: string }
+  ): Promise<TranscribeResult> {
     const s = job.TranscriptionJobStatus;
     if (s === 'QUEUED' || s === 'IN_PROGRESS') return { status: 'in_progress' };
     if (s === 'FAILED') return { status: 'failed', reason: job.FailureReason || 'Transcribe FAILED' };
@@ -154,7 +166,7 @@ class TranscribeService {
       const uri = job.Transcript?.TranscriptFileUri;
       if (!uri) return { status: 'failed', reason: 'Job completado sin TranscriptFileUri' };
       try {
-        const transcript = await this.fetchTranscript(uri);
+        const transcript = await this.fetchTranscript(uri, canales);
         return { status: 'completed', transcript };
       } catch (err: any) {
         return { status: 'failed', reason: `No se pudo leer el transcript: ${err?.message}` };
@@ -168,7 +180,10 @@ class TranscribeService {
    * Descarga el JSON de Transcribe (URL prefirmada) y lo convierte en texto
    * legible con turnos por hablante si hay diarización.
    */
-  private async fetchTranscript(uri: string): Promise<string> {
+  private async fetchTranscript(
+    uri: string,
+    canales?: { ch0: string; ch1: string }
+  ): Promise<string> {
     const resp = await fetch(uri);
     if (!resp.ok) throw new Error(`HTTP ${resp.status} al descargar el transcript`);
     const data: any = await resp.json();
@@ -176,7 +191,32 @@ class TranscribeService {
     const items: any[] = data?.results?.items || [];
     const speakerSegments: any[] = data?.results?.speaker_labels?.segments || [];
 
-    // Sin diarización: devolver el transcript plano.
+    // Por CANAL: cada persona en su propio canal, así que la atribución es
+    // exacta y con nombre real (Coach / Paciente), no "Hablante 1 / 2".
+    const channels: any[] = data?.results?.channel_labels?.channels || [];
+    if (canales && channels.length) {
+      const nombreDe = (label: string) =>
+        label === 'ch_0' ? canales.ch0 : label === 'ch_1' ? canales.ch1 : label;
+      // Cada canal trae sus palabras con tiempo; se intercalan por tiempo para
+      // reconstruir la conversación en el orden en que ocurrió.
+      const palabras: Array<{ t: number; quien: string; texto: string; punt: boolean }> = [];
+      for (const ch of channels) {
+        const quien = nombreDe(ch.channel_label);
+        let ultimoT = 0;
+        for (const it of ch.items || []) {
+          const content = it.alternatives?.[0]?.content;
+          if (!content) continue;
+          const esPunt = it.type === 'punctuation';
+          const t = esPunt ? ultimoT : parseFloat(it.start_time);
+          if (!esPunt) ultimoT = t;
+          palabras.push({ t, quien, texto: content, punt: esPunt });
+        }
+      }
+      palabras.sort((a, b) => a.t - b.t);
+      return this.agrupar(palabras);
+    }
+
+    // Sin diarización ni canales: devolver el transcript plano.
     if (!speakerSegments.length) {
       return data?.results?.transcripts?.[0]?.transcript || '';
     }
@@ -217,6 +257,30 @@ class TranscribeService {
     return lines
       .map((l) => l.replace(/^spk_0:/, 'Hablante 1:').replace(/^spk_1:/, 'Hablante 2:'))
       .join('\n');
+  }
+
+  /** Palabras ya ordenadas por tiempo → turnos "Quien: texto". */
+  private agrupar(palabras: Array<{ quien: string; texto: string; punt: boolean }>): string {
+    const lines: string[] = [];
+    let actual: string | null = null;
+    let buffer: string[] = [];
+    const flush = () => {
+      if (buffer.length) lines.push(`${actual}: ${buffer.join(' ').replace(/\s+([.,?!])/g, '$1')}`);
+      buffer = [];
+    };
+    for (const p of palabras) {
+      if (p.punt) {
+        if (buffer.length) buffer[buffer.length - 1] += p.texto;
+        continue;
+      }
+      if (p.quien !== actual) {
+        flush();
+        actual = p.quien;
+      }
+      buffer.push(p.texto);
+    }
+    flush();
+    return lines.join('\n');
   }
 }
 

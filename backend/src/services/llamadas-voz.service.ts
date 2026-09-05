@@ -36,8 +36,8 @@ import type { Readable } from 'stream';
 import postgresService from './postgres.service';
 import { formatCelularE164 } from './link-paciente.service';
 import { descargarGrabacionVozComoBuffer } from './twilio-media.service';
-import { openai } from './openai.service';
-import { toFile } from 'openai';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { transcribeService } from './video/transcribe.service';
 import type { SessionPayload } from './auth.service';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +52,17 @@ const TIMEOUT_PACIENTE_SEG = 30;
 
 /** Una llamada sin cierre por webhook después de esto se da por caída. */
 const MINUTOS_LLAMADA_HUERFANA = 20;
+
+// La grabación se pide con `record-from-answer-dual`: Twilio deja al coach en un
+// canal y al paciente en el otro. Amazon Transcribe lee esos canales por
+// separado (ChannelIdentification), así que la atribución es EXACTA — no se
+// infiere quién habla, y como nosotros armamos el puente sabemos cuál es cuál:
+// el canal 0 es el tramo padre (el softphone del coach) y el 1 el del paciente.
+// Por eso acá no se usa Whisper, que aplastaría los dos canales en un bloque.
+const S3_REGION = process.env.CHIME_MEDIA_REGION || process.env.AWS_REGION || 'us-east-1';
+const S3_BUCKET = process.env.RECORDINGS_BUCKET || '';
+const PREFIJO_AUDIO = 'audio-llamada';
+const CANALES = { ch0: 'Coach', ch1: 'Paciente' };
 
 /**
  * Credenciales de VOZ. Twilio firma los webhooks con el token de la cuenta que
@@ -364,6 +375,8 @@ export type ResultadoInicio =
 // ---------------------------------------------------------------------------
 
 class LlamadasVozService {
+  private s3 = new S3Client({ region: S3_REGION });
+
   /**
    * Token de voz para el navegador del coach. Solo puede hacer llamadas
    * SALIENTES por la TwiML App de Bodytech; no recibe. Vence en una hora y el
@@ -602,36 +615,94 @@ class LlamadasVozService {
    * curso, así dos disparos simultáneos no pagan Whisper dos veces.
    */
   async transcribirGrabacion(id: number, opts: { forzar?: boolean } = {}): Promise<boolean> {
+    if (!S3_BUCKET) {
+      console.warn('[llamadas-voz] RECORDINGS_BUCKET no configurado: no se transcribe.');
+      return false;
+    }
     const tomada = await postgresService.query(
       `UPDATE llamadas_voz SET transcription_status = 'processing', transcription_error = NULL, updated_at = NOW()
         WHERE id = $1 AND recording_estado = 'lista' AND recording_sid IS NOT NULL
           AND (${opts.forzar ? 'TRUE' : "transcription_status IS DISTINCT FROM 'done'"})
-          AND (transcription_status IS DISTINCT FROM 'processing' OR updated_at < NOW() - INTERVAL '10 minutes')
-        RETURNING recording_sid`,
+          AND (transcription_status IS DISTINCT FROM 'processing' OR updated_at < NOW() - INTERVAL '20 minutes')
+        RETURNING recording_sid, transcription_s3_key`,
       [id]
     );
     if (!tomada || tomada.length === 0) return false;
     const recordingSid = String(tomada[0].recording_sid);
+    const keyPrevia = tomada[0].transcription_s3_key as string | null;
+
     try {
-      const mp3 = await descargarGrabacionVozComoBuffer(recordingSid);
-      const archivo = await toFile(mp3, `llamada-${id}.mp3`, { type: 'audio/mpeg' });
-      const r = await openai.audio.transcriptions.create({ file: archivo, model: 'whisper-1', language: 'es' });
-      const texto = ((r as { text?: string }).text || '').trim();
-      await postgresService.query(
-        `UPDATE llamadas_voz SET transcription_status = 'done', transcription_text = $2,
-                transcribed_at = NOW(), updated_at = NOW() WHERE id = $1`,
-        [id, texto]
+      // El MP3 se sube a S3 porque Transcribe solo lee de ahí. Si un intento
+      // anterior ya lo subió, se reusa: el job es idempotente por nombre.
+      const key = keyPrevia || `${PREFIJO_AUDIO}/${recordingSid}.mp3`;
+      if (!keyPrevia) {
+        const mp3 = await descargarGrabacionVozComoBuffer(recordingSid);
+        await this.s3.send(
+          new PutObjectCommand({
+            Bucket: S3_BUCKET,
+            Key: key,
+            Body: mp3,
+            ContentType: 'audio/mpeg',
+            Tagging: 'app=bodytech-consulta&tipo=audio-llamada',
+          })
+        );
+        await postgresService.query(
+          `UPDATE llamadas_voz SET transcription_s3_key = $2, updated_at = NOW() WHERE id = $1`,
+          [id, key]
+        );
+      }
+
+      const r = await transcribeService.getOrStartFromS3(
+        `bodytech-llamada-${recordingSid}`,
+        `s3://${S3_BUCKET}/${key}`,
+        'mp3',
+        { canales: CANALES }
       );
-      console.log(`📝 [llamadas-voz] Llamada #${id} transcrita (${texto.length} caracteres)`);
-      return true;
+      if (r.status === 'failed') {
+        await this.marcarTranscripcionError(id, r.reason || 'Transcribe rechazó el job');
+        await this.borrarAudio(key);
+        return false;
+      }
+      if (r.status === 'completed' && (r.transcript || '').trim()) {
+        await this.guardarTranscripcion(id, r.transcript!.trim());
+        await this.borrarAudio(key);
+        return true;
+      }
+      // in_progress: lo termina el barrido (Transcribe tarda minutos).
+      console.log(`📝 [llamadas-voz] Job de transcripción iniciado para la llamada #${id}`);
+      return false;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`❌ [llamadas-voz] Transcripción de la llamada #${id} falló: ${msg}`);
-      await postgresService.query(
+      await this.marcarTranscripcionError(id, msg);
+      return false;
+    }
+  }
+
+  private async guardarTranscripcion(id: number, texto: string): Promise<void> {
+    await postgresService.query(
+      `UPDATE llamadas_voz SET transcription_status = 'done', transcription_text = $2,
+              transcribed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id, texto]
+    );
+    console.log(`📝 [llamadas-voz] Llamada #${id} transcrita con hablantes (${texto.length} caracteres)`);
+  }
+
+  private async marcarTranscripcionError(id: number, msg: string): Promise<void> {
+    await postgresService
+      .query(
         `UPDATE llamadas_voz SET transcription_status = 'error', transcription_error = $2, updated_at = NOW() WHERE id = $1`,
         [id, msg.slice(0, 500)]
-      );
-      return false;
+      )
+      .catch(() => undefined);
+  }
+
+  /** El audio ya dio su texto: es dato de paciente y no se queda en S3. */
+  private async borrarAudio(key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    } catch (e: unknown) {
+      console.warn(`[llamadas-voz] No se pudo borrar ${key}:`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -641,18 +712,46 @@ class LlamadasVozService {
    * se reintentan hasta 3 veces, contando por el texto del error.
    */
   async transcribirPendientes(limite = 10): Promise<number> {
+    if (!S3_BUCKET) return 0;
+    // Dos poblaciones: las que nunca arrancaron (o fallaron hace rato) y las que
+    // tienen un job corriendo. Transcribe es asíncrono, así que sondear es parte
+    // del trabajo normal, no una recuperación.
     const rows = await postgresService.query(
-      `SELECT id FROM llamadas_voz
+      `SELECT id, recording_sid, transcription_s3_key, transcription_status
+         FROM llamadas_voz
         WHERE recording_estado = 'lista' AND recording_sid IS NOT NULL
           AND (transcription_status IS NULL
-               OR (transcription_status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes')
+               OR transcription_status = 'processing'
                OR (transcription_status = 'error' AND updated_at < NOW() - INTERVAL '30 minutes'))
         ORDER BY id LIMIT $1`,
       [limite]
     );
     let hechas = 0;
     for (const r of rows ?? []) {
-      if (await this.transcribirGrabacion(Number(r.id))) hechas++;
+      const id = Number(r.id);
+      try {
+        if (r.transcription_status === 'processing' && r.transcription_s3_key) {
+          // Job ya lanzado: solo preguntar cómo va.
+          const res = await transcribeService.getOrStartFromS3(
+            `bodytech-llamada-${r.recording_sid}`,
+            `s3://${S3_BUCKET}/${r.transcription_s3_key}`,
+            'mp3',
+            { canales: CANALES }
+          );
+          if (res.status === 'in_progress') continue;
+          if (res.status === 'completed' && (res.transcript || '').trim()) {
+            await this.guardarTranscripcion(id, res.transcript!.trim());
+            hechas++;
+          } else {
+            await this.marcarTranscripcionError(id, res.reason || 'Transcribe no devolvió texto');
+          }
+          await this.borrarAudio(String(r.transcription_s3_key));
+        } else if (await this.transcribirGrabacion(id)) {
+          hechas++;
+        }
+      } catch (e: unknown) {
+        console.error(`[llamadas-voz] Sondeo de #${id} falló:`, e instanceof Error ? e.message : e);
+      }
     }
     return hechas;
   }

@@ -7,16 +7,28 @@
 // grabar). Por eso se prueban solos, sin red ni base.
 // ============================================================================
 
-jest.mock('../postgres.service', () => ({ __esModule: true, default: { query: jest.fn() } }));
+// Los espías viven FUERA de las factories: `cargar()` hace resetModules para
+// releer el bucket del env, y eso vuelve a ejecutar cada factory — una jest.fn()
+// creada adentro quedaría huérfana y las aserciones mirarían al espía viejo.
+const queryMock = jest.fn();
+const descargarMock = jest.fn();
+const arrancarMock = jest.fn();
+jest.mock('../postgres.service', () => ({ __esModule: true, default: { query: queryMock } }));
 jest.mock('../usuarios.service', () => ({ __esModule: true, default: { findActiveById: jest.fn() } }));
 jest.mock('../link-paciente.service', () => ({ __esModule: true, formatCelularE164: jest.fn() }));
-jest.mock('../twilio-media.service', () => ({ __esModule: true, descargarGrabacionVozComoBuffer: jest.fn() }));
-jest.mock('../openai.service', () => ({ __esModule: true, openai: { audio: { transcriptions: { create: jest.fn() } } } }));
-jest.mock('openai', () => ({ __esModule: true, toFile: jest.fn(async (b: Buffer) => b) }));
+jest.mock('../twilio-media.service', () => ({ __esModule: true, descargarGrabacionVozComoBuffer: descargarMock }));
+const s3send = jest.fn();
+jest.mock('@aws-sdk/client-s3', () => ({
+  __esModule: true,
+  S3Client: jest.fn(() => ({ send: s3send })),
+  PutObjectCommand: jest.fn((i) => ({ __cmd: 'Put', ...i })),
+  DeleteObjectCommand: jest.fn((i) => ({ __cmd: 'Delete', ...i })),
+}));
+jest.mock('../video/transcribe.service', () => ({
+  __esModule: true,
+  transcribeService: { getOrStartFromS3: arrancarMock },
+}));
 
-import postgresService from '../postgres.service';
-import { descargarGrabacionVozComoBuffer } from '../twilio-media.service';
-import { openai } from '../openai.service';
 import llamadasVozService, {
   aplicarEvento,
   identidadCoach,
@@ -162,42 +174,95 @@ describe('token de voz (softphone)', () => {
   });
 });
 
-describe('transcribirGrabacion — automática y sin pagar dos veces', () => {
-  const query = postgresService.query as jest.Mock;
-  const descargar = descargarGrabacionVozComoBuffer as jest.Mock;
-  const whisper = openai.audio.transcriptions.create as jest.Mock;
+describe('transcribirGrabacion — el diálogo con Coach y Paciente separados', () => {
+  const query = queryMock;
+  const descargar = descargarMock;
+  const arrancar = arrancarMock;
+  const envOriginal = process.env;
+  const cmds = () => s3send.mock.calls.map((c) => c[0].__cmd);
+
+  /**
+   * El bucket se lee al IMPORTAR el módulo, así que no alcanza con ponerlo en
+   * beforeEach: hay que recargar. Los mocks viven fuera de las factories, así
+   * que sobreviven al resetModules y las aserciones siguen mirando al espía real.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let svc: any;
+  const cargar = () => {
+    jest.resetModules();
+    process.env.RECORDINGS_BUCKET = 'bucket-test';
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    svc = require('../llamadas-voz.service').default;
+    return svc;
+  };
+
   beforeEach(() => {
-    query.mockReset(); descargar.mockReset(); whisper.mockReset();
+    process.env = { ...envOriginal, RECORDINGS_BUCKET: 'bucket-test' };
+    query.mockReset(); descargar.mockReset(); arrancar.mockReset(); s3send.mockReset();
+    s3send.mockResolvedValue({});
     jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
-  afterEach(() => jest.restoreAllMocks());
-
-  it('transcribe y guarda el texto en la llamada', async () => {
-    query.mockResolvedValueOnce([{ recording_sid: 'RE1' }]).mockResolvedValueOnce([]);
-    descargar.mockResolvedValue(Buffer.from('mp3'));
-    whisper.mockResolvedValue({ text: ' Hola, te habla Bodytech. ' });
-    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(true);
-    expect(descargar).toHaveBeenCalledWith('RE1');
-    expect(query.mock.calls[1][0]).toContain("transcription_status = 'done'");
-    expect(query.mock.calls[1][1]).toEqual([5, 'Hola, te habla Bodytech.']);
+  afterEach(() => {
+    process.env = envOriginal;
+    jest.restoreAllMocks();
   });
 
-  // El claim del UPDATE es lo que evita que el webhook y el barrido paguen
-  // Whisper dos veces por la misma grabación.
-  it('si otra pasada ya la tomó (o ya está hecha), no descarga ni transcribe', async () => {
+  // Lo que distingue a la llamada de la videollamada: la grabación telefónica
+  // ya viene con una persona por canal, así que no hay que adivinar nada.
+  it('sube el MP3 y pide identificación por CANAL, con nombres reales', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: null }]).mockResolvedValue([]);
+    descargar.mockResolvedValue(Buffer.from('mp3'));
+    arrancar.mockResolvedValue({ status: 'in_progress' });
+
+    await cargar().transcribirGrabacion(5);
+
+    expect(cmds()).toEqual(['Put']);
+    expect(s3send.mock.calls[0][0]).toMatchObject({ Bucket: 'bucket-test', Key: 'audio-llamada/RE1.mp3' });
+    expect(arrancar).toHaveBeenCalledWith(
+      'bodytech-llamada-RE1',
+      's3://bucket-test/audio-llamada/RE1.mp3',
+      'mp3',
+      { canales: { ch0: 'Coach', ch1: 'Paciente' } }
+    );
+  });
+
+  it('cuando el job ya terminó, guarda el diálogo y borra el audio', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: null }]).mockResolvedValue([]);
+    descargar.mockResolvedValue(Buffer.from('mp3'));
+    arrancar.mockResolvedValue({ status: 'completed', transcript: 'Coach: hola\nPaciente: buenas' });
+
+    expect(await cargar().transcribirGrabacion(5)).toBe(true);
+    const guardado = query.mock.calls.find((c) => String(c[0]).includes("transcription_status = 'done'"));
+    expect(guardado?.[1]).toContain('Coach: hola\nPaciente: buenas');
+    expect(cmds()).toContain('Delete'); // el audio es PHI: no se queda
+  });
+
+  it('sin claim no descarga ni arranca job', async () => {
     query.mockResolvedValueOnce([]);
-    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(false);
+    expect(await cargar().transcribirGrabacion(5)).toBe(false);
     expect(descargar).not.toHaveBeenCalled();
-    expect(whisper).not.toHaveBeenCalled();
+    expect(arrancar).not.toHaveBeenCalled();
   });
 
-  it('un fallo de Whisper queda registrado como error, no cuelga la fila en processing', async () => {
-    query.mockResolvedValueOnce([{ recording_sid: 'RE1' }]).mockResolvedValueOnce([]);
+  it('un intento previo que ya subió el audio no lo vuelve a subir', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: 'audio-llamada/RE1.mp3' }]).mockResolvedValue([]);
+    arrancar.mockResolvedValue({ status: 'in_progress' });
+
+    await cargar().transcribirGrabacion(5);
+    expect(descargar).not.toHaveBeenCalled();
+    expect(cmds()).toEqual([]);
+  });
+
+  it('si Transcribe rechaza el job, queda en error y libera el audio', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: null }]).mockResolvedValue([]);
     descargar.mockResolvedValue(Buffer.from('mp3'));
-    whisper.mockRejectedValue(new Error('Whisper caído'));
-    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(false);
-    expect(query.mock.calls[1][0]).toContain("transcription_status = 'error'");
-    expect(query.mock.calls[1][1][1]).toContain('Whisper caído');
+    arrancar.mockResolvedValue({ status: 'failed', reason: 'formato inválido' });
+
+    expect(await cargar().transcribirGrabacion(5)).toBe(false);
+    const err = query.mock.calls.find((c) => String(c[0]).includes("transcription_status = 'error'"));
+    expect(err?.[1]?.[1]).toContain('formato inválido');
+    expect(cmds()).toContain('Delete');
   });
 });

@@ -1442,6 +1442,8 @@ class PostgresService {
         `"transcription_text" TEXT`,
         `"transcription_error" TEXT`,
         `"transcribed_at" TIMESTAMPTZ`,
+        // Audio subido a S3 para que Transcribe lo lea; se borra al terminar.
+        `"transcription_s3_key" TEXT`,
       ]) {
         await this.query(`ALTER TABLE llamadas_voz ADD COLUMN IF NOT EXISTS ${col}`);
       }

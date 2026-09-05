@@ -23,7 +23,7 @@ function fechaDe(req: Request): string {
 
 class LinkAutoController {
   /**
-   * POST /api/admin/link-auto/dispatch?fecha=&dryRun=1&limit=N&historiaId=
+   * POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=
    *
    * Fuerza una pasada sin esperar la hora ni el flag. `dryRun=1` no escribe
    * nada; `historiaId` acota a una sola cita (la prueba end-to-end de un envío
@@ -38,7 +38,11 @@ class LinkAutoController {
           ? req.query.historiaId
           : undefined;
 
+      // Qué mensaje: 'recordatorio' (07:00, sin link) o 'link' (minutos antes).
+      const tipo = req.query.tipo === 'recordatorio' ? 'recordatorio' : 'link';
+
       const resumen = await linkAutoService.dispatch(fechaDe(req), {
+        tipo,
         dryRun,
         limit: Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined,
         historiaId,

@@ -14,6 +14,7 @@
 
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
+import llamadasVozService from './llamadas-voz.service';
 import twilioService from './twilio.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
 import { evaluarConsultaOpenAI } from './openai-calidad.service';
@@ -22,6 +23,7 @@ import {
   obtenerUrlMediaTwilio,
   descargarMp4ComoBuffer,
   extraerAudio,
+  descargarGrabacionVozComoBuffer,
 } from './twilio-media.service';
 import { chimeRecordingService } from './video/chime-recording.service';
 import { transcribeService } from './video/transcribe.service';
@@ -36,6 +38,7 @@ import {
 type Grabacion =
   | { kind: 'twilio'; compositionSid: string }
   | { kind: 'chime'; roomName: string }
+  | { kind: 'voz'; llamadaId: number; recordingSid: string }
   | { kind: 'none' };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -55,23 +58,59 @@ async function roomNameForHistoria(historiaId: string): Promise<string | null> {
  * - si no, hay fila en `chime_recordings` para la sala → Chime (MP4 en S3).
  * - si no → ninguna.
  */
-async function resolverGrabacion(historiaId: string, compositionSid: string | null): Promise<Grabacion> {
+async function resolverGrabacion(
+  historiaId: string,
+  compositionSid: string | null,
+  llamadaId?: number
+): Promise<Grabacion> {
+  // Una LLAMADA elegida a mano (el auditor la marcó en la pantalla) manda sobre
+  // todo lo demás: es otra conversación, no un sustituto del video.
+  if (llamadaId) {
+    const ll = await llamadasVozService.get(llamadaId);
+    if (ll && ll.historiaId === historiaId && ll.recordingSid && ll.recordingEstado === 'lista') {
+      return { kind: 'voz', llamadaId: ll.id, recordingSid: ll.recordingSid };
+    }
+    throw Object.assign(new Error('Esa llamada no tiene grabación lista para evaluar.'), {
+      statusCode: 409,
+    });
+  }
   if (compositionSid) return { kind: 'twilio', compositionSid };
   const roomName = await roomNameForHistoria(historiaId);
   if (roomName) {
     const rec = await chimeRecordingService.getRecordingUrl(roomName);
     if (rec) return { kind: 'chime', roomName };
   }
+  // Sin video: si el coach llamó y quedó grabado, eso es la consulta.
+  const llamadas = await llamadasVozService.listarPorHistoria(historiaId);
+  const conAudio = (llamadas ?? []).find((l) => l.recordingSid && l.recordingEstado === 'lista');
+  if (conAudio) return { kind: 'voz', llamadaId: conAudio.id, recordingSid: conAudio.recordingSid! };
   return { kind: 'none' };
+}
+
+/** Cuándo empezó de verdad una llamada: al contestar el paciente (o al marcar). */
+async function inicioRealLlamada(llamadaId: number): Promise<string | null> {
+  const ll = await llamadasVozService.get(llamadaId);
+  return ll ? ll.contestadaPacienteAt ?? ll.iniciadaAt : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Una llamada de voz, resumida para la pantalla de Calidad. */
+export interface LlamadaVozResumen {
+  id: number;
+  iniciadaAt: string;
+  estado: string;
+  duracionSeg: number | null;
+  coachNombre: string | null;
+  tieneGrabacion: boolean;
+}
+
 export interface SessionInfo {
   found: boolean;
   compositionSid: string | null;
+  llamadasVoz: LlamadaVozResumen[];
   patientName: string | null;
   numeroId: string | null;
   doctorName: string | null;
@@ -254,7 +293,31 @@ async function procesarEvaluacion(
     );
     const cachedText = cached?.[0]?.transcription_text;
 
-    if (source.kind === 'chime') {
+    if (source.kind === 'voz') {
+      // LLAMADA del coach: es OTRA conversación, así que el transcript cacheado
+      // de la videollamada no sirve. Se baja el MP3 (chico, dos canales) y va
+      // derecho a Whisper, sin ffmpeg.
+      await setEstado(evaluacionId, 'transcribiendo');
+      await agregarPaso(evaluacionId, 'Descargando la grabación de la llamada...');
+      const mp3 = await descargarGrabacionVozComoBuffer(source.recordingSid);
+      const mbAudio = (mp3.byteLength / (1024 * 1024)).toFixed(2);
+      await agregarPaso(evaluacionId, `Grabación descargada (${mbAudio} MB). Transcribiendo con Whisper...`);
+      const audioFile = await toFile(mp3, 'llamada.mp3', { type: 'audio/mpeg' });
+      const whisperResp = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-1',
+        language: 'es',
+      });
+      transcript = (whisperResp as { text?: string }).text?.trim() ?? '';
+      console.log(`${tag} Transcript de la llamada (${transcript.length} chars)`);
+      if (transcript) {
+        await agregarPaso(
+          evaluacionId,
+          `Transcripción de la llamada completada (${transcript.length} caracteres). Enviando al agente de IA...`
+        );
+        await setEstado(evaluacionId, 'evaluando', { transcript });
+      }
+    } else if (source.kind === 'chime') {
       // Chime → SIEMPRE Amazon Transcribe: lee el MP4 de S3 directo (sin ffmpeg)
       // y SEPARA HABLANTES (médico/paciente), que mejora la evaluación. Es
       // asíncrono: sondeamos. El transcript del navegador queda solo de RESPALDO.
@@ -379,7 +442,7 @@ async function procesarEvaluacion(
     const [formulario, historiaAuditoria, fechaInicioReal] = await Promise.all([
       buscarFormulario(numeroId),
       buscarHistoriaAuditoria(historiaId),
-      buscarInicioReal(historiaId),
+      source.kind === 'voz' ? inicioRealLlamada(source.llamadaId) : buscarInicioReal(historiaId),
     ]);
     if (formulario) {
       console.log(`${tag} Formulario pre-consulta encontrado para historia ${historiaId}`);
@@ -477,6 +540,7 @@ class CalidadService {
       return {
         found: false,
         compositionSid: null,
+        llamadasVoz: [],
         patientName: null,
         numeroId: null,
         doctorName: null,
@@ -493,9 +557,22 @@ class CalidadService {
         .join(' ')
         .trim() || null;
 
+    const llamadas = (await llamadasVozService.listarPorHistoria(historiaId)) ?? [];
+    const llamadasVoz: LlamadaVozResumen[] = llamadas
+      .filter((l) => l.estado === 'completada' || l.recordingSid)
+      .map((l) => ({
+        id: l.id,
+        iniciadaAt: l.iniciadaAt,
+        estado: l.estado,
+        duracionSeg: l.recordingDuracionSeg ?? l.duracionSeg,
+        coachNombre: l.coachNombre,
+        tieneGrabacion: !!l.recordingSid && l.recordingEstado === 'lista',
+      }));
+
     return {
       found: true,
       compositionSid: (hc.composition_sid as string | null) || null,
+      llamadasVoz,
       patientName,
       numeroId: (hc.numeroId as string | null) || null,
       doctorName: (hc.medico as string | null) || null,
@@ -630,7 +707,7 @@ class CalidadService {
    * Crea una fila de evaluación en estado 'procesando' y dispara el
    * pipeline en background. Retorna el id de la evaluación creada.
    */
-  async dispararEvaluacion(historiaId: string): Promise<number> {
+  async dispararEvaluacion(historiaId: string, opts: { llamadaId?: number } = {}): Promise<number> {
     const session = await this.getSession(historiaId);
 
     if (!session.found) {
@@ -641,7 +718,7 @@ class CalidadService {
     // exigimos composition_sid: una consulta Chime no tiene composición, pero sí
     // grabación en S3 (o un transcript del navegador). Se puede evaluar mientras
     // exista un transcript o una grabación de la que sacarlo.
-    const source = await resolverGrabacion(historiaId, session.compositionSid);
+    const source = await resolverGrabacion(historiaId, session.compositionSid, opts.llamadaId);
     if (source.kind === 'none') {
       const cached = await postgresService.query(
         `SELECT "transcription_text" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
@@ -661,10 +738,14 @@ class CalidadService {
     // INSERT → retornar id
     const rows = await postgresService.query(
       `INSERT INTO consulta_evaluaciones
-         (historia_id, estado, pasos)
-       VALUES ($1, 'procesando', '[]'::jsonb)
+         (historia_id, estado, pasos, fuente, llamada_id)
+       VALUES ($1, 'procesando', '[]'::jsonb, $2, $3)
        RETURNING id`,
-      [historiaId]
+      [
+        historiaId,
+        source.kind === 'voz' ? 'voz' : source.kind === 'none' ? 'transcript' : 'video',
+        source.kind === 'voz' ? source.llamadaId : null,
+      ]
     );
 
     if (!rows || rows.length === 0) {
@@ -706,7 +787,7 @@ class CalidadService {
   /** Lista el historial de evaluaciones de una historia clínica, más recientes primero. */
   async getHistorial(historiaId: string): Promise<HistorialRow[]> {
     const rows = await postgresService.query(
-      `SELECT id, puntaje_total, estado, created_at, error_msg
+      `SELECT id, puntaje_total, estado, created_at, error_msg, fuente, llamada_id
        FROM consulta_evaluaciones
        WHERE historia_id = $1
        ORDER BY created_at DESC`,

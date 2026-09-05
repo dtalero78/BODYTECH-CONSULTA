@@ -1,0 +1,125 @@
+// ============================================================================
+// La llamada del coach al paciente: lo que se decide sin tocar Twilio.
+//
+// Casi todo el riesgo está en dos lugares puros: la máquina de estados (los
+// webhooks de Twilio llegan repetidos y desordenados) y el TwiML (un atributo
+// mal escrito y la llamada se corta sin explicación, o peor: se conecta SIN
+// grabar). Por eso se prueban solos, sin red ni base.
+// ============================================================================
+
+jest.mock('../postgres.service', () => ({ __esModule: true, default: { query: jest.fn() } }));
+jest.mock('../usuarios.service', () => ({ __esModule: true, default: { findActiveById: jest.fn() } }));
+jest.mock('../link-paciente.service', () => ({ __esModule: true, formatCelularE164: jest.fn() }));
+
+import {
+  aplicarEvento,
+  esTerminal,
+  twimlParaCoach,
+  twimlAvisoPaciente,
+  twimlDialFin,
+  type EstadoLlamada,
+} from '../llamadas-voz.service';
+
+describe('aplicarEvento — la máquina de estados', () => {
+  // `null` = "no se mueve": así lo consume el servicio (no escribe estado). Acá
+  // se encadena igual que allá, conservando el anterior cuando no hay cambio.
+  const paso = (e: EstadoLlamada, ev: Parameters<typeof aplicarEvento>[1]) => aplicarEvento(e, ev) ?? e;
+
+  it('sigue el camino feliz de punta a punta', () => {
+    let e: EstadoLlamada = 'iniciando';
+    e = paso(e, { tipo: 'coach', status: 'ringing' });
+    expect(e).toBe('llamando_coach');
+    e = paso(e, { tipo: 'coach', status: 'in-progress' });
+    expect(e).toBe('llamando_paciente');
+    // El "ringing" del paciente llega cuando ya estamos llamándolo: no mueve nada.
+    expect(aplicarEvento(e, { tipo: 'paciente', status: 'ringing' })).toBeNull();
+    e = paso(e, { tipo: 'paciente', status: 'in-progress' });
+    expect(e).toBe('en_llamada');
+    e = paso(e, { tipo: 'dial_fin', dialStatus: 'completed' });
+    expect(e).toBe('completada');
+  });
+
+  it('el coach que no atiende su celular es SU no-respuesta, no del paciente', () => {
+    expect(aplicarEvento('llamando_coach', { tipo: 'coach', status: 'no-answer' })).toBe('coach_no_contesto');
+    expect(aplicarEvento('llamando_coach', { tipo: 'coach', status: 'busy' })).toBe('coach_no_contesto');
+  });
+
+  it('el paciente que no contesta queda como sin_respuesta', () => {
+    expect(aplicarEvento('llamando_paciente', { tipo: 'dial_fin', dialStatus: 'no-answer' })).toBe('sin_respuesta');
+    expect(aplicarEvento('llamando_paciente', { tipo: 'paciente', status: 'busy' })).toBe('sin_respuesta');
+  });
+
+  // Twilio reintenta los webhooks: el mismo evento dos veces no puede mover nada.
+  it('un evento repetido no mueve el estado', () => {
+    expect(aplicarEvento('llamando_paciente', { tipo: 'coach', status: 'in-progress' })).toBeNull();
+    expect(aplicarEvento('en_llamada', { tipo: 'paciente', status: 'in-progress' })).toBeNull();
+  });
+
+  it('nada retrocede desde un estado terminal', () => {
+    for (const t of ['completada', 'sin_respuesta', 'coach_no_contesto', 'fallida'] as EstadoLlamada[]) {
+      expect(aplicarEvento(t, { tipo: 'coach', status: 'ringing' })).toBeNull();
+      expect(aplicarEvento(t, { tipo: 'paciente', status: 'in-progress' })).toBeNull();
+      expect(aplicarEvento(t, { tipo: 'dial_fin', dialStatus: 'completed' })).toBeNull();
+    }
+  });
+
+  // Fuera de orden: el "completed" del tramo del coach puede llegar antes que el
+  // dial-fin. Si ya estaban hablando, es completada; si no, el paciente no atendió.
+  it('un completed del coach cierra bien aunque llegue antes que dial-fin', () => {
+    expect(aplicarEvento('en_llamada', { tipo: 'coach', status: 'completed' })).toBe('completada');
+    expect(aplicarEvento('llamando_paciente', { tipo: 'coach', status: 'completed' })).toBe('sin_respuesta');
+  });
+
+  it('un colgado del paciente durante la llamada es completada, no fallida', () => {
+    expect(aplicarEvento('en_llamada', { tipo: 'paciente', status: 'canceled' })).toBe('completada');
+    expect(aplicarEvento('en_llamada', { tipo: 'dial_fin', dialStatus: 'failed' })).toBe('completada');
+  });
+
+  it('esTerminal reconoce exactamente los cuatro finales', () => {
+    expect(['completada', 'sin_respuesta', 'coach_no_contesto', 'fallida'].every(esTerminal)).toBe(true);
+    expect(['iniciando', 'llamando_coach', 'llamando_paciente', 'en_llamada'].some(esTerminal)).toBe(false);
+  });
+});
+
+describe('TwiML', () => {
+  const base = 'https://bodytech.app';
+  const coach = twimlParaCoach({
+    llamadaId: 42,
+    pacienteNombre: 'Juan "El Flaco" <Pérez> & Cía',
+    pacienteCelular: '+573001234567',
+    base,
+  });
+
+  it('graba los dos canales desde que contesta el paciente', () => {
+    expect(coach).toContain('record="record-from-answer-dual"');
+    expect(coach).toContain('recordingStatusCallback="https://bodytech.app/api/twilio/llamadas/42/grabacion"');
+  });
+
+  // Sin el aviso NO hay bridge legal: el <Number url> es lo que lo reproduce.
+  it('el paciente oye el aviso de grabación antes de que lo unan', () => {
+    expect(coach).toContain('<Number url="https://bodytech.app/api/twilio/llamadas/42/aviso"');
+    expect(twimlAvisoPaciente({ pacienteNombre: 'Juan' })).toContain('Esta llamada será grabada');
+    expect(twimlAvisoPaciente({ pacienteNombre: 'Juan' })).toContain('Hola Juan,');
+    expect(twimlAvisoPaciente({ pacienteNombre: '' })).toContain('Hola, te habla');
+  });
+
+  it('declara los callbacks de estado y el cierre del Dial', () => {
+    expect(coach).toContain('statusCallback="https://bodytech.app/api/twilio/llamadas/42/estado?leg=paciente"');
+    expect(coach).toContain('action="https://bodytech.app/api/twilio/llamadas/42/dial-fin"');
+    expect(coach).toContain('>+573001234567</Number>');
+  });
+
+  // Un nombre con comillas o "&" sin escapar rompe el XML y la llamada muere
+  // apenas el coach contesta.
+  it('escapa el nombre del paciente en el XML', () => {
+    expect(coach).toContain('&quot;El Flaco&quot; &lt;Pérez&gt; &amp; Cía');
+    expect(coach).not.toContain('"El Flaco"');
+  });
+
+  it('el cierre del Dial le explica al coach qué pasó', () => {
+    expect(twimlDialFin('no-answer')).toContain('no contestó');
+    expect(twimlDialFin('busy')).toContain('ocupada');
+    expect(twimlDialFin('completed')).not.toContain('<Say');
+    expect(twimlDialFin('completed')).toContain('<Hangup/>');
+  });
+});

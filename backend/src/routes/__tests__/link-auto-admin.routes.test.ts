@@ -62,10 +62,22 @@ describe('/api/admin/link-auto', () => {
         .expect(200);
 
       expect(dispatch).toHaveBeenCalledWith('2026-09-03', {
+        tipo: 'link',
         dryRun: true,
         limit: undefined,
         historiaId: undefined,
       });
+    });
+
+    it('?tipo=recordatorio dispara el recordatorio; cualquier otro valor cae a link', async () => {
+      await request(appConRol('admin'))
+        .post('/api/admin/link-auto/dispatch?tipo=recordatorio&dryRun=1')
+        .expect(200);
+      expect(dispatch.mock.calls[0][1].tipo).toBe('recordatorio');
+      await request(appConRol('admin'))
+        .post('/api/admin/link-auto/dispatch?tipo=loquesea&dryRun=1')
+        .expect(200);
+      expect(dispatch.mock.calls[1][1].tipo).toBe('link');
     });
 
     it('sin dryRun explícito, NO es dry-run (envía de verdad)', async () => {

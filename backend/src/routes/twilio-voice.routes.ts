@@ -1,12 +1,50 @@
+// ============================================================================
+// twilio-voice.routes — /api/twilio
+//
+// Dos cosas conviven acá, con permisos distintos por ruta (el mount en
+// index.ts NO pone middleware, a propósito: los webhooks de Twilio deben
+// poder entrar sin JWT):
+//
+//   · Llamada del coach al paciente (en vivo, grabada) — ver llamadas-voz.
+//       POST /llamadas                 iniciar          clínico
+//       GET  /llamadas/:id             estado en vivo   clínico (solo la propia)
+//       GET  /llamadas?historiaId=     historial        coordinador/admin
+//       GET  /llamadas/:id/audio       la grabación     coordinador/admin
+//       POST /llamadas/:id/{twiml,aviso,estado,dial-fin,grabacion}
+//                                      webhooks Twilio  firma validada
+//
+//   · Robot legado (audio pregrabado, sin coach). Lo usa "Contactar"; queda
+//     protegido por rol — antes cualquiera podía llamar desde el número de
+//     Bodytech.
+// ============================================================================
+
 import { Router } from 'express';
 import twilioVoiceController from '../controllers/twilio-voice.controller';
+import llamadasVozController from '../controllers/llamadas-voz.controller';
+import { requireRole } from '../middleware/rbac.middleware';
 
 const router = Router();
 
-// GET /api/twilio/voice-twiml - TwiML webhook que reproduce el audio de bienvenida
-router.get('/voice-twiml', twilioVoiceController.voiceTwiml.bind(twilioVoiceController));
+const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
+const auditoria = requireRole('coordinador', 'admin');
 
-// POST /api/twilio/voice-call - Make a voice call
-router.post('/voice-call', twilioVoiceController.makeVoiceCall.bind(twilioVoiceController));
+// --- Llamada en vivo ---------------------------------------------------------
+
+router.post('/llamadas', clinico, llamadasVozController.iniciar);
+router.get('/llamadas', auditoria, llamadasVozController.listar);
+router.get('/llamadas/:id', clinico, llamadasVozController.get);
+router.get('/llamadas/:id/audio', auditoria, llamadasVozController.audio);
+
+// Webhooks (públicos; validan la firma de Twilio adentro).
+router.post('/llamadas/:id/twiml', llamadasVozController.twiml);
+router.post('/llamadas/:id/aviso', llamadasVozController.aviso);
+router.post('/llamadas/:id/estado', llamadasVozController.estado);
+router.post('/llamadas/:id/dial-fin', llamadasVozController.dialFin);
+router.post('/llamadas/:id/grabacion', llamadasVozController.grabacion);
+
+// --- Robot legado ------------------------------------------------------------
+
+router.get('/voice-twiml', twilioVoiceController.voiceTwiml.bind(twilioVoiceController));
+router.post('/voice-call', clinico, twilioVoiceController.makeVoiceCall.bind(twilioVoiceController));
 
 export default router;

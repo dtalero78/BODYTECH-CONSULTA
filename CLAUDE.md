@@ -173,7 +173,9 @@ Route: `/ordenes` → `OrdenesPage.tsx`. Full CRUD for medical orders linked to 
 El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):
 
 - **Manual** — el botón "Contactar" de `MedicalPanelPage.tsx` → `POST /api/video/whatsapp/send`. El coach decide cuándo. Además dispara una llamada de voz Twilio.
-- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts), que a `LINK_AUTO_HORA` (07:00 COT) manda el link a toda la agenda del día y sigue barriendo cada 10 min hasta `LINK_AUTO_HORA_FIN` para alcanzar las citas creadas o reprogramadas más tarde. Solo WhatsApp, sin llamada.
+- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts) manda el link **`LINK_AUTO_MINUTOS_ANTES` minutos antes de cada cita** (default 15; barre cada 5 min). Solo WhatsApp, sin llamada. **No se manda a las 07:00**: el paciente que entraba a esa hora no encontraba coach.
+
+**El recordatorio de la mañana es OTRO mensaje, con OTRA plantilla.** A `RECORDATORIO_HORA` (07:00 COT) el mismo worker manda a toda la agenda del día `bodytech_recordatorio_v1` (`TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID`): hora de la consulta + botón Reprogramar, **sin Conectarme**. No deja rastros de link (`enviarRecordatorioPaciente`): no toca `link_enviado_at` ni la sala ni Trepsi; solo registra el mensaje en el chat. Los dos tipos comparten la query de candidatas y la bitácora `link_auto_envio`, cuya PK es `(fecha, historia_id, tipo)`.
 
 `link-paciente.service` tiene tres capas: helpers **puros** (`formatHoraCita`, `formatCelularE164`, `buildRoomNameWithParams`), `prepararLinkDeCita()` (de una fila de `HistoriaClinica` a un envío listo — también pura, y por eso el dry-run del worker corre el mismo código sin escribir nada), y `enviarLinkPaciente()`, que envía (plataforma → fallback Twilio) y deja los **4 rastros**: `link_enviado_at` + `link_enviado_por`, `video_room_name`, el mensaje en el chat, y el webhook a Trepsi.
 
@@ -183,7 +185,23 @@ El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos 
 
 **Filtros que no son negociables** (ver el SQL de `getCandidatas`): la guarda regex sobre `fechaAtencion` antes de cualquier `::timestamptz` (una fila mal formada abortaría la query del día entero), y `NOT EXISTS` sobre `trepsi_appointments` con `estado='cancelled'` — `trepsi.service.cancel()` **no toca `HistoriaClinica`**, así que una cita Trepsi cancelada es indistinguible de una activa, y Trepsi es el 94% del volumen.
 
-Operación (admin): `POST /api/admin/link-auto/dispatch?fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=`. El dry-run no escribe nada y dice a quién le llegaría. Apagado por defecto (`LINK_AUTO_ENABLED`).
+Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=` (bitácora por tipo). El dry-run no escribe nada y dice a quién le llegaría; con `historiaId` el tipo `link` ignora la ventana de minutos ("mandáselo ya"). Ambos apagados por defecto (`LINK_AUTO_ENABLED`, `RECORDATORIO_ENABLED`).
+
+### Llamada del coach al paciente (en vivo, grabada)
+
+Distinta del robot de siempre (`/api/twilio/voice-call`, que reproduce `pbxBody.mp3` sin coach en la línea). Acá el coach **habla** con el paciente y la conversación **queda grabada**. Código en [backend/src/services/llamadas-voz.service.ts](backend/src/services/llamadas-voz.service.ts).
+
+**Puente por celular, dos tramos.** El coach aprieta "Llamar" en el panel → Twilio marca **primero al celular del coach** (sale de `usuarios.celular`) → cuando contesta, `/twiml` le dice "conectando con Juan" y hace `<Dial>` al paciente → el paciente oye el **aviso de grabación** (`/aviso`, obligatorio por Ley 1581, queda dentro del audio) → se unen. `record="record-from-answer-dual"`: dos canales separados, coach y paciente — es lo que le permite a Calidad saber quién dijo qué. Se eligió el celular y no un softphone en el navegador porque no pide micrófono, no depende del wifi del coach, y el panel ya carga la videollamada; el servidor no cambia si algún día se suma el softphone.
+
+**Los celulares los resuelve el servidor**, nunca el cliente: el paciente de `HistoriaClinica.celular`, el coach de `usuarios.celular`. `POST /api/twilio/llamadas` solo recibe `historiaId`. Sin esto, cualquiera con sesión podría usar el número de Bodytech para llamar a quien quiera.
+
+**Estados: máquina pura (`aplicarEvento`).** Los webhooks de Twilio llegan repetidos y desordenados; cada `UPDATE` exige el estado previo y nunca retrocede desde un terminal (`completada`, `sin_respuesta`, `coach_no_contesto`, `fallida`). Las llamadas sin cierre a los 20 min se dan por `fallida` al consultar (`cerrarHuerfanas`), así el panel no se queda "en llamada" para siempre.
+
+**La grabación vive en Twilio** (mismo criterio que las composiciones de video) y se sirve por `GET /api/twilio/llamadas/:id/audio` **solo a coordinador/admin** — los coaches no escuchan, ni las propias. El frontend la baja como Blob (un `<audio src>` no puede mandar el JWT). Cuando `RECORDINGS_BUCKET` esté conectado en producción, `abrirAudio()` es el único punto que cambia.
+
+**Calidad la evalúa como una fuente más.** `Grabacion` en `calidad.service` tiene `kind: 'voz'`; `getSession` devuelve `llamadasVoz` y la pantalla deja elegir "video de la consulta" o "llamada del dd/mm". El MP3 va derecho a Whisper (sin ffmpeg: son archivos chicos). `consulta_evaluaciones.fuente` ('video'|'voz'|'transcript') y `llamada_id` dicen qué se evaluó. Si la historia no tiene video pero sí una llamada grabada, se evalúa la llamada por defecto.
+
+**Router `/api/twilio` sin middleware en el mount, a propósito**: los webhooks deben entrar sin JWT. El RBAC va por ruta, y los webhooks validan la firma de Twilio con el token de **voz** (`TWILIO_VOICE_AUTH_TOKEN`, con fallback al general): Twilio firma con el token de la cuenta que hizo la llamada.
 
 ### PDF export (Puppeteer)
 
@@ -390,19 +408,33 @@ TWILIO_WHATSAPP_GESTION_TEMPLATE_SID=HXxxxx   # Informe de Gestión diario a adm
 GESTION_REPORT_HORA=19:30                      # hora Colombia del envío diario del informe (default 19:30)
 PUBLIC_BASE_URL=https://bodytech.app           # base pública para la URL de la imagen del informe (Twilio la debe alcanzar)
 
-# Envío AUTOMÁTICO del link de videollamada al paciente (worker link-auto).
-# Manda WhatsApp a pacientes reales: APAGADO por defecto, se prende por fases
+# WhatsApp automáticos del día (worker link-auto). Dos mensajes, dos plantillas:
+#   · recordatorio a las 07:00 (hora + Reprogramar, sin link) y
+#   · link minutos antes de cada cita (Conectarme + Reprogramar).
+# Mandan a pacientes reales: APAGADOS por defecto, se prenden por fases
 # (primero LINK_AUTO_SOLO_CELULARES, después LINK_AUTO_SEDES, después todo).
-LINK_AUTO_ENABLED=false                        # kill switch ('1'/'true' para prender)
-LINK_AUTO_HORA=07:00                           # hora Colombia de la tanda del día
-LINK_AUTO_HORA_FIN=19:00                       # tope: después de esta hora no se envía nada
-LINK_AUTO_INTERVALO_MIN=10                     # cada cuánto barre (alcanza citas creadas más tarde)
+RECORDATORIO_ENABLED=false                     # recordatorio de la mañana
+RECORDATORIO_HORA=07:00                        # hora Colombia de la tanda
+RECORDATORIO_HORA_FIN=19:00                    # tope: un servidor caído toda la mañana no manda "hoy tienes consulta" de noche
+TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID=HX870a0caca39c10f10446f005373ec92f   # bodytech_recordatorio_v1
+LINK_AUTO_ENABLED=false                        # link antes de la cita
+LINK_AUTO_MINUTOS_ANTES=15                     # cuánto antes de la cita sale el link
+LINK_AUTO_GRACIA_MIN=5                         # si el worker estuvo caído, igual manda hasta N min después de la hora
+LINK_AUTO_INTERVALO_MIN=5                      # cada cuánto barre
 LINK_AUTO_MAX_POR_CORRIDA=60                   # tope de envíos por pasada
 LINK_AUTO_PAUSA_MS=1500                        # pausa entre envíos
 LINK_AUTO_MAX_INTENTOS=3                       # corta el reintento contra un número muerto
 LINK_AUTO_SOLO_CELULARES=                      # lista blanca CSV (modo observación)
 LINK_AUTO_SEDES=                               # CSV de sede_id, para el rollout escalonado
 LINK_AUTO_EXIGIR_PROFESIONAL=false             # exige que el `medico` exista y esté activo
+
+# Llamada del coach al paciente (en vivo, grabada). Twilio marca al celular del
+# coach (usuarios.celular) y después al paciente. Los webhooks validan firma con
+# el token de VOZ si Voice corre en subcuenta (fallback: los generales).
+TWILIO_VOICE_ACCOUNT_SID=                      # opcional; default TWILIO_ACCOUNT_SID
+TWILIO_VOICE_AUTH_TOKEN=                       # opcional; default TWILIO_AUTH_TOKEN
+TWILIO_VOICE_FROM=+576016284820                # número saliente (el que ya conoce el paciente)
+# PUBLIC_BASE_URL también la usan estos webhooks (Twilio tiene que alcanzarnos).
 
 # PostgreSQL (Digital Ocean managed)
 POSTGRES_HOST=...db.ondigitalocean.com
@@ -531,7 +563,8 @@ These docs go deeper than this file — read them when working on a specific are
 - **Panel nutricional**: `/nutricion/:roomName` con `panelVariant="nutricional"` → `MedicalHistoryPanel` (somatocarta, ISAK, Heath-Carter, plan nutricional con IA). Persiste en `datosNutricionales` (JSONB). `MedicalHistoryPanel.tsx` dejó de estar huérfano.
 - **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
 - **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
-- **Envío automático del link de videollamada**: worker `link-auto.service.ts` (tanda 07:00 COT + barrido hasta las 19:00), lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
+- **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link `LINK_AUTO_MINUTOS_ANTES` antes de cada cita (Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
+- **Llamada del coach al paciente, grabada**: botón "Llamar" en el panel (reemplaza al robot de "Rellamar"), puente por celular con Twilio Voice (`llamadas-voz.service.ts`), aviso de grabación al paciente, tabla `llamadas_voz`, audio solo para coordinador/admin en la historia, y evaluable desde Calidad como fuente `voz`.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.
 - **Twilio Voice**: TwiML webhook con audio Bodytech, número unificado `+576016284820`.

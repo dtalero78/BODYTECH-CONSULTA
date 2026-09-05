@@ -84,6 +84,33 @@ export async function obtenerUrlMediaTwilio(
  * Para consultas médicas (≤ ~200 MB) esto es viable; para audio extraído
  * con `extraerAudio` se transforma a MP3 mono 16 kHz (~2-5 MB).
  */
+/**
+ * El MP3 de una grabación de VOZ (llamada del coach al paciente), como buffer.
+ * A diferencia de las composiciones, no hay redirect ni URL pre-firmada: el
+ * recurso se pide directo con Basic auth. Son archivos chicos (8 kHz, dos
+ * canales) — una llamada de 10 minutos pesa ~1 MB, lejos del tope de Whisper —
+ * así que va derecho a transcribir, sin pasar por ffmpeg.
+ *
+ * Usa las credenciales de VOZ: si Voice corre en una subcuenta, la grabación
+ * vive ahí, no en la cuenta general.
+ */
+export async function descargarGrabacionVozComoBuffer(recordingSid: string): Promise<Buffer> {
+  const accountSid = process.env.TWILIO_VOICE_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_VOICE_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authToken) {
+    throw new Error('TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN no configurados');
+  }
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${encodeURIComponent(
+    recordingSid,
+  )}.mp3`;
+  const response = await axios.get<ArrayBuffer>(url, {
+    auth: { username: accountSid, password: authToken },
+    responseType: 'arraybuffer',
+    maxContentLength: 50 * 1024 * 1024,
+  });
+  return Buffer.from(response.data);
+}
+
 export async function descargarMp4ComoBuffer(url: string): Promise<Buffer> {
   const response = await axios.get<ArrayBuffer>(url, {
     responseType: 'arraybuffer',

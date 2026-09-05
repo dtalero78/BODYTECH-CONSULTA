@@ -1,31 +1,33 @@
 // ============================================================================
-// link-auto.service — envío AUTOMÁTICO del link de la videollamada.
+// link-auto.service — los WhatsApp automáticos del día: recordatorio y link.
 //
-// Antes, el paciente recibía su link solo si el coach apretaba "Contactar". Si
-// el coach se olvidaba, llegaba tarde o no abría la plataforma, la cita se
-// perdía en silencio — que es exactamente lo que mide el indicador "No
-// contactó". Este worker cierra ese hueco: cada mañana manda el link a toda la
-// agenda del día.
+// Son DOS mensajes, en dos momentos, con dos plantillas. Confundirlos fue el
+// primer diseño, y estaba mal:
 //
-// Ritmo: una tanda a LINK_AUTO_HORA y después un barrido cada pocos minutos
-// hasta LINK_AUTO_HORA_FIN. El barrido no es un detalle: una cita creada a las
-// 10:00 para las 15:00 de HOY nunca alcanzaría una única pasada matutina.
+//   · RECORDATORIO — a las 07:00, a toda la agenda del día: "hoy tienes
+//     consulta a las 3 p. m." + botón Reprogramar. SIN "Conectarme": a esa hora
+//     no hay coach en la sala, y el paciente que entraba a las 7 de la mañana
+//     no encontraba a nadie.
+//   · LINK — minutos antes de cada cita (LINK_AUTO_MINUTOS_ANTES): la plantilla
+//     de siempre, Conectarme + Reprogramar. Es el mismo mensaje que manda el
+//     botón "Contactar" del coach, solo que ya nadie tiene que acordarse.
 //
-// Idempotencia: POR CITA, en `link_auto_envio` (PK `fecha, historia_id`), con
-// un claim atómico. No se usa `link_enviado_at` como candado a propósito — si
-// el proceso muriera entre el claim y el envío, esa cita quedaría marcada como
-// contactada para siempre sin que nadie hubiera recibido nada, y esa columna
-// alimenta indicadores. Acá `link_enviado_at` se escribe SOLO tras un envío
-// exitoso, igual que con el botón manual.
+// Los dos comparten la maquinaria: quién tiene cita hoy, excluir canceladas de
+// Trepsi, no mandar dos veces, la bitácora. La idempotencia es POR CITA Y POR
+// TIPO, en `link_auto_envio` (PK fecha, historia_id, tipo), con claim atómico.
+// A propósito NO se usa `link_enviado_at` como candado: si el proceso muriera
+// entre el claim y el envío, la cita quedaría marcada como contactada sin que
+// nadie hubiera recibido nada, y esa columna alimenta indicadores.
 //
-// Apagado por defecto (LINK_AUTO_ENABLED). Manda WhatsApp a pacientes reales:
-// el despliegue va por lista blanca de celulares y después sede por sede.
+// Apagados por defecto (LINK_AUTO_ENABLED / RECORDATORIO_ENABLED). Mandan
+// WhatsApp a pacientes reales: el despliegue va por lista blanca y por sede.
 // ============================================================================
 
 import postgresService from './postgres.service';
 import {
   prepararLinkDeCita,
   enviarLinkPaciente,
+  enviarRecordatorioPaciente,
   FilaCitaLink,
   LinkPreparado,
   MotivoOmision,
@@ -39,14 +41,16 @@ import { nowColombia, rangoDiaColombia, horaAMinutos } from '../helpers/colombia
  */
 const TOPE_CORDURA = 200;
 
+export type TipoEnvio = 'recordatorio' | 'link';
+
 export interface ItemCorrida {
+  tipo: TipoEnvio;
   historiaId: string;
   accion: 'ENVIADA' | 'ENVIARIA' | 'OMITIDA' | 'OMITIRIA' | 'FALLIDA' | 'YA_RECLAMADA';
   nombre: string;
   numeroId?: string;
   celular?: string;
   medico?: string;
-  sedeId?: string;
   horaCita?: string;
   appointmentTime?: string;
   roomName?: string;
@@ -61,6 +65,7 @@ export interface ItemCorrida {
 
 export interface ResumenCorrida {
   fecha: string;
+  tipo: TipoEnvio;
   dryRun: boolean;
   candidatas: number;
   enviadas: number;
@@ -72,9 +77,14 @@ export interface ResumenCorrida {
 }
 
 interface Config {
-  enabled: boolean;
-  horaInicio: number;
-  horaFin: number;
+  linkEnabled: boolean;
+  /** Cuánto antes de la cita sale el link. */
+  linkMinutosAntes: number;
+  /** Si el worker estuvo caído, igual manda hasta estos minutos DESPUÉS de la hora. */
+  linkGraciaMin: number;
+  recordatorioEnabled: boolean;
+  recordatorioHora: number;
+  recordatorioHoraFin: number;
   maxPorCorrida: number;
   pausaMs: number;
   maxIntentos: number;
@@ -96,9 +106,12 @@ function leerConfig(): Config {
   };
 
   return {
-    enabled: bool(process.env.LINK_AUTO_ENABLED),
-    horaInicio: horaAMinutos(process.env.LINK_AUTO_HORA || '07:00', 7 * 60),
-    horaFin: horaAMinutos(process.env.LINK_AUTO_HORA_FIN || '19:00', 19 * 60),
+    linkEnabled: bool(process.env.LINK_AUTO_ENABLED),
+    linkMinutosAntes: num(process.env.LINK_AUTO_MINUTOS_ANTES, 15),
+    linkGraciaMin: num(process.env.LINK_AUTO_GRACIA_MIN, 5),
+    recordatorioEnabled: bool(process.env.RECORDATORIO_ENABLED),
+    recordatorioHora: horaAMinutos(process.env.RECORDATORIO_HORA || '07:00', 7 * 60),
+    recordatorioHoraFin: horaAMinutos(process.env.RECORDATORIO_HORA_FIN || '19:00', 19 * 60),
     maxPorCorrida: num(process.env.LINK_AUTO_MAX_POR_CORRIDA, 60),
     pausaMs: num(process.env.LINK_AUTO_PAUSA_MS, 1500),
     maxIntentos: num(process.env.LINK_AUTO_MAX_INTENTOS, 3),
@@ -123,16 +136,12 @@ class LinkAutoService {
    */
   private corriendo = false;
 
-  /** Lo llama el worker de index.ts. */
+  /** Lo llama el worker de index.ts. Decide qué tipo(s) tocan en esta pasada. */
   async maybeDispatch(): Promise<void> {
     const cfg = leerConfig();
-    if (!cfg.enabled) return;
+    if (!cfg.linkEnabled && !cfg.recordatorioEnabled) return;
 
-    // Patrón "ya pasó la hora", no "es la hora": tolera reinicios del
-    // contenedor y que el intervalo no caiga justo en el minuto objetivo.
     const { fecha, minutos } = nowColombia();
-    if (minutos < cfg.horaInicio || minutos >= cfg.horaFin) return;
-
     if (this.corriendo) {
       console.warn('[link-auto] la pasada anterior sigue corriendo — se salta esta.');
       return;
@@ -140,30 +149,45 @@ class LinkAutoService {
 
     this.corriendo = true;
     try {
-      const r = await this.dispatch(fecha);
-      if (r.enviadas > 0 || r.fallidas > 0) {
-        console.log(
-          `🔗 [Link-Auto] ${fecha}: ${r.enviadas} enviadas · ${r.fallidas} fallidas · ${r.omitidas} omitidas (${r.candidatas} candidatas)`
-        );
+      // Recordatorio: patrón "ya pasó la hora", no "es la hora" — tolera
+      // reinicios y que el intervalo no caiga justo en el minuto. Con tope
+      // superior, para que un servidor caído toda la mañana no mande el
+      // "hoy tienes consulta" a las 11 de la noche.
+      if (cfg.recordatorioEnabled && minutos >= cfg.recordatorioHora && minutos < cfg.recordatorioHoraFin) {
+        this.log(await this.dispatch(fecha, { tipo: 'recordatorio' }));
+      }
+      // Link: la ventana la define la hora de CADA cita, no la del día.
+      if (cfg.linkEnabled) {
+        this.log(await this.dispatch(fecha, { tipo: 'link' }));
       }
     } finally {
       this.corriendo = false;
     }
   }
 
+  private log(r: ResumenCorrida): void {
+    if (r.enviadas > 0 || r.fallidas > 0 || r.abortado) {
+      console.log(
+        `🔗 [Link-Auto] ${r.fecha} ${r.tipo}: ${r.enviadas} enviadas · ${r.fallidas} fallidas · ${r.omitidas} omitidas (${r.candidatas} candidatas)${r.abortado ? ' · ABORTADO ' + r.abortado : ''}`
+      );
+    }
+  }
+
   /**
-   * Una pasada. `dryRun` corre exactamente el mismo camino de decisión pero no
-   * escribe NADA: ni el claim, ni la sala, ni la marca de enviado. Es la forma
-   * de ver a quién le llegaría antes de que le llegue.
+   * Una pasada de UN tipo. `dryRun` corre exactamente el mismo camino de
+   * decisión pero no escribe NADA: ni el claim, ni la sala, ni la marca de
+   * enviado. Es la forma de ver a quién le llegaría antes de que le llegue.
    */
   async dispatch(
     fecha: string,
-    opts: { dryRun?: boolean; limit?: number; historiaId?: string } = {}
+    opts: { tipo: TipoEnvio; dryRun?: boolean; limit?: number; historiaId?: string }
   ): Promise<ResumenCorrida> {
     const cfg = leerConfig();
+    const tipo = opts.tipo;
     const dryRun = opts.dryRun === true;
     const resumen: ResumenCorrida = {
       fecha,
+      tipo,
       dryRun,
       candidatas: 0,
       enviadas: 0,
@@ -179,7 +203,7 @@ class LinkAutoService {
       // chequeo, un error de base se leería como "hoy no hay citas" y el worker
       // callaría en silencio, todos los días.
       resumen.abortado = 'DB_ERROR';
-      console.error('❌ [link-auto] Error consultando citas candidatas — se aborta la pasada.');
+      console.error(`❌ [link-auto] Error consultando candidatas (${tipo}) — se aborta la pasada.`);
       return resumen;
     }
 
@@ -189,7 +213,7 @@ class LinkAutoService {
     if (filas.length > TOPE_CORDURA) {
       resumen.abortado = 'TOPE_CORDURA';
       console.error(
-        `🚨 [link-auto] ${filas.length} candidatas para ${fecha} (tope ${TOPE_CORDURA}). ` +
+        `🚨 [link-auto] ${filas.length} candidatas (${tipo}) para ${fecha} (tope ${TOPE_CORDURA}). ` +
           'Eso no es una agenda normal: NO se envió nada. Revisar la ventana de fechas.'
       );
       return resumen;
@@ -208,6 +232,7 @@ class LinkAutoService {
       if (!prep.ok) {
         resumen.omitidas++;
         resumen.items.push({
+          tipo,
           historiaId: fila.historiaId,
           accion: dryRun ? 'OMITIRIA' : 'OMITIDA',
           nombre: nombreDe(fila),
@@ -217,12 +242,13 @@ class LinkAutoService {
           horaCita: fila.horaBogota ?? undefined,
           motivo: prep.motivo,
         });
-        if (!dryRun) await this.marcarOmitida(fecha, fila, prep.motivo);
+        if (!dryRun) await this.marcarOmitida(fecha, tipo, fila, prep.motivo);
         continue;
       }
 
       const d: LinkPreparado = prep.data;
       const base: ItemCorrida = {
+        tipo,
         historiaId: d.historiaId,
         accion: 'ENVIARIA',
         nombre: d.patientName,
@@ -231,10 +257,15 @@ class LinkAutoService {
         medico: fila.medico ?? undefined,
         horaCita: d.horaCita,
         appointmentTime: d.appointmentTime,
-        roomName: d.roomName,
-        roomNameReusada: d.roomNameReusada,
-        roomNameWithParams: d.roomNameWithParams,
-        linkPaciente: d.linkPaciente,
+        // La sala solo importa para el LINK; el recordatorio no la toca.
+        ...(tipo === 'link'
+          ? {
+              roomName: d.roomName,
+              roomNameReusada: d.roomNameReusada,
+              roomNameWithParams: d.roomNameWithParams,
+              linkPaciente: d.linkPaciente,
+            }
+          : {}),
       };
 
       if (dryRun) {
@@ -242,35 +273,44 @@ class LinkAutoService {
         continue;
       }
 
-      const reclamada = await this.reclamar(fecha, d.historiaId, cfg.maxIntentos);
+      const reclamada = await this.reclamar(fecha, tipo, d.historiaId, cfg.maxIntentos);
       if (!reclamada) {
         resumen.yaReclamadas++;
         resumen.items.push({ ...base, accion: 'YA_RECLAMADA' });
         continue;
       }
 
-      const r = await enviarLinkPaciente({
-        historiaId: d.historiaId,
-        phone: d.phoneE164,
-        patientName: d.patientName,
-        appointmentTime: d.appointmentTime,
-        roomNameWithParams: d.roomNameWithParams,
-        origen: 'auto',
-        esperarEfectos: true,
-        usarPlataforma: plataformaViva,
-      });
+      const r =
+        tipo === 'link'
+          ? await enviarLinkPaciente({
+              historiaId: d.historiaId,
+              phone: d.phoneE164,
+              patientName: d.patientName,
+              appointmentTime: d.appointmentTime,
+              roomNameWithParams: d.roomNameWithParams,
+              origen: 'auto',
+              esperarEfectos: true,
+              usarPlataforma: plataformaViva,
+            })
+          : await enviarRecordatorioPaciente({
+              historiaId: d.historiaId,
+              phone: d.phoneE164,
+              patientName: d.patientName,
+              appointmentTime: d.appointmentTime,
+              usarPlataforma: plataformaViva,
+            });
 
       if (r.success) {
         if (r.via === 'twilio' && plataformaViva) plataformaViva = false;
         resumen.enviadas++;
         resumen.items.push({ ...base, accion: 'ENVIADA', via: r.via });
-        await this.marcarEnviada(fecha, d, r.messageSid, r.via);
+        await this.marcarEnviada(fecha, tipo, d, r.messageSid, r.via);
       } else {
         plataformaViva = false;
         resumen.fallidas++;
         resumen.items.push({ ...base, accion: 'FALLIDA', error: r.error });
-        await this.marcarError(fecha, d.historiaId, r.error || 'error desconocido');
-        console.error(`❌ [link-auto] Falló el envío a ${d.phoneE164}: ${r.error}`);
+        await this.marcarError(fecha, tipo, d.historiaId, r.error || 'error desconocido');
+        console.error(`❌ [link-auto] Falló ${tipo} a ${d.phoneE164}: ${r.error}`);
       }
 
       await sleep(cfg.pausaMs);
@@ -279,30 +319,32 @@ class LinkAutoService {
     return resumen;
   }
 
-  /** Resumen del día para el panel admin: conteo por estado + el detalle. */
+  /** Bitácora del día para el panel admin: conteo por tipo y estado + el detalle. */
   async getEstado(fecha: string): Promise<{
     fecha: string;
-    porEstado: Record<string, number>;
+    porTipo: Record<string, Record<string, number>>;
     filas: Record<string, unknown>[];
   } | null> {
     const filas = await postgresService.query(
-      `SELECT historia_id, estado, motivo, intentos, celular, hora_cita, room_name,
+      `SELECT tipo, historia_id, estado, motivo, intentos, celular, hora_cita, room_name,
               message_sid, via, error,
               to_char(enviado_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS enviado_at,
               to_char(next_try_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS next_try_at
          FROM link_auto_envio
         WHERE fecha = $1::date
-        ORDER BY hora_cita NULLS LAST, historia_id`,
+        ORDER BY tipo, hora_cita NULLS LAST, historia_id`,
       [fecha]
     );
     if (filas === null) return null;
 
-    const porEstado: Record<string, number> = {};
+    const porTipo: Record<string, Record<string, number>> = {};
     for (const f of filas) {
+      const t = String(f.tipo);
       const e = String(f.estado);
-      porEstado[e] = (porEstado[e] || 0) + 1;
+      porTipo[t] = porTipo[t] || {};
+      porTipo[t][e] = (porTipo[t][e] || 0) + 1;
     }
-    return { fecha, porEstado, filas };
+    return { fecha, porTipo, filas };
   }
 
   // -------------------------------------------------------------------------
@@ -312,23 +354,29 @@ class LinkAutoService {
   private async getCandidatas(
     fecha: string,
     cfg: Config,
-    opts: { limit?: number; historiaId?: string }
+    opts: { tipo: TipoEnvio; limit?: number; historiaId?: string }
   ): Promise<FilaCitaLink[] | null> {
-    let rango: { inicioUtc: string; finUtc: string };
+    let dia: { inicioUtc: string; finUtc: string };
     try {
-      rango = rangoDiaColombia(fecha);
+      dia = rangoDiaColombia(fecha);
     } catch {
       return null;
     }
 
+    // La ventana de la cita:
+    //  · recordatorio → todo el día.
+    //  · link → de (ahora - gracia) a (ahora + minutosAntes). Una cita puntual
+    //    pedida a mano (historiaId) ignora la ventana: es "mandáselo YA".
+    let desde = dia.inicioUtc;
+    let hasta = dia.finUtc;
+    if (opts.tipo === 'link' && !opts.historiaId) {
+      const ahora = Date.now();
+      desde = new Date(ahora - cfg.linkGraciaMin * 60_000).toISOString();
+      hasta = new Date(ahora + cfg.linkMinutosAntes * 60_000).toISOString();
+    }
+
     const limit = Math.min(opts.limit || cfg.maxPorCorrida, TOPE_CORDURA + 1);
-    const params: unknown[] = [
-      rango.inicioUtc,
-      rango.finUtc,
-      fecha,
-      cfg.maxIntentos,
-      limit,
-    ];
+    const params: unknown[] = [desde, hasta, fecha, cfg.maxIntentos, limit, opts.tipo, dia.inicioUtc];
 
     let extra = '';
     if (cfg.sedes.length > 0) {
@@ -345,18 +393,18 @@ class LinkAutoService {
     //    sola fila con fechaAtencion mal formada aborta la query entera y el
     //    worker no manda nada en todo el día.
     //  · La ventana se compara como timestamptz, no como texto: fechaAtencion
-    //    es TEXT y mezcla formatos ('Z' y '-05:00'), así que compararla contra
-    //    un Date sería una comparación lexicográfica que a veces acierta.
-    //  · link_enviado_at < inicio del día ⇒ se reenvía a las citas reprogramadas
-    //    DESDE otro día (con la hora nueva), sin duplicarle a nadie de hoy.
+    //    es TEXT y mezcla formatos ('Z' y '-05:00').
+    //  · link_enviado_at < inicio del día ⇒ una cita reprogramada DESDE otro
+    //    día vuelve a recibir su mensaje (con la hora nueva); una ya contactada
+    //    HOY por el coach no recibe ni el recordatorio ni el link de nuevo.
     //  · `medico_valido` viaja como COLUMNA, no como filtro: una cita cuyo
     //    `medico` no existe en `profesionales` se omite en la capa de arriba,
     //    pero queda registrada. Filtrarla acá la haría invisible, y son justo
     //    las que hay que ver (mybodytech guarda ahí el nombre, no el código).
     //  · Las citas de Trepsi canceladas siguen "vivas" en HistoriaClinica
     //    (trepsi.service.cancel solo toca trepsi_appointments), y Trepsi es el
-    //    94% del volumen: sin este NOT EXISTS le mandaríamos el link a gente
-    //    que canceló.
+    //    94% del volumen: sin este NOT EXISTS le escribiríamos a gente que
+    //    canceló.
     const sql = `
       SELECT h."_id" AS historia_id, h."primerNombre" AS primer_nombre,
              h."primerApellido" AS primer_apellido, h."numeroId" AS numero_id,
@@ -372,17 +420,17 @@ class LinkAutoService {
        WHERE h."fechaAtencion" IS NOT NULL
          AND h."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
          AND h."fechaAtencion"::timestamptz >= $1::timestamptz
-         AND h."fechaAtencion"::timestamptz <  $2::timestamptz
+         AND h."fechaAtencion"::timestamptz <= $2::timestamptz
          AND h."fechaConsulta" IS NULL
          AND UPPER(COALESCE(h."atendido", 'PENDIENTE')) NOT IN ('ATENDIDO', 'NO CONTESTA')
          AND COALESCE(h."pvEstado", '') <> 'No Contesta'
          AND COALESCE(h."numeroId", '') NOT IN ('TEST', 'test')
-         AND (h."link_enviado_at" IS NULL OR h."link_enviado_at" < $1::timestamptz)
+         AND (h."link_enviado_at" IS NULL OR h."link_enviado_at" < $7::timestamptz)
          AND NOT EXISTS (SELECT 1 FROM trepsi_appointments t
                           WHERE t.historia_id = h."_id" AND t.estado = 'cancelled')
          AND NOT EXISTS (
                SELECT 1 FROM link_auto_envio e
-                WHERE e.fecha = $3::date AND e.historia_id = h."_id"
+                WHERE e.fecha = $3::date AND e.historia_id = h."_id" AND e.tipo = $6
                   AND (   e.estado = 'enviado'
                        OR e.intentos >= $4
                        OR (e.estado = 'claimed' AND e.claimed_at > NOW() - INTERVAL '15 minutes')
@@ -412,11 +460,16 @@ class LinkAutoService {
    * tiene. Una fila 'claimed' solo se re-toma pasados 15 min: así un crash a
    * mitad de envío se auto-sana en la pasada siguiente en vez de perderse.
    */
-  private async reclamar(fecha: string, historiaId: string, maxIntentos: number): Promise<boolean> {
+  private async reclamar(
+    fecha: string,
+    tipo: TipoEnvio,
+    historiaId: string,
+    maxIntentos: number
+  ): Promise<boolean> {
     const r = await postgresService.query(
-      `INSERT INTO link_auto_envio (fecha, historia_id, estado, intentos, claimed_at, next_try_at)
-       VALUES ($1::date, $2, 'claimed', 1, NOW(), NOW())
-       ON CONFLICT (fecha, historia_id) DO UPDATE
+      `INSERT INTO link_auto_envio (fecha, historia_id, tipo, estado, intentos, claimed_at, next_try_at)
+       VALUES ($1::date, $2, $4, 'claimed', 1, NOW(), NOW())
+       ON CONFLICT (fecha, historia_id, tipo) DO UPDATE
           SET estado = 'claimed', intentos = link_auto_envio.intentos + 1,
               claimed_at = NOW(), error = NULL
         WHERE link_auto_envio.estado IN ('error', 'omitido', 'claimed')
@@ -425,13 +478,14 @@ class LinkAutoService {
           AND (link_auto_envio.estado <> 'claimed'
                OR link_auto_envio.claimed_at < NOW() - INTERVAL '15 minutes')
        RETURNING historia_id`,
-      [fecha, historiaId, maxIntentos]
+      [fecha, historiaId, maxIntentos, tipo]
     );
     return Array.isArray(r) && r.length > 0;
   }
 
   private async marcarEnviada(
     fecha: string,
+    tipo: TipoEnvio,
     d: LinkPreparado,
     messageSid: string | undefined,
     via: string
@@ -440,22 +494,31 @@ class LinkAutoService {
       .query(
         `UPDATE link_auto_envio
             SET estado = 'enviado', enviado_at = NOW(), error = NULL, motivo = NULL,
-                celular = $3, hora_cita = $4, room_name = $5, message_sid = $6, via = $7
-          WHERE fecha = $1::date AND historia_id = $2`,
-        [fecha, d.historiaId, d.phoneE164, d.horaCita, d.roomName, messageSid || null, via]
+                celular = $4, hora_cita = $5, room_name = $6, message_sid = $7, via = $8
+          WHERE fecha = $1::date AND historia_id = $2 AND tipo = $3`,
+        [
+          fecha,
+          d.historiaId,
+          tipo,
+          d.phoneE164,
+          d.horaCita,
+          tipo === 'link' ? d.roomName : null,
+          messageSid || null,
+          via,
+        ]
       )
       .catch((e) => console.error('⚠️ [link-auto] Error marcando enviada:', e?.message ?? e));
   }
 
   /** Backoff lineal: 15 min por intento ya hecho. */
-  private async marcarError(fecha: string, historiaId: string, error: string): Promise<void> {
+  private async marcarError(fecha: string, tipo: TipoEnvio, historiaId: string, error: string): Promise<void> {
     await postgresService
       .query(
         `UPDATE link_auto_envio
-            SET estado = 'error', error = $3,
+            SET estado = 'error', error = $4,
                 next_try_at = NOW() + (intentos * INTERVAL '15 minutes')
-          WHERE fecha = $1::date AND historia_id = $2`,
-        [fecha, historiaId, error.slice(0, 500)]
+          WHERE fecha = $1::date AND historia_id = $2 AND tipo = $3`,
+        [fecha, historiaId, tipo, error.slice(0, 500)]
       )
       .catch((e) => console.error('⚠️ [link-auto] Error marcando error:', e?.message ?? e));
   }
@@ -467,18 +530,19 @@ class LinkAutoService {
    */
   private async marcarOmitida(
     fecha: string,
+    tipo: TipoEnvio,
     fila: FilaCitaLink,
     motivo: MotivoOmision
   ): Promise<void> {
     await postgresService
       .query(
-        `INSERT INTO link_auto_envio (fecha, historia_id, estado, motivo, intentos, celular, hora_cita, next_try_at)
-         VALUES ($1::date, $2, 'omitido', $3, 0, $4, $5, NOW() + INTERVAL '30 minutes')
-         ON CONFLICT (fecha, historia_id) DO UPDATE
-            SET estado = 'omitido', motivo = $3, celular = $4, hora_cita = $5,
+        `INSERT INTO link_auto_envio (fecha, historia_id, tipo, estado, motivo, intentos, celular, hora_cita, next_try_at)
+         VALUES ($1::date, $2, $3, 'omitido', $4, 0, $5, $6, NOW() + INTERVAL '30 minutes')
+         ON CONFLICT (fecha, historia_id, tipo) DO UPDATE
+            SET estado = 'omitido', motivo = $4, celular = $5, hora_cita = $6,
                 next_try_at = NOW() + INTERVAL '30 minutes'
           WHERE link_auto_envio.estado <> 'enviado'`,
-        [fecha, fila.historiaId, motivo, fila.celular, fila.horaBogota]
+        [fecha, fila.historiaId, tipo, motivo, fila.celular, fila.horaBogota]
       )
       .catch((e) => console.error('⚠️ [link-auto] Error marcando omitida:', e?.message ?? e));
   }

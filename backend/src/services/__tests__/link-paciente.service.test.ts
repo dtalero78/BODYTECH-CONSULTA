@@ -12,7 +12,7 @@
 // funciones son puras. Se mockean para que la suite no necesite credenciales.
 jest.mock('../whatsapp.service', () => ({
   __esModule: true,
-  default: { sendTemplateMessage: jest.fn() },
+  default: { sendTemplateMessage: jest.fn(), sendContentTemplate: jest.fn() },
 }));
 jest.mock('../postgres.service', () => ({
   __esModule: true,
@@ -34,6 +34,7 @@ import {
   generateRoomName,
   prepararLinkDeCita,
   enviarLinkPaciente,
+  enviarRecordatorioPaciente,
   FilaCitaLink,
 } from '../link-paciente.service';
 import whatsappService from '../whatsapp.service';
@@ -367,5 +368,65 @@ describe('enviarLinkPaciente', () => {
     enqueueLink.mockRejectedValue(new Error('BD caída'));
 
     await expect(enviarLinkPaciente(input)).resolves.toMatchObject({ success: true });
+  });
+});
+
+// ===========================================================================
+// El recordatorio de la mañana: otro mensaje, sin link, sin rastros de link.
+// ===========================================================================
+
+describe('enviarRecordatorioPaciente', () => {
+  const enviarPlantilla = bslPlataformaChatService.enviarPlantilla as jest.Mock;
+  const sendContent = whatsappService.sendContentTemplate as jest.Mock;
+  const query = postgresService.query as jest.Mock;
+  const registrarMensaje = postgresService.registrarMensajeSaliente as jest.Mock;
+  const enqueueLink = trepsiWebhookService.enqueueLink as jest.Mock;
+
+  const input = { historiaId: 'hc-1', phone: '573001234567', patientName: 'Juan', appointmentTime: '03:00 p. m.' };
+  const envOriginal = process.env;
+
+  beforeEach(() => {
+    process.env = { ...envOriginal, TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID: 'HXrecordatorio' };
+    registrarMensaje.mockResolvedValue(undefined);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    process.env = envOriginal;
+    jest.restoreAllMocks();
+  });
+
+  it('sin plantilla configurada no manda nada y lo dice', async () => {
+    delete process.env.TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID;
+    const r = await enviarRecordatorioPaciente(input);
+    expect(r).toMatchObject({ success: false, error: 'RECORDATORIO_TEMPLATE_NO_CONFIGURADO' });
+    expect(enviarPlantilla).not.toHaveBeenCalled();
+    expect(sendContent).not.toHaveBeenCalled();
+  });
+
+  it('usa la plantilla de recordatorio con nombre, hora e historia (botón Reprogramar)', async () => {
+    enviarPlantilla.mockResolvedValue(true);
+    const r = await enviarRecordatorioPaciente(input);
+    expect(r).toMatchObject({ success: true, via: 'plataforma' });
+    expect(enviarPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
+    expect(enviarPlantilla.mock.calls[0][2]).toEqual({ '1': 'Juan', '2': '03:00 p. m.', '3': 'hc-1' });
+  });
+
+  it('cae a Twilio con la MISMA plantilla si la plataforma no lo tomó', async () => {
+    enviarPlantilla.mockResolvedValue(false);
+    sendContent.mockResolvedValue({ success: true, messageSid: 'SM2' });
+    const r = await enviarRecordatorioPaciente(input);
+    expect(r).toMatchObject({ success: true, via: 'twilio', messageSid: 'SM2' });
+    expect(sendContent.mock.calls[0][1]).toBe('HXrecordatorio');
+  });
+
+  // Es lo que lo distingue del link: no es "contacto", no es la sala, no es Trepsi.
+  it('NO deja rastros de link: ni link_enviado_at, ni sala, ni webhook a Trepsi', async () => {
+    enviarPlantilla.mockResolvedValue(true);
+    await enviarRecordatorioPaciente(input);
+    expect(query).not.toHaveBeenCalled();
+    expect(enqueueLink).not.toHaveBeenCalled();
+    // Pero sí queda en el hilo del chat.
+    expect(registrarMensaje).toHaveBeenCalledTimes(1);
+    expect(registrarMensaje.mock.calls[0][0]).toBe('+573001234567');
   });
 });

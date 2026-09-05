@@ -6,8 +6,19 @@ const API = import.meta.env.VITE_API_BASE_URL || '';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface LlamadaVozResumen {
+  id: number;
+  iniciadaAt: string;
+  estado: string;
+  duracionSeg: number | null;
+  coachNombre: string | null;
+  tieneGrabacion: boolean;
+}
+
 interface SessionInfo {
   compositionSid: string | null;
+  /** Llamadas de voz del coach con esta persona. Cada una es evaluable aparte. */
+  llamadasVoz: LlamadaVozResumen[];
   patientName: string;
   numeroId: string;
   doctorName: string;
@@ -289,6 +300,11 @@ export function CalidadPage() {
   // Polling interval ref
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Fuente a evaluar: el video de la consulta (default) o una llamada ──────
+  const [llamadaSel, setLlamadaSel] = useState<number | null>(null);
+  const [audioLlamada, setAudioLlamada] = useState<{ id: number; url: string } | null>(null);
+  const [audioCargando, setAudioCargando] = useState(false);
+
   // ── Fetch session info ──────────────────────────────────────────────────────
   const fetchSession = useCallback(async () => {
     if (!historiaId) {
@@ -304,6 +320,7 @@ export function CalidadPage() {
       }
       setSession({
         compositionSid: res.data.compositionSid ?? null,
+        llamadasVoz: Array.isArray(res.data.llamadasVoz) ? res.data.llamadasVoz : [],
         patientName: res.data.patientName ?? '—',
         numeroId: res.data.numeroId ?? '—',
         doctorName: res.data.doctorName ?? '—',
@@ -433,7 +450,10 @@ export function CalidadPage() {
     setTranscriptOpen(false);
 
     try {
-      const res = await axios.post(`${API}/api/calidad/evaluar/${historiaId}`);
+      const res = await axios.post(
+        `${API}/api/calidad/evaluar/${historiaId}`,
+        llamadaSel ? { llamadaId: llamadaSel } : {}
+      );
       const evalId: number = res.data.evaluacionId;
 
       // Fetch initial state immediately
@@ -614,6 +634,94 @@ export function CalidadPage() {
           </div>
         </div>
 
+        {/* ── Llamadas grabadas ─────────────────────────────────────────────── */}
+        {session && session.llamadasVoz.length > 0 && (
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-2">
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 0 1 2-2h3.28a1 1 0 0 1 .948.684l1.498 4.493a1 1 0 0 1-.502 1.21l-2.257 1.13a11.042 11.042 0 0 0 5.516 5.516l1.13-2.257a1 1 0 0 1 1.21-.502l4.493 1.498a1 1 0 0 1 .684.949V19a2 2 0 0 1-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              <span className="text-sm font-semibold text-gray-700">Llamadas del coach</span>
+              <span className="ml-auto text-xs text-gray-400">
+                Elegí una para evaluar la llamada en vez del video
+              </span>
+            </div>
+            <ul className="divide-y">
+              <li className="px-5 py-2.5 flex items-center gap-3">
+                <input
+                  type="radio"
+                  name="fuente"
+                  checked={llamadaSel === null}
+                  onChange={() => setLlamadaSel(null)}
+                  disabled={!(videoUrl || session.compositionSid)}
+                />
+                <span className="text-sm text-gray-700">Video de la consulta</span>
+                {!(videoUrl || session.compositionSid) && (
+                  <span className="text-xs text-gray-400">(sin video)</span>
+                )}
+              </li>
+              {session.llamadasVoz.map((l) => {
+                const d = new Date(l.iniciadaAt);
+                const cuando = d.toLocaleString('es-CO', {
+                  day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                  hour12: false, timeZone: 'America/Bogota',
+                });
+                const dur =
+                  l.duracionSeg != null
+                    ? `${Math.floor(l.duracionSeg / 60)}:${String(l.duracionSeg % 60).padStart(2, '0')}`
+                    : '—';
+                const elegida = llamadaSel === l.id;
+                return (
+                  <li key={l.id} className="px-5 py-2.5 flex items-center gap-3 flex-wrap">
+                    <input
+                      type="radio"
+                      name="fuente"
+                      checked={elegida}
+                      disabled={!l.tieneGrabacion}
+                      onChange={() => setLlamadaSel(l.id)}
+                    />
+                    <span className="text-sm text-gray-700">
+                      Llamada del {cuando}
+                      {l.coachNombre ? ` · ${l.coachNombre}` : ''}
+                    </span>
+                    <span className="text-xs text-gray-400 tabular-nums">{dur}</span>
+                    {!l.tieneGrabacion && (
+                      <span className="text-xs text-gray-400">
+                        {l.estado === 'completada' ? 'grabación en camino' : 'sin grabación'}
+                      </span>
+                    )}
+                    {l.tieneGrabacion && audioLlamada?.id !== l.id && (
+                      <button
+                        onClick={async () => {
+                          setAudioCargando(true);
+                          try {
+                            const r = await axios.get(`${API}/api/twilio/llamadas/${l.id}/audio`, {
+                              responseType: 'blob',
+                            });
+                            if (audioLlamada) URL.revokeObjectURL(audioLlamada.url);
+                            setAudioLlamada({ id: l.id, url: URL.createObjectURL(r.data as Blob) });
+                          } catch {
+                            setTriggerError('No se pudo cargar la grabación de la llamada.');
+                          } finally {
+                            setAudioCargando(false);
+                          }
+                        }}
+                        disabled={audioCargando}
+                        className="ml-auto text-xs font-medium text-blue-600 hover:underline disabled:opacity-50"
+                      >
+                        {audioCargando ? 'Cargando…' : 'Escuchar'}
+                      </button>
+                    )}
+                    {audioLlamada?.id === l.id && (
+                      <audio src={audioLlamada.url} controls autoPlay className="ml-auto h-8 max-w-[320px]" />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
         {/* ── Trigger section ────────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border shadow-sm p-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -625,9 +733,12 @@ export function CalidadPage() {
             </div>
             <button
               onClick={handleTrigger}
-              disabled={triggering || isInProgress || !session || !(videoUrl || session.compositionSid) || preparing}
+              disabled={
+                triggering || isInProgress || !session || preparing ||
+                !(llamadaSel || videoUrl || session.compositionSid)
+              }
               title={
-                !(videoUrl || session?.compositionSid)
+                !(llamadaSel || videoUrl || session?.compositionSid)
                   ? (preparing ? 'Preparando el video de la consulta…' : 'Aún no hay grabación lista para esta consulta')
                   : undefined
               }
@@ -637,7 +748,7 @@ export function CalidadPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
-              {triggering ? 'Iniciando...' : isInProgress ? 'Procesando...' : preparing ? 'Preparando video…' : 'Analizar Consulta'}
+              {triggering ? 'Iniciando...' : isInProgress ? 'Procesando...' : preparing ? 'Preparando video…' : llamadaSel ? 'Analizar Llamada' : 'Analizar Consulta'}
             </button>
           </div>
 

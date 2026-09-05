@@ -346,6 +346,59 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// 4. Recordatorio de la mañana (sin link)
+// ---------------------------------------------------------------------------
+
+/**
+ * El WhatsApp de las 07:00: "hoy tienes consulta a las {{2}}" + botón
+ * Reprogramar. A propósito NO lleva "Conectarme": a esa hora no hay coach en
+ * la sala, y un paciente que entra a las 7 de la mañana no encuentra a nadie.
+ * El link sale aparte, minutos antes de la cita (ver enviarLinkPaciente).
+ *
+ * Por eso tampoco deja los rastros del link: no toca link_enviado_at ni la
+ * sala, ni le avisa a Trepsi. Solo el mensaje en el hilo del chat.
+ */
+export async function enviarRecordatorioPaciente(i: {
+  historiaId: string;
+  phone: string;
+  patientName: string;
+  appointmentTime: string;
+  usarPlataforma?: boolean;
+}): Promise<EnviarLinkResult> {
+  const templateSid = process.env.TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID || '';
+  if (!templateSid) {
+    return { success: false, error: 'RECORDATORIO_TEMPLATE_NO_CONFIGURADO', via: 'ninguno' };
+  }
+  const variables: Record<string, string> = {
+    '1': i.patientName,
+    '2': i.appointmentTime,
+    '3': i.historiaId, // botón Reprogramar → /reprogramar/{{3}}
+  };
+  const phoneWithPlus = i.phone.startsWith('+') ? i.phone : `+${i.phone}`;
+
+  let result: EnviarLinkResult;
+  const viaPlataforma =
+    i.usarPlataforma === false
+      ? false
+      : await bslPlataformaChatService.enviarPlantilla(phoneWithPlus, templateSid, variables);
+  if (viaPlataforma) {
+    result = { success: true, via: 'plataforma' };
+  } else {
+    const r = await whatsappService.sendContentTemplate(i.phone, templateSid, variables);
+    result = { ...r, via: r.success ? 'twilio' : 'ninguno' };
+  }
+  if (!result.success) return result;
+
+  try {
+    const cuerpo = `Hola ${i.patientName},\n\nTe recordamos que hoy tienes tu consulta virtual a las ${i.appointmentTime}.\n\nUnos minutos antes de la hora te enviaremos el enlace para conectarte.`;
+    await postgresService.registrarMensajeSaliente(phoneWithPlus, cuerpo, result.messageSid || '', i.patientName);
+  } catch (e) {
+    console.error('⚠️ Error registrando recordatorio en el chat:', e);
+  }
+  return result;
+}
+
 /**
  * Los 4 rastros que deja un envío exitoso. Ninguno es crítico para el paciente
  * (que ya recibió el mensaje), así que cada uno se traga su propio error: un

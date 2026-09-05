@@ -12,12 +12,17 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { MedicalConsultationPanel } from '../components/panel/MedicalConsultationPanel';
+import { LlamadasVozPanel } from '../components/LlamadasVozPanel';
+import authService from '../services/auth.service';
 import { FONT_INTER } from '../components/coordinador/_tokens';
 
 export function HistoriaDetallePage() {
   const { historiaId } = useParams<{ historiaId: string }>();
   const navigate = useNavigate();
   const [isMaxed, setIsMaxed] = useState(true);
+  // Las grabaciones de las llamadas son audio de pacientes: solo quien audita.
+  const role = authService.getUser()?.role;
+  const audita = role === 'coordinador' || role === 'admin';
 
   if (!historiaId) {
     return (
@@ -55,6 +60,9 @@ export function HistoriaDetallePage() {
           <div className="text-[13px] text-zinc-700 font-mono truncate">{historiaId}</div>
         </div>
       </header>
+
+      {/* Llamadas del coach con esta persona (solo coordinador/admin) */}
+      {audita && <LlamadasVozPanel historiaId={historiaId} />}
 
       {/* Panel completo */}
       <main className="flex-1 min-h-0 flex flex-col">

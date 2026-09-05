@@ -474,6 +474,77 @@ class ApiService {
       patientName,
     });
   }
+
+  // --- Llamada del coach al paciente (en vivo, grabada) -----------------------
+
+  /**
+   * Arranca la llamada. Solo manda la cita: los celulares (del paciente y del
+   * coach) los resuelve el servidor, para que nadie pueda usar el número de
+   * Bodytech para llamar a quien quiera.
+   */
+  async iniciarLlamada(historiaId: string): Promise<LlamadaVoz> {
+    const { data } = await this.client.post('/api/twilio/llamadas', { historiaId });
+    return data.llamada;
+  }
+
+  /** Estado en vivo, para seguirla desde el panel. */
+  async getLlamada(id: number): Promise<LlamadaVoz> {
+    const { data } = await this.client.get(`/api/twilio/llamadas/${id}`);
+    return data.llamada;
+  }
+
+  /** Historial de llamadas de una historia (coordinador/admin). */
+  async listarLlamadas(historiaId: string): Promise<LlamadaVoz[]> {
+    const { data } = await this.client.get('/api/twilio/llamadas', { params: { historiaId } });
+    return data.llamadas;
+  }
+
+  /**
+   * La grabación como Blob. Va por acá (y no como `src` directo) porque un
+   * <audio> no puede mandar el JWT en el header: se baja con la sesión y se
+   * reproduce desde un object URL.
+   */
+  async descargarAudioLlamada(id: number): Promise<Blob> {
+    const { data } = await this.client.get(`/api/twilio/llamadas/${id}/audio`, {
+      responseType: 'blob',
+    });
+    return data as Blob;
+  }
+}
+
+export type EstadoLlamada =
+  | 'iniciando'
+  | 'llamando_coach'
+  | 'llamando_paciente'
+  | 'en_llamada'
+  | 'completada'
+  | 'sin_respuesta'
+  | 'coach_no_contesto'
+  | 'fallida';
+
+export const LLAMADA_ESTADOS_TERMINALES: ReadonlyArray<EstadoLlamada> = [
+  'completada',
+  'sin_respuesta',
+  'coach_no_contesto',
+  'fallida',
+];
+
+export interface LlamadaVoz {
+  id: number;
+  historiaId: string;
+  pacienteNombre: string | null;
+  coachNombre: string | null;
+  coachCodigo: string | null;
+  estado: EstadoLlamada;
+  motivoFin: string | null;
+  duracionSeg: number | null;
+  iniciadaAt: string;
+  contestadaCoachAt: string | null;
+  contestadaPacienteAt: string | null;
+  finalizadaAt: string | null;
+  recordingSid: string | null;
+  recordingDuracionSeg: number | null;
+  recordingEstado: 'pendiente' | 'lista' | 'error';
 }
 
 export default new ApiService();

@@ -20,15 +20,16 @@ jest.mock('../link-paciente.service', () => {
   const real = jest.requireActual('../link-paciente.service');
   // Las funciones puras (preparar, formatear) se usan de verdad: son parte de
   // la decisión que queremos probar. Solo se intercepta el envío.
-  return { __esModule: true, ...real, enviarLinkPaciente: jest.fn() };
+  return { __esModule: true, ...real, enviarLinkPaciente: jest.fn(), enviarRecordatorioPaciente: jest.fn() };
 });
 
 import linkAutoService from '../link-auto.service';
 import postgresService from '../postgres.service';
-import { enviarLinkPaciente } from '../link-paciente.service';
+import { enviarLinkPaciente, enviarRecordatorioPaciente } from '../link-paciente.service';
 
 const query = postgresService.query as jest.Mock;
 const enviar = enviarLinkPaciente as jest.Mock;
+const enviarRec = enviarRecordatorioPaciente as jest.Mock;
 
 /** Una fila de cita como la devuelve la query de candidatas. */
 function cita(over: Record<string, unknown> = {}) {
@@ -49,8 +50,12 @@ function cita(over: Record<string, unknown> = {}) {
 
 const ENV_BASE = {
   LINK_AUTO_ENABLED: 'true',
-  LINK_AUTO_HORA: '07:00',
-  LINK_AUTO_HORA_FIN: '19:00',
+  LINK_AUTO_MINUTOS_ANTES: '15',
+  LINK_AUTO_GRACIA_MIN: '5',
+  RECORDATORIO_ENABLED: 'true',
+  RECORDATORIO_HORA: '07:00',
+  RECORDATORIO_HORA_FIN: '19:00',
+  TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID: 'HXrecordatorio',
   LINK_AUTO_PAUSA_MS: '1',
 };
 
@@ -61,6 +66,7 @@ describe('link-auto worker', () => {
     process.env = { ...envOriginal, ...ENV_BASE };
     query.mockReset();
     enviar.mockReset();
+    enviarRec.mockReset();
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -75,48 +81,71 @@ describe('link-auto worker', () => {
   // Cuándo NO corre
   // -------------------------------------------------------------------------
 
-  describe('maybeDispatch no hace nada', () => {
-    // 12:05 UTC = 07:05 en Bogotá: dentro de la ventana.
-    const dentroDeVentana = new Date('2026-09-03T12:05:00Z');
+  describe('maybeDispatch — cuándo corre cada tipo', () => {
+    const a = (iso: string) => jest.useFakeTimers({ advanceTimers: true }).setSystemTime(new Date(iso));
+    afterEach(() => jest.useRealTimers());
 
-    it('si el flag está apagado — ni siquiera consulta la base', async () => {
-      jest.useFakeTimers({ advanceTimers: true }).setSystemTime(dentroDeVentana);
+    it('con los dos flags apagados no consulta la base', async () => {
+      a('2026-09-03T12:05:00Z'); // 07:05 COT
+      process.env.LINK_AUTO_ENABLED = 'false';
+      process.env.RECORDATORIO_ENABLED = 'false';
+      await linkAutoService.maybeDispatch();
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('sin flags definidos, el default es apagado', async () => {
+      a('2026-09-03T12:05:00Z');
+      delete process.env.LINK_AUTO_ENABLED;
+      delete process.env.RECORDATORIO_ENABLED;
+      await linkAutoService.maybeDispatch();
+      expect(query).not.toHaveBeenCalled();
+    });
+
+    it('el recordatorio no sale antes de su hora', async () => {
+      a('2026-09-03T11:00:00Z'); // 06:00 COT
       process.env.LINK_AUTO_ENABLED = 'false';
       await linkAutoService.maybeDispatch();
       expect(query).not.toHaveBeenCalled();
-      jest.useRealTimers();
     });
 
-    it('si el flag no está definido (el default es apagado)', async () => {
-      jest.useFakeTimers({ advanceTimers: true }).setSystemTime(dentroDeVentana);
-      delete process.env.LINK_AUTO_ENABLED;
+    // Un servidor caído toda la mañana no puede mandar "hoy tienes consulta" de noche.
+    it('el recordatorio tampoco sale después del tope', async () => {
+      a('2026-09-04T01:00:00Z'); // 20:00 COT del día 3
+      process.env.LINK_AUTO_ENABLED = 'false';
       await linkAutoService.maybeDispatch();
       expect(query).not.toHaveBeenCalled();
-      jest.useRealTimers();
     });
 
-    it('antes de la hora de inicio', async () => {
-      // 11:00 UTC = 06:00 en Bogotá.
-      jest.useFakeTimers({ advanceTimers: true }).setSystemTime(new Date('2026-09-03T11:00:00Z'));
+    it('pasada la hora, el recordatorio consulta TODO el día', async () => {
+      a('2026-09-03T12:05:00Z'); // 07:05 COT
+      process.env.LINK_AUTO_ENABLED = 'false';
+      query.mockResolvedValueOnce([]);
       await linkAutoService.maybeDispatch();
-      expect(query).not.toHaveBeenCalled();
-      jest.useRealTimers();
+      const params = query.mock.calls[0][1];
+      expect(params[5]).toBe('recordatorio');
+      expect(params[0]).toBe('2026-09-03T05:00:00.000Z');
+      expect(params[1]).toBe('2026-09-04T05:00:00.000Z');
     });
 
-    // Sin tope superior, una cita cargada tarde dispararía un WhatsApp a
-    // medianoche.
-    it('después de la hora de fin', async () => {
-      // 01:00 UTC = 20:00 del día anterior en Bogotá.
-      jest.useFakeTimers({ advanceTimers: true }).setSystemTime(new Date('2026-09-04T01:00:00Z'));
+    // El link no depende de la hora del día sino de la hora de CADA cita.
+    it('el link consulta una ventana alrededor de ahora, a cualquier hora', async () => {
+      a('2026-09-03T11:00:00Z'); // 06:00 COT: antes del recordatorio, pero hay citas a las 6:10
+      process.env.RECORDATORIO_ENABLED = 'false';
+      query.mockResolvedValueOnce([]);
       await linkAutoService.maybeDispatch();
-      expect(query).not.toHaveBeenCalled();
-      jest.useRealTimers();
+      const params = query.mock.calls[0][1];
+      expect(params[5]).toBe('link');
+      expect(params[0]).toBe('2026-09-03T10:55:00.000Z'); // ahora − 5 min de gracia
+      expect(params[1]).toBe('2026-09-03T11:15:00.000Z'); // ahora + 15 min
+    });
+
+    it('a las 07:05 con los dos prendidos, corren los dos (recordatorio primero)', async () => {
+      a('2026-09-03T12:05:00Z');
+      query.mockResolvedValue([]);
+      await linkAutoService.maybeDispatch();
+      expect(query.mock.calls.map((c) => c[1][5])).toEqual(['recordatorio', 'link']);
     });
   });
-
-  // -------------------------------------------------------------------------
-  // La pasada
-  // -------------------------------------------------------------------------
 
   describe('dispatch', () => {
     it('envía y deja la bitácora en "enviado"', async () => {
@@ -126,7 +155,7 @@ describe('link-auto worker', () => {
         .mockResolvedValueOnce([]); // marcarEnviada
       enviar.mockResolvedValue({ success: true, messageSid: 'SM1', via: 'plataforma' });
 
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(r.enviadas).toBe(1);
       expect(r.fallidas).toBe(0);
@@ -149,7 +178,7 @@ describe('link-auto worker', () => {
       query
         .mockResolvedValueOnce([cita()])
         .mockResolvedValueOnce([]); // claim vacío
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(enviar).not.toHaveBeenCalled();
       expect(r.yaReclamadas).toBe(1);
@@ -163,7 +192,7 @@ describe('link-auto worker', () => {
         .mockResolvedValueOnce([]); // marcarError
       enviar.mockResolvedValue({ success: false, error: 'Twilio 21211', via: 'ninguno' });
 
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(r.fallidas).toBe(1);
       expect(r.enviadas).toBe(0);
@@ -176,7 +205,7 @@ describe('link-auto worker', () => {
     // "hoy no hay citas" y callaría todos los días.
     it('aborta si la query de candidatas falla, en vez de leerlo como "sin citas"', async () => {
       query.mockResolvedValueOnce(null);
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(r.abortado).toBe('DB_ERROR');
       expect(enviar).not.toHaveBeenCalled();
@@ -187,7 +216,7 @@ describe('link-auto worker', () => {
       query.mockResolvedValueOnce(
         Array.from({ length: 250 }, (_, i) => cita({ historia_id: `hc-${i}` }))
       );
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(r.abortado).toBe('TOPE_CORDURA');
       expect(enviar).not.toHaveBeenCalled();
@@ -197,7 +226,7 @@ describe('link-auto worker', () => {
       query
         .mockResolvedValueOnce([cita({ medico: null })])
         .mockResolvedValueOnce([]); // marcarOmitida
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(enviar).not.toHaveBeenCalled();
       expect(r.omitidas).toBe(1);
@@ -210,7 +239,7 @@ describe('link-auto worker', () => {
       query
         .mockResolvedValueOnce([cita({ medico: 'PAULA ANDREA MORA PINZON', medico_valido: false })])
         .mockResolvedValueOnce([]); // marcarOmitida
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(enviar).not.toHaveBeenCalled();
       expect(r.items[0].motivo).toBe('MEDICO_DESCONOCIDO');
@@ -221,7 +250,7 @@ describe('link-auto worker', () => {
     it('respeta la lista blanca de celulares', async () => {
       process.env.LINK_AUTO_SOLO_CELULARES = '+573009999999';
       query.mockResolvedValueOnce([cita()]).mockResolvedValueOnce([]);
-      const r = await linkAutoService.dispatch('2026-09-03');
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(enviar).not.toHaveBeenCalled();
       expect(r.items[0].motivo).toBe('FUERA_DE_ALLOWLIST');
@@ -230,19 +259,41 @@ describe('link-auto worker', () => {
     it('acota por sede cuando LINK_AUTO_SEDES está configurado', async () => {
       process.env.LINK_AUTO_SEDES = 'bsl,bdt-nutricion';
       query.mockResolvedValueOnce([]);
-      await linkAutoService.dispatch('2026-09-03');
+      await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
 
       expect(query.mock.calls[0][0]).toContain('"sede_id" = ANY');
       expect(query.mock.calls[0][1]).toContainEqual(['bsl', 'bdt-nutricion']);
     });
 
-    it('la ventana del día se calcula en hora Colombia (UTC-5)', async () => {
+    it('la ventana del recordatorio es el día entero en hora Colombia (UTC-5)', async () => {
       query.mockResolvedValueOnce([]);
-      await linkAutoService.dispatch('2026-09-03');
+      await linkAutoService.dispatch('2026-09-03', { tipo: 'recordatorio' });
 
       const params = query.mock.calls[0][1];
       expect(params[0]).toBe('2026-09-03T05:00:00.000Z');
       expect(params[1]).toBe('2026-09-04T05:00:00.000Z');
+      expect(params[6]).toBe('2026-09-03T05:00:00.000Z'); // inicio del día, para "ya contactada hoy"
+    });
+
+    // "Mandáselo YA": una cita pedida a mano ignora la ventana de minutos.
+    it('el link con historiaId ignora la ventana de minutos', async () => {
+      query.mockResolvedValueOnce([]);
+      await linkAutoService.dispatch('2026-09-03', { tipo: 'link', historiaId: 'hc-1' });
+      const params = query.mock.calls[0][1];
+      expect(params[0]).toBe('2026-09-03T05:00:00.000Z');
+      expect(params).toContain('hc-1');
+    });
+
+    it('el claim y la bitácora llevan el tipo', async () => {
+      query
+        .mockResolvedValueOnce([cita()])
+        .mockResolvedValueOnce([{ historia_id: 'hc-1' }])
+        .mockResolvedValueOnce([]);
+      enviar.mockResolvedValue({ success: true, messageSid: 'SM1', via: 'plataforma' });
+      await linkAutoService.dispatch('2026-09-03', { tipo: 'link' });
+      expect(query.mock.calls[1][0]).toContain('ON CONFLICT (fecha, historia_id, tipo)');
+      expect(query.mock.calls[1][1]).toContain('link');
+      expect(query.mock.calls[2][1]).toContain('link');
     });
   });
 
@@ -250,10 +301,40 @@ describe('link-auto worker', () => {
   // Dry-run
   // -------------------------------------------------------------------------
 
+  describe('recordatorio', () => {
+    it('manda el recordatorio, no el link, y no persiste sala', async () => {
+      query
+        .mockResolvedValueOnce([cita()])
+        .mockResolvedValueOnce([{ historia_id: 'hc-1' }])
+        .mockResolvedValueOnce([]);
+      enviarRec.mockResolvedValue({ success: true, messageSid: 'SM9', via: 'plataforma' });
+
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'recordatorio' });
+
+      expect(r.enviadas).toBe(1);
+      expect(enviar).not.toHaveBeenCalled();
+      expect(enviarRec).toHaveBeenCalledTimes(1);
+      expect(enviarRec.mock.calls[0][0]).toMatchObject({
+        historiaId: 'hc-1',
+        appointmentTime: '03:00 p. m.',
+      });
+      // La bitácora del recordatorio no guarda sala: no la hay.
+      expect(query.mock.calls[2][1][5]).toBeNull();
+      expect(r.items[0].roomName).toBeUndefined();
+    });
+
+    it('el recordatorio aplica las mismas omisiones (sin médico no se manda)', async () => {
+      query.mockResolvedValueOnce([cita({ medico: null })]).mockResolvedValueOnce([]);
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'recordatorio' });
+      expect(enviarRec).not.toHaveBeenCalled();
+      expect(r.items[0]).toMatchObject({ tipo: 'recordatorio', motivo: 'SIN_MEDICO' });
+    });
+  });
+
   describe('dry-run', () => {
     it('no envía ni escribe nada, pero dice a quién le llegaría', async () => {
       query.mockResolvedValueOnce([cita()]);
-      const r = await linkAutoService.dispatch('2026-09-03', { dryRun: true });
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link', dryRun: true });
 
       expect(enviar).not.toHaveBeenCalled();
       expect(query).toHaveBeenCalledTimes(1); // solo la lectura de candidatas
@@ -269,7 +350,7 @@ describe('link-auto worker', () => {
 
     it('marca las que omitiría, con el motivo', async () => {
       query.mockResolvedValueOnce([cita({ celular: '0' })]);
-      const r = await linkAutoService.dispatch('2026-09-03', { dryRun: true });
+      const r = await linkAutoService.dispatch('2026-09-03', { tipo: 'link', dryRun: true });
 
       expect(query).toHaveBeenCalledTimes(1);
       expect(r.items[0]).toMatchObject({

@@ -1342,6 +1342,84 @@ class PostgresService {
           ON link_auto_envio (fecha, estado)
       `);
 
+      // La bitácora ahora distingue QUÉ se envió: 'recordatorio' (07:00, hora +
+      // Reprogramar, sin link) o 'link' (minutos antes de la cita, Conectarme +
+      // Reprogramar). Una cita recibe uno de cada uno por día, así que la clave
+      // pasa a (fecha, historia_id, tipo). El DO es idempotente: solo rehace la
+      // PK si todavía es la de dos columnas.
+      await this.query(`
+        ALTER TABLE link_auto_envio ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'link'
+      `);
+      await this.query(`
+        DO $$
+        BEGIN
+          IF (SELECT count(*) FROM information_schema.key_column_usage
+               WHERE table_name = 'link_auto_envio' AND constraint_name = 'link_auto_envio_pkey') = 2 THEN
+            ALTER TABLE link_auto_envio DROP CONSTRAINT link_auto_envio_pkey;
+            ALTER TABLE link_auto_envio ADD PRIMARY KEY (fecha, historia_id, tipo);
+          END IF;
+        END $$
+      `);
+
+      // ===== Llamada del coach al paciente (en vivo, grabada) =====
+      // Una fila por intento de llamada. El coach la arranca desde el panel;
+      // Twilio marca primero al coach y después al paciente (puente por
+      // celular). Los estados los mueven los webhooks de Twilio, que llegan
+      // desordenados y repetidos: por eso cada UPDATE exige el estado previo y
+      // nunca retrocede desde uno terminal. La grabación queda en Twilio y se
+      // sirve por /api/twilio/llamadas/:id/audio con rol de auditoría.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS llamadas_voz (
+          id                      BIGSERIAL PRIMARY KEY,
+          historia_id             TEXT NOT NULL,
+          numero_id               TEXT,
+          paciente_nombre         TEXT,
+          paciente_celular        TEXT NOT NULL,
+          coach_codigo            TEXT,
+          coach_usuario_id        INTEGER,
+          coach_nombre            TEXT,
+          coach_celular           TEXT NOT NULL,
+          sede_id                 TEXT,
+          estado                  TEXT NOT NULL DEFAULT 'iniciando',
+          motivo_fin              TEXT,
+          call_sid                TEXT,
+          dial_call_sid           TEXT,
+          duracion_seg            INTEGER,
+          iniciada_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          contestada_coach_at     TIMESTAMPTZ,
+          contestada_paciente_at  TIMESTAMPTZ,
+          finalizada_at           TIMESTAMPTZ,
+          recording_sid           TEXT,
+          recording_url           TEXT,
+          recording_duracion_seg  INTEGER,
+          recording_estado        TEXT NOT NULL DEFAULT 'pendiente',
+          error                   TEXT,
+          created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT llamadas_voz_estado_chk CHECK (estado IN (
+            'iniciando', 'llamando_coach', 'llamando_paciente', 'en_llamada',
+            'completada', 'sin_respuesta', 'coach_no_contesto', 'fallida'
+          ))
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_llamadas_voz_historia
+          ON llamadas_voz (historia_id, iniciada_at DESC)
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_llamadas_voz_coach
+          ON llamadas_voz (coach_usuario_id, iniciada_at DESC)
+      `);
+
+      // Calidad puede evaluar una LLAMADA además del video de la consulta.
+      // `fuente` dice de dónde salió el transcript; `llamada_id` la ata.
+      await this.query(`
+        ALTER TABLE consulta_evaluaciones ADD COLUMN IF NOT EXISTS fuente TEXT
+      `);
+      await this.query(`
+        ALTER TABLE consulta_evaluaciones ADD COLUMN IF NOT EXISTS llamada_id BIGINT
+      `);
+
       // ----------------------------------------------------------------------
       // BodyVibeTech — bitácora de LECTURAS.
       //

@@ -99,7 +99,11 @@ export const dispararEvaluacion = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const evaluacionId = await calidadService.dispararEvaluacion(historiaId);
+    // Opcional: evaluar una LLAMADA de voz en vez del video de la consulta.
+    const llamadaRaw = Number(req.body?.llamadaId);
+    const llamadaId = Number.isInteger(llamadaRaw) && llamadaRaw > 0 ? llamadaRaw : undefined;
+
+    const evaluacionId = await calidadService.dispararEvaluacion(historiaId, { llamadaId });
 
     // Respuesta inmediata — el procesamiento continúa en background
     res.status(201).json({ success: true, evaluacionId });

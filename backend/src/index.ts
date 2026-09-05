@@ -326,22 +326,26 @@ if (process.env.NODE_ENV !== 'test') {
   console.log(`📊 [Gestión] Worker iniciado (envío diario ~${GESTION_REPORT_HORA} COT)`);
 }
 
-// Worker del envío AUTOMÁTICO del link de videollamada: manda el link a las
-// citas del día que aún no lo tienen. Una tanda a LINK_AUTO_HORA y después un
-// barrido hasta LINK_AUTO_HORA_FIN — el barrido alcanza las citas creadas o
-// reprogramadas más tarde el mismo día, que una única pasada matutina perdería.
-// La idempotencia es POR CITA (claim en `link_auto_envio`), así que repetir
-// pasadas no duplica envíos. Apagado por defecto: sin LINK_AUTO_ENABLED, no-op.
-const LINK_AUTO_INTERVALO_MS = (Number(process.env.LINK_AUTO_INTERVALO_MIN) || 10) * 60_000;
+// Worker de los WhatsApp automáticos del día. Dos mensajes, dos momentos:
+//   · RECORDATORIO a las 07:00 (RECORDATORIO_HORA) a toda la agenda: hora +
+//     botón Reprogramar, SIN link — a esa hora no hay coach en la sala.
+//   · LINK minutos antes de cada cita (LINK_AUTO_MINUTOS_ANTES): Conectarme +
+//     Reprogramar, lo mismo que manda el botón "Contactar".
+// La idempotencia es por cita y por tipo (claim en `link_auto_envio`), así que
+// repetir pasadas no duplica. Cada 5 min para que "15 minutos antes" sea 15 y
+// no 25. Ambos apagados por defecto: sin *_ENABLED, no-op.
+const LINK_AUTO_INTERVALO_MS = (Number(process.env.LINK_AUTO_INTERVALO_MIN) || 5) * 60_000;
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => {
     linkAutoService.maybeDispatch().catch((e) => {
       console.error('[link-auto] worker error:', e?.message ?? e);
     });
   }, LINK_AUTO_INTERVALO_MS);
-  const estado = process.env.LINK_AUTO_ENABLED === 'true' || process.env.LINK_AUTO_ENABLED === '1'
-    ? `activo ${process.env.LINK_AUTO_HORA || '07:00'}–${process.env.LINK_AUTO_HORA_FIN || '19:00'} COT`
-    : 'APAGADO (LINK_AUTO_ENABLED)';
+  const on = (v?: string) => v === 'true' || v === '1';
+  const estado = [
+    `recordatorio ${on(process.env.RECORDATORIO_ENABLED) ? `ACTIVO ${process.env.RECORDATORIO_HORA || '07:00'} COT` : 'apagado'}`,
+    `link ${on(process.env.LINK_AUTO_ENABLED) ? `ACTIVO ${process.env.LINK_AUTO_MINUTOS_ANTES || 15} min antes` : 'apagado'}`,
+  ].join(' · ');
   console.log(`🔗 [Link-Auto] Worker iniciado cada ${LINK_AUTO_INTERVALO_MS / 60000}min — ${estado}`);
 }
 

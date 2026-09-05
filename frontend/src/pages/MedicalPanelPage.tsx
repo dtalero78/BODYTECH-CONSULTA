@@ -4,6 +4,7 @@ import bodyvibeService from '../services/bodyvibe.service';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
+import { LLAMADA_ESTADOS_TERMINALES, type LlamadaVoz } from '../services/api.service';
 import medicalPanelService, { Patient } from '../services/medical-panel.service';
 import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
@@ -222,7 +223,16 @@ export function MedicalPanelPage() {
   const [error, setError] = useState<string | null>(null);
   const [attendingPatient, setAttendingPatient] = useState<string | null>(null);
   const [contactingPatient, setContactingPatient] = useState<string | null>(null);
-  const [recallingPatient, setRecallingPatient] = useState<string | null>(null);
+  /**
+   * La llamada de voz en curso (una por vez). `data` es lo último que dijo el
+   * servidor; se sondea cada 1,5 s mientras no esté en un estado terminal.
+   */
+  const [llamada, setLlamada] = useState<{
+    patientId: string;
+    data: LlamadaVoz | null;
+    error: string | null;
+  } | null>(null);
+  const [, setTick] = useState(0);
   // "No Contesta" pedía confirmación a nadie y era irreversible: estaba pegado a
   // "Atender" (misma grilla, 8px) y un toque de más borraba al afiliado de la
   // lista sin vuelta atrás. Estos dos estados sostienen el paso de confirmación
@@ -619,15 +629,8 @@ export function MedicalPanelPage() {
       );
       console.log('WhatsApp con template enviado exitosamente');
 
-      // 2. Realizar llamada telefónica con Twilio Voice
-      try {
-        console.log(`📞 Iniciando llamada a: ${phoneWithPlus}`);
-        await apiService.makeVoiceCall(phoneWithPlus, patient.primerNombre);
-        console.log('✅ Llamada telefónica iniciada exitosamente');
-      } catch (callError) {
-        console.error('❌ Error realizando llamada telefónica:', callError);
-        // No interrumpir el flujo si la llamada falla
-      }
+      // La llamada de voz ya no es un robot que dispara "Contactar": la hace el
+      // coach en vivo, con el botón "Llamar" (queda grabada).
 
       // Marcar paciente como contactado (deshabilitar botón permanentemente)
       setContactedPatients(prev => {
@@ -636,7 +639,7 @@ export function MedicalPanelPage() {
         return updated;
       });
 
-      alert(`✅ Mensaje de WhatsApp enviado y llamada iniciada a ${patient.primerNombre}`);
+      alert(`✅ Mensaje de WhatsApp enviado a ${patient.primerNombre}`);
     } catch (error) {
       console.error('Error al contactar paciente:', error);
       alert('Error al contactar afiliado. Inténtalo nuevamente.');
@@ -645,24 +648,121 @@ export function MedicalPanelPage() {
     }
   };
 
-  const handleRellamar = async (patient: Patient) => {
-    setRecallingPatient(patient._id);
+  /**
+   * Llamada EN VIVO del coach al paciente, grabada. Twilio marca primero al
+   * celular del coach y, cuando contesta, al paciente. Reemplaza al robot de
+   * "Rellamar" (audio pregrabado, sin coach). Ver llamadas-voz.service.
+   */
+  const handleLlamar = async (patient: Patient) => {
+    setLlamada({ patientId: patient._id, data: null, error: null });
     try {
-      // Formatear teléfono con código de país internacional
-      const phoneWithPlus = formatPhoneNumber(patient.celular);
-
-      // Realizar llamada telefónica con Twilio Voice
-      console.log(`📞 Rellamando a: ${phoneWithPlus}`);
-      await apiService.makeVoiceCall(phoneWithPlus, patient.primerNombre);
-      console.log('✅ Rellamada iniciada exitosamente');
-
-      alert(`✅ Llamada iniciada a ${patient.primerNombre}`);
-    } catch (error) {
-      console.error('❌ Error al rellamar paciente:', error);
-      alert('Error al realizar la llamada. Inténtalo nuevamente.');
-    } finally {
-      setRecallingPatient(null);
+      const data = await apiService.iniciarLlamada(patient._id);
+      setLlamada({ patientId: patient._id, data, error: null });
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const code = e?.response?.data?.error;
+      const mensajes: Record<string, string> = {
+        SIN_CELULAR_COACH:
+          'Tu usuario no tiene celular registrado. Pedile al coordinador que lo agregue.',
+        SIN_CELULAR_PACIENTE: 'El paciente no tiene un celular válido en la historia.',
+        LLAMADA_EN_CURSO: 'Ya tenés una llamada en curso.',
+        TWILIO_NO_CONFIGURADO: 'La llamada no está configurada en este ambiente.',
+      };
+      setLlamada({
+        patientId: patient._id,
+        data: null,
+        error: (code && mensajes[code]) || 'No se pudo iniciar la llamada. Intentá de nuevo.',
+      });
     }
+  };
+
+  // Seguir la llamada mientras esté viva.
+  const llamadaId = llamada?.data?.id;
+  const llamadaEstado = llamada?.data?.estado;
+  const llamadaTerminal = !!llamadaEstado && LLAMADA_ESTADOS_TERMINALES.includes(llamadaEstado);
+  useEffect(() => {
+    if (!llamadaId || llamadaTerminal) return;
+    const t = setInterval(async () => {
+      setTick((n) => n + 1); // el cronómetro de "en llamada"
+      try {
+        const d = await apiService.getLlamada(llamadaId);
+        setLlamada((prev) => (prev && prev.data?.id === llamadaId ? { ...prev, data: d } : prev));
+      } catch {
+        /* un sondeo perdido no es un error para el coach */
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [llamadaId, llamadaTerminal]);
+
+  // Cuando termina, el resultado se queda unos segundos y el botón vuelve.
+  useEffect(() => {
+    if (!llamada || (!llamada.error && !llamadaTerminal)) return;
+    const t = setTimeout(() => setLlamada(null), 8000);
+    return () => clearTimeout(t);
+  }, [llamada, llamadaTerminal]);
+
+  /** Texto del botón según por dónde va la llamada. */
+  const etiquetaLlamada = (p: Patient): string => {
+    if (!llamada || llamada.patientId !== p._id) return 'Llamar';
+    if (llamada.error) return 'Llamar';
+    const d = llamada.data;
+    if (!d) return 'Iniciando…';
+    switch (d.estado) {
+      case 'iniciando':
+      case 'llamando_coach':
+        return 'Sonando tu celular…';
+      case 'llamando_paciente':
+        return `Llamando a ${p.primerNombre}…`;
+      case 'en_llamada': {
+        const desde = d.contestadaPacienteAt ? new Date(d.contestadaPacienteAt).getTime() : Date.now();
+        const seg = Math.max(0, Math.floor((Date.now() - desde) / 1000));
+        const mm = String(Math.floor(seg / 60)).padStart(2, '0');
+        const ss = String(seg % 60).padStart(2, '0');
+        return `En llamada ${mm}:${ss}`;
+      }
+      case 'completada': {
+        const seg = d.duracionSeg ?? d.recordingDuracionSeg ?? 0;
+        return `Terminó · ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
+      }
+      case 'sin_respuesta':
+        return 'No contestó';
+      case 'coach_no_contesto':
+        return 'No contestaste tu celular';
+      case 'fallida':
+        return 'Falló la llamada';
+      default:
+        return 'Llamar';
+    }
+  };
+
+  const botonLlamar = (p: Patient) => {
+    const esEsta = llamada?.patientId === p._id;
+    const ocupado = !!llamada && !llamada.error && !llamadaTerminal; // hay una viva
+    const deshabilitado = ocupado || !p.celular;
+    return (
+      <div className="flex flex-col items-stretch gap-1">
+        <button
+          onClick={() => handleLlamar(p)}
+          disabled={deshabilitado}
+          title={!p.celular ? 'El paciente no tiene celular' : undefined}
+          className={`${esEsta && llamada?.data?.estado === 'en_llamada' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'} text-white px-2 md:px-4 py-2 rounded-lg transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2`}
+        >
+          {esEsta && ocupado ? (
+            <svg className="animate-pulse h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+            </svg>
+          )}
+          {etiquetaLlamada(p)}
+        </button>
+        {esEsta && llamada?.error && (
+          <span className="text-[11px] text-red-600 leading-tight max-w-[220px]">{llamada.error}</span>
+        )}
+      </div>
+    );
   };
 
   const handleAtender = async (patient: Patient) => {
@@ -1117,28 +1217,7 @@ export function MedicalPanelPage() {
                         )}
                       </button>
 
-                      <button
-                        onClick={() => handleRellamar(searchResult)}
-                        disabled={recallingPatient === searchResult._id}
-                        className="bg-orange-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-orange-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
-                      >
-                        {recallingPatient === searchResult._id ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Llamando...
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
-                            </svg>
-                            Rellamar
-                          </>
-                        )}
-                      </button>
+                      {botonLlamar(searchResult)}
 
                       <button
                         onClick={() =>
@@ -1331,28 +1410,7 @@ export function MedicalPanelPage() {
                             )}
                           </button>
 
-                          <button
-                            onClick={() => handleRellamar(patient)}
-                            disabled={recallingPatient === patient._id}
-                            className="bg-orange-600 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-orange-700 transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2"
-                          >
-                            {recallingPatient === patient._id ? (
-                              <>
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Llamando...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
-                                </svg>
-                                Rellamar
-                              </>
-                            )}
-                          </button>
+                          {botonLlamar(patient)}
 
                           <button
                             onClick={() =>

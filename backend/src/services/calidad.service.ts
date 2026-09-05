@@ -111,6 +111,12 @@ export interface LlamadaVozResumen {
 export interface SessionInfo {
   found: boolean;
   compositionSid: string | null;
+  /**
+   * La consulta tiene transcripción propia (la del navegador, que corre en
+   * TODAS las consultas aunque el video no se grabe). Es lo que permite
+   * evaluar una consulta sin grabación — el 86% de ellas.
+   */
+  tieneTranscripcion: boolean;
   llamadasVoz: LlamadaVozResumen[];
   patientName: string | null;
   numeroId: string | null;
@@ -532,7 +538,7 @@ class CalidadService {
     const rows = await postgresService.query(
       `SELECT "_id", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
               "numeroId", "empresa", "fechaConsulta", "fechaAtencion",
-              "medico", composition_sid
+              "medico", composition_sid, "transcription_text"
        FROM "HistoriaClinica"
        WHERE "_id" = $1
        LIMIT 1`,
@@ -543,6 +549,7 @@ class CalidadService {
       return {
         found: false,
         compositionSid: null,
+        tieneTranscripcion: false,
         llamadasVoz: [],
         patientName: null,
         numeroId: null,
@@ -577,6 +584,8 @@ class CalidadService {
     return {
       found: true,
       compositionSid: (hc.composition_sid as string | null) || null,
+      tieneTranscripcion:
+        typeof hc.transcription_text === 'string' && hc.transcription_text.trim().length > 0,
       llamadasVoz,
       patientName,
       numeroId: (hc.numeroId as string | null) || null,
@@ -695,11 +704,30 @@ class CalidadService {
       return { recordingKind: 'twilio', status, videoUrl, compositionSid };
     }
 
-    // 5) Chime: llegamos aquí si hay sala pero la grabación aún no está lista
-    // (capturando/concatenando) o si nunca hubo grabación para la sala.
-    //  - Con sala → 'processing': el MP4 sigue en camino; el front hace polling.
-    //  - Sin sala → error claro (consulta sin video, p. ej. historia manual).
+    // 5) Chime con sala pero sin fila en `chime_recordings`. Son DOS casos muy
+    // distintos y antes se devolvían los dos como 'processing' — el frontend se
+    // quedaba girando para siempre esperando un MP4 que nunca iba a existir, que
+    // es lo que le pasa al 86% de las consultas:
+    //
+    //  · La grabación se DESCARTÓ por muestreo (solo se graban N por coach al
+    //    mes, ver chime-recording.debeGrabarPorMuestreo): `recording_enabled`
+    //    queda en false y no se inserta fila. Nunca va a haber video → 'no_recording'.
+    //  · La captura arranca y recién ahí se inserta la fila. Si la sala todavía
+    //    está viva y debía grabarse, el MP4 sigue en camino → 'processing'.
     if (roomNameChime) {
+      const ses = await postgresService.query(
+        `SELECT recording_enabled, ended_at FROM video_sessions WHERE room_name = $1 LIMIT 1`,
+        [roomNameChime]
+      );
+      const fila = ses?.[0] as { recording_enabled?: boolean; ended_at?: Date | null } | undefined;
+      // Sin fila de sesión no podemos afirmar que se grabó; si además la sala ya
+      // terminó, la fila de `chime_recordings` (que se crea AL EMPEZAR a grabar)
+      // ya habría aparecido. En los dos casos: no hay video y no lo habrá.
+      const descartadaPorMuestreo = fila?.recording_enabled === false;
+      const terminoSinGrabar = !fila || !!fila.ended_at;
+      if (descartadaPorMuestreo || terminoSinGrabar) {
+        return { recordingKind: 'chime', status: 'no_recording', videoUrl: null, compositionSid: null };
+      }
       return { recordingKind: 'chime', status: 'processing', videoUrl: null, compositionSid: null };
     }
     throw Object.assign(

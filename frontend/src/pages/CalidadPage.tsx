@@ -19,6 +19,8 @@ interface LlamadaVozResumen {
 
 interface SessionInfo {
   compositionSid: string | null;
+  /** Hay transcripción de la consulta: se puede evaluar aunque no se haya grabado. */
+  tieneTranscripcion: boolean;
   /** Llamadas de voz del coach con esta persona. Cada una es evaluable aparte. */
   llamadasVoz: LlamadaVozResumen[];
   patientName: string;
@@ -307,6 +309,8 @@ export function CalidadPage() {
   const [audioLlamada, setAudioLlamada] = useState<{ id: number; url: string } | null>(null);
   const [audioCargando, setAudioCargando] = useState(false);
   const [transcripcionAbierta, setTranscripcionAbierta] = useState<number | null>(null);
+  /** La consulta no se grabó (muestreo). No es un error: no hay nada que esperar. */
+  const [sinGrabacion, setSinGrabacion] = useState(false);
 
   // ── Fetch session info ──────────────────────────────────────────────────────
   const fetchSession = useCallback(async () => {
@@ -323,6 +327,7 @@ export function CalidadPage() {
       }
       setSession({
         compositionSid: res.data.compositionSid ?? null,
+        tieneTranscripcion: res.data.tieneTranscripcion === true,
         llamadasVoz: Array.isArray(res.data.llamadasVoz) ? res.data.llamadasVoz : [],
         patientName: res.data.patientName ?? '—',
         numeroId: res.data.numeroId ?? '—',
@@ -377,6 +382,13 @@ export function CalidadPage() {
           setPreparing(false);
           return true;
         }
+        if (status === 'no_recording') {
+          // El muestreo descartó esta consulta: no hay MP4 y nunca lo va a haber.
+          // Antes esto llegaba como 'processing' y la pantalla giraba sin fin.
+          setSinGrabacion(true);
+          setPreparing(false);
+          return true;
+        }
         if (status === 'failed' || status === 'deleted') {
           setPrepareError('No se pudo generar el video de la consulta.');
           setPreparing(false);
@@ -391,11 +403,21 @@ export function CalidadPage() {
       }
     };
 
-    // primer intento inmediato; si no está listo, polling cada 5s
+    // Primer intento inmediato; si no está listo, polling cada 5s con TOPE:
+    // concatenar un MP4 tarda ~1-2 min, así que a los 5 min ya no viene. Sin
+    // tope, cualquier estado inesperado deja el spinner girando para siempre.
+    const MAX_INTENTOS = 60;
+    let intentos = 0;
     if (await tick()) return;
     if (prepareRef.current) clearInterval(prepareRef.current);
     prepareRef.current = setInterval(async () => {
-      if (await tick()) {
+      intentos++;
+      const listo = await tick();
+      if (listo || intentos >= MAX_INTENTOS) {
+        if (!listo) {
+          setPrepareError('El video no quedó listo. Podés evaluar con la transcripción o reintentar.');
+          setPreparing(false);
+        }
         if (prepareRef.current) clearInterval(prepareRef.current);
         prepareRef.current = null;
       }
@@ -482,7 +504,7 @@ export function CalidadPage() {
   useEffect(() => {
     if (session?.compositionSid) {
       fetchVideoUrl(session.compositionSid);
-    } else if (session && !session.compositionSid && !videoUrl && !preparing && !prepareError) {
+    } else if (session && !session.compositionSid && !videoUrl && !preparing && !prepareError && !sinGrabacion) {
       // Sesión sin composición Twilio → preparar la grabación (Chime S3 o Twilio
       // on-demand). El guard `!videoUrl` evita re-preparar una vez Chime resolvió.
       prepareVideo();
@@ -626,19 +648,24 @@ export function CalidadPage() {
                 <p className="text-sm font-medium">{prepareError}</p>
               </div>
             ) : (
-              <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-400">
+              <div className="aspect-video bg-gray-100 rounded-lg flex flex-col items-center justify-center gap-3 text-gray-400 px-6 text-center">
                 <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0 1 21 8.82v6.36a1 1 0 0 1-1.447.89L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2zM3 3l18 18" />
                 </svg>
-                <p className="text-sm font-medium">Sin grabación disponible</p>
-                <p className="text-xs">Esta consulta no tiene un video asociado.</p>
+                <p className="text-sm font-medium text-gray-500">Esta consulta no se grabó</p>
+                <p className="text-xs max-w-sm leading-relaxed">
+                  Se graba una muestra por coach al mes, no todas las consultas.
+                  {session?.tieneTranscripcion
+                    ? ' Igual se puede auditar: hay transcripción completa de la conversación.'
+                    : ' Y no hay transcripción, así que esta consulta no se puede evaluar.'}
+                </p>
               </div>
             )}
           </div>
         </div>
 
         {/* ── Llamadas grabadas ─────────────────────────────────────────────── */}
-        {session && session.llamadasVoz.length > 0 && (
+        {session && (session.llamadasVoz.length > 0 || (session.tieneTranscripcion && !videoUrl && !session.compositionSid)) && (
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-2">
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -656,11 +683,19 @@ export function CalidadPage() {
                   name="fuente"
                   checked={llamadaSel === null}
                   onChange={() => setLlamadaSel(null)}
-                  disabled={!(videoUrl || session.compositionSid)}
+                  disabled={!(videoUrl || session.compositionSid || session.tieneTranscripcion)}
                 />
-                <span className="text-sm text-gray-700">Video de la consulta</span>
+                <span className="text-sm text-gray-700">
+                  {videoUrl || session.compositionSid
+                    ? 'Video de la consulta'
+                    : 'Transcripción de la consulta'}
+                </span>
                 {!(videoUrl || session.compositionSid) && (
-                  <span className="text-xs text-gray-400">(sin video)</span>
+                  <span className="text-xs text-gray-400">
+                    {session.tieneTranscripcion
+                      ? '(no se grabó; se evalúa el texto)'
+                      : '(sin video ni transcripción)'}
+                  </span>
                 )}
               </li>
               {session.llamadasVoz.map((l) => {
@@ -761,18 +796,22 @@ export function CalidadPage() {
             <div>
               <h2 className="text-base font-bold text-gray-800">Analizar consulta</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                Transcribe el audio y evalúa la calidad de la atención médica con IA.
+                {!llamadaSel && !videoUrl && !session?.compositionSid && session?.tieneTranscripcion
+                  ? 'Esta consulta no se grabó: se evalúa con la transcripción de la conversación.'
+                  : 'Transcribe el audio y evalúa la calidad de la atención médica.'}
               </p>
             </div>
             <button
               onClick={handleTrigger}
               disabled={
                 triggering || isInProgress || !session || preparing ||
-                !(llamadaSel || videoUrl || session.compositionSid)
+                !(llamadaSel || videoUrl || session.compositionSid || session.tieneTranscripcion)
               }
               title={
-                !(llamadaSel || videoUrl || session?.compositionSid)
-                  ? (preparing ? 'Preparando el video de la consulta…' : 'Aún no hay grabación lista para esta consulta')
+                !(llamadaSel || videoUrl || session?.compositionSid || session?.tieneTranscripcion)
+                  ? (preparing
+                      ? 'Preparando el video de la consulta…'
+                      : 'Esta consulta no tiene grabación ni transcripción para evaluar')
                   : undefined
               }
               className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold transition-colors shadow-sm"

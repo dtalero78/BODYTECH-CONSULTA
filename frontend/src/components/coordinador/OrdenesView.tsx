@@ -65,6 +65,9 @@ interface OrdenItem {
   // que el backend puede setear mientras corre el pipeline; en el row se
   // muestran todos como "en curso".
   calidadEvalId?: number | null;
+  /** Llamadas de voz del coach con esta persona: grabadas / ya transcritas. */
+  llamadasGrabadas?: number;
+  llamadasTranscritas?: number;
   calidadPuntaje?: number | null; // 0..100 normalizado
   calidadEstado?:
     | 'procesando'
@@ -1111,8 +1114,31 @@ function CalidadCell({ orden, onClick }: { orden: OrdenItem; onClick: () => void
   const puntaje = orden.calidadPuntaje;
   const estado = orden.calidadEstado;
 
-  // Sin evaluación previa
+  // Sin evaluación previa. Si hay una llamada del coach ya transcrita, se
+  // muestra: es material listo para evaluar, no un vacío.
   if (!estado) {
+    if ((orden.llamadasTranscritas ?? 0) > 0) {
+      return (
+        <button
+          onClick={onClick}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-100 text-[11px]"
+          title="Hay una llamada del coach transcrita, lista para evaluar"
+        >
+          📞 Llamada transcrita
+        </button>
+      );
+    }
+    if ((orden.llamadasGrabadas ?? 0) > 0) {
+      return (
+        <button
+          onClick={onClick}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100 text-[11px]"
+          title="La llamada del coach se está transcribiendo"
+        >
+          📞 Transcribiendo…
+        </button>
+      );
+    }
     return (
       <button
         onClick={onClick}

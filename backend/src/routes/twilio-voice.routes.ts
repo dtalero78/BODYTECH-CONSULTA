@@ -36,6 +36,7 @@ router.post('/llamadas', clinico, llamadasVozController.iniciar);
 router.get('/llamadas', auditoria, llamadasVozController.listar);
 router.get('/llamadas/:id', clinico, llamadasVozController.get);
 router.get('/llamadas/:id/audio', auditoria, llamadasVozController.audio);
+router.post('/llamadas/:id/transcribir', auditoria, llamadasVozController.transcribir);
 
 // Webhooks (públicos; validan la firma de Twilio adentro). Los dos primeros
 // los llama la TwiML App "Bodytech · Llamada del coach" (voice_url y

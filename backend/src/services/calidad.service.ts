@@ -23,7 +23,6 @@ import {
   obtenerUrlMediaTwilio,
   descargarMp4ComoBuffer,
   extraerAudio,
-  descargarGrabacionVozComoBuffer,
 } from './twilio-media.service';
 import { chimeRecordingService } from './video/chime-recording.service';
 import { transcribeService } from './video/transcribe.service';
@@ -105,6 +104,8 @@ export interface LlamadaVozResumen {
   duracionSeg: number | null;
   coachNombre: string | null;
   tieneGrabacion: boolean;
+  transcripcionEstado: 'processing' | 'done' | 'error' | null;
+  transcripcion: string | null;
 }
 
 export interface SessionInfo {
@@ -297,18 +298,20 @@ async function procesarEvaluacion(
       // LLAMADA del coach: es OTRA conversación, así que el transcript cacheado
       // de la videollamada no sirve. Se baja el MP3 (chico, dos canales) y va
       // derecho a Whisper, sin ffmpeg.
-      await setEstado(evaluacionId, 'transcribiendo');
-      await agregarPaso(evaluacionId, 'Descargando la grabación de la llamada...');
-      const mp3 = await descargarGrabacionVozComoBuffer(source.recordingSid);
-      const mbAudio = (mp3.byteLength / (1024 * 1024)).toFixed(2);
-      await agregarPaso(evaluacionId, `Grabación descargada (${mbAudio} MB). Transcribiendo con Whisper...`);
-      const audioFile = await toFile(mp3, 'llamada.mp3', { type: 'audio/mpeg' });
-      const whisperResp = await openai.audio.transcriptions.create({
-        file: audioFile,
-        model: 'whisper-1',
-        language: 'es',
-      });
-      transcript = (whisperResp as { text?: string }).text?.trim() ?? '';
+      // La llamada se transcribe sola al llegar la grabación; si ya está,
+      // no se vuelve a pagar Whisper. Si no (webhook perdido), se hace acá y
+      // queda guardada en la llamada para la próxima.
+      const ll = await llamadasVozService.get(source.llamadaId);
+      if (ll?.transcriptionStatus === 'done' && ll.transcriptionText) {
+        transcript = ll.transcriptionText.trim();
+        await agregarPaso(evaluacionId, `Reutilizando la transcripción de la llamada (${transcript.length} caracteres)...`);
+      } else {
+        await setEstado(evaluacionId, 'transcribiendo');
+        await agregarPaso(evaluacionId, 'Transcribiendo la grabación de la llamada con Whisper...');
+        await llamadasVozService.transcribirGrabacion(source.llamadaId, { forzar: true });
+        const ll2 = await llamadasVozService.get(source.llamadaId);
+        transcript = (ll2?.transcriptionText || '').trim();
+      }
       console.log(`${tag} Transcript de la llamada (${transcript.length} chars)`);
       if (transcript) {
         await agregarPaso(
@@ -567,6 +570,8 @@ class CalidadService {
         duracionSeg: l.recordingDuracionSeg ?? l.duracionSeg,
         coachNombre: l.coachNombre,
         tieneGrabacion: !!l.recordingSid && l.recordingEstado === 'lista',
+        transcripcionEstado: l.transcriptionStatus,
+        transcripcion: l.transcriptionText,
       }));
 
     return {

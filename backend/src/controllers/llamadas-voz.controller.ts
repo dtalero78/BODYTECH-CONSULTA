@@ -119,6 +119,22 @@ class LlamadasVozController {
     }
   };
 
+  /** POST /api/twilio/llamadas/:id/transcribir — rehacer la transcripción (auditoría). */
+  transcribir = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = idDe(req);
+      if (!id) {
+        res.status(400).json({ success: false, error: 'ID_INVALIDO' });
+        return;
+      }
+      const ok = await llamadasVozService.transcribirGrabacion(id, { forzar: true });
+      const llamada = await llamadasVozService.get(id);
+      res.status(ok ? 200 : 409).json({ success: ok, error: ok ? undefined : 'SIN_GRABACION_O_EN_CURSO', llamada });
+    } catch (e) {
+      next(e);
+    }
+  };
+
   /** GET /api/twilio/llamadas?historiaId= — coordinador/admin. */
   listar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -292,6 +308,8 @@ class LlamadasVozController {
         duracionSeg: Number.isFinite(dur) ? dur : null,
         status: params.RecordingStatus || 'completed',
       })
+      // Transcripción automática, como la del video: sin esperar a nadie.
+      .then(() => llamadasVozService.transcribirGrabacion(id))
       .catch((e) => console.error(`[llamadas-voz] grabacion #${id} falló:`, e?.message ?? e));
   };
 }

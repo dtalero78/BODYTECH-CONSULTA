@@ -22,6 +22,7 @@ jest.mock('../../services/llamadas-voz.service', () => ({
     registrarDialFin: jest.fn().mockResolvedValue(undefined),
     registrarGrabacion: jest.fn().mockResolvedValue(undefined),
     tokenVoz: jest.fn(),
+    transcribirGrabacion: jest.fn().mockResolvedValue(true),
     conectarSoftphone: jest.fn(),
     registrarEstadoPorCallSid: jest.fn().mockResolvedValue(undefined),
   },
@@ -130,6 +131,12 @@ describe('/api/twilio/llamadas', () => {
     it.each(['coach', 'medico'])('403 para %s — ni la propia', async (rol) => {
       await request(appConRol(rol, 7)).get('/api/twilio/llamadas/1/audio').expect(403);
       expect(svc.abrirAudio).not.toHaveBeenCalled();
+    });
+
+    it('rehacer la transcripción es solo de auditoría', async () => {
+      await request(appConRol('coach', 7)).post('/api/twilio/llamadas/1/transcribir').expect(403);
+      await request(appConRol('admin')).post('/api/twilio/llamadas/1/transcribir').expect(200);
+      expect(svc.transcribirGrabacion).toHaveBeenCalledWith(1, { forzar: true });
     });
 
     it('el historial por historia también es solo de auditoría', async () => {

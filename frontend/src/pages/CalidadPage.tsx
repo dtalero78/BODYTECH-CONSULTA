@@ -13,6 +13,8 @@ interface LlamadaVozResumen {
   duracionSeg: number | null;
   coachNombre: string | null;
   tieneGrabacion: boolean;
+  transcripcionEstado: 'processing' | 'done' | 'error' | null;
+  transcripcion: string | null;
 }
 
 interface SessionInfo {
@@ -304,6 +306,7 @@ export function CalidadPage() {
   const [llamadaSel, setLlamadaSel] = useState<number | null>(null);
   const [audioLlamada, setAudioLlamada] = useState<{ id: number; url: string } | null>(null);
   const [audioCargando, setAudioCargando] = useState(false);
+  const [transcripcionAbierta, setTranscripcionAbierta] = useState<number | null>(null);
 
   // ── Fetch session info ──────────────────────────────────────────────────────
   const fetchSession = useCallback(async () => {
@@ -689,6 +692,36 @@ export function CalidadPage() {
                       <span className="text-xs text-gray-400">
                         {l.estado === 'completada' ? 'grabación en camino' : 'sin grabación'}
                       </span>
+                    )}
+                    {l.tieneGrabacion && (
+                      <span
+                        className={`text-[11px] px-1.5 py-0.5 rounded-full border ${
+                          l.transcripcionEstado === 'done'
+                            ? 'bg-green-50 text-green-800 border-green-100'
+                            : l.transcripcionEstado === 'error'
+                              ? 'bg-red-50 text-red-800 border-red-100'
+                              : 'bg-amber-50 text-amber-800 border-amber-100'
+                        }`}
+                      >
+                        {l.transcripcionEstado === 'done'
+                          ? 'Transcrita'
+                          : l.transcripcionEstado === 'error'
+                            ? 'Transcripción falló'
+                            : 'Transcribiendo…'}
+                      </span>
+                    )}
+                    {l.transcripcionEstado === 'done' && l.transcripcion && (
+                      <button
+                        onClick={() => setTranscripcionAbierta(transcripcionAbierta === l.id ? null : l.id)}
+                        className="text-xs font-medium text-blue-600 hover:underline"
+                      >
+                        {transcripcionAbierta === l.id ? 'Ocultar texto' : 'Ver texto'}
+                      </button>
+                    )}
+                    {transcripcionAbierta === l.id && l.transcripcion && (
+                      <p className="basis-full mt-1 text-[12.5px] leading-relaxed text-gray-600 bg-gray-50 border rounded-lg px-3 py-2 whitespace-pre-wrap">
+                        {l.transcripcion}
+                      </p>
                     )}
                     {l.tieneGrabacion && audioLlamada?.id !== l.id && (
                       <button

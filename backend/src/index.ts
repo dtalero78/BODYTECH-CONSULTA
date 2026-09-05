@@ -35,6 +35,7 @@ import bodyvibeRoutes from './routes/bodyvibe.routes';
 import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
 import linkAutoService from './services/link-auto.service';
+import llamadasVozService from './services/llamadas-voz.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { mybodytechMonitorMiddleware } from './middleware/mybodytech-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -354,6 +355,22 @@ if (process.env.NODE_ENV !== 'test') {
     `link ${on(process.env.LINK_AUTO_ENABLED) ? `ACTIVO ${process.env.LINK_AUTO_MINUTOS_ANTES || 15} min antes` : 'apagado'}`,
   ].join(' · ');
   console.log(`🔗 [Link-Auto] Worker iniciado cada ${LINK_AUTO_INTERVALO_MS / 60000}min — ${estado}`);
+}
+
+// Transcripción de las llamadas del coach. Cada grabación se transcribe sola
+// al llegar el webhook; este barrido recoge las que quedaron sin transcribir
+// (webhook perdido, contenedor reiniciado a mitad de Whisper, o anteriores a
+// la función). Primera pasada a los 45 s del arranque, para no correr encima
+// de las migraciones.
+const LLAMADAS_TRANSCRIBIR_INTERVALO_MS = 10 * 60_000;
+if (process.env.NODE_ENV !== 'test') {
+  const barrer = () =>
+    llamadasVozService
+      .transcribirPendientes()
+      .then((n) => n > 0 && console.log(`📝 [llamadas-voz] ${n} grabación(es) transcrita(s) en el barrido`))
+      .catch((e) => console.error('[llamadas-voz] barrido de transcripción falló:', e?.message ?? e));
+  setTimeout(barrer, 45_000);
+  setInterval(barrer, LLAMADAS_TRANSCRIBIR_INTERVALO_MS);
 }
 
 // Worker del Torniquete: cada 60s cierra las jornadas cuyo último latido superó

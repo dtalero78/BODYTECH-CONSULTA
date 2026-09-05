@@ -120,6 +120,32 @@ export function CalidadDetalleModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
+
+  // Fuentes evaluables de esta historia: el video de la consulta y/o las
+  // llamadas del coach. Si no hay video pero sí una llamada transcrita, se
+  // evalúa la llamada por defecto.
+  const [fuentes, setFuentes] = useState<{
+    compositionSid: string | null;
+    llamadas: Array<{ id: number; iniciadaAt: string; duracionSeg: number | null; transcripcionEstado: string | null }>;
+  } | null>(null);
+  const [llamadaSel, setLlamadaSel] = useState<number | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    axios
+      .get(`${API}/api/calidad/session/${historiaId}`, { headers: authHeaders() })
+      .then((res) => {
+        if (!vivo) return;
+        const llamadas = Array.isArray(res.data?.llamadasVoz) ? res.data.llamadasVoz : [];
+        const compositionSid = res.data?.compositionSid ?? null;
+        setFuentes({ compositionSid, llamadas });
+        const transcrita = llamadas.find((l: { transcripcionEstado: string | null }) => l.transcripcionEstado === 'done');
+        if (!compositionSid && transcrita) setLlamadaSel(transcrita.id);
+      })
+      .catch(() => vivo && setFuentes({ compositionSid: null, llamadas: [] }));
+    return () => {
+      vivo = false;
+    };
+  }, [historiaId]);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchEval = useCallback(
@@ -182,7 +208,7 @@ export function CalidadDetalleModal({
     try {
       const res = await axios.post(
         `${API}/api/calidad/evaluar/${historiaId}`,
-        {},
+        llamadaSel ? { llamadaId: llamadaSel } : {},
         { headers: authHeaders() },
       );
       const newId = res.data.evaluacionId ?? res.data.id;
@@ -248,6 +274,48 @@ export function CalidadDetalleModal({
             <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-[13px] text-red-700 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Qué se evalúa: el video o una llamada del coach */}
+          {fuentes && fuentes.llamadas.length > 0 && (
+            <div className="mb-4 px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-md">
+              <div className="text-[10.5px] uppercase tracking-[0.1em] text-zinc-400 font-semibold mb-1.5">
+                Evaluar
+              </div>
+              <div className="flex flex-col gap-1.5 text-[12.5px] text-zinc-700">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="fuente-modal"
+                    checked={llamadaSel === null}
+                    disabled={!fuentes.compositionSid}
+                    onChange={() => setLlamadaSel(null)}
+                  />
+                  Video de la consulta{!fuentes.compositionSid && <span className="text-zinc-400"> (sin video)</span>}
+                </label>
+                {fuentes.llamadas.map((l) => {
+                  const d = new Date(l.iniciadaAt);
+                  const cuando = d.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' });
+                  const dur = l.duracionSeg != null ? ` · ${Math.floor(l.duracionSeg / 60)}:${String(l.duracionSeg % 60).padStart(2, '0')}` : '';
+                  const lista = l.transcripcionEstado === 'done';
+                  return (
+                    <label key={l.id} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="fuente-modal"
+                        checked={llamadaSel === l.id}
+                        disabled={!lista}
+                        onChange={() => setLlamadaSel(l.id)}
+                      />
+                      Llamada del {cuando}{dur}
+                      <span className={`text-[11px] ${lista ? 'text-green-700' : 'text-amber-700'}`}>
+                        {lista ? '· transcrita' : l.transcripcionEstado === 'error' ? '· transcripción falló' : '· transcribiendo…'}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
 

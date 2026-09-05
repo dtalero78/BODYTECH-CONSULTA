@@ -551,6 +551,9 @@ export interface LlamadaVoz {
   recordingSid: string | null;
   recordingDuracionSeg: number | null;
   recordingEstado: 'pendiente' | 'lista' | 'error';
+  transcriptionStatus: 'processing' | 'done' | 'error' | null;
+  transcriptionText: string | null;
+  transcribedAt: string | null;
 }
 
 export default new ApiService();

@@ -88,6 +88,9 @@ export interface OrdenItem {
   // Calidad: última evaluación (cualquier estado) ligada a esta historia.
   // Si no hay ninguna, los tres campos van null.
   calidadEvalId?: number | null;
+  /** Llamadas de voz del coach con esta persona: grabadas / ya transcritas. */
+  llamadasGrabadas?: number;
+  llamadasTranscritas?: number;
   calidadPuntaje?: number | null; // 0..100 normalizado por el backend de calidad
   calidadEstado?:
     | 'procesando'
@@ -653,7 +656,9 @@ class MedicalPanelService {
                 h."origen",
                 ce.id           AS calidad_eval_id,
                 ce.puntaje_total AS calidad_puntaje,
-                ce.estado       AS calidad_estado
+                ce.estado       AS calidad_estado,
+                lv.grabadas     AS llamadas_grabadas,
+                lv.transcritas  AS llamadas_transcritas
          FROM "HistoriaClinica" h
          LEFT JOIN LATERAL (
            SELECT id, puntaje_total, estado
@@ -662,6 +667,11 @@ class MedicalPanelService {
            ORDER BY (estado = 'completado') DESC, created_at DESC
            LIMIT 1
          ) ce ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT count(*) FILTER (WHERE recording_estado = 'lista')::int AS grabadas,
+                  count(*) FILTER (WHERE transcription_status = 'done')::int AS transcritas
+             FROM llamadas_voz WHERE historia_id = h."_id"
+         ) lv ON TRUE
          WHERE ${whereClause}
          ${orderByClause}
          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
@@ -693,6 +703,8 @@ class MedicalPanelService {
             ? String(row._createdDate)
             : undefined,
         calidadEvalId: row.calidad_eval_id != null ? Number(row.calidad_eval_id) : null,
+        llamadasGrabadas: Number(row.llamadas_grabadas || 0),
+        llamadasTranscritas: Number(row.llamadas_transcritas || 0),
         calidadPuntaje: row.calidad_puntaje != null ? Number(row.calidad_puntaje) : null,
         calidadEstado: (row.calidad_estado as OrdenItem['calidadEstado']) ?? null,
       }));

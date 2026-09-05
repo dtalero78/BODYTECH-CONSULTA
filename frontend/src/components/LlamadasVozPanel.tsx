@@ -45,6 +45,7 @@ export function LlamadasVozPanel({ historiaId }: { historiaId: string }) {
   const [audio, setAudio] = useState<{ id: number; url: string } | null>(null);
   const [cargandoAudio, setCargandoAudio] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [textoAbierto, setTextoAbierto] = useState<number | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -125,6 +126,22 @@ export function LlamadasVozPanel({ historiaId }: { historiaId: string }) {
               )}
               {audio?.id === l.id && (
                 <audio src={audio.url} controls autoPlay className="h-8 max-w-[320px]" />
+              )}
+              {l.transcriptionStatus === 'done' && l.transcriptionText && (
+                <button
+                  onClick={() => setTextoAbierto(textoAbierto === l.id ? null : l.id)}
+                  className="text-[12px] font-medium text-zinc-600 hover:underline"
+                >
+                  {textoAbierto === l.id ? 'Ocultar transcripción' : 'Transcripción'}
+                </button>
+              )}
+              {l.transcriptionStatus === 'processing' && (
+                <span className="text-[11px] text-zinc-400">transcribiendo…</span>
+              )}
+              {textoAbierto === l.id && l.transcriptionText && (
+                <p className="basis-full mt-1 text-[12.5px] leading-relaxed text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
+                  {l.transcriptionText}
+                </p>
               )}
             </li>
           );

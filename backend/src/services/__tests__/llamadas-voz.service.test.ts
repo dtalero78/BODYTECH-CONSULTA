@@ -10,7 +10,13 @@
 jest.mock('../postgres.service', () => ({ __esModule: true, default: { query: jest.fn() } }));
 jest.mock('../usuarios.service', () => ({ __esModule: true, default: { findActiveById: jest.fn() } }));
 jest.mock('../link-paciente.service', () => ({ __esModule: true, formatCelularE164: jest.fn() }));
+jest.mock('../twilio-media.service', () => ({ __esModule: true, descargarGrabacionVozComoBuffer: jest.fn() }));
+jest.mock('../openai.service', () => ({ __esModule: true, openai: { audio: { transcriptions: { create: jest.fn() } } } }));
+jest.mock('openai', () => ({ __esModule: true, toFile: jest.fn(async (b: Buffer) => b) }));
 
+import postgresService from '../postgres.service';
+import { descargarGrabacionVozComoBuffer } from '../twilio-media.service';
+import { openai } from '../openai.service';
 import llamadasVozService, {
   aplicarEvento,
   identidadCoach,
@@ -153,5 +159,45 @@ describe('token de voz (softphone)', () => {
 
   it('la identidad del coach es estable por usuario', () => {
     expect(identidadCoach(7)).toBe('coach-7');
+  });
+});
+
+describe('transcribirGrabacion — automática y sin pagar dos veces', () => {
+  const query = postgresService.query as jest.Mock;
+  const descargar = descargarGrabacionVozComoBuffer as jest.Mock;
+  const whisper = openai.audio.transcriptions.create as jest.Mock;
+  beforeEach(() => {
+    query.mockReset(); descargar.mockReset(); whisper.mockReset();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('transcribe y guarda el texto en la llamada', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1' }]).mockResolvedValueOnce([]);
+    descargar.mockResolvedValue(Buffer.from('mp3'));
+    whisper.mockResolvedValue({ text: ' Hola, te habla Bodytech. ' });
+    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(true);
+    expect(descargar).toHaveBeenCalledWith('RE1');
+    expect(query.mock.calls[1][0]).toContain("transcription_status = 'done'");
+    expect(query.mock.calls[1][1]).toEqual([5, 'Hola, te habla Bodytech.']);
+  });
+
+  // El claim del UPDATE es lo que evita que el webhook y el barrido paguen
+  // Whisper dos veces por la misma grabación.
+  it('si otra pasada ya la tomó (o ya está hecha), no descarga ni transcribe', async () => {
+    query.mockResolvedValueOnce([]);
+    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(false);
+    expect(descargar).not.toHaveBeenCalled();
+    expect(whisper).not.toHaveBeenCalled();
+  });
+
+  it('un fallo de Whisper queda registrado como error, no cuelga la fila en processing', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1' }]).mockResolvedValueOnce([]);
+    descargar.mockResolvedValue(Buffer.from('mp3'));
+    whisper.mockRejectedValue(new Error('Whisper caído'));
+    expect(await llamadasVozService.transcribirGrabacion(5)).toBe(false);
+    expect(query.mock.calls[1][0]).toContain("transcription_status = 'error'");
+    expect(query.mock.calls[1][1][1]).toContain('Whisper caído');
   });
 });

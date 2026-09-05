@@ -1415,6 +1415,17 @@ class PostgresService {
       await this.query(`
         ALTER TABLE llamadas_voz ALTER COLUMN coach_celular DROP NOT NULL
       `);
+      // Transcripción automática de la grabación (Whisper), como la del video:
+      // arranca sola al llegar la grabación y Calidad la reutiliza en vez de
+      // volver a pagar Whisper. NULL = nunca se intentó.
+      for (const col of [
+        `"transcription_status" TEXT`,
+        `"transcription_text" TEXT`,
+        `"transcription_error" TEXT`,
+        `"transcribed_at" TIMESTAMPTZ`,
+      ]) {
+        await this.query(`ALTER TABLE llamadas_voz ADD COLUMN IF NOT EXISTS ${col}`);
+      }
 
       // Calidad puede evaluar una LLAMADA además del video de la consulta.
       // `fuente` dice de dónde salió el transcript; `llamada_id` la ata.

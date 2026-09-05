@@ -35,6 +35,9 @@ import axios from 'axios';
 import type { Readable } from 'stream';
 import postgresService from './postgres.service';
 import { formatCelularE164 } from './link-paciente.service';
+import { descargarGrabacionVozComoBuffer } from './twilio-media.service';
+import { openai } from './openai.service';
+import { toFile } from 'openai';
 import type { SessionPayload } from './auth.service';
 
 // ---------------------------------------------------------------------------
@@ -303,6 +306,10 @@ export interface LlamadaVoz {
   recordingDuracionSeg: number | null;
   recordingEstado: 'pendiente' | 'lista' | 'error';
   error: string | null;
+  /** NULL = no se intentó; processing | done | error. */
+  transcriptionStatus: 'processing' | 'done' | 'error' | null;
+  transcriptionText: string | null;
+  transcribedAt: string | null;
 }
 
 const iso = (v: unknown): string | null => {
@@ -335,6 +342,9 @@ function filaALlamada(r: Record<string, unknown>): LlamadaVoz {
     recordingDuracionSeg: r.recording_duracion_seg != null ? Number(r.recording_duracion_seg) : null,
     recordingEstado: (String(r.recording_estado) as LlamadaVoz['recordingEstado']) || 'pendiente',
     error: r.error ? String(r.error) : null,
+    transcriptionStatus: (r.transcription_status as LlamadaVoz['transcriptionStatus']) || null,
+    transcriptionText: r.transcription_text ? String(r.transcription_text) : null,
+    transcribedAt: iso(r.transcribed_at),
   };
 }
 
@@ -581,6 +591,70 @@ class LlamadasVozService {
         WHERE id = $1`,
       [id, p.recordingSid, p.recordingUrl, p.duracionSeg, lista ? 'lista' : 'error']
     );
+  }
+
+  // --- Transcripción -------------------------------------------------------
+
+  /**
+   * Transcribe la grabación con Whisper y la guarda en la fila. Corre sola al
+   * llegar la grabación (webhook) y en el barrido de pendientes. Idempotente:
+   * el UPDATE que la pone en 'processing' exige que no esté ya hecha ni en
+   * curso, así dos disparos simultáneos no pagan Whisper dos veces.
+   */
+  async transcribirGrabacion(id: number, opts: { forzar?: boolean } = {}): Promise<boolean> {
+    const tomada = await postgresService.query(
+      `UPDATE llamadas_voz SET transcription_status = 'processing', transcription_error = NULL, updated_at = NOW()
+        WHERE id = $1 AND recording_estado = 'lista' AND recording_sid IS NOT NULL
+          AND (${opts.forzar ? 'TRUE' : "transcription_status IS DISTINCT FROM 'done'"})
+          AND (transcription_status IS DISTINCT FROM 'processing' OR updated_at < NOW() - INTERVAL '10 minutes')
+        RETURNING recording_sid`,
+      [id]
+    );
+    if (!tomada || tomada.length === 0) return false;
+    const recordingSid = String(tomada[0].recording_sid);
+    try {
+      const mp3 = await descargarGrabacionVozComoBuffer(recordingSid);
+      const archivo = await toFile(mp3, `llamada-${id}.mp3`, { type: 'audio/mpeg' });
+      const r = await openai.audio.transcriptions.create({ file: archivo, model: 'whisper-1', language: 'es' });
+      const texto = ((r as { text?: string }).text || '').trim();
+      await postgresService.query(
+        `UPDATE llamadas_voz SET transcription_status = 'done', transcription_text = $2,
+                transcribed_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [id, texto]
+      );
+      console.log(`📝 [llamadas-voz] Llamada #${id} transcrita (${texto.length} caracteres)`);
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`❌ [llamadas-voz] Transcripción de la llamada #${id} falló: ${msg}`);
+      await postgresService.query(
+        `UPDATE llamadas_voz SET transcription_status = 'error', transcription_error = $2, updated_at = NOW() WHERE id = $1`,
+        [id, msg.slice(0, 500)]
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Grabaciones listas sin transcripción (webhook perdido, contenedor
+   * reiniciado a mitad de Whisper, o anteriores a esta función). Las de error
+   * se reintentan hasta 3 veces, contando por el texto del error.
+   */
+  async transcribirPendientes(limite = 10): Promise<number> {
+    const rows = await postgresService.query(
+      `SELECT id FROM llamadas_voz
+        WHERE recording_estado = 'lista' AND recording_sid IS NOT NULL
+          AND (transcription_status IS NULL
+               OR (transcription_status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes')
+               OR (transcription_status = 'error' AND updated_at < NOW() - INTERVAL '30 minutes'))
+        ORDER BY id LIMIT $1`,
+      [limite]
+    );
+    let hechas = 0;
+    for (const r of rows ?? []) {
+      if (await this.transcribirGrabacion(Number(r.id))) hechas++;
+    }
+    return hechas;
   }
 
   /**

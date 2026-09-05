@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { Users, User } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, TextareaField, PillToggleField } from '../fields';
 import type { MedicalHistoryFull } from '../types';
+import { useModalChain } from '../useModalChain';
 
 interface CorpAntecedentesTabProps {
   historiaId: string | undefined;
@@ -11,7 +11,14 @@ interface CorpAntecedentesTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'familiares' | 'personales' | null;
+type ModalKey = 'familiares' | 'personales';
+
+/** Recorrido clínico de la sección: define el "Siguiente" del pie de cada modal. */
+const ORDEN: ReadonlyArray<ModalKey> = ['familiares', 'personales'];
+const ETIQUETAS: Record<ModalKey, string> = {
+  familiares: 'Antecedentes familiares',
+  personales: 'Antecedentes personales',
+};
 
 const FAMILIARES: ReadonlyArray<{ label: string; field: string }> = [
   { label: 'Enfermedad cardiaca', field: 'mc_fam_cardiaca' },
@@ -73,7 +80,7 @@ function toDateInput(v: unknown): string {
 }
 
 export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAntecedentesTabProps) {
-  const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
 
   const famActivos = FAMILIARES.map((f) => coerceBool(data?.[camel(f.field)])).filter(Boolean).length;
   const perActivos = PERSONALES_BOOL.map((f) => coerceBool(data?.[camel(f.field)])).filter(Boolean).length;
@@ -107,8 +114,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
 
       {/* ============ Familiares ============ */}
       <Modal
-        open={openModal === 'familiares'}
-        onClose={() => setOpenModal(null)}
+        {...chain('familiares')}
         crumb="Antecedentes · Familiares"
         title="Antecedentes familiares"
         icon={<Users size={18} />}
@@ -149,8 +155,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
 
       {/* ============ Personales ============ */}
       <Modal
-        open={openModal === 'personales'}
-        onClose={() => setOpenModal(null)}
+        {...chain('personales')}
         crumb="Antecedentes · Personales"
         title="Antecedentes personales"
         icon={<User size={18} />}

@@ -9,6 +9,7 @@ import { DowntonCard } from '../DowntonCard';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 import { Cie10Field } from './Cie10Field';
+import { useModalChain } from '../useModalChain';
 
 interface CorpDiagnosticoRiesgoTabProps {
   historiaId: string | undefined;
@@ -16,7 +17,14 @@ interface CorpDiagnosticoRiesgoTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'diagnosticos' | 'riesgo' | null;
+type ModalKey = 'diagnosticos' | 'riesgo';
+
+/** Recorrido clínico de la sección: define el "Siguiente" del pie de cada modal. */
+const ORDEN: ReadonlyArray<ModalKey> = ['diagnosticos', 'riesgo'];
+const ETIQUETAS: Record<ModalKey, string> = {
+  diagnosticos: 'Diagnósticos',
+  riesgo: 'Riesgo y aptitud',
+};
 
 const opt = (vals: string[]): ReadonlyArray<DropdownOption> =>
   vals.map((v) => ({ value: v, label: v }));
@@ -81,7 +89,7 @@ function isFilled(v: unknown): boolean {
 }
 
 export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: CorpDiagnosticoRiesgoTabProps) {
-  const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
 
   const dxVals = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcDxCie10];
   const dxFilled = dxVals.filter(isFilled).length;
@@ -139,8 +147,7 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
       />
 
       <Modal
-        open={openModal === 'diagnosticos'}
-        onClose={() => setOpenModal(null)}
+        {...chain('diagnosticos')}
         crumb="Diagnósticos"
         title="Diagnósticos"
         icon={<Stethoscope size={18} />}
@@ -162,8 +169,7 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
       </Modal>
 
       <Modal
-        open={openModal === 'riesgo'}
-        onClose={() => setOpenModal(null)}
+        {...chain('riesgo')}
         crumb="Riesgo y aptitud"
         title="Riesgo y aptitud"
         icon={<ShieldAlert size={18} />}

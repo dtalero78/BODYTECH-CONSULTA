@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { ClipboardList, HeartPulse, Dumbbell, Activity, Users } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, TextareaField, SelectField } from '../fields';
 import { TemplateTextareaField } from '../corporativo-tabs/TemplateTextareaField';
 import type { MedicalHistoryFull } from '../types';
+import { useModalChain } from '../useModalChain';
 
 /**
  * Tab t8 — Prescripción de ejercicio (panel de consulta médica).
@@ -35,9 +35,30 @@ interface PrescripcionTabProps {
    */
   showEyePill?: boolean;
   modalSize?: 'default' | 'wide';
+  /**
+   * Encadenado que entra y sale de este tab. En el examen ocupacional el
+   * recorrido es Análisis → las 5 secciones FIT → Remisión, y el primero y el
+   * último viven en `CorpPrescripcionTab`: por eso el padre puede controlar qué
+   * paso está abierto y enganchar los extremos de la cadena.
+   * Sin estas props el tab funciona igual que siempre (panel del rol Médico).
+   */
+  openStep?: PrescModalKey | null;
+  onStepChange?: (k: PrescModalKey | null) => void;
+  chainEnd?: { label: string; onNext: () => void };
+  chainStart?: { onBack: () => void };
 }
 
-type ModalKey = 'generales' | 'cardio' | 'fuerza' | 'flexibilidad' | 'clases' | null;
+export type PrescModalKey = 'generales' | 'cardio' | 'fuerza' | 'flexibilidad' | 'clases';
+
+/** Recorrido FIT: define el "Siguiente" del pie de cada modal. */
+const ORDEN: ReadonlyArray<PrescModalKey> = ['generales', 'cardio', 'fuerza', 'flexibilidad', 'clases'];
+const ETIQUETAS: Record<PrescModalKey, string> = {
+  generales: 'Recomendaciones generales',
+  cardio: 'Cardiovascular',
+  fuerza: 'Fuerza',
+  flexibilidad: 'Flexibilidad',
+  clases: 'Clases grupales',
+};
 
 function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
@@ -159,8 +180,18 @@ export function PrescripcionTab({
   onPatchLocal,
   showEyePill = true,
   modalSize = 'default',
+  openStep,
+  onStepChange,
+  chainEnd,
+  chainStart,
 }: PrescripcionTabProps) {
-  const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const { setOpen: setOpenModal, chain } = useModalChain(
+    ORDEN,
+    ETIQUETAS,
+    chainEnd,
+    chainStart,
+    onStepChange ? { open: openStep ?? null, setOpen: onStepChange } : undefined
+  );
 
   const cardioVals = [data?.prescCardioFrecuencia, data?.prescCardioIntensidad, data?.prescCardioTiempo, data?.prescCardioTipo];
   const fuerzaVals = [data?.prescFuerzaFrecuencia, data?.prescFuerzaIntensidad, data?.prescFuerzaSeries, data?.prescFuerzaRepeticiones, data?.prescFuerzaTipo];
@@ -219,8 +250,7 @@ export function PrescripcionTab({
 
       {/* 1. Recomendaciones generales */}
       <Modal
-        open={openModal === 'generales'}
-        onClose={() => setOpenModal(null)}
+        {...chain('generales')}
         crumb="Prescripción · General"
         title="Recomendaciones generales"
         icon={<ClipboardList size={18} />}
@@ -241,8 +271,7 @@ export function PrescripcionTab({
 
       {/* 2. Cardiovascular */}
       <Modal
-        open={openModal === 'cardio'}
-        onClose={() => setOpenModal(null)}
+        {...chain('cardio')}
         crumb="Prescripción · Cardiovascular"
         title="Ejercicio cardiovascular (FIT)"
         icon={<HeartPulse size={18} />}
@@ -264,8 +293,7 @@ export function PrescripcionTab({
 
       {/* 3. Fuerza */}
       <Modal
-        open={openModal === 'fuerza'}
-        onClose={() => setOpenModal(null)}
+        {...chain('fuerza')}
         crumb="Prescripción · Fuerza"
         title="Ejercicio de fuerza (FIT)"
         icon={<Dumbbell size={18} />}
@@ -296,8 +324,7 @@ export function PrescripcionTab({
 
       {/* 4. Flexibilidad */}
       <Modal
-        open={openModal === 'flexibilidad'}
-        onClose={() => setOpenModal(null)}
+        {...chain('flexibilidad')}
         crumb="Prescripción · Flexibilidad"
         title="Ejercicio de flexibilidad"
         icon={<Activity size={18} />}
@@ -315,8 +342,7 @@ export function PrescripcionTab({
 
       {/* 5. Clases grupales */}
       <Modal
-        open={openModal === 'clases'}
-        onClose={() => setOpenModal(null)}
+        {...chain('clases')}
         crumb="Prescripción · Clases grupales"
         title="Clases grupales"
         icon={<Users size={18} />}

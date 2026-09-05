@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { EyeOnPatientPill } from './EyeOnPatientPill';
@@ -35,6 +35,22 @@ interface ModalProps {
    * desborda el contenedor.
    */
   size?: 'default' | 'wide';
+  /**
+   * Encadenado de secciones ("wizard"). Cuando se pasa `nextLabel`, el botón
+   * primario deja de decir "Guardado ✓" y pasa a nombrar el paso siguiente
+   * ("Siguiente: Fuerza"), abriéndolo en vez de cerrar. `onBack` agrega "Atrás".
+   *
+   * Es lo que pidió el equipo médico: al terminar una sección querían caer
+   * directo en la siguiente en vez de cerrar, buscar el card y volver a abrir.
+   *
+   * A diferencia de la plataforma que mostraron de referencia, acá el guardado
+   * NO ocurre al final de la cadena: cada campo ya se auto-guarda solo. La
+   * cadena es únicamente navegación, así que abandonarla a la mitad no pierde
+   * nada — que es justo la ventaja que no queríamos resignar.
+   */
+  nextLabel?: string;
+  onNext?: () => void;
+  onBack?: () => void;
 }
 
 /**
@@ -43,7 +59,7 @@ interface ModalProps {
  *
  * Animación scaleY 200ms ease-out al abrir.
  */
-export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true, formulas, size = 'default' }: ModalProps) {
+export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, children, onSave, showEyePill = true, formulas, size = 'default', nextLabel, onNext, onBack }: ModalProps) {
   // Esc para cerrar
   useEffect(() => {
     if (!open) return;
@@ -111,24 +127,44 @@ export function Modal({ open, onClose, crumb, title, icon, footerHint, isMaxed, 
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[var(--p-line)] bg-[var(--p-surface-3)] rounded-b-[20px]">
-          <span className="text-[11px] text-[var(--p-text-3)]">{footerHint || 'Auto-guardado activo'}</span>
+          <div className="flex items-center gap-3 min-w-0">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="inline-flex items-center gap-1 px-2.5 py-2 rounded-[10px] text-xs font-semibold text-[var(--p-text-2)] hover:text-[var(--p-text)] hover:bg-[var(--p-input)] transition shrink-0"
+              >
+                <ChevronLeft size={14} />
+                Atrás
+              </button>
+            )}
+            <span className="text-[11px] text-[var(--p-text-3)] truncate">{footerHint || 'Auto-guardado activo'}</span>
+          </div>
           <div className="flex gap-2.5">
             <button
               type="button"
               onClick={onClose}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-semibold text-[var(--p-text-2)] hover:text-[var(--p-text)] hover:bg-[var(--p-input)] transition"
             >
-              Cancelar
+              {nextLabel ? 'Cerrar' : 'Cancelar'}
             </button>
             <button
               type="button"
               onClick={() => {
                 onSave?.();
-                onClose();
+                if (nextLabel && onNext) onNext();
+                else onClose();
               }}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-xs font-bold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition"
             >
-              Guardado ✓
+              {nextLabel ? (
+                <>
+                  Siguiente: {nextLabel}
+                  <ChevronRight size={14} />
+                </>
+              ) : (
+                'Guardado ✓'
+              )}
             </button>
           </div>
         </div>

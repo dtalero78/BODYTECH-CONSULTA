@@ -3,7 +3,7 @@ import { FileText, Send } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, TextareaField } from '../fields';
-import { PrescripcionTab } from '../tabs/PrescripcionTab';
+import { PrescripcionTab, type PrescModalKey } from '../tabs/PrescripcionTab';
 import type { MedicalHistoryFull } from '../types';
 
 interface CorpPrescripcionTabProps {
@@ -32,6 +32,12 @@ function isFilled(v: unknown): boolean {
  */
 export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPrescripcionTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
+  // Paso abierto DENTRO de PrescripcionTab. Vive acá porque el recorrido del
+  // examen ocupacional entra y sale de ese componente:
+  //   Análisis → generales → cardio → fuerza → flexibilidad → clases → Remisión
+  // Los extremos son de este tab y el medio del otro, así que alguien tiene que
+  // sostener el hilo; el padre es el único que ve las dos mitades.
+  const [prescStep, setPrescStep] = useState<PrescModalKey | null>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,6 +49,10 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
         onPatchLocal={onPatchLocal}
         showEyePill={false}
         modalSize="wide"
+        openStep={prescStep}
+        onStepChange={setPrescStep}
+        chainStart={{ onBack: () => setOpenModal('analisis') }}
+        chainEnd={{ label: 'Remisión', onNext: () => setOpenModal('remision') }}
       />
 
       {/* Propios del examen ocupacional */}
@@ -68,6 +78,11 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
       <Modal
         open={openModal === 'analisis'}
         onClose={() => setOpenModal(null)}
+        nextLabel="Recomendaciones generales"
+        onNext={() => {
+          setOpenModal(null);
+          setPrescStep('generales');
+        }}
         crumb="Análisis"
         title="Análisis"
         icon={<FileText size={18} />}
@@ -89,6 +104,10 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
       <Modal
         open={openModal === 'remision'}
         onClose={() => setOpenModal(null)}
+        onBack={() => {
+          setOpenModal(null);
+          setPrescStep('clases');
+        }}
         crumb="Remisión"
         title="Remisión"
         icon={<Send size={18} />}

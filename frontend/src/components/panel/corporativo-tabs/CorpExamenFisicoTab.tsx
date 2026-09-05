@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Scale, HeartPulse, Gauge, Hand, Stethoscope } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
@@ -10,6 +9,7 @@ import { edadEfectiva } from '../edad';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+import { useModalChain } from '../useModalChain';
 
 // Escala de estabilidad unipodal que usa el equipo médico. El texto de cada
 // opción ya trae el rango en segundos, así que el campo numérico aparte sobra.
@@ -106,7 +106,17 @@ interface CorpExamenFisicoTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'signos' | 'fc' | 'ruffier' | 'handgrip' | 'examen' | null;
+type ModalKey = 'signos' | 'fc' | 'ruffier' | 'handgrip' | 'examen';
+
+/** Recorrido clínico de la sección: define el "Siguiente" del pie de cada modal. */
+const ORDEN: ReadonlyArray<ModalKey> = ['signos', 'fc', 'ruffier', 'handgrip', 'examen'];
+const ETIQUETAS: Record<ModalKey, string> = {
+  signos: 'Signos y composición',
+  fc: 'Frecuencia cardíaca',
+  ruffier: 'Test de Ruffier',
+  handgrip: 'Handgrip',
+  examen: 'Examen físico',
+};
 
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -129,7 +139,7 @@ function round2(n: number): number {
 }
 
 export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExamenFisicoTabProps) {
-  const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
 
   // ---- Composición corporal: IMC calculado (peso kg / talla m²) ----
   const peso = toNum(data?.mcPeso);
@@ -288,8 +298,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
 
       {/* ============ Signos y composición corporal ============ */}
       <Modal
-        open={openModal === 'signos'}
-        onClose={() => setOpenModal(null)}
+        {...chain('signos')}
         crumb="Examen Físico · Signos y composición corporal"
         title="Signos y composición corporal"
         icon={<Scale size={18} />}
@@ -338,8 +347,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
 
       {/* ============ Parámetros de FC ============ */}
       <Modal
-        open={openModal === 'fc'}
-        onClose={() => setOpenModal(null)}
+        {...chain('fc')}
         crumb="Examen Físico · Parámetros de frecuencia cardíaca"
         title="Parámetros de frecuencia cardíaca"
         icon={<HeartPulse size={18} />}
@@ -401,8 +409,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
 
       {/* ============ Ruffier ============ */}
       <Modal
-        open={openModal === 'ruffier'}
-        onClose={() => setOpenModal(null)}
+        {...chain('ruffier')}
         crumb="Examen Físico · Test de Ruffier"
         title="Test de Ruffier"
         icon={<Gauge size={18} />}
@@ -436,8 +443,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
 
       {/* ============ Handgrip ============ */}
       <Modal
-        open={openModal === 'handgrip'}
-        onClose={() => setOpenModal(null)}
+        {...chain('handgrip')}
         crumb="Examen Físico · Handgrip"
         title="Handgrip (dinamometría)"
         icon={<Hand size={18} />}
@@ -473,8 +479,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       {/* ============ Observaciones ============ */}
       {/* ============ Examen Físico (revisión por sistemas + estabilidad/Wells/obs) ============ */}
       <Modal
-        open={openModal === 'examen'}
-        onClose={() => setOpenModal(null)}
+        {...chain('examen')}
         crumb="Examen Físico · Revisión y hallazgos"
         title="Examen Físico"
         icon={<Stethoscope size={18} />}

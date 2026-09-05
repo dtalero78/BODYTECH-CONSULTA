@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { ClipboardList, HeartPulse } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextareaField, PillToggleField } from '../fields';
 import { TemplateTextareaField } from './TemplateTextareaField';
 import type { MedicalHistoryFull } from '../types';
+import { useModalChain } from '../useModalChain';
 
 interface CorpAnamnesisTabProps {
   historiaId: string | undefined;
@@ -12,7 +12,14 @@ interface CorpAnamnesisTabProps {
   onPatchLocal: (field: string, value: unknown) => void;
 }
 
-type ModalKey = 'motivo' | 'sintomas' | null;
+type ModalKey = 'motivo' | 'sintomas';
+
+/** Recorrido clínico de la sección: define el "Siguiente" del pie de cada modal. */
+const ORDEN: ReadonlyArray<ModalKey> = ['motivo', 'sintomas'];
+const ETIQUETAS: Record<ModalKey, string> = {
+  motivo: 'Motivo y enfermedad actual',
+  sintomas: 'Síntomas en ejercicio',
+};
 
 const ENFERMEDAD_ACTUAL_TEMPLATE =
   'Paciente femenina/masculino de años de edad, quien asiste a valoración médico ' +
@@ -42,7 +49,7 @@ function isFilled(v: unknown): boolean {
 }
 
 export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnesisTabProps) {
-  const [openModal, setOpenModal] = useState<ModalKey>(null);
+  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
 
 
   const motivoVals = [data?.motivoConsultaTexto, data?.mcEnfermedadActual];
@@ -81,8 +88,7 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
       />
 
       <Modal
-        open={openModal === 'motivo'}
-        onClose={() => setOpenModal(null)}
+        {...chain('motivo')}
         crumb="Anamnesis · Motivo de consulta"
         title="Motivo y enfermedad actual"
         icon={<ClipboardList size={18} />}
@@ -115,8 +121,7 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
 
 
       <Modal
-        open={openModal === 'sintomas'}
-        onClose={() => setOpenModal(null)}
+        {...chain('sintomas')}
         crumb="Anamnesis · Síntomas en ejercicio"
         title="Síntomas en ejercicio"
         icon={<HeartPulse size={18} />}

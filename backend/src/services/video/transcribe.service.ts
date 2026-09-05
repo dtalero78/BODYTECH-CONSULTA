@@ -51,6 +51,50 @@ class TranscribeService {
     return `bodytech-tx-${roomName}`.replace(/[^0-9a-zA-Z._-]/g, '-').slice(0, 200);
   }
 
+  /**
+   * Igual que `getOrStartTranscription`, pero sobre CUALQUIER audio ya subido a
+   * S3 — no solo el MP4 de una sala Chime. Lo usa la diarización del audio del
+   * navegador, que existe en TODAS las consultas y no solo en la muestra que se
+   * graba. Misma idempotencia: el nombre del job es la llave.
+   */
+  async getOrStartFromS3(
+    jobName: string,
+    s3Uri: string,
+    mediaFormat: 'mp4' | 'webm' | 'ogg' | 'mp3' | 'wav' | 'flac' | 'm4a'
+  ): Promise<TranscribeResult> {
+    const safeName = jobName.replace(/[^0-9a-zA-Z._-]/g, '-').slice(0, 200);
+    let job;
+    try {
+      const got = await this.client.send(
+        new GetTranscriptionJobCommand({ TranscriptionJobName: safeName })
+      );
+      job = got.TranscriptionJob;
+    } catch {
+      job = undefined; // BadRequest/NotFound → no existe todavía
+    }
+    if (!job) {
+      try {
+        await this.client.send(
+          new StartTranscriptionJobCommand({
+            TranscriptionJobName: safeName,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            LanguageCode: LANGUAGE as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            MediaFormat: mediaFormat as any,
+            Media: { MediaFileUri: s3Uri },
+            Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 },
+          })
+        );
+      } catch (err: any) {
+        if (err?.name !== 'ConflictException') {
+          return { status: 'failed', reason: err?.message || 'StartTranscriptionJob falló' };
+        }
+      }
+      return { status: 'in_progress' };
+    }
+    return this.leerJob(job);
+  }
+
   async getOrStartTranscription(roomName: string): Promise<TranscribeResult> {
     if (!BUCKET) return { status: 'failed', reason: 'RECORDINGS_BUCKET no configurado' };
     const jobName = this.jobName(roomName);
@@ -96,6 +140,12 @@ class TranscribeService {
       return { status: 'in_progress' };
     }
 
+    return this.leerJob(job);
+  }
+
+  /** Estado de un job existente → resultado uniforme para los dos caminos. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async leerJob(job: any): Promise<TranscribeResult> {
     const s = job.TranscriptionJobStatus;
     if (s === 'QUEUED' || s === 'IN_PROGRESS') return { status: 'in_progress' };
     if (s === 'FAILED') return { status: 'failed', reason: job.FailureReason || 'Transcribe FAILED' };

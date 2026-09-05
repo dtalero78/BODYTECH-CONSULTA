@@ -117,6 +117,8 @@ export interface SessionInfo {
    * evaluar una consulta sin grabación — el 86% de ellas.
    */
   tieneTranscripcion: boolean;
+  /** El diálogo ya está atribuido (Amazon Transcribe) o sigue en bloque corrido. */
+  transcripcionConHablantes: boolean;
   llamadasVoz: LlamadaVozResumen[];
   patientName: string | null;
   numeroId: string | null;
@@ -294,11 +296,19 @@ async function procesarEvaluacion(
     // 0. Reutilizar el transcript ya generado por el pipeline de transcripción
     //    (audio client-side de la consulta). Independiente del proveedor de video
     //    (Twilio o Chime): si existe, evita re-transcribir (doble costo y latencia).
+    // Se prefiere el diálogo con hablantes (Amazon Transcribe) sobre el bloque
+    // corrido de Whisper: varios ítems de la rúbrica dependen de saber quién
+    // habló, y sobre un texto sin atribución el evaluador tiene que adivinar.
     const cached = await postgresService.query(
-      `SELECT "transcription_text" FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+      `SELECT "transcription_text", "transcription_hablantes"
+         FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
       [historiaId]
     );
-    const cachedText = cached?.[0]?.transcription_text;
+    const conHablantes = cached?.[0]?.transcription_hablantes;
+    const cachedText =
+      typeof conHablantes === 'string' && conHablantes.trim().length > 0
+        ? conHablantes
+        : cached?.[0]?.transcription_text;
 
     if (source.kind === 'voz') {
       // LLAMADA del coach: es OTRA conversación, así que el transcript cacheado
@@ -378,10 +388,15 @@ async function procesarEvaluacion(
     } else if (typeof cachedText === 'string' && cachedText.trim().length > 0) {
       // Twilio (u otro): reusar el transcript del navegador si existe.
       transcript = cachedText.trim();
-      console.log(`${tag} Reutilizando transcript existente (${transcript.length} chars) — no re-transcribo`);
+      const atribuido = /Hablante [12]:/.test(transcript);
+      console.log(
+        `${tag} Reutilizando transcript existente (${transcript.length} chars, ${atribuido ? 'con hablantes' : 'bloque corrido'}) — no re-transcribo`
+      );
       await agregarPaso(
         evaluacionId,
-        `Reutilizando transcripción de la consulta (${transcript.length} caracteres)...`
+        atribuido
+          ? `Reutilizando la transcripción con hablantes separados (${transcript.length} caracteres)...`
+          : `Reutilizando transcripción de la consulta (${transcript.length} caracteres)...`
       );
       await setEstado(evaluacionId, 'evaluando', { transcript });
     } else if (source.kind === 'twilio') {
@@ -538,7 +553,7 @@ class CalidadService {
     const rows = await postgresService.query(
       `SELECT "_id", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
               "numeroId", "empresa", "fechaConsulta", "fechaAtencion",
-              "medico", composition_sid, "transcription_text"
+              "medico", composition_sid, "transcription_text", "transcription_hablantes"
        FROM "HistoriaClinica"
        WHERE "_id" = $1
        LIMIT 1`,
@@ -550,6 +565,7 @@ class CalidadService {
         found: false,
         compositionSid: null,
         tieneTranscripcion: false,
+        transcripcionConHablantes: false,
         llamadasVoz: [],
         patientName: null,
         numeroId: null,
@@ -585,7 +601,12 @@ class CalidadService {
       found: true,
       compositionSid: (hc.composition_sid as string | null) || null,
       tieneTranscripcion:
-        typeof hc.transcription_text === 'string' && hc.transcription_text.trim().length > 0,
+        (typeof hc.transcription_text === 'string' && hc.transcription_text.trim().length > 0) ||
+        (typeof hc.transcription_hablantes === 'string' &&
+          hc.transcription_hablantes.trim().length > 0),
+      transcripcionConHablantes:
+        typeof hc.transcription_hablantes === 'string' &&
+        hc.transcription_hablantes.trim().length > 0,
       llamadasVoz,
       patientName,
       numeroId: (hc.numeroId as string | null) || null,

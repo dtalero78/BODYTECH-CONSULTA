@@ -1415,6 +1415,25 @@ class PostgresService {
       await this.query(`
         ALTER TABLE llamadas_voz ALTER COLUMN coach_celular DROP NOT NULL
       `);
+      // Diarización: el MISMO audio del navegador pasado por Amazon Transcribe,
+      // que separa hablantes. Whisper (transcription_text) da el texto en
+      // segundos para el autollenado clínico; esto da el diálogo atribuido para
+      // Calidad, unos minutos después. Conviven a propósito.
+      for (const col of [
+        `"transcription_hablantes" TEXT`,
+        `"transcription_hablantes_status" TEXT`,
+        `"transcription_hablantes_error" TEXT`,
+        `"transcription_hablantes_key" TEXT`,
+        `"transcription_hablantes_at" TIMESTAMPTZ`,
+      ]) {
+        await this.query(`ALTER TABLE "HistoriaClinica" ADD COLUMN IF NOT EXISTS ${col}`);
+      }
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_hc_diarizacion_pendiente
+          ON "HistoriaClinica" ("transcription_hablantes_status")
+          WHERE "transcription_hablantes_status" = 'processing'
+      `);
+
       // Transcripción automática de la grabación (Whisper), como la del video:
       // arranca sola al llegar la grabación y Calidad la reutiliza en vez de
       // volver a pagar Whisper. NULL = nunca se intentó.

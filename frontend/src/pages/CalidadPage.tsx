@@ -21,6 +21,8 @@ interface SessionInfo {
   compositionSid: string | null;
   /** Hay transcripción de la consulta: se puede evaluar aunque no se haya grabado. */
   tieneTranscripcion: boolean;
+  /** El diálogo ya viene atribuido (Hablante 1 / 2) en vez de bloque corrido. */
+  transcripcionConHablantes: boolean;
   /** Llamadas de voz del coach con esta persona. Cada una es evaluable aparte. */
   llamadasVoz: LlamadaVozResumen[];
   patientName: string;
@@ -328,6 +330,7 @@ export function CalidadPage() {
       setSession({
         compositionSid: res.data.compositionSid ?? null,
         tieneTranscripcion: res.data.tieneTranscripcion === true,
+        transcripcionConHablantes: res.data.transcripcionConHablantes === true,
         llamadasVoz: Array.isArray(res.data.llamadasVoz) ? res.data.llamadasVoz : [],
         patientName: res.data.patientName ?? '—',
         numeroId: res.data.numeroId ?? '—',
@@ -692,9 +695,11 @@ export function CalidadPage() {
                 </span>
                 {!(videoUrl || session.compositionSid) && (
                   <span className="text-xs text-gray-400">
-                    {session.tieneTranscripcion
-                      ? '(no se grabó; se evalúa el texto)'
-                      : '(sin video ni transcripción)'}
+                    {!session.tieneTranscripcion
+                      ? '(sin video ni transcripción)'
+                      : session.transcripcionConHablantes
+                        ? '(no se grabó; se evalúa el diálogo con hablantes separados)'
+                        : '(no se grabó; se evalúa el texto — sin separar hablantes)'}
                   </span>
                 )}
               </li>

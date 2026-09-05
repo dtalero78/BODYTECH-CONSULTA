@@ -157,6 +157,17 @@ The module evaluates consultation quality by:
 
 **ffmpeg dependency**: `extraerAudio` writes to a temp file (not a pipe/stdin) to avoid cross-platform stream issues.
 
+**Dos transcripciones, a propósito.** El navegador del médico graba la consulta **mezclando su micrófono con el audio del paciente** ([useConsultationRecorder.ts](frontend/src/hooks/useConsultationRecorder.ts)), así que las dos voces están en el archivo en TODAS las consultas. Ese audio va por dos caminos en paralelo:
+
+| | Quién | Cuándo | Resultado |
+|---|---|---|---|
+| `transcription_text` | Whisper | segundos | bloque corrido, **sin** hablantes |
+| `transcription_hablantes` | Amazon Transcribe | minutos | diálogo **con** "Hablante 1 / 2" |
+
+Whisper no se puede reemplazar por Transcribe: de él depende el **autollenado de los 11 campos clínicos** que el médico revisa apenas cierra la consulta, y Transcribe es un job asíncrono. Transcribe no se puede omitir: varios ítems de la rúbrica dependen de saber quién habló, y sobre un bloque sin atribución el evaluador adivina. `calidad.service` **prefiere `transcription_hablantes`** cuando existe.
+
+La vía de diarización ([diarizacion.service.ts](backend/src/services/video/diarizacion.service.ts)) sube el audio a `RECORDINGS_BUCKET` bajo `audio-consulta/`, arranca el job, y un worker cada 3 min sondea y guarda. **El audio se borra de S3 al terminar** (es PHI y ya cumplió su función). Todo best-effort: si S3 o Transcribe fallan, la consulta conserva su transcripción de Whisper. Apagable con `DIARIZACION_ENABLED=false`.
+
 **Solo se graba una MUESTRA de consultas** (`CHIME_SAMPLES_PER_MONTH`, default 10 por coach al mes; ver `chime-recording.debeGrabarPorMuestreo`). En 30 días: ~139 grabadas de ~1.127 atendidas. Consecuencias que hay que tener presentes al tocar Calidad:
 
 - Una consulta sin grabación **no es un error**: es lo normal (86%). `ensureComposition` devuelve `'no_recording'` para ese caso y `'processing'` solo cuando el MP4 de verdad viene en camino. Confundirlos dejaba la pantalla girando para siempre — la fila de `chime_recordings` se crea AL EMPEZAR a grabar, así que una sala terminada sin fila no va a tener video nunca.

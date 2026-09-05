@@ -5,6 +5,7 @@ import twilioService from './twilio.service';
 import { videoProvider } from './video';
 import medicalHistoryService, { EDITABLE_FIELDS } from './medical-history.service';
 import { openai } from './openai.service';
+import { diarizacionService } from './video/diarizacion.service';
 import {
   obtenerUrlMediaTwilio,
   descargarMp4ComoBuffer,
@@ -483,6 +484,14 @@ class TranscriptionService {
 
       // Marcar processing antes del I/O largo (Whisper + GPT).
       await this.markStatus(historiaId, 'processing');
+
+      // En PARALELO, sin bloquear: el mismo audio va a Amazon Transcribe para
+      // obtener el diálogo con hablantes separados (lo usa Calidad). Whisper
+      // sigue siendo el camino rápido — de él depende el autollenado clínico,
+      // y Transcribe tarda minutos. Best-effort: si falla, no rompe nada.
+      diarizacionService.iniciar(historiaId, audioBuf, mime).catch((e) => {
+        console.error('[Transcription] diarización no pudo arrancar:', e?.message ?? e);
+      });
 
       if (variant === 'nutricional') {
         await this.runNutricionPipeline(historiaId, audioBuf, `consulta.${ext}`, t0, mime);

@@ -36,6 +36,7 @@ import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
 import linkAutoService from './services/link-auto.service';
 import llamadasVozService from './services/llamadas-voz.service';
+import { diarizacionService } from './services/video/diarizacion.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
 import { mybodytechMonitorMiddleware } from './middleware/mybodytech-monitor.middleware';
 import { requireApiKey } from './middleware/api-key.middleware';
@@ -371,6 +372,22 @@ if (process.env.NODE_ENV !== 'test') {
       .catch((e) => console.error('[llamadas-voz] barrido de transcripción falló:', e?.message ?? e));
   setTimeout(barrer, 45_000);
   setInterval(barrer, LLAMADAS_TRANSCRIBIR_INTERVALO_MS);
+}
+
+// Diarización: sondea los jobs de Amazon Transcribe que dan el diálogo con
+// hablantes separados (el que usa Calidad). Es asíncrono por naturaleza —
+// Transcribe tarda minutos— y nadie lo espera en una request. Solo se arma si
+// hay bucket configurado; sin él, diarizacionService.enabled es false.
+const DIARIZACION_INTERVALO_MS = 3 * 60_000;
+if (process.env.NODE_ENV !== 'test' && diarizacionService.enabled) {
+  const sondear = () =>
+    diarizacionService
+      .procesarPendientes()
+      .then((n) => n > 0 && console.log(`🗣️  [Diarizacion] ${n} consulta(s) con hablantes separados`))
+      .catch((e) => console.error('[diarizacion] sondeo falló:', e?.message ?? e));
+  setTimeout(sondear, 60_000);
+  setInterval(sondear, DIARIZACION_INTERVALO_MS);
+  console.log(`🗣️  [Diarizacion] Sondeo iniciado (cada ${DIARIZACION_INTERVALO_MS / 60000}min)`);
 }
 
 // Worker del Torniquete: cada 60s cierra las jornadas cuyo último latido superó

@@ -116,15 +116,24 @@ describe('link-auto worker', () => {
       expect(query).not.toHaveBeenCalled();
     });
 
-    it('pasada la hora, el recordatorio consulta TODO el día', async () => {
+    it('pasada la hora, el recordatorio consulta desde AHORA hasta el fin del día', async () => {
       a('2026-09-03T12:05:00Z'); // 07:05 COT
       process.env.LINK_AUTO_ENABLED = 'false';
       query.mockResolvedValueOnce([]);
       await linkAutoService.maybeDispatch();
       const params = query.mock.calls[0][1];
       expect(params[5]).toBe('recordatorio');
-      expect(params[0]).toBe('2026-09-03T05:00:00.000Z');
+      expect(params[0]).toBe('2026-09-03T12:05:00.000Z'); // ahora, no las 00:00: nada de citas ya pasadas
       expect(params[1]).toBe('2026-09-04T05:00:00.000Z');
+    });
+
+    // Si se prende a media tarde, no le recuerda a nadie una cita que ya tuvo.
+    it('un recordatorio tardío no incluye citas ya pasadas', async () => {
+      a('2026-09-03T22:07:00Z'); // 17:07 COT
+      process.env.LINK_AUTO_ENABLED = 'false';
+      query.mockResolvedValueOnce([]);
+      await linkAutoService.maybeDispatch();
+      expect(query.mock.calls[0][1][0]).toBe('2026-09-03T22:07:00.000Z');
     });
 
     // El link no depende de la hora del día sino de la hora de CADA cita.
@@ -267,10 +276,12 @@ describe('link-auto worker', () => {
 
     it('la ventana del recordatorio es el día entero en hora Colombia (UTC-5)', async () => {
       query.mockResolvedValueOnce([]);
+      jest.useFakeTimers({ advanceTimers: true }).setSystemTime(new Date('2026-09-03T12:00:00Z')); // 07:00 COT
       await linkAutoService.dispatch('2026-09-03', { tipo: 'recordatorio' });
+      jest.useRealTimers();
 
       const params = query.mock.calls[0][1];
-      expect(params[0]).toBe('2026-09-03T05:00:00.000Z');
+      expect(params[0]).toBe('2026-09-03T12:00:00.000Z');
       expect(params[1]).toBe('2026-09-04T05:00:00.000Z');
       expect(params[6]).toBe('2026-09-03T05:00:00.000Z'); // inicio del día, para "ya contactada hoy"
     });

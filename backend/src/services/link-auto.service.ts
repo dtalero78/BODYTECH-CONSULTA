@@ -369,6 +369,13 @@ class LinkAutoService {
     //    pedida a mano (historiaId) ignora la ventana: es "mandáselo YA".
     let desde = dia.inicioUtc;
     let hasta = dia.finUtc;
+    if (opts.tipo === 'recordatorio' && !opts.historiaId) {
+      // Solo citas que todavía no pasaron. A las 07:00 es el día entero; pero
+      // si la tanda corre tarde (servidor caído, flag prendido a media tarde)
+      // no se le dice "hoy tienes consulta a las 10" a quien ya la tuvo.
+      const ahora = new Date().toISOString();
+      if (ahora > desde) desde = ahora;
+    }
     if (opts.tipo === 'link' && !opts.historiaId) {
       const ahora = Date.now();
       desde = new Date(ahora - cfg.linkGraciaMin * 60_000).toISOString();

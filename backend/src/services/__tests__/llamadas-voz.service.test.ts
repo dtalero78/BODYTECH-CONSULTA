@@ -239,6 +239,21 @@ describe('transcribirGrabacion — el diálogo con Coach y Paciente separados', 
     expect(cmds()).toContain('Delete'); // el audio es PHI: no se queda
   });
 
+  // Si la llave quedara apuntando a un objeto ya borrado, un reintento se
+  // saltaría la subida y el job fallaría buscando algo que no está.
+  it('al borrar el audio también limpia la llave, para que un reintento resuba', async () => {
+    query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: null }]).mockResolvedValue([]);
+    descargar.mockResolvedValue(Buffer.from('mp3'));
+    arrancar.mockResolvedValue({ status: 'completed', transcript: 'Coach: hola' });
+
+    await cargar().transcribirGrabacion(5);
+
+    const limpiada = query.mock.calls.find((c) =>
+      String(c[0]).includes('transcription_s3_key = NULL')
+    );
+    expect(limpiada?.[1]).toEqual([5]);
+  });
+
   it('sin claim no descarga ni arranca job', async () => {
     query.mockResolvedValueOnce([]);
     expect(await cargar().transcribirGrabacion(5)).toBe(false);

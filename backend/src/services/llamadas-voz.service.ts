@@ -565,11 +565,11 @@ class LlamadasVozService {
     if (res.status === 'in_progress') return false;
     if (res.status === 'completed' && (res.transcript || '').trim()) {
       await this.guardarTranscripcion(id, res.transcript!.trim());
-      await this.borrarAudio(key);
+      await this.borrarAudio(key, id);
       return true;
     }
     await this.marcarTranscripcionError(id, res.reason || 'Transcribe no devolvió texto');
-    await this.borrarAudio(key);
+    await this.borrarAudio(key, id);
     return false;
   }
 
@@ -720,12 +720,12 @@ class LlamadasVozService {
       );
       if (r.status === 'failed') {
         await this.marcarTranscripcionError(id, r.reason || 'Transcribe rechazó el job');
-        await this.borrarAudio(key);
+        await this.borrarAudio(key, id);
         return false;
       }
       if (r.status === 'completed' && (r.transcript || '').trim()) {
         await this.guardarTranscripcion(id, r.transcript!.trim());
-        await this.borrarAudio(key);
+        await this.borrarAudio(key, id);
         return true;
       }
       // in_progress: lo termina el barrido (Transcribe tarda minutos).
@@ -757,12 +757,22 @@ class LlamadasVozService {
       .catch(() => undefined);
   }
 
-  /** El audio ya dio su texto: es dato de paciente y no se queda en S3. */
-  private async borrarAudio(key: string): Promise<void> {
+  /**
+   * El audio ya dio su texto: es dato de paciente y no se queda en S3. Se
+   * limpia también la llave en la fila — si quedara apuntando a un objeto
+   * borrado, un reintento se saltaría la subida y el job fallaría buscando algo
+   * que ya no está.
+   */
+  private async borrarAudio(key: string, id?: number): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }));
     } catch (e: unknown) {
       console.warn(`[llamadas-voz] No se pudo borrar ${key}:`, e instanceof Error ? e.message : e);
+    }
+    if (id !== undefined) {
+      await postgresService
+        .query(`UPDATE llamadas_voz SET transcription_s3_key = NULL WHERE id = $1`, [id])
+        .catch(() => undefined);
     }
   }
 

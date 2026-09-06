@@ -10,7 +10,7 @@
 // son datos de pacientes y no tiene sentido traerlas todas por abrir la ficha.
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Phone, Play, Loader2 } from 'lucide-react';
 import apiService, { type LlamadaVoz } from '../services/api.service';
 import { Pill, PILLS, initialsOf, MonoAvatar } from './coordinador/_tokens';
@@ -47,16 +47,35 @@ export function LlamadasVozPanel({ historiaId }: { historiaId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [textoAbierto, setTextoAbierto] = useState<number | null>(null);
 
+  const cargar = useCallback(
+    (vivo: () => boolean) =>
+      apiService
+        .listarLlamadas(historiaId)
+        .then((l) => vivo() && setLlamadas(l))
+        .catch(() => vivo() && setLlamadas([])),
+    [historiaId]
+  );
+
   useEffect(() => {
     let vivo = true;
-    apiService
-      .listarLlamadas(historiaId)
-      .then((l) => vivo && setLlamadas(l))
-      .catch(() => vivo && setLlamadas([]));
+    cargar(() => vivo);
     return () => {
       vivo = false;
     };
-  }, [historiaId]);
+  }, [cargar]);
+
+  // Mientras alguna esté transcribiendo, refrescar: el backend consulta el job
+  // al listar, así que el texto aparece solo en cuanto Transcribe termina.
+  const transcribiendo = (llamadas ?? []).some((l) => l.transcriptionStatus === 'processing');
+  useEffect(() => {
+    if (!transcribiendo) return;
+    let vivo = true;
+    const t = setInterval(() => cargar(() => vivo), 15000);
+    return () => {
+      vivo = false;
+      clearInterval(t);
+    };
+  }, [transcribiendo, cargar]);
 
   // Liberar el object URL al cambiar de audio o desmontar.
   useEffect(() => {

@@ -118,8 +118,21 @@ export function BarraVista({
     XLSX.writeFile(libro, `${nombreArchivo ?? tablaId}_${hoy}.xlsx`);
   };
 
+  /*
+   * Sin variantes `dark:`, a propósito.
+   *
+   * Este componente nació dentro de BodyVibeTech, que sí tiene apariencia
+   * oscura propia, y se trajo puestas unas clases `dark:bg-zinc-900`. Pero se
+   * reusa en cuatro pantallas del panel del coordinador —profesionales,
+   * órdenes, indicadores e historias— y ese panel está diseñado solo en claro.
+   *
+   * Tailwind no tiene `darkMode` configurado, así que usa el default 'media':
+   * el modo oscuro lo decide el sistema operativo. Con el Mac en apariencia
+   * automática, al anochecer estos cuatro botones se volvían cajas negras con
+   * el texto oscuro adentro — ilegibles, y sin forma de apagarlo desde la app.
+   */
   const btn =
-    'inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[12.5px] hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800';
+    'inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[12.5px] hover:bg-zinc-50';
 
   return (
     <div ref={contenedor} className="relative flex flex-wrap items-center gap-2">
@@ -129,12 +142,12 @@ export function BarraVista({
           Columnas ({visibles.length}/{columnas.length})
         </button>
         {abierto === 'columnas' && (
-          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-zinc-200 bg-white p-1.5 shadow-lg">
             {columnas.map((c) => (
               <label
                 key={c.id}
                 className={`flex items-center gap-2 rounded px-2 py-1.5 text-[12.5px] ${
-                  c.fija ? 'opacity-50' : 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  c.fija ? 'opacity-50' : 'cursor-pointer hover:bg-zinc-50'
                 }`}
               >
                 <input
@@ -156,7 +169,7 @@ export function BarraVista({
           Mis vistas{vistas.length > 0 ? ` (${vistas.length})` : ''}
         </button>
         {abierto === 'vistas' && (
-          <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-zinc-200 bg-white p-1.5 shadow-lg">
             {vistas.length === 0 && (
               <p className="px-2 py-1.5 text-[12px] text-zinc-500">
                 Todavía no ha guardado ninguna. Acomode las columnas y use «Guardar vista».
@@ -165,7 +178,7 @@ export function BarraVista({
             {vistas.map((v) => (
               <div
                 key={v.id}
-                className="group flex items-center gap-1 rounded px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                className="group flex items-center gap-1 rounded px-2 py-1.5 hover:bg-zinc-50"
               >
                 <button onClick={() => aplicar(v)} className="min-w-0 flex-1 truncate text-left text-[12.5px]">
                   {v.nombre}

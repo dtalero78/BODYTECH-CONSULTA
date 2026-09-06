@@ -499,6 +499,18 @@ export function CalidadPage() {
   }, [historiaId, fetchEvaluacion, startPolling]);
 
   // ── Effects ─────────────────────────────────────────────────────────────────
+  // Mientras alguna llamada esté transcribiendo, refrescar cada 15 s. El job de
+  // Transcribe termina en ~1 min y el backend lo consulta al listar, así que el
+  // texto aparece solo — sin que nadie tenga que recargar la página.
+  const hayTranscribiendo = (session?.llamadasVoz ?? []).some(
+    (l) => l.tieneGrabacion && l.transcripcionEstado !== 'done' && l.transcripcionEstado !== 'error'
+  );
+  useEffect(() => {
+    if (!hayTranscribiendo) return;
+    const t = setInterval(fetchSession, 15000);
+    return () => clearInterval(t);
+  }, [hayTranscribiendo, fetchSession]);
+
   useEffect(() => {
     fetchSession();
     fetchHistorial();

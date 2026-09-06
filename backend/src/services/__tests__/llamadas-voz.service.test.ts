@@ -255,6 +255,38 @@ describe('transcribirGrabacion — el diálogo con Coach y Paciente separados', 
     expect(cmds()).toEqual([]);
   });
 
+  // El job termina en ~1 min pero el barrido corre cada varios minutos: sin
+  // consultar al listar, alguien mirando la pantalla veía "Transcribiendo…"
+  // durante minutos sobre un texto que ya estaba listo.
+  it('listar una historia consulta los jobs en curso y guarda el que terminó', async () => {
+    query
+      .mockResolvedValueOnce([{ id: 7, recording_sid: 'RE1', transcription_s3_key: 'audio-llamada/RE1.mp3' }])
+      .mockResolvedValue([]);
+    arrancar.mockResolvedValue({ status: 'completed', transcript: 'Coach: hola\nPaciente: buenas' });
+
+    await cargar().listarPorHistoria('hc-1');
+
+    const guardado = query.mock.calls.find((c) => String(c[0]).includes("transcription_status = 'done'"));
+    expect(guardado?.[1]).toContain('Coach: hola\nPaciente: buenas');
+    expect(cmds()).toContain('Delete');
+  });
+
+  it('si AWS no responde al listar, igual devuelve las llamadas', async () => {
+    query
+      .mockResolvedValueOnce([{ id: 7, recording_sid: 'RE1', transcription_s3_key: 'k' }])
+      .mockResolvedValue([{ id: 7, historia_id: 'hc-1', paciente_celular: '+57300', coach_celular: null, estado: 'completada', recording_estado: 'lista', iniciada_at: new Date() }]);
+    arrancar.mockRejectedValue(new Error('AWS caído'));
+
+    const r = await cargar().listarPorHistoria('hc-1');
+    expect(r).toHaveLength(1);
+  });
+
+  it('con refrescar:false no consulta a AWS', async () => {
+    query.mockResolvedValue([]);
+    await cargar().listarPorHistoria('hc-1', { refrescar: false });
+    expect(arrancar).not.toHaveBeenCalled();
+  });
+
   it('si Transcribe rechaza el job, queda en error y libera el audio', async () => {
     query.mockResolvedValueOnce([{ recording_sid: 'RE1', transcription_s3_key: null }]).mockResolvedValue([]);
     descargar.mockResolvedValue(Buffer.from('mp3'));

@@ -363,7 +363,7 @@ if (process.env.NODE_ENV !== 'test') {
 // (webhook perdido, contenedor reiniciado a mitad de Whisper, o anteriores a
 // la función). Primera pasada a los 45 s del arranque, para no correr encima
 // de las migraciones.
-const LLAMADAS_TRANSCRIBIR_INTERVALO_MS = 10 * 60_000;
+const LLAMADAS_TRANSCRIBIR_INTERVALO_MS = 3 * 60_000;
 if (process.env.NODE_ENV !== 'test') {
   const barrer = () =>
     llamadasVozService

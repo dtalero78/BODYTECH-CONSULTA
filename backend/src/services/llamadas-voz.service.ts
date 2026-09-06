@@ -503,14 +503,74 @@ class LlamadasVozService {
     return filaALlamada(rows[0]);
   }
 
-  /** Las llamadas de una historia, más reciente primero. */
-  async listarPorHistoria(historiaId: string): Promise<LlamadaVoz[] | null> {
+  /**
+   * Las llamadas de una historia, más reciente primero.
+   *
+   * Antes de listar, pregunta por los jobs de transcripción en curso DE ESTA
+   * historia. El job de Transcribe termina en ~1 minuto, pero el barrido corre
+   * cada pocos minutos: sin esto, alguien que abre la pantalla veía
+   * "Transcribiendo…" durante minutos sobre un texto que ya estaba listo. Es una
+   * consulta barata a AWS y solo por las llamadas de esta historia.
+   */
+  async listarPorHistoria(
+    historiaId: string,
+    opts: { refrescar?: boolean } = {}
+  ): Promise<LlamadaVoz[] | null> {
+    if (opts.refrescar !== false) await this.refrescarTranscripciones(historiaId);
     const rows = await postgresService.query(
       `SELECT * FROM llamadas_voz WHERE historia_id = $1 ORDER BY iniciada_at DESC`,
       [historiaId]
     );
     if (rows === null) return null;
     return rows.map((r: Record<string, unknown>) => filaALlamada(r));
+  }
+
+  /** Consulta los jobs en curso de una historia y guarda los que ya terminaron. */
+  private async refrescarTranscripciones(historiaId: string): Promise<void> {
+    if (!S3_BUCKET) return;
+    const rows = await postgresService.query(
+      `SELECT id, recording_sid, transcription_s3_key FROM llamadas_voz
+        WHERE historia_id = $1 AND transcription_status = 'processing'
+          AND transcription_s3_key IS NOT NULL`,
+      [historiaId]
+    );
+    for (const r of rows ?? []) {
+      try {
+        await this.sondearJob(
+          Number(r.id),
+          String(r.recording_sid),
+          String(r.transcription_s3_key)
+        );
+      } catch (e: unknown) {
+        // Que AWS no responda no puede impedir listar las llamadas.
+        console.warn(
+          `[llamadas-voz] No se pudo refrescar #${r.id}:`,
+          e instanceof Error ? e.message : e
+        );
+      }
+    }
+  }
+
+  /**
+   * Pregunta cómo va un job y, si terminó, guarda el texto y libera el audio.
+   * Devuelve true solo cuando quedó transcrita.
+   */
+  private async sondearJob(id: number, recordingSid: string, key: string): Promise<boolean> {
+    const res = await transcribeService.getOrStartFromS3(
+      `bodytech-llamada-${recordingSid}`,
+      `s3://${S3_BUCKET}/${key}`,
+      'mp3',
+      { canales: CANALES }
+    );
+    if (res.status === 'in_progress') return false;
+    if (res.status === 'completed' && (res.transcript || '').trim()) {
+      await this.guardarTranscripcion(id, res.transcript!.trim());
+      await this.borrarAudio(key);
+      return true;
+    }
+    await this.marcarTranscripcionError(id, res.reason || 'Transcribe no devolvió texto');
+    await this.borrarAudio(key);
+    return false;
   }
 
   /**
@@ -732,20 +792,9 @@ class LlamadasVozService {
       try {
         if (r.transcription_status === 'processing' && r.transcription_s3_key) {
           // Job ya lanzado: solo preguntar cómo va.
-          const res = await transcribeService.getOrStartFromS3(
-            `bodytech-llamada-${r.recording_sid}`,
-            `s3://${S3_BUCKET}/${r.transcription_s3_key}`,
-            'mp3',
-            { canales: CANALES }
-          );
-          if (res.status === 'in_progress') continue;
-          if (res.status === 'completed' && (res.transcript || '').trim()) {
-            await this.guardarTranscripcion(id, res.transcript!.trim());
+          if (await this.sondearJob(id, String(r.recording_sid), String(r.transcription_s3_key))) {
             hechas++;
-          } else {
-            await this.marcarTranscripcionError(id, res.reason || 'Transcribe no devolvió texto');
           }
-          await this.borrarAudio(String(r.transcription_s3_key));
         } else if (await this.transcribirGrabacion(id)) {
           hechas++;
         }

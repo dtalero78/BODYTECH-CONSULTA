@@ -3,6 +3,7 @@ import { z, ZodError } from 'zod';
 import medicalPanelService, {
   OrdenCreateInput,
   OrdenUpdateInput,
+  ORIGENES_AGENDABLES,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
 import disponibilidadService from '../services/disponibilidad.service';
@@ -93,6 +94,10 @@ const createOrdenSchema = z.object({
   // Modalidad de la cita — usada para validar el cupo contra la disponibilidad
   // del profesional. No se persiste como columna; default 'virtual'.
   modalidad: z.enum(['presencial', 'virtual']).optional(),
+  // Departamento de la cita. El enum viene del servicio, que a propósito excluye
+  // 'trepsi' y 'mybodytech' para que el formulario no pueda reclamar la
+  // procedencia de un socio. Si falta, el servicio lo deduce.
+  origen: z.enum(ORIGENES_AGENDABLES).optional(),
 });
 
 const updateOrdenBodySchema = z.object({

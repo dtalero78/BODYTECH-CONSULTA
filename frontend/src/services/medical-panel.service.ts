@@ -66,6 +66,8 @@ export interface OrdenCreatePayload {
   horaAtencion: string;  // HH:MM
   ciudad?: string;
   modalidad?: 'presencial' | 'virtual'; // para validar el cupo contra disponibilidad
+  /** Departamento de la cita. Si no se manda, el backend lo deduce del profesional. */
+  origen?: 'nativa' | 'umv' | 'corporativo';
 }
 
 /**

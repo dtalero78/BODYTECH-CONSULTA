@@ -3,6 +3,25 @@ import { X, Search, Loader2 } from 'lucide-react';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService, { Modalidad, SlotHora } from '../services/calendario.service';
 import profesionalesService, { Profesional } from '../services/profesionales.service';
+import { ORIGENES_AGENDABLES } from './coordinador/origen';
+
+type OrigenAgendable = (typeof ORIGENES_AGENDABLES)[number]['value'];
+
+/**
+ * Departamento que le corresponde por defecto a un profesional, según su
+ * especialidad. Sólo es la SUGERENCIA inicial del selector: quien agenda puede
+ * cambiarla, y es esa elección la que se guarda. Antes esta deducción vivía en
+ * el backend y era la única fuente del `origen`, con lo cual reasignar la cita
+ * a otro médico la cambiaba de departamento en silencio.
+ */
+function origenSugerido(especialidad: string | null | undefined): OrigenAgendable {
+  const esp = (especialidad ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  return esp === 'medico corporativo' ? 'corporativo' : 'nativa';
+}
 
 interface AgendarCitaModalProps {
   open: boolean;
@@ -92,6 +111,13 @@ export function AgendarCitaModal({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsLoaded, setSlotsLoaded] = useState(false);
 
+  // Departamento de la cita. `origenTocado` distingue "lo eligió una persona" de
+  // "lo sugirió el profesional": mientras nadie lo toque, sigue al profesional
+  // seleccionado; apenas alguien lo cambia, su elección manda y cambiar de
+  // profesional ya no se la pisa.
+  const [origen, setOrigen] = useState<OrigenAgendable>('nativa');
+  const [origenTocado, setOrigenTocado] = useState(false);
+
   // Reset al abrir (false → true).
   useEffect(() => {
     if (open) {
@@ -104,6 +130,8 @@ export function AgendarCitaModal({
       setSelectedMedico(medicoCode ?? '');
       setSlots([]);
       setSlotsLoaded(false);
+      setOrigen('nativa');
+      setOrigenTocado(false);
     }
   }, [open, medicoCode]);
 
@@ -129,6 +157,14 @@ export function AgendarCitaModal({
     [medicos, selectedMedico]
   );
   const profesionalId = profesional?.id ?? null;
+
+  // Sugerir el departamento a partir del profesional elegido, sin pisar una
+  // elección manual. `profesional` puede llegar tarde (la lista se carga aparte),
+  // así que esto también cubre el caso del panel con `medicoCode` fijo.
+  useEffect(() => {
+    if (!open || origenTocado || !profesional) return;
+    setOrigen(origenSugerido(profesional.especialidad));
+  }, [open, origenTocado, profesional]);
 
   // Cargar horarios disponibles cuando hay fecha + profesional + modalidad.
   useEffect(() => {
@@ -245,6 +281,7 @@ export function AgendarCitaModal({
         horaAtencion: form.horaAtencion,
         ciudad: form.ciudad.trim() || undefined,
         modalidad,
+        origen,
       };
       await medicalPanelService.createOrden(payload);
       onSuccess();
@@ -430,6 +467,34 @@ export function AgendarCitaModal({
                 className={inputClass}
                 placeholder="Empresa"
               />
+            </div>
+
+            {/* Departamento (origen). Se guarda en la cita y es lo que separa
+                Trepsi, UMV, Médico Corporativo y la agenda propia en el
+                calendario y en los indicadores. */}
+            <div>
+              <label
+                htmlFor="agendar-origen"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Departamento
+              </label>
+              <select
+                id="agendar-origen"
+                name="origen"
+                value={origen}
+                onChange={(e) => {
+                  setOrigen(e.target.value as OrigenAgendable);
+                  setOrigenTocado(true);
+                }}
+                className={inputClass}
+              >
+                {ORIGENES_AGENDABLES.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Tipo de examen */}

@@ -12,9 +12,19 @@
  * Vive en su propio módulo (y no dentro de una vista) porque lo consumen tanto
  * el calendario como Afiliados.
  */
-export type Origen = 'trepsi' | 'umv' | 'mybodytech' | 'nativa';
+/**
+ * UMV y Médico Corporativo son departamentos DISTINTOS, aunque durante un
+ * tiempo compartieron el valor 'umv': el origen se deducía de la especialidad
+ * de quien atendía, así que una cita quedaba marcada como UMV justamente
+ * cuando la atendía un médico corporativo. El directorio compartido de la
+ * cadena ya los separa por `ambito` ('virtual' vs 'corporativo').
+ *
+ * UMV        → teleconsulta de la Unidad Médica Virtual.
+ * corporativo → examen ocupacional presencial del Médico Corporativo.
+ */
+export type Origen = 'trepsi' | 'umv' | 'corporativo' | 'mybodytech' | 'nativa';
 
-const VALIDOS: ReadonlyArray<Origen> = ['trepsi', 'umv', 'mybodytech', 'nativa'];
+const VALIDOS: ReadonlyArray<Origen> = ['trepsi', 'umv', 'corporativo', 'mybodytech', 'nativa'];
 
 /**
  * Resuelve el origen de una fila. Manda la columna `origen`; el prefijo del
@@ -35,6 +45,18 @@ export function resolverOrigen(origen: string | null | undefined, id: string | n
 export const ORIGEN_META: Record<Origen, { label: string; cls: string } | null> = {
   trepsi: { label: 'Trepsi', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
   umv: { label: 'UMV', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  corporativo: { label: 'Corporativo', cls: 'bg-teal-50 text-teal-700 border-teal-200' },
   mybodytech: { label: 'MyBodytech', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
   nativa: null,
 };
+
+/**
+ * Departamentos que el formulario de agendamiento puede elegir. Espeja
+ * `ORIGENES_AGENDABLES` del backend: 'trepsi' y 'mybodytech' quedan fuera
+ * porque los escribe cada integración al recibir la cita por su propia API.
+ */
+export const ORIGENES_AGENDABLES: ReadonlyArray<{ value: Exclude<Origen, 'trepsi' | 'mybodytech'>; label: string }> = [
+  { value: 'nativa', label: 'Agenda propia' },
+  { value: 'umv', label: 'UMV · Unidad Médica Virtual' },
+  { value: 'corporativo', label: 'Médico Corporativo' },
+];

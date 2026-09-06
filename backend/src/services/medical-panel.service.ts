@@ -81,8 +81,9 @@ export interface OrdenItem {
   /** Timestamp de creación de la fila (`_createdDate`). Ordena el listado. */
   createdAt?: string;
   /**
-   * Departamento / vía de entrada: 'trepsi' | 'umv' | 'mybodytech' | 'nativa'.
-   * Lo escribe cada vía al crear la historia; antes cada vista lo deducía sola.
+   * Departamento / vía de entrada: 'trepsi' | 'umv' | 'corporativo' |
+   * 'mybodytech' | 'nativa'. Lo escribe cada vía al crear la historia; antes
+   * cada vista lo deducía sola.
    */
   origen?: string | null;
   // Calidad: última evaluación (cualquier estado) ligada a esta historia.
@@ -119,6 +120,17 @@ export interface OrdenFilters {
   sort?: 'created_desc' | 'fecha_asc';
 }
 
+/**
+ * Departamentos que se pueden elegir AL AGENDAR desde la plataforma.
+ *
+ * Deliberadamente NO incluye 'trepsi' ni 'mybodytech': esos los escribe cada
+ * integración al recibir la cita por su propia API, y dejar que el formulario
+ * los reclame permitiría falsificar la procedencia de una cita (y con ella la
+ * facturación y los indicadores del socio).
+ */
+export const ORIGENES_AGENDABLES = ['nativa', 'umv', 'corporativo'] as const;
+export type OrigenAgendable = (typeof ORIGENES_AGENDABLES)[number];
+
 export interface OrdenCreateInput {
   primerNombre: string;
   segundoNombre?: string;
@@ -134,6 +146,8 @@ export interface OrdenCreateInput {
   fechaAtencion: string;  // YYYY-MM-DD
   horaAtencion: string;   // HH:MM
   ciudad?: string;
+  /** Departamento al que pertenece la cita. Si falta, se deduce (ver createOrden). */
+  origen?: OrigenAgendable;
 }
 
 export interface OrdenUpdateInput {
@@ -754,13 +768,24 @@ class MedicalPanelService {
       const [y, m, d] = data.fechaAtencion.split('-').map(Number);
       const fechaTs = new Date(Date.UTC(y, m - 1, d, h + 5, min, 0));
 
-      // El origen se RESUELVE y GUARDA al crear, no se deduce después. UMV
-      // (Unidad Médica Virtual) y las citas propias son departamentos distintos,
-      // y hoy lo único que los separa es a qué profesional se asignan: el examen
-      // ocupacional de UMV lo atiende un Médico Corporativo, con el panel propio.
-      // Guardarlo acá evita que cada vista invente su propia regla, que es como
-      // llegamos a que las citas de MyBodytech se mostraran como "Nativa".
-      const origen = (await this.esMedicoCorporativo(data.medico)) ? 'umv' : 'nativa';
+      // El origen se RESUELVE y GUARDA al crear, no se deduce después: guardarlo
+      // acá evita que cada vista invente su propia regla, que es como llegamos a
+      // que las citas de MyBodytech se mostraran como "Nativa".
+      //
+      // Lo ELIGE quien agenda. Antes se deducía de la especialidad del
+      // profesional (`esMedicoCorporativo ? 'umv' : 'nativa'`), lo cual tenía dos
+      // defectos: reasignar la cita a otro médico la convertía en 'nativa' en
+      // silencio y desaparecía de los números de su departamento; y confundía dos
+      // departamentos que la operación considera distintos — UMV (Unidad Médica
+      // Virtual, teleconsulta) y Médico Corporativo (examen ocupacional
+      // presencial). El directorio compartido ya los separa por `ambito`
+      // ('virtual' vs 'corporativo').
+      //
+      // La deducción sobrevive sólo como respaldo para llamadores que todavía no
+      // mandan el campo, ya con el valor correcto: un médico corporativo produce
+      // 'corporativo', no 'umv'.
+      const origen =
+        data.origen ?? ((await this.esMedicoCorporativo(data.medico)) ? 'corporativo' : 'nativa');
 
       const result = await postgresService.query(
         `INSERT INTO "HistoriaClinica" (

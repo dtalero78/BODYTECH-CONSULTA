@@ -164,6 +164,8 @@ The module evaluates consultation quality by:
 | `transcription_text` | Whisper | segundos | bloque corrido, **sin** hablantes |
 | `transcription_hablantes` | Amazon Transcribe | minutos | diálogo **con** "Hablante 1 / 2" |
 
+Los dos usan el **vocabulario propio** `TRANSCRIBE_VOCABULARY_NAME` (marcas y términos de nutrición; sin él Transcribe escribe "Boditech"). Se crea con `npm run transcribe:vocabulario`, es idempotente, y tarda ~1 min en pasar a READY — un job que lo use antes falla. Si la variable no está, los jobs corren igual, solo sin esa ayuda.
+
 Whisper no se puede reemplazar por Transcribe: de él depende el **autollenado de los 11 campos clínicos** que el médico revisa apenas cierra la consulta, y Transcribe es un job asíncrono. Transcribe no se puede omitir: varios ítems de la rúbrica dependen de saber quién habló, y sobre un bloque sin atribución el evaluador adivina. `calidad.service` **prefiere `transcription_hablantes`** cuando existe.
 
 La vía de diarización ([diarizacion.service.ts](backend/src/services/video/diarizacion.service.ts)) sube el audio a `RECORDINGS_BUCKET` bajo `audio-consulta/`, arranca el job, y un worker cada 3 min sondea y guarda. **El audio se borra de S3 al terminar** (es PHI y ya cumplió su función). Todo best-effort: si S3 o Transcribe fallan, la consulta conserva su transcripción de Whisper. Apagable con `DIARIZACION_ENABLED=false`.

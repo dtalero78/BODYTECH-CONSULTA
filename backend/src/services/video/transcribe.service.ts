@@ -26,6 +26,10 @@ const REGION = process.env.CHIME_CONTROL_REGION || process.env.AWS_REGION || 'us
 const BUCKET = process.env.RECORDINGS_BUCKET || '';
 // Español latinoamericano (no hay es-CO en Transcribe; es-US es el más cercano).
 const LANGUAGE = process.env.TRANSCRIBE_LANGUAGE || 'es-US';
+// Vocabulario propio de Bodytech (marcas y términos del dominio). Sin él,
+// Transcribe escribe "Boditech". Se crea una vez en AWS con
+// `npm run transcribe:vocabulario`; si no existe, los jobs corren igual.
+const VOCABULARY = process.env.TRANSCRIBE_VOCABULARY_NAME || '';
 
 export type TranscribeStatus =
   | 'no_recording' // aún no hay MP4 para la sala (grabación en proceso o inexistente)
@@ -89,9 +93,12 @@ class TranscribeService {
             //    quien llama sabe qué canal es quién.
             //  · ShowSpeakerLabels — un solo canal mezclado (el navegador).
             //    Transcribe separa las voces, pero no sabe cuál es cuál.
-            Settings: opts.canales
-              ? { ChannelIdentification: true }
-              : { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 },
+            Settings: {
+              ...(opts.canales
+                ? { ChannelIdentification: true }
+                : { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 }),
+              ...(VOCABULARY ? { VocabularyName: VOCABULARY } : {}),
+            },
           })
         );
       } catch (err: any) {
@@ -135,7 +142,11 @@ class TranscribeService {
             Media: { MediaFileUri: rec.s3Uri },
             // Separación de hablantes: en una consulta son 2 (médico y paciente).
             // Le da al evaluador quién dijo qué, algo que Whisper no hace.
-            Settings: { ShowSpeakerLabels: true, MaxSpeakerLabels: 2 },
+            Settings: {
+              ShowSpeakerLabels: true,
+              MaxSpeakerLabels: 2,
+              ...(VOCABULARY ? { VocabularyName: VOCABULARY } : {}),
+            },
             // SIN OutputBucketName: Transcribe guarda el resultado en su bucket y
             // devuelve una URL prefirmada → no hacen falta permisos S3 de salida.
           })
@@ -197,23 +208,31 @@ class TranscribeService {
     if (canales && channels.length) {
       const nombreDe = (label: string) =>
         label === 'ch_0' ? canales.ch0 : label === 'ch_1' ? canales.ch1 : label;
-      // Cada canal trae sus palabras con tiempo; se intercalan por tiempo para
-      // reconstruir la conversación en el orden en que ocurrió.
-      const palabras: Array<{ t: number; quien: string; texto: string; punt: boolean }> = [];
+      // Cada canal se agrupa en TURNOS (frases separadas por silencio) y recién
+      // después se ordenan entre sí por tiempo. Intercalar palabra por palabra
+      // parece más fiel, pero cuando los dos hablan encimados —"sí", "ajá", un
+      // saludo que se pisa— las frases se entreveran y el diálogo queda ilegible:
+      //   Paciente: Me encanta / Coach: Listo. / Paciente: la que utilizan.
+      // Con turnos, cada intervención queda entera y en su lugar.
+      const turnos: Array<{ t: number; quien: string; texto: string }> = [];
       for (const ch of channels) {
-        const quien = nombreDe(ch.channel_label);
-        let ultimoT = 0;
-        for (const it of ch.items || []) {
-          const content = it.alternatives?.[0]?.content;
-          if (!content) continue;
-          const esPunt = it.type === 'punctuation';
-          const t = esPunt ? ultimoT : parseFloat(it.start_time);
-          if (!esPunt) ultimoT = t;
-          palabras.push({ t, quien, texto: content, punt: esPunt });
+        for (const turno of this.turnosDeCanal(ch.items || [])) {
+          turnos.push({ ...turno, quien: nombreDe(ch.channel_label) });
         }
       }
-      palabras.sort((a, b) => a.t - b.t);
-      return this.agrupar(palabras);
+      turnos.sort((a, b) => a.t - b.t);
+      // Dos turnos seguidos de la misma persona se unen: son una sola frase que
+      // el silencio partió, no dos intervenciones.
+      const lineas: string[] = [];
+      let quienPrev: string | null = null;
+      for (const t of turnos) {
+        if (t.quien === quienPrev) lineas[lineas.length - 1] += ` ${t.texto}`;
+        else {
+          lineas.push(`${t.quien}: ${t.texto}`);
+          quienPrev = t.quien;
+        }
+      }
+      return lineas.join('\n');
     }
 
     // Sin diarización ni canales: devolver el transcript plano.
@@ -259,29 +278,41 @@ class TranscribeService {
       .join('\n');
   }
 
-  /** Palabras ya ordenadas por tiempo → turnos "Quien: texto". */
-  private agrupar(palabras: Array<{ quien: string; texto: string; punt: boolean }>): string {
-    const lines: string[] = [];
-    let actual: string | null = null;
+  /**
+   * Palabras de UN canal → turnos. Se corta donde hay un silencio: en una
+   * conversación real, una pausa larga separa dos intervenciones aunque nadie
+   * más haya hablado.
+   */
+  private turnosDeCanal(
+    items: any[],
+    silencioSeg = 1.2
+  ): Array<{ t: number; texto: string }> {
+    const turnos: Array<{ t: number; texto: string }> = [];
     let buffer: string[] = [];
-    const flush = () => {
-      if (buffer.length) lines.push(`${actual}: ${buffer.join(' ').replace(/\s+([.,?!])/g, '$1')}`);
+    let inicio = 0;
+    let finPrevio: number | null = null;
+    const cerrar = () => {
+      if (!buffer.length) return;
+      turnos.push({ t: inicio, texto: buffer.join(' ').replace(/\s+([.,?!])/g, '$1') });
       buffer = [];
     };
-    for (const p of palabras) {
-      if (p.punt) {
-        if (buffer.length) buffer[buffer.length - 1] += p.texto;
+    for (const it of items) {
+      const content = it.alternatives?.[0]?.content;
+      if (!content) continue;
+      if (it.type === 'punctuation') {
+        if (buffer.length) buffer[buffer.length - 1] += content;
         continue;
       }
-      if (p.quien !== actual) {
-        flush();
-        actual = p.quien;
-      }
-      buffer.push(p.texto);
+      const t0 = parseFloat(it.start_time);
+      if (finPrevio !== null && t0 - finPrevio > silencioSeg) cerrar();
+      if (!buffer.length) inicio = t0;
+      buffer.push(content);
+      finPrevio = parseFloat(it.end_time ?? it.start_time);
     }
-    flush();
-    return lines.join('\n');
+    cerrar();
+    return turnos;
   }
+
 }
 
 export const transcribeService = new TranscribeService();

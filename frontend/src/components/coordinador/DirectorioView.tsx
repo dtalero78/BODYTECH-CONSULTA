@@ -17,11 +17,13 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { Database, RefreshCw, Search, Building2, Users, Network } from 'lucide-react';
+import { Database, RefreshCw, Search, Building2, Users, Network, GitCompare } from 'lucide-react';
 import directorioService, {
   ResumenDirectorio,
   SedeDirectorio,
   ProfesionalDirectorio,
+  CotejoProfesional,
+  CotejoResumen,
 } from '../../services/directorio.service';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, Pill } from './_tokens';
 
@@ -29,7 +31,7 @@ interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }
 
-type Tab = 'resumen' | 'sedes' | 'profesionales';
+type Tab = 'resumen' | 'sedes' | 'profesionales' | 'cotejo';
 
 const ROLES: { valor: string; etiqueta: string }[] = [
   { valor: '', etiqueta: 'Todos los roles' },
@@ -54,6 +56,8 @@ export function DirectorioView({ showToast }: Props) {
   const [resumen, setResumen] = useState<ResumenDirectorio | null>(null);
   const [sedes, setSedes] = useState<SedeDirectorio[]>([]);
   const [profesionales, setProfesionales] = useState<ProfesionalDirectorio[]>([]);
+  const [cotejo, setCotejo] = useState<CotejoProfesional[]>([]);
+  const [cotejoResumen, setCotejoResumen] = useState<CotejoResumen | null>(null);
 
   // Filtros de la pestaña de planta.
   const [rol, setRol] = useState('');
@@ -96,6 +100,19 @@ export function DirectorioView({ showToast }: Props) {
     return () => clearTimeout(t);
   }, [tab, rol, sedeFiltro, busqueda, showToast]);
 
+  // El cotejo se pide sólo al abrir su pestaña: cruza las dos bases y no hace
+  // falta tenerlo listo mientras se mira el resumen.
+  useEffect(() => {
+    if (tab !== 'cotejo') return;
+    directorioService
+      .cotejo()
+      .then(({ filas, resumen: r }) => {
+        setCotejo(filas);
+        setCotejoResumen(r);
+      })
+      .catch((e) => showToast({ type: 'error', message: e?.message ?? 'Error' }));
+  }, [tab, showToast]);
+
   const nombreSede = (slug: string) => sedes.find((s) => s.slug === slug)?.nombre ?? slug;
 
   return (
@@ -134,6 +151,7 @@ export function DirectorioView({ showToast }: Props) {
           ['resumen', 'Resumen', Network],
           ['sedes', `Sedes${resumen ? ` · ${resumen.sedes}` : ''}`, Building2],
           ['profesionales', `Planta${resumen ? ` · ${resumen.profesionales}` : ''}`, Users],
+          ['cotejo', 'Cotejo', GitCompare],
         ] as const).map(([id, etiqueta, Icono]) => (
           <button
             key={id}
@@ -229,6 +247,55 @@ export function DirectorioView({ showToast }: Props) {
             <Mono>{s.profesionales}</Mono>,
           ])}
         />
+      )}
+
+      {/* ── Cotejo ──────────────────────────────────────────────────── */}
+      {tab === 'cotejo' && (
+        <div>
+          <div className="text-[12.5px] text-zinc-600 mb-4 max-w-[70ch] leading-relaxed">
+            Los profesionales activos de <strong>esta</strong> aplicación, cruzados por cédula
+            contra la planta de la cadena. Responde quién de los que atienden acá es parte del
+            directorio y quién existe sólo en esta app.
+          </div>
+
+          {cotejoResumen && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <Pill variant="ok">En el directorio · {cotejoResumen.enDirectorio}</Pill>
+              <Pill variant="now">Sólo en esta app · {cotejoResumen.soloLocal}</Pill>
+              <Pill variant="mute">Sin cédula cargada · {cotejoResumen.sinDocumento}</Pill>
+              <span className="text-[12px] text-zinc-500 ml-1">
+                de {cotejoResumen.total} activos
+              </span>
+            </div>
+          )}
+
+          <Tabla
+            cabeceras={['Nombre', 'Código', 'Cédula', 'Especialidad', 'Estado', 'En el directorio']}
+            filas={cotejo.map((c) => [
+              c.nombre,
+              <Mono>{c.codigo}</Mono>,
+              c.documento ? <Mono>{c.documento}</Mono> : <span className="text-zinc-300">—</span>,
+              <span className="text-zinc-500 text-[11.5px]">{c.especialidad ?? '—'}</span>,
+              c.estado === 'en_directorio' ? (
+                <Pill variant="ok">en el directorio</Pill>
+              ) : c.estado === 'solo_local' ? (
+                <Pill variant="now">sólo en esta app</Pill>
+              ) : (
+                <Pill variant="mute">sin cédula</Pill>
+              ),
+              c.directorio ? (
+                <span className="text-zinc-600 text-[11.5px]">
+                  {c.directorio.cargo}
+                  {c.directorio.sedes.length > 0 && (
+                    <span className="text-zinc-400"> · {c.directorio.sedes.length} sede(s)</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-zinc-300">—</span>
+              ),
+            ])}
+          />
+        </div>
       )}
 
       {/* ── Planta ──────────────────────────────────────────────────── */}

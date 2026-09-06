@@ -45,6 +45,36 @@ export interface ResumenDirectorio {
   porRegional: { regional: string; sedes: number }[];
 }
 
+/**
+ * Un profesional de ESTA app, cotejado contra el directorio de la cadena.
+ *
+ * `sin_documento` no es "no está en la planta": es que todavía no se le cargó
+ * la cédula, así que no se puede saber.
+ */
+export interface CotejoProfesional {
+  id: number;
+  sedeId: string;
+  codigo: string;
+  documento: string | null;
+  nombre: string;
+  especialidad: string | null;
+  estado: 'en_directorio' | 'solo_local' | 'sin_documento';
+  directorio: {
+    nombre: string;
+    rol: RolDirectorio;
+    cargo: string;
+    ambito: AmbitoDirectorio;
+    sedes: string[];
+  } | null;
+}
+
+export interface CotejoResumen {
+  total: number;
+  enDirectorio: number;
+  soloLocal: number;
+  sinDocumento: number;
+}
+
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -60,6 +90,14 @@ async function get<T>(path: string, params?: Record<string, string | undefined>)
 }
 
 export default {
+  /** Devuelve las filas Y el resumen, por eso no pasa por `get<T>()`. */
+  cotejo: async (): Promise<{ filas: CotejoProfesional[]; resumen: CotejoResumen }> => {
+    const { data } = await axios.get(`${API_BASE_URL}/api/directorio/cotejo`, {
+      headers: authHeader(),
+    });
+    if (!data?.success) throw new Error(data?.error || 'ERROR');
+    return { filas: data.data as CotejoProfesional[], resumen: data.resumen as CotejoResumen };
+  },
   resumen: () => get<ResumenDirectorio>('/resumen'),
   sedes: () => get<SedeDirectorio[]>('/sedes'),
   profesionales: (f: { rol?: string; sede?: string; q?: string } = {}) =>

@@ -17,6 +17,8 @@ export interface ProfesionalRow {
   sedeId: string;
   rol: Rol;
   codigo: string;
+  /** Cédula, para cruzar con el directorio compartido de la cadena. */
+  documento: string | null;
   primerNombre: string;
   segundoNombre: string | null;
   primerApellido: string;
@@ -39,6 +41,7 @@ export interface ProfesionalRow {
 export interface ProfesionalInput {
   rol: Rol;
   codigo: string;
+  documento?: string | null;
   primerNombre: string;
   segundoNombre?: string | null;
   primerApellido: string;
@@ -91,6 +94,7 @@ function rowToProfesional(row: Record<string, unknown>): ProfesionalRow {
     sedeId: String(row.sede_id),
     rol: String(row.rol) as Rol,
     codigo: String(row.codigo),
+    documento: row.documento ? String(row.documento) : null,
     primerNombre: String(row.primer_nombre),
     segundoNombre: row.segundo_nombre ? String(row.segundo_nombre) : null,
     primerApellido: String(row.primer_apellido),
@@ -127,7 +131,7 @@ function rowToProfesional(row: Record<string, unknown>): ProfesionalRow {
  * porque puede pesar MB en base64).
  */
 const COLS_LIST = `
-  id, sede_id, rol, codigo,
+  id, sede_id, rol, codigo, documento,
   primer_nombre, segundo_nombre, primer_apellido, segundo_apellido,
   alias, especialidad,
   numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
@@ -138,7 +142,7 @@ const COLS_LIST = `
 `;
 
 const COLS_DETAIL = `
-  id, sede_id, rol, codigo,
+  id, sede_id, rol, codigo, documento,
   primer_nombre, segundo_nombre, primer_apellido, segundo_apellido,
   alias, especialidad,
   numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
@@ -244,6 +248,7 @@ class ProfesionalesService {
       sedeId,
       input.rol,
       input.codigo,
+      input.documento ?? null,
       input.primerNombre,
       input.segundoNombre ?? null,
       input.primerApellido,
@@ -261,13 +266,13 @@ class ProfesionalesService {
     ];
     const sql = `
       INSERT INTO profesionales (
-        sede_id, rol, codigo,
+        sede_id, rol, codigo, documento,
         primer_nombre, segundo_nombre, primer_apellido, segundo_apellido,
         alias, especialidad,
         numero_licencia, tipo_licencia, fecha_vencimiento_licencia,
         tiempo_consulta, firma, email, celular, foto
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
       )
       RETURNING ${COLS_DETAIL}
     `;
@@ -305,6 +310,7 @@ class ProfesionalesService {
     const mapping: Record<keyof ProfesionalInput, string> = {
       rol: 'rol',
       codigo: 'codigo',
+      documento: 'documento',
       primerNombre: 'primer_nombre',
       segundoNombre: 'segundo_nombre',
       primerApellido: 'primer_apellido',

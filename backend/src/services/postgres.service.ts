@@ -821,6 +821,38 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS foto TEXT
       `);
 
+      // Cédula del profesional, para poder cruzarlo con el directorio compartido
+      // de la cadena (`bodytech_profesionales`, otra base del mismo cluster).
+      //
+      // Hasta ahora la única llave era `codigo`, que es texto libre y además
+      // está bajo UNIQUE (codigo, sede_id): una misma persona que atienda en
+      // varias sedes son varias filas con ids distintos. El directorio, en
+      // cambio, modela UNA fila por persona (llave = cédula) más una tabla de
+      // asignaciones. Sin este campo no hay forma de decir si el profesional de
+      // acá es alguien de la planta o alguien que sólo existe en esta app.
+      await this.query(`
+        ALTER TABLE profesionales
+          ADD COLUMN IF NOT EXISTS documento VARCHAR(40)
+      `);
+      // Backfill idempotente: en la práctica el `codigo` YA es la cédula cuando
+      // parece una (los códigos que no lo son —MEDCORP01, PRUEBA01— no cumplen
+      // el patrón y quedan en NULL, que es la respuesta correcta).
+      //
+      // Sólo toca filas con `documento` NULL, así que no pisa una corrección
+      // hecha a mano. Si el `codigo` de alguien NO es su cédula, hay que poner
+      // la cédula real en `documento` — no dejarlo en NULL, o esta migración
+      // volvería a copiarle el código en el próximo arranque.
+      await this.query(`
+        UPDATE profesionales
+           SET documento = codigo
+         WHERE documento IS NULL
+           AND codigo ~ '^[0-9]{6,12}$'
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_profesionales_documento
+          ON profesionales (documento)
+      `);
+
       // Disponibilidad horaria: cada fila es UN rango (permite múltiples
       // rangos por día/modalidad, ej. lunes 8-12 y 14-18).
       await this.query(`

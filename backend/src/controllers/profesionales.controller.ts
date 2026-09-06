@@ -22,6 +22,14 @@ const modalidadEnum = z.enum(['presencial', 'virtual']);
 const profesionalCreateSchema = z.object({
   rol: rolEnum,
   codigo: z.string().min(1).max(80),
+  // Cédula, para cruzar con el directorio compartido. Sólo dígitos: es lo que
+  // usa el directorio como llave, y aceptar puntos o guiones haría que la misma
+  // persona no cruzara según cómo la escribieron.
+  documento: z
+    .string()
+    .regex(/^[0-9]{5,15}$/, 'El documento debe ser solo dígitos.')
+    .nullable()
+    .optional(),
   primerNombre: z.string().min(1).max(100),
   segundoNombre: z.string().max(100).nullable().optional(),
   primerApellido: z.string().min(1).max(100),

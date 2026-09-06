@@ -65,6 +65,7 @@ interface Props {
 const EMPTY: ProfesionalInput = {
   rol: 'medico',
   codigo: '',
+  documento: null,
   primerNombre: '',
   segundoNombre: null,
   primerApellido: '',
@@ -92,6 +93,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       setForm({
         rol: editing.rol,
         codigo: editing.codigo,
+        documento: editing.documento,
         primerNombre: editing.primerNombre,
         segundoNombre: editing.segundoNombre,
         primerApellido: editing.primerApellido,
@@ -286,6 +288,33 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                 <p className="text-xs text-gray-400 mt-1">El código no se puede cambiar.</p>
               )}
             </div>
+          </div>
+
+          {/* Cédula: es la llave con la que el directorio compartido de la
+              cadena identifica a una persona (una fila por persona, aunque
+              atienda en varias sedes). El `codigo` de arriba no sirve para eso
+              porque es único POR SEDE. */}
+          <div>
+            <label
+              htmlFor="prof-documento"
+              className="block text-xs font-medium text-gray-500 mb-1.5"
+            >
+              Cédula <span className="text-gray-400">(para cruzar con el directorio)</span>
+            </label>
+            <input
+              id="prof-documento"
+              type="text"
+              inputMode="numeric"
+              value={form.documento ?? ''}
+              onChange={(e) =>
+                update('documento', e.target.value.replace(/\D/g, '') || null)
+              }
+              placeholder="1015420891"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Solo dígitos, sin puntos ni guiones.
+            </p>
           </div>
 
           {/* Nombres */}

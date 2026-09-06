@@ -211,6 +211,32 @@ class DirectorioService {
     );
     return rows.map((r) => ({ ...r, sedes: r.sedes ?? [] }));
   }
+
+  /**
+   * De una lista de cédulas, cuáles están en el directorio y con qué datos.
+   *
+   * Existe para el cotejo: saber si el profesional dado de alta en ESTA app es
+   * alguien de la planta de la cadena o alguien que sólo existe acá. No se puede
+   * resolver con un JOIN porque son bases distintas del mismo cluster y
+   * DigitalOcean no entrega el superusuario que exige `postgres_fdw` (ver la
+   * cabecera de este archivo), así que el cruce se hace en memoria: son ~141
+   * filas del lado del directorio y una decena del lado de acá.
+   */
+  async porDocumentos(documentos: ReadonlyArray<string>): Promise<Map<string, ProfesionalDirectorio>> {
+    const limpios = [...new Set(documentos.filter((d) => /^[0-9]{5,15}$/.test(d)))];
+    if (limpios.length === 0) return new Map();
+
+    const { rows } = await this.getPool().query<ProfesionalDirectorio & { sedes: string[] | null }>(
+      `SELECT p.documento, p.nombre, p.rol, p.cargo, p.ambito, p.ciudad,
+              array_remove(array_agg(ps.sede_slug ORDER BY ps.sede_slug), NULL) AS sedes
+         FROM profesionales p
+         LEFT JOIN profesional_sedes ps ON ps.documento = p.documento
+        WHERE p.documento = ANY($1::text[])
+        GROUP BY p.documento, p.nombre, p.rol, p.cargo, p.ambito, p.ciudad`,
+      [limpios],
+    );
+    return new Map(rows.map((r) => [r.documento, { ...r, sedes: r.sedes ?? [] }]));
+  }
 }
 
 export default new DirectorioService();

@@ -23,6 +23,8 @@ export interface Profesional {
   sedeId: string;
   rol: Rol;
   codigo: string;
+  /** Cédula, para cruzar con el directorio compartido de la cadena. */
+  documento: string | null;
   primerNombre: string;
   segundoNombre: string | null;
   primerApellido: string;
@@ -45,6 +47,7 @@ export interface Profesional {
 export interface ProfesionalInput {
   rol: Rol;
   codigo: string;
+  documento?: string | null;
   primerNombre: string;
   segundoNombre?: string | null;
   primerApellido: string;

@@ -21,6 +21,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import directorioService from '../services/directorio.service';
+import postgresService from '../services/postgres.service';
 import { getSession } from '../middleware/rbac.middleware';
 
 const router = Router();
@@ -80,6 +81,62 @@ router.get('/profesionales', async (req: Request, res: Response) => {
     res.json({ success: true, data });
   } catch (e) {
     console.error('[directorio] profesionales:', e);
+    res.status(503).json({ success: false, error: 'DIRECTORIO_NO_DISPONIBLE' });
+  }
+});
+
+/**
+ * Cotejo: los profesionales dados de alta en ESTA app, cruzados contra el
+ * directorio de la cadena por cédula.
+ *
+ * Responde la pregunta que hoy no se puede hacer: ¿quién de los que atienden
+ * acá es parte de la planta, y quién existe sólo en esta app? Los que no tienen
+ * cédula cargada salen como `sin_documento` — no son un "no está", son un "no
+ * se puede saber todavía".
+ */
+router.get('/cotejo', async (_req: Request, res: Response) => {
+  try {
+    const locales = await postgresService.query(
+      `SELECT id, sede_id, codigo, documento, especialidad,
+              TRIM(CONCAT_WS(' ', primer_nombre, primer_apellido)) AS nombre
+         FROM profesionales
+        WHERE activo
+        ORDER BY primer_apellido, primer_nombre`,
+    );
+    const filas = locales ?? [];
+    const enDirectorio = await directorioService.porDocumentos(
+      filas.map((p) => String(p.documento ?? '')),
+    );
+
+    const data = filas.map((p) => {
+      const doc = p.documento ? String(p.documento) : null;
+      const dir = doc ? enDirectorio.get(doc) : undefined;
+      return {
+        id: Number(p.id),
+        sedeId: String(p.sede_id),
+        codigo: String(p.codigo),
+        documento: doc,
+        nombre: String(p.nombre || p.codigo),
+        especialidad: p.especialidad ? String(p.especialidad) : null,
+        estado: !doc ? 'sin_documento' : dir ? 'en_directorio' : 'solo_local',
+        directorio: dir
+          ? { nombre: dir.nombre, rol: dir.rol, cargo: dir.cargo, ambito: dir.ambito, sedes: dir.sedes }
+          : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      data,
+      resumen: {
+        total: data.length,
+        enDirectorio: data.filter((d) => d.estado === 'en_directorio').length,
+        soloLocal: data.filter((d) => d.estado === 'solo_local').length,
+        sinDocumento: data.filter((d) => d.estado === 'sin_documento').length,
+      },
+    });
+  } catch (e) {
+    console.error('[directorio] cotejo:', e);
     res.status(503).json({ success: false, error: 'DIRECTORIO_NO_DISPONIBLE' });
   }
 });

@@ -19,7 +19,20 @@ export interface AccesoPersona {
   activo: boolean;
 }
 
+/** La ficha de agenda de Consulta, cuando la persona tiene una. */
+export interface FichaLite {
+  id: number;
+  codigo: string;
+  documento: string | null;
+  nombre: string;
+  rol: string;
+  sedeId: string;
+  especialidad: string | null;
+  activo: boolean;
+}
+
 export interface Persona {
+  /** Negativo = es una ficha sin cuenta, no una persona de la tabla de cuentas. */
   id: number;
   email: string;
   nombre: string;
@@ -28,6 +41,8 @@ export interface Persona {
   apps: AccesoPersona[];
   /** Baja de la organización: no entra a NINGUNA aplicación. */
   baja?: { motivo: string | null; en: string } | null;
+  /** Su ficha de agenda, si la tiene. `null` = no atiende, o todavía no se creó. */
+  ficha?: FichaLite | null;
 }
 
 export interface CrearPersona {

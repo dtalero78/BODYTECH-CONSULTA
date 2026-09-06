@@ -24,12 +24,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   UserPlus, RefreshCw, Search, Power, UserMinus, Pencil, X, AlertTriangle, Dices,
+  ClipboardList, CalendarClock,
 } from 'lucide-react';
 import usuariosGlobalService, {
   Persona, AppDestino, EditarPersona,
 } from '../../services/usuarios-global.service';
 import authService, { Role } from '../../services/auth.service';
 import usuariosApi, { ProfesionalLite } from '../../services/usuarios.service';
+import profesionalesService, { Profesional } from '../../services/profesionales.service';
+import { ProfesionalFormModal } from './ProfesionalFormModal';
+import { DisponibilidadModal } from './DisponibilidadModal';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, CTA_PRIMARY, CTA_OUTLINE } from './_tokens';
 
 interface Props {
@@ -117,6 +121,12 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
   const [guardando, setGuardando] = useState(false);
   const [hoja, setHoja] = useState<Hoja | null>(null);
 
+  // La ficha se edita con el modal que ya existe: es el mismo formulario, y
+  // duplicarlo sería tener dos sitios donde arreglar el mismo campo.
+  const [fichaEditando, setFichaEditando] = useState<Profesional | null>(null);
+  const [creandoFicha, setCreandoFicha] = useState(false);
+  const [dispoDe, setDispoDe] = useState<Profesional | null>(null);
+
   const [busqueda, setBusqueda] = useState('');
   const [filtroApp, setFiltroApp] = useState<'todas' | AppDestino>('todas');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
@@ -166,6 +176,13 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
   const nombreSede = useCallback(
     (id: string) => sedes.find((s) => s.sedeId === id)?.nombre ?? id,
     [sedes],
+  );
+
+  /** ¿Su rol en Consulta exige ficha? Si la falta, entra y no puede agendar. */
+  const esClinico = useCallback(
+    (p: Persona) =>
+      ROLES_CLINICOS.includes(p.apps.find((a) => a.app === 'consulta')?.rol ?? ''),
+    [],
   );
 
   /** Activa en una aplicación e inactiva en otra: la baja no llegó a todas partes. */
@@ -336,6 +353,17 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
     }
   }
 
+  /** Trae la ficha completa: la lista sólo carga lo justo para pintarla. */
+  async function abrirFicha(idFicha: number, modo: 'editar' | 'disponibilidad') {
+    try {
+      const p = await profesionalesService.getById(idFicha);
+      if (modo === 'editar') setFichaEditando(p);
+      else setDispoDe(p);
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : 'No se pudo abrir la ficha' });
+    }
+  }
+
   // ── Acciones de fila ──────────────────────────────────────────────────────
   /**
    * Encender o apagar la cuenta. Hay DOS interruptores —la persona y su acceso a
@@ -412,7 +440,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <UserPlus className="w-[18px] h-[18px] text-[#1e3a8a]" />
-          <h1 className="text-[19px] font-semibold text-zinc-900">Usuarios</h1>
+          <h1 className="text-[19px] font-semibold text-zinc-900">Team</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -421,6 +449,13 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
           >
             <RefreshCw className={`w-[13px] h-[13px] ${cargando ? 'animate-spin' : ''}`} />
             Actualizar
+          </button>
+          <button
+            onClick={() => setCreandoFicha(true)}
+            className="inline-flex items-center gap-1.5 h-[30px] px-2.5 border border-zinc-300 rounded-md text-[12.5px] text-zinc-700 hover:bg-zinc-50"
+          >
+            <ClipboardList className="w-[13px] h-[13px]" />
+            Nuevo profesional
           </button>
           <button onClick={abrirNueva} className={CTA_PRIMARY}>
             <UserPlus className="w-[14px] h-[14px]" />
@@ -491,7 +526,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
         <table className="w-full text-[12.5px] border-collapse">
           <thead>
             <tr className="bg-zinc-50 border-b border-zinc-200">
-              {['Persona', 'Correo', 'Accesos', 'A dónde entra', ''].map((h) => (
+              {['Persona', 'Correo', 'Accesos', 'Ficha de agenda', 'A dónde entra', ''].map((h) => (
                 <th key={h} className={`px-3 py-2 text-left ${SECTION_LABEL}`}>
                   {h}
                 </th>
@@ -501,7 +536,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
           <tbody>
             {visibles.length === 0 && !cargando && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">
+                <td colSpan={6} className="px-3 py-6 text-center text-zinc-400">
                   {personas.length === 0 ? 'Sin usuarios todavía.' : 'Nadie coincide con la búsqueda.'}
                 </td>
               </tr>
@@ -579,21 +614,65 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                       </div>
                     )}
                   </td>
+                  <td className="px-3 py-2 align-top">
+                    {p.ficha ? (
+                      <button
+                        onClick={() => abrirFicha(p.ficha!.id, 'editar')}
+                        className="text-left text-[11.5px] text-zinc-700 hover:text-[#1f3a8a]"
+                      >
+                        <span style={{ fontFamily: FONT_MONO }}>{p.ficha.codigo}</span>
+                        <div className="text-[10.5px] text-zinc-400">
+                          {p.ficha.especialidad || p.ficha.rol}
+                        </div>
+                      </button>
+                    ) : esClinico(p) ? (
+                      <span className="text-[11px] text-amber-700">
+                        sin ficha: no puede agendar
+                      </span>
+                    ) : (
+                      <span className="text-zinc-300 text-[11.5px]">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 align-top text-zinc-500 text-[11.5px] max-w-[26ch]">
-                    {p.apps.map((a) => DESTINO[`${a.app}:${a.rol}`]).filter(Boolean).join(' · ') || '—'}
+                    {p.apps.map((a) => DESTINO[`${a.app}:${a.rol}`]).filter(Boolean).join(' · ') ||
+                      (p.ficha && p.apps.length === 0 ? (
+                        <span className="text-amber-700">tiene ficha, no tiene cuenta: no entra</span>
+                      ) : (
+                        '—'
+                      ))}
                   </td>
                   <td className="px-3 py-2 align-top text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-0.5">
-                      <IconoAccion titulo="Editar" onClick={() => abrirPersona(p)}>
-                        <Pencil className="w-[14px] h-[14px]" />
-                      </IconoAccion>
-                      <IconoAccion
-                        titulo={p.activo ? 'Inhabilitar' : 'Habilitar'}
-                        onClick={() => alternarActivo(p)}
-                      >
-                        <Power className="w-[14px] h-[14px]" />
-                      </IconoAccion>
-                      {esAdmin && (
+                      {p.id > 0 && (
+                        <IconoAccion titulo="Editar" onClick={() => abrirPersona(p)}>
+                          <Pencil className="w-[14px] h-[14px]" />
+                        </IconoAccion>
+                      )}
+                      {p.ficha && (
+                        <IconoAccion
+                          titulo="Ficha de agenda"
+                          onClick={() => abrirFicha(p.ficha!.id, 'editar')}
+                        >
+                          <ClipboardList className="w-[14px] h-[14px]" />
+                        </IconoAccion>
+                      )}
+                      {p.ficha && (
+                        <IconoAccion
+                          titulo="Disponibilidad"
+                          onClick={() => abrirFicha(p.ficha!.id, 'disponibilidad')}
+                        >
+                          <CalendarClock className="w-[14px] h-[14px]" />
+                        </IconoAccion>
+                      )}
+                      {p.id > 0 && (
+                        <IconoAccion
+                          titulo={p.activo ? 'Inhabilitar' : 'Habilitar'}
+                          onClick={() => alternarActivo(p)}
+                        >
+                          <Power className="w-[14px] h-[14px]" />
+                        </IconoAccion>
+                      )}
+                      {esAdmin && p.id > 0 && (
                         <IconoAccion
                           titulo={p.baja ? 'Reactivar en la organización' : 'Dar de baja de la organización'}
                           peligro={!p.baja}
@@ -610,6 +689,34 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Ficha de agenda: el mismo modal de siempre, reusado. Crear ficha es
+          además el camino que da de alta a la persona en el directorio y le
+          arma la cuenta, todo en un paso. */}
+      <ProfesionalFormModal
+        isOpen={creandoFicha || fichaEditando !== null}
+        editing={fichaEditando}
+        onClose={() => {
+          setCreandoFicha(false);
+          setFichaEditando(null);
+        }}
+        onSaved={() => {
+          setCreandoFicha(false);
+          setFichaEditando(null);
+          cargar();
+        }}
+        onError={(m) => showToast({ type: 'error', message: m })}
+      />
+
+      {dispoDe && (
+        <DisponibilidadModal
+          isOpen
+          profesional={dispoDe}
+          onClose={() => setDispoDe(null)}
+          onSaved={() => setDispoDe(null)}
+          onError={(m) => showToast({ type: 'error', message: m })}
+        />
+      )}
 
       {/* ── Hoja de la persona ───────────────────────────────────────────── */}
       {hoja && (

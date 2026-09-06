@@ -13,7 +13,6 @@ import {
   Building2,
   Settings,
   LogOut,
-  UserCog,
   Map,
   Fingerprint,
   Database,
@@ -22,7 +21,6 @@ import {
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
-import { ProfesionalesView } from '../components/coordinador/ProfesionalesView';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
@@ -43,7 +41,6 @@ type View =
   | 'identidades'
   | 'empresas'
   | 'indicadores'
-  | 'usuarios'
   | 'directorio';
 
 interface NavBadge {
@@ -69,7 +66,6 @@ export function CoordinadorPage() {
     directorio: undefined,
     identidades: undefined,
     empresas: undefined,
-    usuarios: undefined,
   });
 
   useEffect(() => {
@@ -223,9 +219,13 @@ export function CoordinadorPage() {
         <nav className="px-3 pt-4 pb-2 flex-1 overflow-y-auto">
           <div className={`${SECTION_LABEL} px-3 pb-2`}>OPERACIÓN</div>
           <div className="space-y-0.5 mb-5">
+            {/* Una sola lista de gente. Antes eran dos —«Profesionales» acá y
+                «Usuarios» en SISTEMA— y había personas que sólo salían en una:
+                un admin no tiene ficha, y una ficha sin cuenta no tenía dónde
+                verse. Hay gente sin ficha, pero no ficha sin gente. */}
             <NavItem
               icon={<UsersRound className="w-[15px] h-[15px]" />}
-              label="Profesionales"
+              label="Team"
               active={view === 'profesionales'}
               onClick={() => setView('profesionales')}
               badge={badges.profesionales}
@@ -279,15 +279,7 @@ export function CoordinadorPage() {
 
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
           <div className="space-y-0.5">
-            {/* Una sola entrada: antes eran tres pantallas que se pisaban
-                («Usuarios», «Creación de usuarios» y «Accesos») y había que
-                saber en cuál estaba lo que uno necesitaba. */}
-            <NavItem
-              icon={<UserCog className="w-[15px] h-[15px]" />}
-              label="Usuarios"
-              active={view === 'usuarios'}
-              onClick={() => setView('usuarios')}
-            />
+
             {puedeConstruir && (
               <NavItem
                 icon={<Sparkles className="w-[15px] h-[15px]" />}
@@ -370,8 +362,8 @@ export function CoordinadorPage() {
       <main className="flex-1 min-w-0">
         <div className="px-8 pt-6 pb-8">
           {view === 'profesionales' && (
-            <ProfesionalesView
-              reloadKey={reloadKey}
+            <UsuariosPanelView
+              key={`per-${reloadKey}`}
               showToast={showToast}
               reportCount={reportProfesionalesCount}
             />
@@ -396,9 +388,7 @@ export function CoordinadorPage() {
           {view === 'indicadores' && (
             <IndicadoresView key={`ind-${reloadKey}`} showToast={showToast} />
           )}
-          {view === 'usuarios' && (
-            <UsuariosPanelView key={`usr-${reloadKey}`} showToast={showToast} />
-          )}
+
           {view === 'directorio' && isDirectorioUser && (
             <DirectorioView key={`dir-${reloadKey}`} showToast={showToast} />
           )}

@@ -28,6 +28,7 @@ import { getSession } from '../middleware/rbac.middleware';
 import usuariosService from '../services/usuarios.service';
 import bajasService from '../services/bajas.service';
 import { getSharedPool } from '../services/shared-db';
+import postgresService from '../services/postgres.service';
 import {
   revisarAlta,
   revisarEdicion,
@@ -112,21 +113,104 @@ router.get('/roles', (_req: Request, res: Response) => {
   res.json({ success: true, data: ROLES_POR_APP });
 });
 
+/**
+ * La ficha de agenda, tal como la necesita la lista de personas. Se lee de la
+ * base de Consulta, que es donde vive.
+ */
+interface FichaLite {
+  id: number;
+  codigo: string;
+  documento: string | null;
+  nombre: string;
+  rol: string;
+  sedeId: string;
+  especialidad: string | null;
+  activo: boolean;
+}
+
+async function fichasDeConsulta(): Promise<FichaLite[]> {
+  const filas = await postgresService.query(
+    `SELECT id, codigo, documento, rol, sede_id,
+            trim(concat_ws(' ', primer_nombre, primer_apellido)) AS nombre,
+            especialidad, activo
+       FROM profesionales`,
+  );
+  return (filas ?? []).map((f) => ({
+    id: Number(f.id),
+    codigo: String(f.codigo),
+    documento: f.documento ? String(f.documento) : null,
+    nombre: String(f.nombre),
+    rol: String(f.rol),
+    sedeId: String(f.sede_id),
+    especialidad: f.especialidad ? String(f.especialidad) : null,
+    activo: Boolean(f.activo),
+  }));
+}
+
+/**
+ * La lista ÚNICA de gente: las cuentas, cada una con su ficha de agenda si la
+ * tiene, más las fichas que todavía no tienen cuenta.
+ *
+ * Esas fichas sueltas son la razón de que la lista no pueda salir sólo de la
+ * tabla de cuentas: alguien que quedó con ficha y sin cuenta desaparecería de
+ * la pantalla justo cuando hay que notarlo —aparece en la agenda y no puede
+ * entrar—. Se muestran como una fila más, sin correo.
+ */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const todas = await usuariosGlobalService.listar();
+    const [todas, fichas] = await Promise.all([
+      usuariosGlobalService.listar(),
+      fichasDeConsulta(),
+    ]);
     const actor = actorDe(req);
-    res.json({
-      success: true,
-      data: todas.filter((p) => {
+
+    const porId = new Map(fichas.map((f) => [f.id, f]));
+    const porDocumento = new Map(
+      fichas.filter((f) => f.documento).map((f) => [f.documento as string, f]),
+    );
+    const usadas = new Set<number>();
+
+    const personas = todas
+      .filter((p) => {
         const c = p.apps.find((a) => a.app === 'consulta');
         return visibleEnListado(actor, {
           email: p.email,
           rolConsulta: c?.rol ?? null,
           sedes: ((c?.alcance as { sedes?: string[] })?.sedes ?? []) as string[],
         });
-      }),
-    });
+      })
+      .map((p) => {
+        const c = p.apps.find((a) => a.app === 'consulta');
+        const idFicha = (c?.alcance as { profesionalId?: number | null })?.profesionalId ?? null;
+        // Por id de la ficha (el vínculo explícito) y, si no, por cédula: es la
+        // llave con la que se cruza todo lo demás.
+        const ficha =
+          (idFicha ? porId.get(idFicha) : undefined) ??
+          (p.documento ? porDocumento.get(p.documento) : undefined) ??
+          null;
+        if (ficha) usadas.add(ficha.id);
+        return { ...p, ficha };
+      });
+
+    // Las fichas sin cuenta, como filas propias. Sólo las ve quien puede verlo
+    // todo: acotarlas por sede exigiría un alcance que no tienen.
+    const sueltas =
+      actor.role === 'admin'
+        ? fichas
+            .filter((f) => !usadas.has(f.id))
+            .map((f) => ({
+              id: -f.id, // negativo: no es una persona de la tabla de cuentas
+              email: '',
+              nombre: f.nombre,
+              documento: f.documento,
+              activo: f.activo,
+              apps: [],
+              baja: null,
+              ficha: f,
+            }))
+        : [];
+
+    res.json({ success: true, data: [...personas, ...sueltas] });
   } catch (e) {
     next(e);
   }

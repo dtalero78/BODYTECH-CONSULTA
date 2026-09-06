@@ -23,6 +23,7 @@ import directorioRoutes from './routes/directorio.routes';
 import padronRoutes from './routes/padron.routes';
 import empresasRoutes from './routes/empresas.routes';
 import empresasService from './services/empresas.service';
+import padronSyncService from './services/padron-sync.service';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
@@ -294,6 +295,32 @@ postgresService
       .asegurarEsquema()
       .catch((e) => console.error('⚠️ [empresas] no se pudo asegurar el catálogo:', e?.message ?? e))
   )
+  // Padrón de afiliados: un ESPEJO de las historias, no un segundo cuaderno.
+  // Sobre `HistoriaClinica` sólo hace SELECT; escribe únicamente en la tabla
+  // `afiliados` de la base compartida. Si falla entero, no se cae una atención.
+  //
+  // Corre al arrancar y luego cada `PADRON_SYNC_MINUTOS` (default 15). Toma ~2s
+  // sobre 4.200 personas. `PADRON_SYNC_ENABLED=false` lo apaga sin desplegar
+  // código nuevo.
+  .then(() => {
+    if (process.env.PADRON_SYNC_ENABLED === 'false') {
+      console.log('ℹ️ [padrón] sincronización apagada por configuración');
+      return;
+    }
+    const correr = () =>
+      padronSyncService
+        .sincronizar()
+        .then((r) =>
+          console.log(
+            `✅ [padrón] ${r.reflejados} personas reflejadas de ${r.leidos} (excluidas: ` +
+              `${r.excluidos.conflicto} en conflicto, ${r.excluidos.administrativo} administrativas) en ${r.ms}ms`
+          )
+        )
+        .catch((e) => console.error('⚠️ [padrón] sincronización fallida:', e?.message ?? e));
+    const minutos = Math.max(5, parseInt(process.env.PADRON_SYNC_MINUTOS || '15', 10));
+    setInterval(correr, minutos * 60 * 1000);
+    return correr();
+  })
   // Cerrojo 1 de BodyVibeTech: crea/actualiza el rol de solo lectura y levanta
   // su pool aparte. Va DESPUÉS de las migraciones porque los GRANT del bloque 1
   // se otorgan sobre vistas que las migraciones crean. Si falla, BodyVibeTech

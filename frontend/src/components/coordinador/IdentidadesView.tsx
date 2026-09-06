@@ -16,6 +16,7 @@ import padronService, {
   AfiliadoCotejado,
   ResumenCotejo,
   EstadoIdentidad,
+  EstadoPadron,
 } from '../../services/padron.service';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, Pill } from './_tokens';
 
@@ -66,6 +67,7 @@ export function IdentidadesView({ showToast }: Props) {
   const [truncado, setTruncado] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [padron, setPadron] = useState<EstadoPadron | null>(null);
 
   const [estado, setEstado] = useState<string>('');
   const [busqueda, setBusqueda] = useState('');
@@ -97,6 +99,12 @@ export function IdentidadesView({ showToast }: Props) {
     const t = setTimeout(() => cargar({ estado, q: busqueda }), 250);
     return () => clearTimeout(t);
   }, [estado, busqueda, cargar]);
+
+  // El estado del padrón se pide aparte del cotejo: no depende de los filtros y
+  // no tiene por qué recargarse cada vez que alguien escribe en el buscador.
+  useEffect(() => {
+    padronService.estado().then(setPadron).catch(() => setPadron(null));
+  }, []);
 
   const explicacion = ESTADOS.find((e) => e.valor === estado)?.explica ?? '';
 
@@ -135,6 +143,29 @@ export function IdentidadesView({ showToast }: Props) {
             valor={resumen.enVariosProgramas}
             ayuda="La misma persona atendida en más de un programa."
           />
+        </div>
+      )}
+
+      {padron && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-5 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-[12.5px]">
+          <span className="text-zinc-700">
+            <strong>{padron.personas.toLocaleString('es-CO')}</strong> personas en el padrón
+          </span>
+          {padron.desfase === 0 ? (
+            <span className="text-green-700">al día</span>
+          ) : (
+            <span className="text-amber-700">
+              faltan {padron.desfase} por reflejar
+            </span>
+          )}
+          {padron.actualizadoEn && (
+            <span className="text-zinc-400">
+              actualizado {new Date(padron.actualizadoEn).toLocaleString('es-CO')}
+            </span>
+          )}
+          <span className="text-zinc-400 ml-auto">
+            se actualiza solo; los conflictos y las administrativas quedan fuera a propósito
+          </span>
         </div>
       )}
 

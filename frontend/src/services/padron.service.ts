@@ -49,7 +49,23 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export interface EstadoPadron {
+  /** Personas ya reflejadas en el padrón. */
+  personas: number;
+  actualizadoEn: string | null;
+  /** Cuántas deberían estar y todavía no están. Debería ser 0. */
+  desfase: number;
+}
+
 export default {
+  async estado(): Promise<EstadoPadron> {
+    const { data } = await axios.get(`${API_BASE_URL}/api/padron/estado`, {
+      headers: authHeader(),
+    });
+    if (!data?.success) throw new Error(data?.error || 'No se pudo leer el padrón');
+    return data.data as EstadoPadron;
+  },
+
   async cotejo(f: { estado?: string; q?: string } = {}): Promise<RespuestaCotejo> {
     const { data } = await axios.get(`${API_BASE_URL}/api/padron/cotejo`, {
       headers: authHeader(),

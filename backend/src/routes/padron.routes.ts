@@ -11,6 +11,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import padronService from '../services/padron.service';
+import padronSyncService from '../services/padron-sync.service';
 import { effectiveSedes } from '../middleware/rbac.middleware';
 import type { EstadoIdentidad } from '../helpers/padron.helper';
 
@@ -57,6 +58,36 @@ router.get('/cotejo', async (req: Request, res: Response, next: NextFunction) =>
       coincidencias: data.length,
       resumen,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * GET /api/padron/estado — cómo está el espejo.
+ *
+ * `desfase` es la red de seguridad del diseño: cuántas personas deberían estar
+ * en el padrón y todavía no están. Si algún día ese número se dispara, la
+ * avería se ve; sin él, un espejo que dejó de actualizarse se vería idéntico a
+ * uno al día.
+ */
+router.get('/estado', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, data: await padronSyncService.estado() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * POST /api/padron/sincronizar — fuerza el reflejo ahora.
+ *
+ * Lo normal es que corra solo cada tantos minutos; esto existe para no tener
+ * que esperar (y para poder verificar después de un arreglo de identidades).
+ */
+router.post('/sincronizar', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, data: await padronSyncService.sincronizar() });
   } catch (e) {
     next(e);
   }

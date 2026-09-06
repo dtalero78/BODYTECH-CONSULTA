@@ -6,12 +6,12 @@
 // composición corporal en ACC, y tenerla dos veces es cómo llegamos a que
 // consulta creyera que había 5 sedes y ACC 6 cuando en realidad son 94.
 //
-// ── Por qué un pool aparte y no el de `directorio.service` ──────────────────
+// ── Por qué no usa `directorio.service` ─────────────────────────────────────
 // Ese archivo es de SOLO LECTURA a propósito y no tiene un solo INSERT: el
 // directorio de sedes y planta lo escribe únicamente el importador de RRHH.
-// Esa regla sigue intacta. Este servicio escribe, pero exclusivamente en
-// `empresas` — una tabla que nadie importa de un Excel, porque una empresa
-// cliente nueva aparece cuando el médico llega a ella.
+// Esa regla sigue intacta. Este servicio escribe —por el pool compartido de
+// `shared-db`— pero exclusivamente en `empresas`, una tabla que nadie importa
+// de un Excel porque una empresa cliente aparece cuando el médico llega a ella.
 //
 // ── Por qué se crea el catálogo AHORA ───────────────────────────────────────
 // La columna `mc_empresa` se desplegó con cero filas. Es la única ventana para
@@ -21,7 +21,7 @@
 // ventana.
 // ============================================================================
 
-import { Pool } from 'pg';
+import { getSharedPool } from './shared-db';
 import { normalizarNombre } from '../helpers/padron.helper';
 
 export interface Empresa {
@@ -37,28 +37,7 @@ export interface Empresa {
 const SEMILLA: ReadonlyArray<string> = ['Bancolombia', 'Ecopetrol'];
 
 class EmpresasService {
-  private pool: Pool | null = null;
-
-  private getPool(): Pool {
-    if (this.pool) return this.pool;
-    this.pool = new Pool({
-      user: process.env.POSTGRES_USER || 'doadmin',
-      password: process.env.POSTGRES_PASSWORD,
-      host:
-        process.env.POSTGRES_HOST ||
-        'bslpostgres-do-user-19197755-0.k.db.ondigitalocean.com',
-      port: parseInt(process.env.POSTGRES_PORT || '25060'),
-      database: process.env.DIRECTORIO_DATABASE || 'bodytech_profesionales',
-      ssl: { rejectUnauthorized: false },
-      max: 3,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    });
-    this.pool.on('error', (err) => {
-      console.error('❌ [empresas] error inesperado en el pool:', err);
-    });
-    return this.pool;
-  }
+  private getPool = getSharedPool;
 
   /**
    * Crea la tabla y siembra las empresas reales. Idempotente; se llama al

@@ -1,17 +1,23 @@
 // ============================================================================
-// AccesosView — Quién tiene acceso a qué aplicación.
+// AccesosView — Quién tiene acceso a qué aplicación, y quién ya no.
 //
-// Fase 1 de unificar el login. No cambia el inicio de sesión: cada aplicación
-// sigue autenticando contra su propia lista. Esto sólo hace visible lo que hoy
-// exige mirar en tres bases distintas.
+// Dos cosas distintas conviven acá, y conviene no confundirlas:
 //
-// Lo que importa está arriba: las personas con acceso ACTIVO en una aplicación
-// e INACTIVO en otra. Ese es el riesgo real — alguien a quien se dio de baja en
-// un lado y sigue entrando por el otro.
+//   VER   — el mapa de accesos. Cada aplicación tiene su lista; esto las junta
+//           para poder responder «¿a qué tiene acceso esta persona?» sin mirar
+//           en tres bases. No cambia nada.
+//
+//   BAJA  — dar de baja de la ORGANIZACIÓN. Eso SÍ cambia el inicio de sesión:
+//           la persona deja de poder entrar a las tres aplicaciones, decidido
+//           una sola vez. Es lo que hasta ahora había que hacer app por app —y
+//           que ya se falló al menos una vez.
+//
+// Las filas ámbar son el problema que motivó todo: alguien activo en una
+// aplicación e inactivo en otra. Las rojas son quienes ya no entran a ninguna.
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { KeyRound, RefreshCw, AlertTriangle } from 'lucide-react';
+import { KeyRound, RefreshCw, AlertTriangle, UserMinus, UserPlus } from 'lucide-react';
 import accesosService, { PersonaConAccesos, ResumenAccesos } from '../../services/accesos.service';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL } from './_tokens';
 
@@ -61,6 +67,33 @@ export function AccesosView({ showToast }: Props) {
     }
   }
 
+  async function darDeBaja(p: PersonaConAccesos) {
+    const motivo = window.prompt(
+      `Dar de baja a ${p.nombre ?? p.email} de TODA la organización.\n\n` +
+        'Deja de poder entrar a las tres aplicaciones, no solo a una.\n' +
+        'Se puede revertir.\n\nMotivo (opcional):',
+    );
+    if (motivo === null) return; // canceló
+    try {
+      await accesosService.darDeBaja(p.email, motivo.trim() || null);
+      showToast({ type: 'success', message: `${p.nombre ?? p.email} ya no puede entrar a ninguna aplicación.` });
+      await cargar();
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : 'Error' });
+    }
+  }
+
+  async function reactivar(p: PersonaConAccesos) {
+    if (!window.confirm(`¿Devolverle el acceso a ${p.nombre ?? p.email}?\n\nVolverá a entrar donde tenga cuenta activa.`)) return;
+    try {
+      await accesosService.reactivar(p.email);
+      showToast({ type: 'success', message: 'Acceso restablecido.' });
+      await cargar();
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : 'Error' });
+    }
+  }
+
   return (
     <div style={{ fontFamily: FONT_INTER }}>
       <div className="flex items-center justify-between mb-1">
@@ -81,8 +114,8 @@ export function AccesosView({ showToast }: Props) {
       <div className="text-[12.5px] text-zinc-600 mb-5 max-w-[74ch] leading-relaxed">
         Cada aplicación tiene su propia lista de usuarios. Esta pantalla las junta para poder
         responder «¿a qué tiene acceso esta persona?» sin mirar en tres lados.{' '}
-        <strong>No cambia el inicio de sesión</strong>: cada aplicación sigue autenticando como
-        siempre.
+        <strong>Dar de baja acá la saca de las tres</strong> — es la única acción que hace falta
+        cuando alguien deja de trabajar en Bodytech.
       </div>
 
       {resumen && (
@@ -90,6 +123,7 @@ export function AccesosView({ showToast }: Props) {
           <Recuadro etiqueta="Personas" valor={resumen.personas} />
           <Recuadro etiqueta="En varias aplicaciones" valor={resumen.enVariasApps} />
           <Recuadro etiqueta="Con acceso inconsistente" valor={resumen.inconsistentes} alerta />
+          <Recuadro etiqueta="Dadas de baja" valor={resumen.bajas} />
         </div>
       )}
 
@@ -112,7 +146,7 @@ export function AccesosView({ showToast }: Props) {
         <table className="w-full text-[12.5px] border-collapse">
           <thead>
             <tr className="bg-zinc-50 border-b border-zinc-200">
-              {['Persona', 'Correo', 'Cédula', 'Accesos'].map((h) => (
+              {['Persona', 'Correo', 'Cédula', 'Accesos', ''].map((h) => (
                 <th key={h} className={`px-3 py-2 text-left ${SECTION_LABEL}`}>
                   {h}
                 </th>
@@ -122,7 +156,7 @@ export function AccesosView({ showToast }: Props) {
           <tbody>
             {personas.length === 0 && !cargando && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-zinc-400">
+                <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">
                   Sin datos todavía. Usá «Actualizar».
                 </td>
               </tr>
@@ -130,9 +164,18 @@ export function AccesosView({ showToast }: Props) {
             {personas.map((p) => (
               <tr
                 key={p.email}
-                className={`border-b border-zinc-100 last:border-0 ${p.inconsistente ? 'bg-amber-50/40' : 'hover:bg-zinc-50/60'}`}
+                className={`border-b border-zinc-100 last:border-0 ${
+                  p.baja ? 'bg-red-50/50' : p.inconsistente ? 'bg-amber-50/40' : 'hover:bg-zinc-50/60'
+                }`}
               >
-                <td className="px-3 py-2 align-top text-zinc-900">{p.nombre ?? '—'}</td>
+                <td className="px-3 py-2 align-top text-zinc-900">
+                  <span className={p.baja ? 'line-through text-zinc-400' : ''}>{p.nombre ?? '—'}</span>
+                  {p.baja && (
+                    <div className="text-[10.5px] text-red-700 mt-0.5">
+                      de baja{p.baja.motivo ? ` · ${p.baja.motivo}` : ''}
+                    </div>
+                  )}
+                </td>
                 <td className="px-3 py-2 align-top text-zinc-600" style={{ fontFamily: FONT_MONO }}>
                   {p.email}
                 </td>
@@ -156,6 +199,27 @@ export function AccesosView({ showToast }: Props) {
                       </span>
                     ))}
                   </div>
+                </td>
+                <td className="px-3 py-2 align-top text-right whitespace-nowrap">
+                  {p.baja ? (
+                    <button
+                      onClick={() => reactivar(p)}
+                      title="Devolverle el acceso"
+                      className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-zinc-500 hover:text-green-700 hover:bg-green-50"
+                    >
+                      <UserPlus className="w-[13px] h-[13px]" />
+                      Reactivar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => darDeBaja(p)}
+                      title="Dar de baja de toda la organización"
+                      className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-zinc-400 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <UserMinus className="w-[13px] h-[13px]" />
+                      Dar de baja
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

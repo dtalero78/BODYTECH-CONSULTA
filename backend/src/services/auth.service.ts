@@ -15,6 +15,7 @@ import jwt from 'jsonwebtoken';
 import postgresService from './postgres.service';
 import usuariosService, { Rol } from './usuarios.service';
 import accesosSyncService from './accesos-sync.service';
+import bajasService from './bajas.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod';
 const JWT_TTL = '24h';
@@ -197,6 +198,15 @@ class AuthService {
     const row = await usuariosService.findActiveByEmail(email);
     // Mensaje uniforme INVALID_CREDENTIALS para no filtrar si el email existe.
     if (!row) {
+      return { ok: false, error: 'INVALID_CREDENTIALS' };
+    }
+
+    // Baja organizacional: la persona ya no trabaja en Bodytech. Se decide UNA
+    // vez, en el armario compartido, y vale para todas las aplicaciones — sin
+    // tener que acordarse de desactivarla en cada una. Se responde el mismo
+    // INVALID_CREDENTIALS que el resto: quién sigue en la organización no es
+    // información que deba filtrarse en una pantalla de login.
+    if (await bajasService.estaDeBaja(email)) {
       return { ok: false, error: 'INVALID_CREDENTIALS' };
     }
 

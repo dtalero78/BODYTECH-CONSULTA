@@ -21,6 +21,8 @@ import torniqueteService from './services/torniquete.service';
 import usuariosRoutes from './routes/usuarios.routes';
 import directorioRoutes from './routes/directorio.routes';
 import padronRoutes from './routes/padron.routes';
+import empresasRoutes from './routes/empresas.routes';
+import empresasService from './services/empresas.service';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
@@ -199,6 +201,9 @@ app.use('/api/directorio', directorioRoutes);
 // Identidad de afiliados (cotejo). Devuelve nombres y cédulas de pacientes,
 // así que va al mismo nivel de acceso que /api/usuarios.
 app.use('/api/padron', requireRole('admin', 'coordinador'), padronRoutes);
+// Catálogo de empresas cliente. El médico corporativo LEE (para su formulario)
+// y el coordinador da de alta; por eso el rol se exige por ruta, no acá.
+app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresasRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
@@ -280,6 +285,15 @@ import bodyvibeCatalogoService from './services/bodyvibe-catalogo.service';
 postgresService
   .runMigrations()
   .then(() => usuariosService.seedBootstrapAdmin())
+  // Catálogo de empresas cliente. Vive en la base COMPARTIDA, no en la propia,
+  // así que no puede ir dentro de runMigrations(). Si falla —esa base puede
+  // estar caída sin que ésta lo esté— el resto de la plataforma sigue igual y
+  // el campo Empresa simplemente no ofrece opciones.
+  .then(() =>
+    empresasService
+      .asegurarEsquema()
+      .catch((e) => console.error('⚠️ [empresas] no se pudo asegurar el catálogo:', e?.message ?? e))
+  )
   // Cerrojo 1 de BodyVibeTech: crea/actualiza el rol de solo lectura y levanta
   // su pool aparte. Va DESPUÉS de las migraciones porque los GRANT del bloque 1
   // se otorgan sobre vistas que las migraciones crean. Si falla, BodyVibeTech

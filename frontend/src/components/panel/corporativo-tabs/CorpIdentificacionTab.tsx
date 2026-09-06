@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Contact } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
@@ -7,6 +7,7 @@ import { TextField, SelectField, PhoneField } from '../fields';
 import { edadEfectiva } from '../edad';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+import { useEmpresas } from '../hooks/useEmpresas';
 
 
 interface CorpIdentificacionTabProps {
@@ -42,6 +43,17 @@ function isFilled(v: unknown): boolean {
 
 export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpIdentificacionTabProps) {
   const [open, setOpen] = useState(false);
+  const { empresas, cargando: cargandoEmpresas } = useEmpresas();
+
+  // Si la historia ya trae una empresa que no está en el catálogo —porque la
+  // dieron de baja, o porque quedó de cuando el campo era texto libre— se
+  // agrega como opción. Sin esto el desplegable se vería vacío y el valor
+  // guardado sería invisible: presente en la base, imposible de ver o corregir.
+  const empresaOpts: ReadonlyArray<DropdownOption> = useMemo(() => {
+    const guardada = (data?.mcEmpresa ?? '').trim();
+    const nombres = guardada && !empresas.includes(guardada) ? [...empresas, guardada] : empresas;
+    return nombres.map((v) => ({ value: v, label: v }));
+  }, [empresas, data?.mcEmpresa]);
 
   const fechaNac = data?.fechaNacimiento as string | Date | null | undefined;
   // Si la ficha del afiliado ya trae la edad, se respeta; si no, se deriva de la
@@ -152,14 +164,21 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
           {/* El examen ocupacional se hace EN la empresa cliente, no en una
               sede de Bodytech, así que la empresa es el equivalente al "dónde"
               de las otras líneas. Va al lado de Ocupación porque las dos
-              describen el trabajo de la persona. */}
-          <TextField
+              describen el trabajo de la persona.
+
+              Lista y no texto libre: escrita a mano, la misma empresa termina
+              como "Bancolombia", "BANCOLOMBIA S.A." y "bancolombia sa", y
+              después no se puede contar por empresa. Se dan de alta desde el
+              panel de coordinador. */}
+          <SelectField
             historiaId={historiaId}
             field="mc_empresa"
             initialValue={data?.mcEmpresa}
             onSaved={onPatchLocal}
             label="Empresa"
-            placeholder="Ej. Bancolombia"
+            options={empresaOpts}
+            placeholder={cargandoEmpresas ? 'Cargando…' : 'Seleccionar…'}
+            searchable
           />
           <TextField
             historiaId={historiaId}

@@ -18,6 +18,7 @@ import {
   Fingerprint,
   Database,
   Users,
+  Building,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -29,6 +30,7 @@ import { TorniqueteView } from '../components/coordinador/TorniqueteView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { IdentidadesView } from '../components/coordinador/IdentidadesView';
+import { EmpresasView } from '../components/coordinador/EmpresasView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -39,6 +41,7 @@ type View =
   | 'torniquete'
   | 'ordenes'
   | 'identidades'
+  | 'empresas'
   | 'indicadores'
   | 'usuarios'
   | 'directorio';
@@ -65,6 +68,7 @@ export function CoordinadorPage() {
     indicadores: undefined,
     directorio: undefined,
     identidades: undefined,
+    empresas: undefined,
     usuarios: undefined,
   });
 
@@ -312,6 +316,12 @@ export function CoordinadorPage() {
               onClick={() => setView('identidades')}
             />
             <NavItem
+              icon={<Building className="w-[15px] h-[15px]" />}
+              label="Empresas"
+              active={view === 'empresas'}
+              onClick={() => setView('empresas')}
+            />
+            <NavItem
               icon={<Building2 className="w-[15px] h-[15px]" />}
               label="Sedes"
               disabled
@@ -391,6 +401,9 @@ export function CoordinadorPage() {
           )}
           {view === 'identidades' && (
             <IdentidadesView key={`ident-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'empresas' && (
+            <EmpresasView key={`emp-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

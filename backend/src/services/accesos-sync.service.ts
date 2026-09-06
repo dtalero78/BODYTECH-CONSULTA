@@ -185,6 +185,35 @@ class AccesosSyncService {
     };
   }
 
+  /**
+   * A qué aplicaciones pertenece un correo, según el espejo. En el orden en que
+   * conviene probarlas.
+   *
+   * Es la «tabla email → app» que el propio `auth.service` pedía en su
+   * comentario para dejar de encadenar. Devuelve vacío cuando no sabe —correo
+   * desconocido, o el espejo caído— y ese vacío es importante: quien llama debe
+   * caer en la cascada de siempre, nunca dejar a alguien afuera por lo que este
+   * espejo no alcanzó a reflejar.
+   *
+   * Sólo cuentas ACTIVAS: una desactivada no debe ni siquiera dirigir el
+   * intento, aunque de todos modos la aplicación destino la rechazaría.
+   */
+  async appsDe(email: string): Promise<string[]> {
+    const limpio = String(email ?? '').trim().toLowerCase();
+    if (!limpio) return [];
+    try {
+      const { rows } = await getSharedPool().query(
+        `SELECT app FROM accesos WHERE email = $1 AND activo`,
+        [limpio],
+      );
+      return rows.map((r) => String(r.app));
+    } catch (e) {
+      // El espejo es una ayuda, no un requisito para entrar.
+      console.error('⚠️ [accesos] appsDe falló, se usará la cascada:', e instanceof Error ? e.message : e);
+      return [];
+    }
+  }
+
   /** El detalle para la pantalla: una fila por persona, con sus accesos. */
   async listar(): Promise<
     Array<{

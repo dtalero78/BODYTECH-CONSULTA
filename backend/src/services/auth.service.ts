@@ -14,6 +14,7 @@
 import jwt from 'jsonwebtoken';
 import postgresService from './postgres.service';
 import usuariosService, { Rol } from './usuarios.service';
+import accesosSyncService from './accesos-sync.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod';
 const JWT_TTL = '24h';
@@ -240,7 +241,41 @@ class AuthService {
    * (una tabla `email → app` acá) en vez de seguir encadenando.
    */
   async loginHermanas(email: string, password: string): Promise<HermanaLoginResult> {
-    for (const hermana of APPS_HERMANAS) {
+    // Enrutamiento por correo — la «tabla email → app» que pedía el comentario
+    // de arriba. El espejo de accesos dice a qué aplicación pertenece este
+    // correo, y se prueba SOLO esa: la contraseña deja de viajar a sistemas que
+    // no son el de la persona, y se ahorran hasta 8 s por hermana descartada.
+    //
+    // El espejo es una AYUDA, nunca un requisito: si no conoce el correo, o si
+    // está caído, `appsDe` devuelve vacío y se prueban todas como siempre. Y si
+    // la aplicación que indicó rechaza, se cae igual a la cascada completa —
+    // un espejo desactualizado puede hacer perder tiempo, jamás dejar a alguien
+    // sin poder entrar.
+    let orden = APPS_HERMANAS;
+    try {
+      const apps = await accesosSyncService.appsDe(email);
+      if (apps.length > 0) {
+        const dirigidas = APPS_HERMANAS.filter((h) => apps.includes(h.programa));
+        if (dirigidas.length > 0) {
+          const acertó = await this.probarHermanas(dirigidas, email, password);
+          if (acertó.ok) return acertó;
+          // Sólo quedan por probar las que el espejo NO señaló.
+          orden = APPS_HERMANAS.filter((h) => !apps.includes(h.programa));
+        }
+      }
+    } catch {
+      // Cualquier problema del espejo deja el login exactamente como estaba.
+    }
+    return this.probarHermanas(orden, email, password);
+  }
+
+  /** Prueba una lista de hermanas en orden. Extraído para poder dirigir el intento. */
+  private async probarHermanas(
+    lista: ReadonlyArray<{ programa: string; url: string }>,
+    email: string,
+    password: string
+  ): Promise<HermanaLoginResult> {
+    for (const hermana of lista) {
       try {
         const resp = await fetch(`${hermana.url}/api/auth/login`, {
           method: 'POST',

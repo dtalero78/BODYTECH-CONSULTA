@@ -259,6 +259,17 @@ class UsuariosService {
   }
 
   /** Crea un usuario + sus sedes de forma atómica. `EMAIL_TAKEN` si el email ya existe. */
+  /**
+   * Refleja el cambio en la tabla global de usuarios, que es la que usa el
+   * login. Se llama después de cada escritura local; si no se llamara, las dos
+   * tablas empezarían a divergir y alguien se quedaría afuera con su contraseña
+   * nueva. Import perezoso para no crear un ciclo entre servicios.
+   */
+  private async reflejarEnGlobal(id: number): Promise<void> {
+    const { default: usuariosGlobal } = await import('./usuarios-global.service');
+    await usuariosGlobal.reflejarDesdeConsulta(id);
+  }
+
   async create(input: CreateUsuarioInput): Promise<{ ok: boolean; id?: number; error?: string }> {
     const client = await postgresService.getClient();
     if (!client) return { ok: false, error: 'DB_ERROR' };
@@ -282,6 +293,7 @@ class UsuariosService {
         await this.replaceSedes(client, id, input.sedes);
       }
       await client.query('COMMIT');
+      await this.reflejarEnGlobal(id);
       return { ok: true, id };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
@@ -334,6 +346,7 @@ class UsuariosService {
         await this.replaceSedes(client, id, fields.esGlobal ? [] : sedes);
       }
       await client.query('COMMIT');
+      await this.reflejarEnGlobal(id);
       return { ok: true };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
@@ -350,7 +363,11 @@ class UsuariosService {
       `UPDATE usuarios SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING id`,
       [passwordHash, id]
     );
-    return !!(r && r.length > 0);
+    const ok = !!(r && r.length > 0);
+    // Sin esto, alguien cambiaría su clave y no podría entrar: el login lee de
+    // la tabla global.
+    if (ok) await this.reflejarEnGlobal(id);
+    return ok;
   }
 
   /**

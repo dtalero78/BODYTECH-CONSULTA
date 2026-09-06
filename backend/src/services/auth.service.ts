@@ -16,6 +16,7 @@ import postgresService from './postgres.service';
 import usuariosService, { Rol } from './usuarios.service';
 import accesosSyncService from './accesos-sync.service';
 import bajasService from './bajas.service';
+import usuariosGlobalService from './usuarios-global.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod';
 const JWT_TTL = '24h';
@@ -195,6 +196,31 @@ class AuthService {
     password: string,
     remember = false
   ): Promise<PasswordLoginResult> {
+    // ── LA tabla de usuarios es la compartida ──────────────────────────────
+    // La lista local de esta aplicación queda congelada como red de seguridad:
+    // si la tabla global no conoce el correo —o no responde— se autentica con
+    // ella, exactamente como antes. `AUTH_GLOBAL_ENABLED=false` vuelve al
+    // comportamiento anterior sin desplegar código.
+    if (process.env.AUTH_GLOBAL_ENABLED !== 'false') {
+      const global = await usuariosGlobalService.porEmail(email).catch((e) => {
+        console.error('⚠️ [auth] tabla global no disponible, se usa la local:', e?.message ?? e);
+        return null;
+      });
+      if (global) {
+        const acceso = global.apps.find((a) => a.app === 'consulta' && a.activo);
+        // Sin acceso a ESTA aplicación no es un error: puede ser de ACC o de
+        // prepagadas, y el caller sigue con las hermanas.
+        if (acceso) {
+          const passOk = await usuariosService.verifyPassword(password, global.passwordHash);
+          if (!passOk) return { ok: false, error: 'INVALID_CREDENTIALS' };
+          if (await bajasService.estaDeBaja(email)) {
+            return { ok: false, error: 'INVALID_CREDENTIALS' };
+          }
+          return this.emitirSesionGlobal(global, acceso, remember);
+        }
+      }
+    }
+
     const row = await usuariosService.findActiveByEmail(email);
     // Mensaje uniforme INVALID_CREDENTIALS para no filtrar si el email existe.
     if (!row) {
@@ -238,6 +264,58 @@ class AuthService {
       expiresIn: remember ? SESSION_TTL_REMEMBER : SESSION_TTL,
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { kind: _kind, ...user } = payload;
+    return { ok: true, token, user };
+  }
+
+  /**
+   * Arma la sesión desde la tabla global. El token queda IDÉNTICO al de antes:
+   * mismo `userId` local (con el que se guardan las vistas del coordinador y la
+   * auditoría), mismas sedes, mismo rol. Cambiar el id habría dejado huérfano
+   * todo lo que cuelga de él.
+   *
+   * El código y la especialidad del profesional se resuelven acá y no se
+   * guardan en el alcance: son de la ficha del profesional, que vive en esta
+   * aplicación y puede cambiar sin que el usuario se toque.
+   */
+  private async emitirSesionGlobal(
+    persona: { email: string; nombre: string },
+    acceso: { rol: string; alcance: Record<string, unknown> },
+    remember: boolean
+  ): Promise<PasswordLoginResult> {
+    const alcance = acceso.alcance ?? {};
+    const esGlobal = Boolean(alcance.esGlobal);
+    const profesionalId = alcance.profesionalId as number | null | undefined;
+
+    let codigo: string | null = null;
+    let especialidad: string | null = null;
+    if (profesionalId) {
+      const p = await postgresService.query(
+        'SELECT codigo, especialidad FROM profesionales WHERE id = $1 LIMIT 1',
+        [profesionalId]
+      );
+      if (p && p.length > 0) {
+        codigo = p[0].codigo ?? null;
+        especialidad = p[0].especialidad ?? null;
+      }
+    }
+
+    const payload: SessionPayload = {
+      kind: 'session',
+      userId: Number(alcance.usuarioIdLocal ?? 0),
+      email: persona.email,
+      nombre: persona.nombre,
+      role: acceso.rol as SessionPayload['role'],
+      // `esGlobal` ve todas las sedes, igual que en el camino local.
+      sedes: esGlobal ? [] : ((alcance.sedes as string[]) ?? []),
+      esGlobal,
+      codigo,
+      especialidad,
+    };
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: remember ? SESSION_TTL_REMEMBER : SESSION_TTL,
+    });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { kind: _kind, ...user } = payload;
     return { ok: true, token, user };

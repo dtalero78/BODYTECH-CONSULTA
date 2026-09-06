@@ -201,17 +201,24 @@ class AuthService {
       return { ok: false, error: 'INVALID_CREDENTIALS' };
     }
 
+    const passOk = await usuariosService.verifyPassword(password, row.password_hash);
+    if (!passOk) {
+      return { ok: false, error: 'INVALID_CREDENTIALS' };
+    }
+
     // Baja organizacional: la persona ya no trabaja en Bodytech. Se decide UNA
     // vez, en el armario compartido, y vale para todas las aplicaciones — sin
     // tener que acordarse de desactivarla en cada una. Se responde el mismo
     // INVALID_CREDENTIALS que el resto: quién sigue en la organización no es
     // información que deba filtrarse en una pantalla de login.
+    //
+    // Va DESPUÉS de comprobar la contraseña, aunque comprobarla sea trabajo que
+    // se va a descartar. Puesto antes, una cuenta dada de baja respondería
+    // notoriamente más rápido que una con la clave equivocada, y esa diferencia
+    // de tiempo alcanza para deducir que el correo existe y está de baja. Es el
+    // mismo cuidado que ya tenía ACC comparando contra un hash de descarte
+    // cuando el correo no existe.
     if (await bajasService.estaDeBaja(email)) {
-      return { ok: false, error: 'INVALID_CREDENTIALS' };
-    }
-
-    const passOk = await usuariosService.verifyPassword(password, row.password_hash);
-    if (!passOk) {
       return { ok: false, error: 'INVALID_CREDENTIALS' };
     }
 

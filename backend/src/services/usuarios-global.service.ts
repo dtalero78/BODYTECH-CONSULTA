@@ -34,6 +34,7 @@
 
 import { getSharedPool } from './shared-db';
 import postgresService from './postgres.service';
+import bcrypt from 'bcryptjs';
 
 export type App = 'consulta' | 'acc' | 'prepagadas';
 
@@ -190,6 +191,95 @@ class UsuariosGlobalService {
         e instanceof Error ? e.message : e,
       );
     }
+  }
+
+  /**
+   * Crea una persona con su acceso a UNA aplicación.
+   *
+   * Para Consulta NO se usa esto: allá el usuario tiene que existir también en
+   * la tabla local, porque de su id cuelgan las vistas guardadas del
+   * coordinador y la auditoría. El panel llama a `usuariosService.create()`,
+   * que crea local y refleja. Acá se crean los de ACC y prepagadas, que no
+   * tienen esa dependencia.
+   */
+  async crear(input: {
+    email: string;
+    password: string;
+    nombre: string;
+    documento?: string | null;
+    app: App;
+    rol: string;
+    alcance?: Record<string, unknown>;
+  }): Promise<{ ok: boolean; id?: number; error?: string }> {
+    const email = String(input.email).trim().toLowerCase();
+    if (!email) return { ok: false, error: 'EMAIL_REQUERIDO' };
+    // Mismo cifrado que las tres aplicaciones: bcrypt, factor 10.
+    const hash = bcrypt.hashSync(input.password, 10);
+    const pool = getSharedPool();
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO personas (email, password_hash, nombre, documento)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email) DO UPDATE SET actualizada_en = NOW()
+         RETURNING id, (xmax = 0) AS creada`,
+        [email, hash, input.nombre.trim(), input.documento?.replace(/\D/g, '') || null],
+      );
+      const id = Number(rows[0].id);
+      // Si la persona ya existía, no se le pisa la contraseña: se le agrega el
+      // acceso a esta aplicación. Alguien que ya trabaja en Bodytech y ahora
+      // también atiende en otra app no debe tener que cambiar su clave.
+      await pool.query(
+        `INSERT INTO persona_apps (persona_id, app, rol, alcance, activo)
+         VALUES ($1, $2, $3, $4, TRUE)
+         ON CONFLICT (persona_id, app) DO UPDATE
+           SET rol = EXCLUDED.rol, alcance = EXCLUDED.alcance, activo = TRUE`,
+        [id, input.app, input.rol, JSON.stringify(input.alcance ?? {})],
+      );
+      return { ok: true, id };
+    } catch (e) {
+      console.error('❌ [usuarios-global.crear]', e instanceof Error ? e.message : e);
+      return { ok: false, error: 'DB_ERROR' };
+    }
+  }
+
+  /** Edita datos de la persona y/o su acceso a una aplicación. */
+  async editar(
+    id: number,
+    cambios: {
+      nombre?: string;
+      documento?: string | null;
+      activo?: boolean;
+      password?: string;
+      app?: App;
+      rol?: string;
+      accesoActivo?: boolean;
+    },
+  ): Promise<boolean> {
+    const pool = getSharedPool();
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (cambios.nombre !== undefined) { params.push(cambios.nombre.trim()); sets.push(`nombre = $${params.length}`); }
+    if (cambios.documento !== undefined) { params.push(cambios.documento?.replace(/\D/g, '') || null); sets.push(`documento = $${params.length}`); }
+    if (cambios.activo !== undefined) { params.push(cambios.activo); sets.push(`activo = $${params.length}`); }
+    if (cambios.password) { params.push(bcrypt.hashSync(cambios.password, 10)); sets.push(`password_hash = $${params.length}`); }
+    if (sets.length > 0) {
+      params.push(id);
+      await pool.query(
+        `UPDATE personas SET ${sets.join(', ')}, actualizada_en = NOW() WHERE id = $${params.length}`,
+        params,
+      );
+    }
+    if (cambios.app && (cambios.rol !== undefined || cambios.accesoActivo !== undefined)) {
+      await pool.query(
+        `INSERT INTO persona_apps (persona_id, app, rol, activo)
+         VALUES ($1, $2, COALESCE($3, 'admin'), COALESCE($4, TRUE))
+         ON CONFLICT (persona_id, app) DO UPDATE
+           SET rol = COALESCE(EXCLUDED.rol, persona_apps.rol),
+               activo = COALESCE($4, persona_apps.activo)`,
+        [id, cambios.app, cambios.rol ?? null, cambios.accesoActivo ?? null],
+      );
+    }
+    return true;
   }
 
   /** Todas las personas, para el panel de control. Sin hashes. */

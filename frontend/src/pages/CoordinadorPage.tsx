@@ -20,6 +20,7 @@ import {
   Users,
   Building,
   KeyRound,
+  UserPlus,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -33,6 +34,7 @@ import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { IdentidadesView } from '../components/coordinador/IdentidadesView';
 import { EmpresasView } from '../components/coordinador/EmpresasView';
 import { AccesosView } from '../components/coordinador/AccesosView';
+import { CreacionUsuariosView } from '../components/coordinador/CreacionUsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -45,6 +47,7 @@ type View =
   | 'identidades'
   | 'empresas'
   | 'accesos'
+  | 'creacion-usuarios'
   | 'indicadores'
   | 'usuarios'
   | 'directorio';
@@ -73,6 +76,7 @@ export function CoordinadorPage() {
     identidades: undefined,
     empresas: undefined,
     accesos: undefined,
+    'creacion-usuarios': undefined,
     usuarios: undefined,
   });
 
@@ -285,6 +289,14 @@ export function CoordinadorPage() {
           <div className="space-y-0.5">
             {authService.getUser()?.role === 'admin' && (
               <NavItem
+                icon={<UserPlus className="w-[15px] h-[15px]" />}
+                label="Creación de usuarios"
+                active={view === 'creacion-usuarios'}
+                onClick={() => setView('creacion-usuarios')}
+              />
+            )}
+            {authService.getUser()?.role === 'admin' && (
+              <NavItem
                 icon={<KeyRound className="w-[15px] h-[15px]" />}
                 label="Accesos"
                 active={view === 'accesos'}
@@ -419,6 +431,9 @@ export function CoordinadorPage() {
           )}
           {view === 'accesos' && (
             <AccesosView key={`acc-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'creacion-usuarios' && (
+            <CreacionUsuariosView key={`cu-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

@@ -25,6 +25,8 @@ import empresasRoutes from './routes/empresas.routes';
 import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
 import accesosRoutes from './routes/accesos.routes';
+import usuariosGlobalRoutes from './routes/usuarios-global.routes';
+import usuariosGlobalService from './services/usuarios-global.service';
 import accesosSyncService from './services/accesos-sync.service';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
@@ -211,6 +213,9 @@ app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresas
 // login). No autentica: sólo muestra. Sólo admin — es el mapa de acceso de
 // toda la organización.
 app.use('/api/accesos', requireRole('admin'), accesosRoutes);
+// Creación de Usuarios: el panel único de las tres aplicaciones. Sólo admin —
+// crea cuentas con el rol que se le indique, en cualquiera de las tres.
+app.use('/api/usuarios-global', requireRole('admin'), usuariosGlobalRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
@@ -296,6 +301,13 @@ postgresService
   // así que no puede ir dentro de runMigrations(). Si falla —esa base puede
   // estar caída sin que ésta lo esté— el resto de la plataforma sigue igual y
   // el campo Empresa simplemente no ofrece opciones.
+  // Tabla global de usuarios: la que usa el login. Va antes que el resto del
+  // armario porque sin ella nadie entra.
+  .then(() =>
+    usuariosGlobalService
+      .asegurarEsquema()
+      .catch((e) => console.error('⚠️ [usuarios-global] no se pudo asegurar el esquema:', e?.message ?? e))
+  )
   .then(() =>
     empresasService
       .asegurarEsquema()

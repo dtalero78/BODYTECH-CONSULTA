@@ -15,7 +15,8 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "transcribe:vocabulario": "node scripts/transcribe-vocabulario.js",
-    "directorio:subir": "ts-node scripts/subir-fichas-al-directorio.ts"
+    "directorio:subir": "ts-node scripts/subir-fichas-al-directorio.ts",
+    "carpeta:llenar": "ts-node scripts/llenar-carpetas.ts"
   },
   "keywords": [
     "twilio",

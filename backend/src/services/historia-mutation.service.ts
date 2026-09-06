@@ -4,6 +4,7 @@ import { historiaClinicaRepository } from '../repositories';
 import historiaQueryService from './historia-query.service';
 import trepsiWebhookService from './trepsi-webhook.service';
 import mybodytechRipsService from './mybodytech-rips.service';
+import carpetaService from './carpeta.service';
 import {
   EDITABLE_FIELDS,
   EDITABLE_FIELD_TYPE_MAP,
@@ -244,6 +245,15 @@ class HistoriaMutationService {
         .catch((e) => {
           console.error(`⚠️  [mybodytech-RIPS] Error: ${e?.message ?? e}`);
         });
+
+      // PASO 4: dejar la entrada en LA carpeta del paciente, la del armario.
+      // Es lo que le permite al siguiente profesional —de esta aplicación o de
+      // otra— leer lo que ya se le hizo a esta persona en vez de empezar de
+      // cero. Fire-and-forget como los dos anteriores: la consulta ya quedó
+      // guardada, y si esto falla se pone al día en el siguiente guardado.
+      carpetaService
+        .reflejarDesdeConsulta(payload.historiaId)
+        .catch((e) => console.error(`⚠️  [carpeta] ${e?.message ?? e}`));
 
       return { success: true };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

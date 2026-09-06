@@ -247,6 +247,8 @@ export interface MedicalHistoryFull {
 
   // ---- Médico Corporativo (examen ocupacional presencial, sin videollamada) ----
   mcDireccion?: string;
+  /** Empresa cliente donde se hizo el examen ocupacional. */
+  mcEmpresa?: string;
   mcEnfermedadActual?: string;
   mcSintDolorToracico?: boolean;
   mcSintPalpitaciones?: boolean;

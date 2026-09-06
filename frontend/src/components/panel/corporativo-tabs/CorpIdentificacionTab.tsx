@@ -149,6 +149,18 @@ export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpId
             value={edadCalc ?? '—'}
             unit={edadCalc !== null ? 'años' : 'requiere fecha de nacimiento'}
           />
+          {/* El examen ocupacional se hace EN la empresa cliente, no en una
+              sede de Bodytech, así que la empresa es el equivalente al "dónde"
+              de las otras líneas. Va al lado de Ocupación porque las dos
+              describen el trabajo de la persona. */}
+          <TextField
+            historiaId={historiaId}
+            field="mc_empresa"
+            initialValue={data?.mcEmpresa}
+            onSaved={onPatchLocal}
+            label="Empresa"
+            placeholder="Ej. Bancolombia"
+          />
           <TextField
             historiaId={historiaId}
             field="ocupacion"

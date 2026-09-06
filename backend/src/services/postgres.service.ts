@@ -388,6 +388,21 @@ class PostgresService {
           -- Identificación
           ADD COLUMN IF NOT EXISTS "mc_direccion" VARCHAR(200),
 
+          -- Empresa cliente donde se hizo el examen ocupacional.
+          --
+          -- Columna propia y NO las columnas empresa / codEmpresa que ya
+          -- existen: esas están ocupadas por la MARCA (3.405 filas dicen
+          -- 'BODYTECH-COLOMBIA' o 'ATHLETIC', que Trepsi manda para distinguir
+          -- Bodytech de Athletic). Meter acá el cliente mezclaría dos
+          -- significados en la misma columna, que es exactamente el enredo que
+          -- tenía la columna origen entre UMV y Corporativo.
+          --
+          -- Por ahora es texto libre. El catálogo de empresas —compartido con
+          -- ACC, que ya las maneja como texto suelto (Bancolombia, Claro,
+          -- Ecopetrol…)— está pendiente; cuando exista, esta columna es lo que
+          -- se reconcilia contra él.
+          ADD COLUMN IF NOT EXISTS "mc_empresa" VARCHAR(200),
+
           -- Enfermedad actual
           ADD COLUMN IF NOT EXISTS "mc_enfermedad_actual" TEXT,
 
@@ -694,6 +709,21 @@ class PostgresService {
           ('bt-salitre',   'Bodytech Salitre',        'Bogotá'),
           ('bt-medellin',  'Bodytech Medellín',       'Medellín'),
           ('bt-cali',      'Bodytech Cali',           'Cali')
+        ON CONFLICT (sede_id) DO NOTHING
+      `);
+      // Médico Corporativo. No es un lugar: el examen ocupacional se hace en la
+      // EMPRESA CLIENTE, no en un gimnasio de Bodytech. Es un cajón de
+      // aislamiento — que es lo que `sede_id` realmente hace en esta app (ver
+      // 'trepsi' y 'mybodytech', que tampoco son lugares) — y sirve para acotar
+      // por `usuario_sedes` quién ve las historias de esta línea.
+      //
+      // La empresa donde se hizo el examen va en `mc_empresa`, más abajo.
+      // `ciudad` es NOT NULL y esto no tiene una: los exámenes se hacen donde
+      // esté la empresa cliente, en todo el país. 'Nacional' lo dice sin inventar
+      // una ciudad falsa.
+      await this.query(`
+        INSERT INTO sedes (sede_id, nombre, ciudad) VALUES
+          ('corporativo', 'Médico Corporativo', 'Nacional')
         ON CONFLICT (sede_id) DO NOTHING
       `);
 

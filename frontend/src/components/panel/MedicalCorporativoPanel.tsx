@@ -54,6 +54,7 @@ function camposPorSeccion(
     c1: [
       { label: 'Fecha de nacimiento', value: d?.fechaNacimiento },
       { label: 'Género', value: d?.generoBiologico },
+      { label: 'Empresa', value: d?.mcEmpresa },
       { label: 'Ocupación', value: d?.ocupacion },
       { label: 'EPS', value: d?.eps },
       { label: 'Teléfono', value: d?.telefonoResidencia },

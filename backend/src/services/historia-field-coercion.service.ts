@@ -214,6 +214,7 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   // corporativo (Identificación · Correo).
   { field: 'email', type: 'string' },
   { field: 'mc_direccion', type: 'string' },
+  { field: 'mc_empresa', type: 'string' },
   { field: 'mc_enfermedad_actual', type: 'string' },
   // Síntomas en ejercicio
   { field: 'mc_sint_dolor_toracico', type: 'boolean' },

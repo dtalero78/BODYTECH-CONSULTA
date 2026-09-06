@@ -72,6 +72,19 @@ const DESTINO: Record<string, string> = {
 const ROLES_CLINICOS = ['medico', 'coach'];
 
 /**
+ * A qué programa pertenece la persona. Mismo vocabulario que el origen de las
+ * citas: si la persona es de Trepsi y la cita es de Trepsi, se llaman igual.
+ * Es una lista porque alguien puede cubrir dos.
+ */
+const PROGRAMAS: { v: string; t: string; cls: string }[] = [
+  { v: 'trepsi', t: 'Trepsi', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+  { v: 'umv', t: 'UMV', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { v: 'corporativo', t: 'Corporativo', cls: 'bg-teal-50 text-teal-700 border-teal-200' },
+  { v: 'mybodytech', t: 'MyBodytech', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+  { v: 'nativa', t: 'Nativa', cls: 'bg-zinc-100 text-zinc-600 border-zinc-200' },
+];
+
+/**
  * Lo que un coordinador puede repartir. El servidor aplica el mismo límite —
  * esto es para que la interfaz no ofrezca lo que va a rechazar.
  */
@@ -97,6 +110,7 @@ interface Hoja {
   esGlobal: boolean;
   sedes: string[];
   profesionalId: number | null;
+  programas: string[];
 }
 
 /** Contraseña temporal legible: sin caracteres que se confundan al dictarla. */
@@ -130,6 +144,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroApp, setFiltroApp] = useState<'todas' | AppDestino>('todas');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
+  const [filtroPrograma, setFiltroPrograma] = useState<string>('todos');
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -178,6 +193,14 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
     [sedes],
   );
 
+  /** Los programas de la persona, guardados en el alcance de su acceso a Consulta. */
+  const programasDe = useCallback(
+    (p: Persona) =>
+      ((p.apps.find((a) => a.app === 'consulta')?.alcance as { programas?: string[] })?.programas ??
+        []) as string[],
+    [],
+  );
+
   /** ¿Su rol en Consulta exige ficha? Si la falta, entra y no puede agendar. */
   const esClinico = useCallback(
     (p: Persona) =>
@@ -201,9 +224,10 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       if (filtroEstado === 'inhabilitados' && p.activo) return false;
       if (filtroEstado === 'baja' && !p.baja) return false;
       if (filtroEstado === 'inconsistentes' && !esInconsistente(p)) return false;
+      if (filtroPrograma !== 'todos' && !programasDe(p).includes(filtroPrograma)) return false;
       return true;
     });
-  }, [personas, busqueda, filtroApp, filtroEstado, esInconsistente]);
+  }, [personas, busqueda, filtroApp, filtroEstado, filtroPrograma, esInconsistente, programasDe]);
 
   const conteoInconsistentes = useMemo(
     () => personas.filter(esInconsistente).length,
@@ -223,6 +247,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       esGlobal: false,
       sedes: [],
       profesionalId: null,
+      programas: [],
     });
   }
 
@@ -233,6 +258,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       esGlobal?: boolean;
       profesionalId?: number | null;
       celular?: string | null;
+      programas?: string[];
     };
     setHoja({
       id: p.id,
@@ -245,6 +271,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       esGlobal: Boolean(alc.esGlobal),
       sedes: alc.sedes ?? [],
       profesionalId: alc.profesionalId ?? null,
+      programas: alc.programas ?? [],
     });
   }
 
@@ -284,6 +311,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
             sedes: hoja.esGlobal ? [] : hoja.sedes,
             esGlobal: hoja.esGlobal,
             profesionalId: pideProfesional ? hoja.profesionalId : null,
+            programas: hoja.programas,
           }
         : {};
 
@@ -504,6 +532,11 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
               : []),
           ]}
         />
+        <Segmento
+          valor={filtroPrograma}
+          onChange={setFiltroPrograma}
+          opciones={[{ v: 'todos', t: 'Todo programa' }, ...PROGRAMAS.map((p) => ({ v: p.v, t: p.t }))]}
+        />
         <span className="text-[11.5px] text-zinc-400 ml-auto" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {visibles.length} de {personas.length}
         </span>
@@ -572,6 +605,21 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                     {p.baja && (
                       <div className="text-[10.5px] text-red-700 mt-0.5">
                         de baja{p.baja.motivo ? ` · ${p.baja.motivo}` : ''}
+                      </div>
+                    )}
+                    {programasDe(p).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {programasDe(p).map((v) => {
+                          const meta = PROGRAMAS.find((x) => x.v === v);
+                          return (
+                            <span
+                              key={v}
+                              className={`px-1.5 py-0.5 rounded border text-[10px] ${meta?.cls ?? 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}
+                            >
+                              {meta?.t ?? v}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </td>
@@ -900,6 +948,35 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                     </p>
                   </Campo>
                 )}
+                <Campo etiqueta="Programa">
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROGRAMAS.map((pr) => {
+                      const puesto = hoja.programas.includes(pr.v);
+                      return (
+                        <button
+                          key={pr.v}
+                          type="button"
+                          onClick={() =>
+                            setHoja({
+                              ...hoja,
+                              programas: puesto
+                                ? hoja.programas.filter((x) => x !== pr.v)
+                                : [...hoja.programas, pr.v],
+                            })
+                          }
+                          className={`px-2 py-1 rounded border text-[11.5px] ${
+                            puesto ? pr.cls : 'bg-white text-zinc-400 border-zinc-200'
+                          }`}
+                        >
+                          {pr.t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    A qué línea pertenece. Puede ser más de una.
+                  </p>
+                </Campo>
                 {esAdmin && (
                   <label className="flex items-center gap-2 text-[12.5px] text-zinc-700">
                     <input

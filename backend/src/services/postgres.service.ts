@@ -1062,6 +1062,19 @@ class PostgresService {
           ON usuario_sedes (sede_id)
       `);
 
+      // A qué PROGRAMA pertenece la persona: Trepsi, UMV, Médico Corporativo o
+      // la consulta nativa. Hasta ahora sólo lo decía la sede de su ficha —y
+      // eso deja fuera a quien no atiende: la coordinadora de Trepsi no tiene
+      // ficha, y no había forma de saber que es de Trepsi.
+      //
+      // Es una lista porque alguien puede cubrir dos programas. Mismo
+      // vocabulario que el `origen` de las citas, a propósito: si la persona es
+      // de Trepsi y la cita es de Trepsi, tienen que llamarse igual.
+      await this.query(`
+        ALTER TABLE usuarios
+          ADD COLUMN IF NOT EXISTS programas TEXT[] NOT NULL DEFAULT '{}'
+      `);
+
       // ===== Torniquete de jornada laboral (control de entrada/salida) =====
       // Registro persistente de cuándo un profesional (médico/coach) está activo
       // en la plataforma durante su jornada. Cada fila es UNA sesión de jornada

@@ -85,6 +85,13 @@ const ROLES_POR_APP: Record<string, readonly string[]> = {
   prepagadas: ['admin', 'asesor', 'profesional'],
 };
 
+/**
+ * A qué programa pertenece la persona. Mismo vocabulario que el `origen` de las
+ * citas a propósito: si la persona es de Trepsi y la cita es de Trepsi, tienen
+ * que llamarse igual o nadie va a poder cruzarlos.
+ */
+const PROGRAMAS = ['trepsi', 'umv', 'corporativo', 'mybodytech', 'nativa'] as const;
+
 const crearSchema = z
   .object({
     email: z.string().email(),
@@ -103,6 +110,7 @@ const crearSchema = z
     // crear una cuenta que parece funcionar y no funciona.
     profesionalId: z.number().int().nullable().optional(),
     celular: z.string().trim().max(30).nullable().optional(),
+    programas: z.array(z.enum(PROGRAMAS)).optional(),
   })
   .refine((v) => ROLES_POR_APP[v.app]?.includes(v.rol), {
     message: 'Ese rol no existe en esa aplicación.',
@@ -254,6 +262,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         sedes: d.sedes ?? [],
         profesionalId: d.profesionalId ?? null,
         celular: d.celular ?? null,
+        programas: d.programas ?? [],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       if (!r.ok) {
@@ -303,6 +312,7 @@ const editarSchema = z.object({
   esGlobal: z.boolean().optional(),
   profesionalId: z.number().int().nullable().optional(),
   celular: z.string().trim().max(30).nullable().optional(),
+  programas: z.array(z.enum(PROGRAMAS)).optional(),
 });
 
 /** El id LOCAL del usuario de Consulta, guardado en su alcance al migrar. */
@@ -346,7 +356,8 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       d.sedes !== undefined ||
       d.esGlobal !== undefined ||
       d.profesionalId !== undefined ||
-      d.celular !== undefined;
+      d.celular !== undefined ||
+      d.programas !== undefined;
     if (tocaConsulta) {
       const idLocal = await idLocalDeConsulta(id);
       if (!idLocal) {
@@ -368,6 +379,7 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
           esGlobal: d.esGlobal,
           profesionalId: d.profesionalId,
           celular: d.celular,
+          programas: d.programas,
         },
         d.sedes,
       );

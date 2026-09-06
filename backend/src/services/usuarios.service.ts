@@ -90,6 +90,8 @@ export interface CreateUsuarioInput {
   profesionalId?: number | null;
   celular?: string | null;
   sedes: string[];
+  /** A qué programa(s) pertenece: trepsi, umv, corporativo, nativa. */
+  programas?: string[];
 }
 
 class UsuariosService {
@@ -276,8 +278,8 @@ class UsuariosService {
     try {
       await client.query('BEGIN');
       const ins = await client.query(
-        `INSERT INTO usuarios (email, password_hash, nombre, rol, profesional_id, es_global, celular, activo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE) RETURNING id`,
+        `INSERT INTO usuarios (email, password_hash, nombre, rol, profesional_id, es_global, celular, programas, activo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE) RETURNING id`,
         [
           this.normalizeEmail(input.email),
           input.passwordHash,
@@ -286,6 +288,7 @@ class UsuariosService {
           input.profesionalId ?? null,
           input.esGlobal,
           input.celular ?? null,
+          input.programas ?? [],
         ]
       );
       const id = ins.rows[0].id as number;
@@ -316,6 +319,7 @@ class UsuariosService {
       esGlobal?: boolean;
       profesionalId?: number | null;
       celular?: string | null;
+      programas?: string[];
     },
     sedes?: string[]
   ): Promise<{ ok: boolean; error?: string }> {
@@ -332,6 +336,7 @@ class UsuariosService {
       if (fields.esGlobal !== undefined) { sets.push(`es_global = $${i++}`); params.push(fields.esGlobal); }
       if (fields.profesionalId !== undefined) { sets.push(`profesional_id = $${i++}`); params.push(fields.profesionalId); }
       if (fields.celular !== undefined) { sets.push(`celular = $${i++}`); params.push(fields.celular); }
+      if (fields.programas !== undefined) { sets.push(`programas = $${i++}`); params.push(fields.programas); }
       sets.push(`updated_at = NOW()`);
       params.push(id);
       const r = await client.query(

@@ -149,7 +149,7 @@ class UsuariosGlobalService {
     try {
       const filas = await postgresService.query(
         `SELECT u.id, lower(u.email) AS email, u.password_hash, u.nombre, u.rol,
-                u.es_global, u.profesional_id, u.activo, u.celular,
+                u.es_global, u.profesional_id, u.activo, u.celular, u.programas,
                 COALESCE(array_agg(us.sede_id) FILTER (WHERE us.sede_id IS NOT NULL), '{}') AS sedes
            FROM usuarios u LEFT JOIN usuario_sedes us ON us.usuario_id = u.id
           WHERE u.id = $1
@@ -186,6 +186,7 @@ class UsuariosGlobalService {
             esGlobal: Boolean(u.es_global),
             profesionalId: u.profesional_id ?? null,
             celular: u.celular ?? null,
+            programas: u.programas ?? [],
             usuarioIdLocal: Number(u.id),
           }),
           Boolean(u.activo),

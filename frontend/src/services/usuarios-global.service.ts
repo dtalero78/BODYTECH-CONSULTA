@@ -57,6 +57,7 @@ export interface CrearPersona {
   sedes?: string[];
   esGlobal?: boolean;
   profesionalId?: number | null;
+  programas?: string[];
 }
 
 export interface EditarPersona {
@@ -72,6 +73,7 @@ export interface EditarPersona {
   esGlobal?: boolean;
   profesionalId?: number | null;
   celular?: string | null;
+  programas?: string[];
 }
 
 function authHeader(): Record<string, string> {

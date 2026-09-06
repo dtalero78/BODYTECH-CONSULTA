@@ -24,6 +24,8 @@ import padronRoutes from './routes/padron.routes';
 import empresasRoutes from './routes/empresas.routes';
 import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
+import accesosRoutes from './routes/accesos.routes';
+import accesosSyncService from './services/accesos-sync.service';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
@@ -205,6 +207,10 @@ app.use('/api/padron', requireRole('admin', 'coordinador'), padronRoutes);
 // Catálogo de empresas cliente. El médico corporativo LEE (para su formulario)
 // y el coordinador da de alta; por eso el rol se exige por ruta, no acá.
 app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresasRoutes);
+// Mapa de accesos entre las tres aplicaciones hermanas (fase 1 de unificar el
+// login). No autentica: sólo muestra. Sólo admin — es el mapa de acceso de
+// toda la organización.
+app.use('/api/accesos', requireRole('admin'), accesosRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
@@ -319,6 +325,28 @@ postgresService
         .catch((e) => console.error('⚠️ [padrón] sincronización fallida:', e?.message ?? e));
     const minutos = Math.max(5, parseInt(process.env.PADRON_SYNC_MINUTOS || '15', 10));
     setInterval(correr, minutos * 60 * 1000);
+    return correr();
+  })
+  // Espejo de accesos entre aplicaciones. Sólo LEE las tablas `usuarios` de las
+  // tres bases y no guarda contraseñas; no toca el inicio de sesión, que sigue
+  // funcionando exactamente igual. Cada hora alcanza: las altas de usuarios son
+  // raras comparadas con las citas.
+  .then(() => {
+    if (process.env.ACCESOS_SYNC_ENABLED === 'false') return;
+    const correr = () =>
+      accesosSyncService
+        .sincronizar()
+        .then((r) =>
+          console.log(
+            `✅ [accesos] ${r.reflejados} reflejados (${Object.entries(r.porApp)
+              .map(([a, n]) => `${a} ${n}`)
+              .join(', ')})` +
+              `${r.inconsistentes > 0 ? ` · ⚠️ ${r.inconsistentes} con acceso inconsistente entre apps` : ''}` +
+              `${r.errores.length > 0 ? ` · errores: ${r.errores.join('; ')}` : ''}`
+          )
+        )
+        .catch((e) => console.error('⚠️ [accesos] espejo fallido:', e?.message ?? e));
+    setInterval(correr, 60 * 60 * 1000);
     return correr();
   })
   // Cerrojo 1 de BodyVibeTech: crea/actualiza el rol de solo lectura y levanta

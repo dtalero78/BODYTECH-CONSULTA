@@ -19,6 +19,7 @@ import {
   Database,
   Users,
   Building,
+  KeyRound,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -31,6 +32,7 @@ import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { IdentidadesView } from '../components/coordinador/IdentidadesView';
 import { EmpresasView } from '../components/coordinador/EmpresasView';
+import { AccesosView } from '../components/coordinador/AccesosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -42,6 +44,7 @@ type View =
   | 'ordenes'
   | 'identidades'
   | 'empresas'
+  | 'accesos'
   | 'indicadores'
   | 'usuarios'
   | 'directorio';
@@ -69,6 +72,7 @@ export function CoordinadorPage() {
     directorio: undefined,
     identidades: undefined,
     empresas: undefined,
+    accesos: undefined,
     usuarios: undefined,
   });
 
@@ -279,6 +283,14 @@ export function CoordinadorPage() {
 
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
           <div className="space-y-0.5">
+            {authService.getUser()?.role === 'admin' && (
+              <NavItem
+                icon={<KeyRound className="w-[15px] h-[15px]" />}
+                label="Accesos"
+                active={view === 'accesos'}
+                onClick={() => setView('accesos')}
+              />
+            )}
             <NavItem
               icon={<UserCog className="w-[15px] h-[15px]" />}
               label="Usuarios"
@@ -404,6 +416,9 @@ export function CoordinadorPage() {
           )}
           {view === 'empresas' && (
             <EmpresasView key={`emp-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'accesos' && (
+            <AccesosView key={`acc-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

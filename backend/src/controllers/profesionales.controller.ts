@@ -11,6 +11,15 @@ import profesionalesService from '../services/profesionales.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
+import usuariosService from '../services/usuarios.service';
+import { asegurarPersona } from '../services/directorio-escritura.service';
+import { revisarAlta, Actor } from '../helpers/usuarios-permisos.helper';
+
+/** El actor, en los términos que entiende el helper de permisos. */
+function actorDe(req: Request): Actor {
+  const s = getSession(req);
+  return { role: s?.role ?? '', email: s?.email ?? '', sedes: s?.sedes ?? [] };
+}
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -25,11 +34,10 @@ const profesionalCreateSchema = z.object({
   // Cédula, para cruzar con el directorio compartido. Sólo dígitos: es lo que
   // usa el directorio como llave, y aceptar puntos o guiones haría que la misma
   // persona no cruzara según cómo la escribieron.
-  documento: z
-    .string()
-    .regex(/^[0-9]{5,15}$/, 'El documento debe ser solo dígitos.')
-    .nullable()
-    .optional(),
+  // Obligatoria: es la llave del directorio compartido, y toda persona de la
+  // plataforma existe primero allá. Sin cédula no hay a quién enganchar la
+  // ficha ni la cuenta.
+  documento: z.string().regex(/^[0-9]{5,15}$/, 'El documento debe ser solo dígitos.'),
   primerNombre: z.string().min(1).max(100),
   segundoNombre: z.string().max(100).nullable().optional(),
   primerApellido: z.string().min(1).max(100),
@@ -48,6 +56,18 @@ const profesionalCreateSchema = z.object({
   foto: z.string().nullable().optional(),
   email: z.string().email().nullable().optional(),
   celular: z.string().nullable().optional(),
+  // La cuenta, en el mismo paso. Opcional sólo para el caso de "todavía no
+  // tengo su correo": sin ella la persona queda en la agenda y no puede entrar,
+  // y la lista de profesionales lo muestra como tal.
+  cuenta: z
+    .object({
+      email: z.string().email('Correo inválido.'),
+      password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
+      rol: z.enum(['medico', 'coach', 'auxiliar', 'coordinador', 'admin', 'torre']),
+      sedes: z.array(z.string()).optional(),
+      esGlobal: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const profesionalUpdateSchema = profesionalCreateSchema.partial().refine(
@@ -215,12 +235,90 @@ class ProfesionalesController {
         });
         return;
       }
-      const result = await profesionalesService.create(parsed.data, sedeId);
-      if (!result.ok) {
+      const d = parsed.data;
+
+      // Si va a crear cuenta, los límites de privilegio son los MISMOS que en el
+      // panel de usuarios: un coordinador no reparte roles ni sedes ajenas por
+      // esta otra puerta.
+      if (d.cuenta) {
+        const fallo = revisarAlta(actorDe(req), {
+          app: 'consulta',
+          rol: d.cuenta.rol,
+          esGlobal: d.cuenta.esGlobal,
+          sedes: d.cuenta.sedes ?? [sedeId],
+          // El vínculo con la ficha existe por construcción: se crea acá mismo.
+          profesionalId: 0,
+        });
+        if (fallo) {
+          res.status(fallo.code === 'FORBIDDEN' ? 403 : 400).json({
+            success: false,
+            error: { code: fallo.code, message: fallo.message },
+          });
+          return;
+        }
+      }
+
+      // PASO 1 — el directorio. Toda persona existe primero allá; si esto falla,
+      // no se crea nada, para no dejar una ficha huérfana de su persona.
+      const enDirectorio = await asegurarPersona({
+        documento: d.documento,
+        nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
+        rol: d.rol === 'coach' ? 'coach' : 'medico',
+        cargo: d.especialidad ?? null,
+        ambito: sedeId === 'corporativo' ? 'corporativo' : 'virtual',
+      });
+      if (!enDirectorio.ok) {
+        res.status(503).json({
+          success: false,
+          error: {
+            code: enDirectorio.error,
+            message: 'No se pudo registrar a la persona en el directorio. No se creó nada.',
+          },
+        });
+        return;
+      }
+
+      // PASO 2 — la ficha de agenda de Consulta.
+      const result = await profesionalesService.create(d, sedeId);
+      if (!result.ok || !result.data) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
       }
-      res.status(result.status).json({ success: true, data: result.data });
+      const ficha = result.data;
+
+      // PASO 3 — la cuenta, enganchada a la ficha recién creada. Si falla, la
+      // ficha queda: se le crea la cuenta después desde el panel de usuarios, y
+      // el mensaje lo dice en vez de fingir que todo salió bien.
+      let cuenta: { creada: boolean; error?: string } = { creada: false };
+      if (d.cuenta) {
+        const r = await usuariosService.create({
+          email: d.cuenta.email,
+          passwordHash: await usuariosService.hashPassword(d.cuenta.password),
+          nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
+          rol: d.cuenta.rol as never,
+          esGlobal: d.cuenta.esGlobal ?? false,
+          sedes: d.cuenta.esGlobal ? [] : (d.cuenta.sedes ?? [sedeId]),
+          profesionalId: ficha.id,
+          celular: d.celular ?? null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        cuenta = r.ok
+          ? { creada: true }
+          : {
+              creada: false,
+              error:
+                r.error === 'EMAIL_TAKEN'
+                  ? 'Ya existe una cuenta con ese correo. La ficha sí quedó creada.'
+                  : 'No se pudo crear la cuenta. La ficha sí quedó creada.',
+            };
+      }
+
+      res.status(result.status).json({
+        success: true,
+        data: ficha,
+        directorio: { yaEstaba: !enDirectorio.creada },
+        cuenta,
+      });
     } catch (err) {
       next(err);
     }

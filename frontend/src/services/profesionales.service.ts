@@ -62,6 +62,27 @@ export interface ProfesionalInput {
   foto?: string | null;
   email?: string | null;
   celular?: string | null;
+  /**
+   * La cuenta con la que la persona va a entrar, en el mismo paso. Si no se
+   * manda, queda con ficha y sin cuenta: aparece en la agenda y no puede entrar.
+   */
+  cuenta?: {
+    email: string;
+    password: string;
+    rol: string;
+    sedes?: string[];
+    esGlobal?: boolean;
+  };
+}
+
+/** Lo que devuelve el alta: además de la ficha, qué pasó con las otras dos partes. */
+export interface AltaProfesional {
+  profesional: Profesional;
+  /** `true` si la persona ya estaba en el directorio (lo normal si viene de RRHH). */
+  yaEstabaEnDirectorio: boolean;
+  cuentaCreada: boolean;
+  /** Por qué no se creó la cuenta, si se pidió y falló. La ficha sí quedó. */
+  errorCuenta?: string;
 }
 
 export interface Rango {
@@ -117,11 +138,16 @@ class ProfesionalesService {
     return res.data?.data;
   }
 
-  async create(input: ProfesionalInput): Promise<Profesional> {
+  async create(input: ProfesionalInput): Promise<AltaProfesional> {
     const res = await axios.post(`${API_BASE_URL}/api/profesionales`, input, {
       headers: authHeaders(),
     });
-    return res.data?.data;
+    return {
+      profesional: res.data?.data,
+      yaEstabaEnDirectorio: Boolean(res.data?.directorio?.yaEstaba),
+      cuentaCreada: Boolean(res.data?.cuenta?.creada),
+      errorCuenta: res.data?.cuenta?.error,
+    };
   }
 
   async update(id: number, input: Partial<ProfesionalInput>): Promise<Profesional> {

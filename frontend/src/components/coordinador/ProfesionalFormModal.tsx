@@ -84,6 +84,9 @@ const EMPTY: ProfesionalInput = {
 
 export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onError }: Props) {
   const [form, setForm] = useState<ProfesionalInput>(EMPTY);
+  // La cuenta con la que va a entrar. Se pide en el mismo paso: una persona se
+  // crea una vez, no en dos pantallas.
+  const [cuenta, setCuenta] = useState({ email: '', password: '', rol: 'coach' });
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -112,7 +115,16 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     } else {
       setForm(EMPTY);
     }
+    // La cuenta arranca en blanco cada vez, con la clave ya generada: si hay que
+    // buscar el botón para que aparezca, la mitad de las veces no se genera.
+    setCuenta({ email: '', password: generarClave(), rol: EMPTY.rol });
   }, [editing, isOpen]);
+
+  // El rol de la cuenta sigue al de la ficha mientras no se toque a mano: un
+  // coach de la ficha no debería entrar como médico por descuido.
+  useEffect(() => {
+    setCuenta((c) => (c.email ? c : { ...c, rol: form.rol }));
+  }, [form.rol]);
 
   async function handleFirmaUpload(file: File) {
     if (file.size > MAX_FIRMA_BYTES) {
@@ -169,12 +181,34 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       onError('Código, primer nombre y primer apellido son obligatorios.');
       return;
     }
+    if (!editing && !(form.documento ?? '').trim()) {
+      onError('La cédula es obligatoria: es con lo que la persona queda en el directorio.');
+      return;
+    }
+    if (!editing && cuenta.email.trim() && cuenta.password.length < 8) {
+      onError('La contraseña provisional debe tener al menos 8 caracteres.');
+      return;
+    }
     setSaving(true);
     try {
-      const saved = editing
-        ? await profesionalesService.update(editing.id, form)
-        : await profesionalesService.create(form);
-      onSaved(saved);
+      if (editing) {
+        onSaved(await profesionalesService.update(editing.id, form));
+        onClose();
+        return;
+      }
+      const alta = await profesionalesService.create({
+        ...form,
+        cuenta: cuenta.email.trim()
+          ? {
+              email: cuenta.email.trim().toLowerCase(),
+              password: cuenta.password,
+              rol: cuenta.rol,
+            }
+          : undefined,
+      });
+      onSaved(alta.profesional);
+      // La ficha quedó; si la cuenta no, se dice — no se finge que todo salió.
+      if (alta.errorCuenta) onError(alta.errorCuenta);
       onClose();
     } catch (err: unknown) {
       const msg =
@@ -299,7 +333,10 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
               htmlFor="prof-documento"
               className="block text-xs font-medium text-gray-500 mb-1.5"
             >
-              Cédula <span className="text-gray-400">(para cruzar con el directorio)</span>
+              Cédula{' '}
+              <span className="text-gray-400">
+                {editing ? '(para cruzar con el directorio)' : '· obligatoria'}
+              </span>
             </label>
             <input
               id="prof-documento"
@@ -313,7 +350,9 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-400 mt-1">
-              Solo dígitos, sin puntos ni guiones.
+              {editing
+                ? 'Solo dígitos, sin puntos ni guiones.'
+                : 'Con esto la persona queda en el directorio, que es de donde salen la ficha y la cuenta.'}
             </p>
           </div>
 
@@ -510,6 +549,69 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
             />
           </div>
 
+          {/* ── La cuenta, en el mismo paso ─────────────────────────────────
+              Antes esto vivía en otra pantalla: se creaba la ficha, la persona
+              aparecía en la agenda y no podía entrar, y nadie se enteraba hasta
+              que le tocaba atender. Al editar no se muestra: las cuentas ya
+              creadas se administran desde «Usuarios». */}
+          {!editing && (
+            <div className="pt-4 border-t border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-800 mb-1">Cuenta para entrar</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Con esto la persona ya puede iniciar sesión. Si todavía no tenés su correo,
+                dejalo en blanco: queda con ficha y sin cuenta, y aparece marcada así en la lista.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Correo</label>
+                  <input
+                    type="email"
+                    value={cuenta.email}
+                    onChange={(e) => setCuenta({ ...cuenta, email: e.target.value })}
+                    placeholder="nombre.apellido@bodytechcorp.com"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol</label>
+                  <select
+                    value={cuenta.rol}
+                    onChange={(e) => setCuenta({ ...cuenta, rol: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="medico">medico</option>
+                    <option value="coach">coach</option>
+                    <option value="auxiliar">auxiliar</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Contraseña provisional
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={cuenta.password}
+                    onChange={(e) => setCuenta({ ...cuenta, password: e.target.value })}
+                    placeholder="mínimo 8 caracteres"
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCuenta({ ...cuenta, password: generarClave() })}
+                    className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    Generar
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Se la entregás a la persona. Queda visible acá porque después no se puede ver.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 justify-end pt-3 border-t border-gray-100">
             <button
               type="button"
@@ -530,4 +632,12 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       </div>
     </div>
   );
+}
+
+/** Contraseña provisional legible: sin caracteres que se confundan al dictarla. */
+function generarClave(): string {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const n = new Uint32Array(12);
+  crypto.getRandomValues(n);
+  return Array.from(n, (v) => abc[v % abc.length]).join('');
 }

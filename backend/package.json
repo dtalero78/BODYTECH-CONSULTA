@@ -14,7 +14,8 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
-    "transcribe:vocabulario": "node scripts/transcribe-vocabulario.js"
+    "transcribe:vocabulario": "node scripts/transcribe-vocabulario.js",
+    "directorio:subir": "ts-node scripts/subir-fichas-al-directorio.ts"
   },
   "keywords": [
     "twilio",

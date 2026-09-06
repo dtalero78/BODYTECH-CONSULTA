@@ -482,6 +482,38 @@ class AuthService {
   }
 
   /**
+   * Token de reset para una PERSONA de la tabla global, no para un usuario de
+   * Consulta. Es lo que le permite recuperar la clave a quien trabaja sólo en
+   * ACC o en prepagadas: esa gente no tiene fila local, y hasta ahora la página
+   * de «olvidé mi clave» les respondía «listo» sin mandarles nada.
+   *
+   * Como el local, va firmado con el hash actual: cambiar la contraseña invalida
+   * el enlace, así que sirve UNA vez.
+   */
+  createPasswordResetTokenGlobal(personaId: number, passwordHash: string): string {
+    const key = `${JWT_SECRET}:${passwordHash}`;
+    return jwt.sign({ kind: 'pwreset-global', personaId }, key, { expiresIn: '1h' });
+  }
+
+  /** Verifica el token global. Devuelve el id de la persona, o `null`. */
+  async verifyPasswordResetTokenGlobal(token: string): Promise<number | null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const decoded = jwt.decode(token) as any;
+    if (!decoded || decoded.kind !== 'pwreset-global' || typeof decoded.personaId !== 'number') {
+      return null;
+    }
+    const { default: usuariosGlobalService } = await import('./usuarios-global.service');
+    const persona = await usuariosGlobalService.porId(decoded.personaId);
+    if (!persona) return null;
+    try {
+      jwt.verify(token, `${JWT_SECRET}:${persona.passwordHash}`);
+      return decoded.personaId as number;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Verifica un token de reset. Decodifica sin verificar para sacar el userId,
    * busca el usuario, reconstruye la clave con su hash actual y verifica la
    * firma. Retorna el userId si es válido, null si no.

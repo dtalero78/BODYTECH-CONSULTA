@@ -250,6 +250,38 @@ class UsuariosGlobalService {
   }
 
   /**
+   * Una persona por su id, con su hash. Lo usa el enlace de «olvidé mi clave»:
+   * se firma con el hash actual, así que hay que poder recuperarlo para
+   * verificarlo. Sin filtrar por `activo`: quien está inhabilitado no debe
+   * poder cambiar la clave, y eso lo decide quien llama, no esta consulta.
+   */
+  async porId(id: number): Promise<{ id: number; email: string; nombre: string; passwordHash: string; activo: boolean } | null> {
+    const { rows } = await getSharedPool().query(
+      'SELECT id, email, nombre, password_hash, activo FROM personas WHERE id = $1',
+      [id],
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: Number(r.id),
+      email: String(r.email),
+      nombre: String(r.nombre),
+      passwordHash: String(r.password_hash),
+      activo: Boolean(r.activo),
+    };
+  }
+
+  /** El id LOCAL de Consulta de esta persona, si tiene cuenta allá. */
+  async idLocalDeConsulta(personaId: number): Promise<number | null> {
+    const { rows } = await getSharedPool().query(
+      `SELECT (alcance->>'usuarioIdLocal')::int AS id
+         FROM persona_apps WHERE persona_id = $1 AND app = 'consulta'`,
+      [personaId],
+    );
+    return rows[0]?.id ? Number(rows[0].id) : null;
+  }
+
+  /**
    * Rellena el celular en el alcance de quienes se reflejaron antes de que
    * existiera ese campo. Sólo escribe donde falta, y NUNCA toca `personas`:
    * un reflejo completo sobreescribiría el hash con el de la tabla local, y

@@ -14,6 +14,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import authService from '../services/auth.service';
 import usuariosService from '../services/usuarios.service';
+import usuariosGlobalService from '../services/usuarios-global.service';
 import emailService from '../services/email.service';
 
 const loginSchema = z.object({
@@ -204,14 +205,21 @@ class AuthController {
         return;
       }
       const { email } = parsed.data;
-      const row = await usuariosService.findActiveByEmail(email);
-      if (row) {
-        const token = authService.createPasswordResetToken(row.id, row.password_hash);
+      // Se busca en la tabla GLOBAL de cuentas, no en la local de Consulta.
+      // Quien trabaja sólo en ACC o en prepagadas no tiene fila local, y esta
+      // página le respondía «listo» sin mandarle nada: 9 de las 26 cuentas
+      // activas no tenían forma de recuperar su clave.
+      const persona = await usuariosGlobalService.porEmail(email);
+      if (persona && persona.activo) {
+        const token = authService.createPasswordResetTokenGlobal(
+          persona.id,
+          persona.passwordHash,
+        );
         const base = process.env.BASE_URL || 'https://bodytech.app';
         const link = `${base.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
         // No bloqueamos la respuesta por el envío; logueamos si falla.
-        emailService.sendPasswordReset(row.email, row.nombre, link).then((ok) => {
-          if (!ok) console.error(`⚠️ [forgot-password] No se pudo enviar a ${row.email}`);
+        emailService.sendPasswordReset(persona.email, persona.nombre, link).then((ok) => {
+          if (!ok) console.error(`⚠️ [forgot-password] No se pudo enviar a ${persona.email}`);
         });
       }
       // Respuesta uniforme — no filtra existencia del email.
@@ -234,12 +242,31 @@ class AuthController {
         return;
       }
       const { token, password } = parsed.data;
+      const hash = await usuariosService.hashPassword(password);
+
+      // Enlaces nuevos: apuntan a la persona de la tabla global.
+      const personaId = await authService.verifyPasswordResetTokenGlobal(token);
+      if (personaId !== null) {
+        // Si además tiene cuenta en Consulta, se escribe por la tabla local,
+        // que refleja: así las dos copias quedan con el mismo hash.
+        const idLocal = await usuariosGlobalService.idLocalDeConsulta(personaId);
+        const ok = idLocal
+          ? await usuariosService.setPassword(idLocal, hash)
+          : await usuariosGlobalService.editar(personaId, { password });
+        if (!ok) {
+          res.status(500).json({ success: false, error: 'DB_ERROR' });
+          return;
+        }
+        res.status(200).json({ success: true });
+        return;
+      }
+
+      // Enlaces emitidos antes de este cambio: siguen valiendo su hora.
       const userId = await authService.verifyPasswordResetToken(token);
       if (userId === null) {
         res.status(400).json({ success: false, error: 'INVALID_TOKEN' });
         return;
       }
-      const hash = await usuariosService.hashPassword(password);
       const ok = await usuariosService.setPassword(userId, hash);
       if (!ok) {
         res.status(500).json({ success: false, error: 'DB_ERROR' });

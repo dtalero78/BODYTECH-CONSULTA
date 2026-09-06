@@ -176,10 +176,10 @@ class CarpetaService {
   async reflejarDesdeConsulta(historiaId: string): Promise<boolean> {
     try {
       const filas = await postgresService.query(
-        `SELECT "_id", "numeroId", "nombre", "apellido", "medico", "origen",
+        `SELECT "_id", "numeroId", "primerNombre", "primerApellido", "medico", "origen",
                 "fechaConsulta", "fechaAtencion",
                 motivo_consulta_texto, hallazgos_descripcion,
-                md_concepto_final, md_recomendaciones_medicas_adicionales,
+                "mdConceptoFinal", "mdRecomendacionesMedicasAdicionales",
                 cc_peso_nuevo, cc_estatura_nuevo, tas, tad, fcr
            FROM "HistoriaClinica" WHERE "_id" = $1`,
         [historiaId],
@@ -190,7 +190,7 @@ class CarpetaService {
       const partes = [
         h.motivo_consulta_texto && `Motivo: ${h.motivo_consulta_texto}`,
         h.hallazgos_descripcion && `Hallazgos: ${h.hallazgos_descripcion}`,
-        h.md_concepto_final && `Concepto: ${h.md_concepto_final}`,
+        h.mdConceptoFinal && `Concepto: ${h.mdConceptoFinal}`,
       ].filter(Boolean) as string[];
 
       // El `origen` de la cita ES el servicio: trepsi, umv o corporativo. Las
@@ -204,7 +204,7 @@ class CarpetaService {
 
       return await this.registrar(
         String(h.numeroId),
-        [h.nombre, h.apellido].filter(Boolean).join(' ').trim() || null,
+        [h.primerNombre, h.primerApellido].filter(Boolean).join(' ').trim() || null,
         {
           app: 'consulta',
           servicio,
@@ -219,7 +219,7 @@ class CarpetaService {
             tensionSistolica: h.tas ?? null,
             tensionDiastolica: h.tad ?? null,
             frecuenciaCardiaca: h.fcr ?? null,
-            recomendaciones: h.md_recomendaciones_medicas_adicionales ?? null,
+            recomendaciones: h.mdRecomendacionesMedicasAdicionales ?? null,
           },
         },
       );

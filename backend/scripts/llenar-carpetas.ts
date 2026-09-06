@@ -37,10 +37,10 @@ async function main(): Promise<void> {
 
   for (;;) {
     const filas = await postgresService.query(
-      `SELECT "_id", "numeroId", "nombre", "apellido", "medico", "origen",
+      `SELECT "_id", "numeroId", "primerNombre", "primerApellido", "medico", "origen",
               "fechaConsulta", "fechaAtencion",
-              motivo_consulta_texto, hallazgos_descripcion, md_concepto_final,
-              md_recomendaciones_medicas_adicionales,
+              motivo_consulta_texto, hallazgos_descripcion, "mdConceptoFinal",
+              "mdRecomendacionesMedicasAdicionales",
               cc_peso_nuevo, cc_estatura_nuevo, tas, tad, fcr
          FROM "HistoriaClinica"
         WHERE "numeroId" IS NOT NULL AND "numeroId" <> ''
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
       for (const h of filas) {
         const doc = String(h.numeroId).replace(/\D/g, '');
         if (!doc) continue;
-        const nombre = [h.nombre, h.apellido].filter(Boolean).join(' ').trim() || null;
+        const nombre = [h.primerNombre, h.primerApellido].filter(Boolean).join(' ').trim() || null;
         await cliente.query(
           `INSERT INTO afiliados (documento, nombre) VALUES ($1, $2)
            ON CONFLICT (documento) DO UPDATE
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
         const partes = [
           h.motivo_consulta_texto && `Motivo: ${h.motivo_consulta_texto}`,
           h.hallazgos_descripcion && `Hallazgos: ${h.hallazgos_descripcion}`,
-          h.md_concepto_final && `Concepto: ${h.md_concepto_final}`,
+          h.mdConceptoFinal && `Concepto: ${h.mdConceptoFinal}`,
         ].filter(Boolean);
         await cliente.query(
           `INSERT INTO historia_entradas
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
               tensionSistolica: h.tas ?? null,
               tensionDiastolica: h.tad ?? null,
               frecuenciaCardiaca: h.fcr ?? null,
-              recomendaciones: h.md_recomendaciones_medicas_adicionales ?? null,
+              recomendaciones: h.mdRecomendacionesMedicasAdicionales ?? null,
             }),
           ],
         );

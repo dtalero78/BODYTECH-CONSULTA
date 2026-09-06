@@ -20,6 +20,7 @@ import torniqueteRoutes from './routes/torniquete.routes';
 import torniqueteService from './services/torniquete.service';
 import usuariosRoutes from './routes/usuarios.routes';
 import directorioRoutes from './routes/directorio.routes';
+import padronRoutes from './routes/padron.routes';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
@@ -195,6 +196,9 @@ app.use('/api/usuarios', requireRole('admin', 'coordinador'), usuariosRoutes);
 // cluster). El acceso se controla DENTRO del router, por lista de emails y no
 // por rol: muestra la planta completa de la cadena, con cédulas.
 app.use('/api/directorio', directorioRoutes);
+// Identidad de afiliados (cotejo). Devuelve nombres y cédulas de pacientes,
+// así que va al mismo nivel de acceso que /api/usuarios.
+app.use('/api/padron', requireRole('admin', 'coordinador'), padronRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);

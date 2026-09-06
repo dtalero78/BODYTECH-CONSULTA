@@ -17,6 +17,7 @@ import {
   Map,
   Fingerprint,
   Database,
+  Users,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -27,6 +28,7 @@ import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { TorniqueteView } from '../components/coordinador/TorniqueteView';
 import { UsuariosView } from '../components/coordinador/UsuariosView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
+import { IdentidadesView } from '../components/coordinador/IdentidadesView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -36,6 +38,7 @@ type View =
   | 'calendario'
   | 'torniquete'
   | 'ordenes'
+  | 'identidades'
   | 'indicadores'
   | 'usuarios'
   | 'directorio';
@@ -61,6 +64,7 @@ export function CoordinadorPage() {
     ordenes: undefined,
     indicadores: undefined,
     directorio: undefined,
+    identidades: undefined,
     usuarios: undefined,
   });
 
@@ -302,6 +306,12 @@ export function CoordinadorPage() {
               />
             )}
             <NavItem
+              icon={<Users className="w-[15px] h-[15px]" />}
+              label="Identidades"
+              active={view === 'identidades'}
+              onClick={() => setView('identidades')}
+            />
+            <NavItem
               icon={<Building2 className="w-[15px] h-[15px]" />}
               label="Sedes"
               disabled
@@ -378,6 +388,9 @@ export function CoordinadorPage() {
           )}
           {view === 'directorio' && isDirectorioUser && (
             <DirectorioView key={`dir-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'identidades' && (
+            <IdentidadesView key={`ident-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

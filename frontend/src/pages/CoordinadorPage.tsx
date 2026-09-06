@@ -19,8 +19,6 @@ import {
   Database,
   Users,
   Building,
-  KeyRound,
-  UserPlus,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -29,12 +27,10 @@ import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
 import { TorniqueteView } from '../components/coordinador/TorniqueteView';
-import { UsuariosView } from '../components/coordinador/UsuariosView';
+import { UsuariosPanelView } from '../components/coordinador/UsuariosPanelView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { IdentidadesView } from '../components/coordinador/IdentidadesView';
 import { EmpresasView } from '../components/coordinador/EmpresasView';
-import { AccesosView } from '../components/coordinador/AccesosView';
-import { CreacionUsuariosView } from '../components/coordinador/CreacionUsuariosView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -46,8 +42,6 @@ type View =
   | 'ordenes'
   | 'identidades'
   | 'empresas'
-  | 'accesos'
-  | 'creacion-usuarios'
   | 'indicadores'
   | 'usuarios'
   | 'directorio';
@@ -75,8 +69,6 @@ export function CoordinadorPage() {
     directorio: undefined,
     identidades: undefined,
     empresas: undefined,
-    accesos: undefined,
-    'creacion-usuarios': undefined,
     usuarios: undefined,
   });
 
@@ -287,22 +279,9 @@ export function CoordinadorPage() {
 
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
           <div className="space-y-0.5">
-            {authService.getUser()?.role === 'admin' && (
-              <NavItem
-                icon={<UserPlus className="w-[15px] h-[15px]" />}
-                label="Creación de usuarios"
-                active={view === 'creacion-usuarios'}
-                onClick={() => setView('creacion-usuarios')}
-              />
-            )}
-            {authService.getUser()?.role === 'admin' && (
-              <NavItem
-                icon={<KeyRound className="w-[15px] h-[15px]" />}
-                label="Accesos"
-                active={view === 'accesos'}
-                onClick={() => setView('accesos')}
-              />
-            )}
+            {/* Una sola entrada: antes eran tres pantallas que se pisaban
+                («Usuarios», «Creación de usuarios» y «Accesos») y había que
+                saber en cuál estaba lo que uno necesitaba. */}
             <NavItem
               icon={<UserCog className="w-[15px] h-[15px]" />}
               label="Usuarios"
@@ -418,7 +397,7 @@ export function CoordinadorPage() {
             <IndicadoresView key={`ind-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'usuarios' && (
-            <UsuariosView key={`usr-${reloadKey}`} showToast={showToast} />
+            <UsuariosPanelView key={`usr-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'directorio' && isDirectorioUser && (
             <DirectorioView key={`dir-${reloadKey}`} showToast={showToast} />
@@ -428,12 +407,6 @@ export function CoordinadorPage() {
           )}
           {view === 'empresas' && (
             <EmpresasView key={`emp-${reloadKey}`} showToast={showToast} />
-          )}
-          {view === 'accesos' && (
-            <AccesosView key={`acc-${reloadKey}`} showToast={showToast} />
-          )}
-          {view === 'creacion-usuarios' && (
-            <CreacionUsuariosView key={`cu-${reloadKey}`} showToast={showToast} />
           )}
         </div>
       </main>

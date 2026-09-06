@@ -26,17 +26,37 @@ export interface Persona {
   documento: string | null;
   activo: boolean;
   apps: AccesoPersona[];
+  /** Baja de la organización: no entra a NINGUNA aplicación. */
+  baja?: { motivo: string | null; en: string } | null;
 }
 
 export interface CrearPersona {
   email: string;
   nombre: string;
-  password: string;
+  /** Sólo para alguien nuevo. Quien ya existe conserva la que usa. */
+  password?: string;
   documento?: string | null;
+  celular?: string | null;
   app: AppDestino;
   rol: string;
   sedes?: string[];
   esGlobal?: boolean;
+  profesionalId?: number | null;
+}
+
+export interface EditarPersona {
+  nombre?: string;
+  documento?: string | null;
+  activo?: boolean;
+  password?: string;
+  app?: AppDestino;
+  rol?: string;
+  accesoActivo?: boolean;
+  /** Sólo tienen sentido en Consulta: de allá cuelgan. */
+  sedes?: string[];
+  esGlobal?: boolean;
+  profesionalId?: number | null;
+  celular?: string | null;
 }
 
 function authHeader(): Record<string, string> {
@@ -79,18 +99,7 @@ export default {
     }
   },
 
-  async editar(
-    id: number,
-    cambios: {
-      nombre?: string;
-      documento?: string | null;
-      activo?: boolean;
-      password?: string;
-      app?: AppDestino;
-      rol?: string;
-      accesoActivo?: boolean;
-    },
-  ): Promise<void> {
+  async editar(id: number, cambios: EditarPersona): Promise<void> {
     try {
       const { data } = await axios.patch(`${API_BASE_URL}/api/usuarios-global/${id}`, cambios, {
         headers: authHeader(),
@@ -98,6 +107,24 @@ export default {
       if (!data?.success) throw new Error(data?.message || 'No se pudo guardar');
     } catch (e) {
       throw mensajeDeError(e, 'No se pudo guardar el cambio');
+    }
+  },
+
+  /**
+   * Baja de la organización: sale de LAS TRES aplicaciones de una vez. Es lo
+   * que hasta ahora había que hacer aplicación por aplicación —y que ya se
+   * falló al menos una vez.
+   */
+  async baja(id: number, dar: boolean, motivo?: string | null): Promise<void> {
+    try {
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/usuarios-global/${id}/baja`,
+        { dar, motivo: motivo ?? null },
+        { headers: authHeader() },
+      );
+      if (!data?.success) throw new Error(data?.message || 'No se pudo aplicar');
+    } catch (e) {
+      throw mensajeDeError(e, 'No se pudo aplicar la baja');
     }
   },
 };

@@ -12,16 +12,66 @@
 // siempre —que crea local y refleja en la global— y para ACC y prepagadas se
 // escribe directo en la global, que es lo único que esas aplicaciones leen.
 //
-// Sólo admin: crea cuentas con el rol que se le indique.
+// ── Quién puede qué ────────────────────────────────────────────────────────
+// Admin: todo. Coordinador: sólo Consulta, sólo roles no privilegiados
+// (médico, coach, auxiliar), sólo SUS sedes, y nunca la baja organizacional.
+// Son los mismos límites que aplicaba el panel anterior de usuarios; se
+// trasladan acá porque esta ruta lo reemplaza. Sin ellos, unificar el panel
+// habría sido una escalada de privilegios disfrazada de mejora.
 // ============================================================================
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import usuariosGlobalService from '../services/usuarios-global.service';
+import { getSession } from '../middleware/rbac.middleware';
 import usuariosService from '../services/usuarios.service';
+import bajasService from '../services/bajas.service';
+import { getSharedPool } from '../services/shared-db';
+import {
+  revisarAlta,
+  revisarEdicion,
+  visibleEnListado,
+  puedeDarDeBaja,
+  Actor,
+} from '../helpers/usuarios-permisos.helper';
 
 const router = Router();
+
+/** El actor, en los términos que entiende el helper de permisos. */
+function actorDe(req: Request): Actor {
+  const s = getSession(req);
+  return { role: s?.role ?? '', email: s?.email ?? '', sedes: s?.sedes ?? [] };
+}
+
+/** Traduce un rechazo del helper a la respuesta HTTP. */
+function rechazar(res: Response, r: { code: string; message: string }): void {
+  res.status(r.code === 'FORBIDDEN' ? 403 : 400).json({
+    success: false,
+    error: r.code,
+    message: r.message,
+  });
+}
+
+/** La persona y su acceso a Consulta, para decidir si el actor puede tocarla. */
+async function personaBasica(
+  id: number,
+): Promise<{ email: string; rolConsulta: string | null; sedes: string[] } | null> {
+  const { rows } = await getSharedPool().query(
+    `SELECT p.email, pa.rol, pa.alcance
+       FROM personas p
+       LEFT JOIN persona_apps pa ON pa.persona_id = p.id AND pa.app = 'consulta'
+      WHERE p.id = $1`,
+    [id],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    email: String(r.email),
+    rolConsulta: r.rol ? String(r.rol) : null,
+    sedes: (r.alcance?.sedes as string[]) ?? [],
+  };
+}
 
 /**
  * Roles válidos POR aplicación. No hay un vocabulario único a propósito: un
@@ -38,12 +88,20 @@ const crearSchema = z
   .object({
     email: z.string().email(),
     nombre: z.string().trim().min(2, 'El nombre es muy corto.').max(200),
-    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
+    // Opcional a propósito: si la persona YA está en el armario (trabaja en
+    // otra aplicación) esto no crea una cuenta nueva, le agrega el acceso —y
+    // conserva la clave que ya usa. Una persona, una contraseña.
+    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').optional(),
     documento: z.string().trim().regex(/^[0-9]{5,15}$/).nullable().optional(),
     app: z.enum(['consulta', 'acc', 'prepagadas']),
     rol: z.string().min(1),
     sedes: z.array(z.string()).optional(),
     esGlobal: z.boolean().optional(),
+    // Sólo aplica a Consulta: un médico o coach SIN profesional vinculado no
+    // puede agendar (el sistema responde SIN_PROFESIONAL). Crear uno así es
+    // crear una cuenta que parece funcionar y no funciona.
+    profesionalId: z.number().int().nullable().optional(),
+    celular: z.string().trim().max(30).nullable().optional(),
   })
   .refine((v) => ROLES_POR_APP[v.app]?.includes(v.rol), {
     message: 'Ese rol no existe en esa aplicación.',
@@ -54,9 +112,21 @@ router.get('/roles', (_req: Request, res: Response) => {
   res.json({ success: true, data: ROLES_POR_APP });
 });
 
-router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.json({ success: true, data: await usuariosGlobalService.listar() });
+    const todas = await usuariosGlobalService.listar();
+    const actor = actorDe(req);
+    res.json({
+      success: true,
+      data: todas.filter((p) => {
+        const c = p.apps.find((a) => a.app === 'consulta');
+        return visibleEnListado(actor, {
+          email: p.email,
+          rolConsulta: c?.rol ?? null,
+          sedes: ((c?.alcance as { sedes?: string[] })?.sedes ?? []) as string[],
+        });
+      }),
+    });
   } catch (e) {
     next(e);
   }
@@ -73,17 +143,33 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     return;
   }
   const d = parsed.data;
+  const fallo = revisarAlta(actorDe(req), d);
+  if (fallo) return rechazar(res, fallo);
+
   try {
+    const yaExiste = await usuariosGlobalService.hashDe(d.email);
+    if (!yaExiste && !d.password) {
+      res.status(400).json({
+        success: false,
+        error: 'VALIDACION',
+        message: 'Una persona nueva necesita una contraseña.',
+      });
+      return;
+    }
+
     if (d.app === 'consulta') {
-      // Camino local + reflejo: ver la cabecera.
+      // Camino local + reflejo: ver la cabecera. Si ya existe se REUSA su hash:
+      // crear la fila local con uno nuevo se lo reflejaría encima y le
+      // cambiaría la contraseña de las otras aplicaciones sin avisar.
       const r = await usuariosService.create({
         email: d.email,
-        passwordHash: bcrypt.hashSync(d.password, 10),
+        passwordHash: yaExiste?.passwordHash ?? bcrypt.hashSync(d.password as string, 10),
         nombre: d.nombre,
         rol: d.rol as never,
         esGlobal: d.esGlobal ?? false,
         sedes: d.sedes ?? [],
-        profesionalId: null,
+        profesionalId: d.profesionalId ?? null,
+        celular: d.celular ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       if (!r.ok) {
@@ -100,7 +186,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
     const r = await usuariosGlobalService.crear({
       email: d.email,
-      password: d.password,
+      // `crear` sólo usa la contraseña cuando inserta a alguien nuevo; a quien
+      // ya existe le agrega el acceso sin tocarle el hash.
+      password: d.password ?? '',
       nombre: d.nombre,
       documento: d.documento ?? null,
       app: d.app,
@@ -125,7 +213,24 @@ const editarSchema = z.object({
   app: z.enum(['consulta', 'acc', 'prepagadas']).optional(),
   rol: z.string().optional(),
   accesoActivo: z.boolean().optional(),
+  // Sólo para Consulta. Se escriben en su tabla local, que es de donde cuelgan
+  // las sedes y la ficha del profesional, y de ahí se reflejan en la global.
+  sedes: z.array(z.string()).optional(),
+  esGlobal: z.boolean().optional(),
+  profesionalId: z.number().int().nullable().optional(),
+  celular: z.string().trim().max(30).nullable().optional(),
 });
+
+/** El id LOCAL del usuario de Consulta, guardado en su alcance al migrar. */
+async function idLocalDeConsulta(personaId: number): Promise<number | null> {
+  const { rows } = await getSharedPool().query(
+    `SELECT (alcance->>'usuarioIdLocal')::int AS id
+       FROM persona_apps WHERE persona_id = $1 AND app = 'consulta'`,
+    [personaId],
+  );
+  const id = rows[0]?.id;
+  return id ? Number(id) : null;
+}
 
 router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
   const id = Number(req.params.id);
@@ -144,7 +249,87 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
     return;
   }
   try {
-    await usuariosGlobalService.editar(id, d);
+    const destino = await personaBasica(id);
+    if (!destino) {
+      res.status(404).json({ success: false, error: 'NO_ENCONTRADA' });
+      return;
+    }
+    const fallo = revisarEdicion(actorDe(req), destino, d);
+    if (fallo) return rechazar(res, fallo);
+    // Lo propio de Consulta (sedes, profesional, esGlobal) se escribe en SU
+    // tabla, que es de donde cuelgan, y se refleja solo en la global.
+    const tocaConsulta =
+      d.sedes !== undefined ||
+      d.esGlobal !== undefined ||
+      d.profesionalId !== undefined ||
+      d.celular !== undefined;
+    if (tocaConsulta) {
+      const idLocal = await idLocalDeConsulta(id);
+      if (!idLocal) {
+        res.status(400).json({
+          success: false,
+          error: 'SIN_CUENTA_CONSULTA',
+          message: 'Esa persona no tiene cuenta en Consulta; esos campos no aplican.',
+        });
+        return;
+      }
+      // Las sedes van como TERCER argumento, no dentro del objeto: adentro se
+      // ignorarían en silencio y el usuario quedaría sin ninguna.
+      await usuariosService.update(
+        idLocal,
+        {
+          nombre: d.nombre,
+          rol: d.app === 'consulta' ? (d.rol as never) : undefined,
+          activo: d.activo,
+          esGlobal: d.esGlobal,
+          profesionalId: d.profesionalId,
+          celular: d.celular,
+        },
+        d.sedes,
+      );
+    }
+    // La contraseña de alguien de Consulta se escribe por la tabla local, que
+    // la refleja: escribirla sólo en la global dejaría la copia local con la
+    // clave vieja, y el camino de respaldo (global caída) pediría la anterior.
+    // Se escribe UNA vez —bcrypt de la misma clave da hashes distintos, y dos
+    // escrituras dejarían local y global divergentes sin razón.
+    let cambios = d;
+    if (d.password) {
+      const idLocal = await idLocalDeConsulta(id);
+      if (idLocal) {
+        await usuariosService.setPassword(idLocal, bcrypt.hashSync(d.password, 10));
+        cambios = { ...d, password: undefined };
+      }
+    }
+    await usuariosGlobalService.editar(id, cambios);
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Da de baja de la organización, o la revierte. Sale de TODAS las aplicaciones. */
+router.post('/:id/baja', async (req: Request, res: Response, next: NextFunction) => {
+  const id = Number(req.params.id);
+  const dar = req.body?.dar !== false;
+  if (!puedeDarDeBaja(actorDe(req))) {
+    return rechazar(res, {
+      code: 'FORBIDDEN',
+      message: 'Sólo un administrador da de baja de la organización.',
+    });
+  }
+  try {
+    const { rows } = await getSharedPool().query('SELECT email FROM personas WHERE id = $1', [id]);
+    const email = rows[0]?.email;
+    if (!email) {
+      res.status(404).json({ success: false, error: 'NO_ENCONTRADA' });
+      return;
+    }
+    if (dar) {
+      await bajasService.darDeBaja(String(email), req.body?.motivo ?? null, getSession(req)?.email ?? null);
+    } else {
+      await bajasService.reactivar(String(email));
+    }
     res.json({ success: true });
   } catch (e) {
     next(e);

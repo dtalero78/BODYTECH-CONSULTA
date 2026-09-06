@@ -215,7 +215,7 @@ app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresas
 app.use('/api/accesos', requireRole('admin'), accesosRoutes);
 // Creación de Usuarios: el panel único de las tres aplicaciones. Sólo admin —
 // crea cuentas con el rol que se le indique, en cualquiera de las tres.
-app.use('/api/usuarios-global', requireRole('admin'), usuariosGlobalRoutes);
+app.use('/api/usuarios-global', requireRole('admin', 'coordinador'), usuariosGlobalRoutes);
 // Bot de asistencia técnica para el equipo Trepsi durante la integración.
 // Público (sin JWT, sin API Key) — el system prompt + rate limit lo protegen.
 app.use('/api/bot-trepsi', botTrepsiRoutes);
@@ -306,6 +306,7 @@ postgresService
   .then(() =>
     usuariosGlobalService
       .asegurarEsquema()
+      .then(() => usuariosGlobalService.rellenarCelularEnAlcance())
       .catch((e) => console.error('⚠️ [usuarios-global] no se pudo asegurar el esquema:', e?.message ?? e))
   )
   .then(() =>

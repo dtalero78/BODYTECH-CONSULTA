@@ -46,6 +46,12 @@ export interface PersonaGlobal {
   activo: boolean;
   /** Qué puede hacer en cada aplicación donde tiene acceso. */
   apps: Array<{ app: App; rol: string; alcance: Record<string, unknown>; activo: boolean }>;
+  /**
+   * Baja de la organización, si la hay. Vive en `bajas_organizacion`, de la
+   * misma base, y viaja junto con la persona porque el panel no puede mostrar
+   * a alguien como «activo» cuando el login ya lo está rechazando.
+   */
+  baja?: { motivo: string | null; en: string } | null;
 }
 
 /** Fila cruda para autenticar: incluye el hash, que nunca sale del backend. */
@@ -143,7 +149,7 @@ class UsuariosGlobalService {
     try {
       const filas = await postgresService.query(
         `SELECT u.id, lower(u.email) AS email, u.password_hash, u.nombre, u.rol,
-                u.es_global, u.profesional_id, u.activo,
+                u.es_global, u.profesional_id, u.activo, u.celular,
                 COALESCE(array_agg(us.sede_id) FILTER (WHERE us.sede_id IS NOT NULL), '{}') AS sedes
            FROM usuarios u LEFT JOIN usuario_sedes us ON us.usuario_id = u.id
           WHERE u.id = $1
@@ -179,6 +185,7 @@ class UsuariosGlobalService {
             sedes: u.sedes ?? [],
             esGlobal: Boolean(u.es_global),
             profesionalId: u.profesional_id ?? null,
+            celular: u.celular ?? null,
             usuarioIdLocal: Number(u.id),
           }),
           Boolean(u.activo),
@@ -242,6 +249,56 @@ class UsuariosGlobalService {
     }
   }
 
+  /**
+   * Rellena el celular en el alcance de quienes se reflejaron antes de que
+   * existiera ese campo. Sólo escribe donde falta, y NUNCA toca `personas`:
+   * un reflejo completo sobreescribiría el hash con el de la tabla local, y
+   * quien se hubiera cambiado la clave desde el panel volvería a la anterior.
+   *
+   * El celular no es cosmético: es el número al que llega el informe de gestión
+   * diario. Mostrarlo en blanco haría que la primera edición lo borrara.
+   */
+  async rellenarCelularEnAlcance(): Promise<void> {
+    try {
+      const filas = await postgresService.query(
+        `SELECT lower(email) AS email, celular FROM usuarios WHERE celular IS NOT NULL AND celular <> ''`,
+      );
+      if (!filas || filas.length === 0) return;
+      await getSharedPool().query(
+        `UPDATE persona_apps pa
+            SET alcance = pa.alcance || jsonb_build_object('celular', v.celular)
+           FROM (SELECT unnest($1::text[]) AS email, unnest($2::text[]) AS celular) v,
+                personas p
+          WHERE lower(p.email) = v.email
+            AND pa.persona_id = p.id
+            AND pa.app = 'consulta'
+            AND NOT (pa.alcance ? 'celular')`,
+        [filas.map((f) => String(f.email)), filas.map((f) => String(f.celular))],
+      );
+    } catch (e) {
+      console.error(
+        '⚠️ [usuarios-global] no se pudo rellenar el celular en el alcance:',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
+  /**
+   * La contraseña que YA tiene quien está en el armario, sin filtrar por
+   * `activo`. Es lo que permite darle acceso a otra aplicación sin cambiársela:
+   * una persona, una clave.
+   */
+  async hashDe(email: string): Promise<{ id: number; passwordHash: string } | null> {
+    const limpio = String(email ?? '').trim().toLowerCase();
+    if (!limpio) return null;
+    const { rows } = await getSharedPool().query(
+      'SELECT id, password_hash FROM personas WHERE email = $1',
+      [limpio],
+    );
+    const r = rows[0];
+    return r ? { id: Number(r.id), passwordHash: String(r.password_hash) } : null;
+  }
+
   /** Edita datos de la persona y/o su acceso a una aplicación. */
   async editar(
     id: number,
@@ -286,6 +343,7 @@ class UsuariosGlobalService {
   async listar(): Promise<PersonaGlobal[]> {
     const { rows } = await getSharedPool().query(
       `SELECT p.id, p.email, p.nombre, p.documento, p.activo,
+              b.motivo AS baja_motivo, b.dada_de_baja_en AS baja_en,
               COALESCE(
                 jsonb_agg(jsonb_build_object('app', pa.app, 'rol', pa.rol,
                                              'alcance', pa.alcance, 'activo', pa.activo)
@@ -294,7 +352,8 @@ class UsuariosGlobalService {
               ) AS apps
          FROM personas p
          LEFT JOIN persona_apps pa ON pa.persona_id = p.id
-        GROUP BY p.id
+         LEFT JOIN bajas_organizacion b ON b.email = p.email
+        GROUP BY p.id, b.motivo, b.dada_de_baja_en
         ORDER BY p.activo DESC, p.nombre`,
     );
     return rows.map((r) => ({
@@ -304,6 +363,7 @@ class UsuariosGlobalService {
       documento: r.documento ? String(r.documento) : null,
       activo: Boolean(r.activo),
       apps: r.apps as PersonaGlobal['apps'],
+      baja: r.baja_en ? { motivo: r.baja_motivo ?? null, en: new Date(r.baja_en).toISOString() } : null,
     }));
   }
 }

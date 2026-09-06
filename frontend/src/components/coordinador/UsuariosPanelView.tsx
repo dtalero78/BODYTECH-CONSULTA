@@ -337,11 +337,38 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
   }
 
   // ── Acciones de fila ──────────────────────────────────────────────────────
+  /**
+   * Encender o apagar la cuenta. Hay DOS interruptores —la persona y su acceso a
+   * cada aplicación— y el login exige los dos; encender sólo el de arriba deja
+   * un botón que parece funcionar y no cambia nada. Así que al habilitar a
+   * alguien cuyos accesos están TODOS apagados, se encienden también: si alguno
+   * quedó activo a propósito, los demás no se tocan.
+   *
+   * Al inhabilitar basta con apagar la persona: los accesos se conservan como
+   * estaban, para que al volver quede como antes.
+   */
   async function alternarActivo(p: Persona) {
-    if (!window.confirm(`¿${p.activo ? 'Inhabilitar' : 'Habilitar'} a ${p.nombre}?`)) return;
+    const apagados = p.apps.length > 0 && p.apps.every((a) => !a.activo);
+    const reviveAccesos = !p.activo && apagados;
+    const pregunta = p.activo
+      ? `¿Inhabilitar a ${p.nombre}?`
+      : reviveAccesos
+        ? `¿Habilitar a ${p.nombre}?\n\nVolverá a entrar a ${p.apps
+            .map((a) => APP_NOMBRE[a.app])
+            .join(' y ')}.`
+        : `¿Habilitar a ${p.nombre}?`;
+    if (!window.confirm(pregunta)) return;
     try {
       await usuariosGlobalService.editar(p.id, { activo: !p.activo });
-      showToast({ type: 'success', message: `${p.nombre} ${p.activo ? 'inhabilitado' : 'habilitado'}.` });
+      if (reviveAccesos) {
+        for (const a of p.apps) {
+          await usuariosGlobalService.editar(p.id, { app: a.app, rol: a.rol, accesoActivo: true });
+        }
+      }
+      showToast({
+        type: 'success',
+        message: `${p.nombre} ${p.activo ? 'inhabilitado' : 'habilitado'}.`,
+      });
       await cargar();
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : 'Error' });
@@ -535,6 +562,11 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                             <span className="opacity-70">· {a.rol}</span>
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {p.activo && !p.baja && p.apps.length > 0 && p.apps.every((a) => !a.activo) && (
+                      <div className="text-[10.5px] text-amber-700 mt-1">
+                        activa, pero sin acceso a ninguna aplicación: no entra
                       </div>
                     )}
                     {consulta && (

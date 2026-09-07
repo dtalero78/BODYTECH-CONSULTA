@@ -90,14 +90,28 @@ class UsuariosGlobalService {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_persona_apps_app ON persona_apps (app, activo)`,
     );
-    // ACC y prepagadas leen para autenticar; escribir es exclusivo del panel de
-    // Consulta, que es donde se administran los usuarios.
+    // Las tres leen para autenticar.
     for (const rol of ['acc_app', 'prepagadas_app']) {
       await pool
         .query(`GRANT SELECT ON personas, persona_apps TO ${rol}`)
         .catch((e) =>
           console.error(`⚠️ [usuarios-global] no se pudo dar SELECT a ${rol}:`, e?.message ?? e),
         );
+    }
+    // ACC además ESCRIBE: su coordinadora da de alta a su propia gente desde el
+    // panel de ACC. El DELETE de `profesional_sedes` no es un extra — el alta
+    // reemplaza el conjunto de sedes de la persona, y sin ese permiso la
+    // transacción entera se caía con un «no se pudo guardar» que no decía nada.
+    // Prepagadas sigue sólo con lectura: todavía no da de alta a nadie.
+    for (const sql of [
+      'GRANT INSERT, UPDATE ON personas, persona_apps TO acc_app',
+      'GRANT USAGE, SELECT ON SEQUENCE personas_id_seq TO acc_app',
+      'GRANT INSERT, UPDATE ON profesionales TO acc_app',
+      'GRANT INSERT, UPDATE, DELETE ON profesional_sedes TO acc_app',
+    ]) {
+      await pool
+        .query(sql)
+        .catch((e) => console.error('⚠️ [usuarios-global] permiso:', e?.message ?? e));
     }
   }
 

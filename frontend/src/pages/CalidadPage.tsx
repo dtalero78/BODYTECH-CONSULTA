@@ -688,7 +688,7 @@ export function CalidadPage() {
               </svg>
               <span className="text-sm font-semibold text-gray-700">Llamadas del coach</span>
               <span className="ml-auto text-xs text-gray-400">
-                Elegí una para evaluar la llamada en vez del video
+                Elija una para evaluar la llamada en vez del video
               </span>
             </div>
             <ul className="divide-y">

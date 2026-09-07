@@ -22,6 +22,7 @@ jest.mock('../../services/llamadas-voz.service', () => ({
     registrarDialFin: jest.fn().mockResolvedValue(undefined),
     registrarGrabacion: jest.fn().mockResolvedValue(undefined),
     tokenVoz: jest.fn(),
+    cancelarSiNoArranco: jest.fn().mockResolvedValue(true),
     transcribirGrabacion: jest.fn().mockResolvedValue(true),
     conectarSoftphone: jest.fn(),
     registrarEstadoPorCallSid: jest.fn().mockResolvedValue(undefined),
@@ -131,6 +132,14 @@ describe('/api/twilio/llamadas', () => {
     it.each(['coach', 'medico'])('403 para %s — ni la propia', async (rol) => {
       await request(appConRol(rol, 7)).get('/api/twilio/llamadas/1/audio').expect(403);
       expect(svc.abrirAudio).not.toHaveBeenCalled();
+    });
+
+    // Libera al coach cuando el navegador no llegó a marcar. Es suya, así que
+    // un clínico puede hacerlo; el servicio ya limita a filas propias sin call_sid.
+    it('cancelar una llamada trabada lo puede hacer el coach', async () => {
+      await request(appConRol()).post('/api/twilio/llamadas/1/cancelar').expect(401);
+      const res = await request(appConRol('coach', 7)).post('/api/twilio/llamadas/1/cancelar').expect(200);
+      expect(res.body).toMatchObject({ success: true, cancelada: true });
     });
 
     it('rehacer la transcripción es solo de auditoría', async () => {

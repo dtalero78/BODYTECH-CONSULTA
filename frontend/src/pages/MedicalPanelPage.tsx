@@ -531,7 +531,7 @@ export function MedicalPanelPage() {
         return e.response?.data?.message ?? 'Esta cita fue reprogramada.';
       }
       console.error('Error marcando como no contesta:', err);
-      return 'No se pudo marcar. Intentá de nuevo.';
+      return 'No se pudo marcar. Vuelva a intentar.';
     }
   };
 
@@ -688,17 +688,35 @@ export function MedicalPanelPage() {
     setLlamada({ patientId: patient._id, data: null, error: null });
     const mensajes: Record<string, string> = {
       SIN_CELULAR_PACIENTE: 'El paciente no tiene un celular válido en la historia.',
-      LLAMADA_EN_CURSO: 'Ya tenés una llamada en curso.',
+      LLAMADA_EN_CURSO: 'Ya tiene una llamada en curso.',
       SOFTPHONE_NO_CONFIGURADO: 'La llamada desde el navegador no está configurada en este ambiente.',
-      HISTORIA_NO_ENCONTRADA: 'No encontré la cita.',
+      HISTORIA_NO_ENCONTRADA: 'No se encontró la cita.',
     };
+
+    // El micrófono se pide ANTES de crear la llamada. Antes se pedía después, al
+    // conectar con Twilio: el primer intento se trababa en el diálogo del
+    // permiso, fallaba, y la llamada quedaba creada en el servidor bloqueando al
+    // coach 3 minutos con "ya tiene una llamada en curso". Las dos quejas del
+    // 7-sep —el letrero rojo en el primer intento y el bloqueo— eran esto mismo.
     try {
-      const data = await apiService.iniciarLlamada(patient._id);
-      setLlamada({ patientId: patient._id, data, error: null });
+      const permiso = await navigator.mediaDevices.getUserMedia({ audio: true });
+      permiso.getTracks().forEach((t) => t.stop());
+    } catch {
+      setLlamada({
+        patientId: patient._id,
+        data: null,
+        error: 'El navegador no dejó usar el micrófono. Permítalo y vuelva a intentar.',
+      });
+      return;
+    }
+
+    let creada: LlamadaVoz | null = null;
+    try {
+      creada = await apiService.iniciarLlamada(patient._id);
+      setLlamada({ patientId: patient._id, data: creada, error: null });
 
       const device = await obtenerDevice();
-      // Acá el navegador pide permiso de micrófono la primera vez.
-      const call = await device.connect({ params: { llamadaId: String(data.id) } });
+      const call = await device.connect({ params: { llamadaId: String(creada.id) } });
       softphoneRef.current = { device, call };
       call.on('disconnect', () => {
         if (softphoneRef.current) softphoneRef.current.call = null;
@@ -709,17 +727,17 @@ export function MedicalPanelPage() {
         );
       });
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } }; name?: string; message?: string; code?: number };
+      // Si la llamada alcanzó a crearse pero el navegador no pudo marcar, se
+      // cancela: sin esto el coach queda bloqueado hasta que la fila venza sola.
+      if (creada) {
+        apiService.cancelarLlamada(creada.id).catch(() => undefined);
+      }
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
       const code = e?.response?.data?.error;
-      const micNegado = e?.name === 'NotAllowedError' || e?.code === 31401 || /permission/i.test(e?.message || '');
       setLlamada({
         patientId: patient._id,
         data: null,
-        error:
-          (code && mensajes[code]) ||
-          (micNegado
-            ? 'El navegador no dejó usar el micrófono. Permitilo y volvé a intentar.'
-            : 'No se pudo iniciar la llamada. Intentá de nuevo.'),
+        error: (code && mensajes[code]) || 'No se pudo iniciar la llamada. Vuelva a intentar.',
       });
     }
   };

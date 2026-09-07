@@ -515,6 +515,30 @@ class LlamadasVozService {
     await this.registrarEstadoLeg(Number(rows[0].id), 'coach', status, { duracionSeg });
   }
 
+  /**
+   * Cancela una llamada que nunca llegó a marcar.
+   *
+   * El navegador crea la llamada en el servidor y recién después se conecta a
+   * Twilio. Si eso falla —el permiso de micrófono, un token vencido, la pestaña
+   * cerrada— la fila quedaba en `iniciando` y bloqueaba al coach durante 3
+   * minutos con "ya tiene una llamada en curso". Ahora el panel la cancela y
+   * puede reintentar de una.
+   *
+   * Solo toca filas suyas y solo si NO llegó a marcar (sin `call_sid`): una
+   * llamada real ya en curso no se cancela por acá.
+   */
+  async cancelarSiNoArranco(id: number, session: SessionPayload): Promise<boolean> {
+    const r = await postgresService.query(
+      `UPDATE llamadas_voz
+          SET estado = 'fallida', motivo_fin = COALESCE(motivo_fin, 'cancelada_por_el_panel'),
+              finalizada_at = COALESCE(finalizada_at, NOW()), updated_at = NOW()
+        WHERE id = $1 AND coach_usuario_id = $2 AND estado = 'iniciando' AND call_sid IS NULL
+        RETURNING id`,
+      [id, session.userId]
+    );
+    return Array.isArray(r) && r.length > 0;
+  }
+
   async get(id: number): Promise<LlamadaVoz | null> {
     const rows = await postgresService.query(`SELECT * FROM llamadas_voz WHERE id = $1`, [id]);
     if (!rows || rows.length === 0) return null;

@@ -96,6 +96,26 @@ class LlamadasVozController {
     res.json({ success: true, ...t });
   };
 
+  /**
+   * POST /api/twilio/llamadas/:id/cancelar — la llamada nunca llegó a marcar
+   * (permiso de micrófono, token, pestaña cerrada). Libera al coach para que
+   * pueda reintentar sin esperar a que la fila venza sola.
+   */
+  cancelar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const session = getSession(req);
+      const id = idDe(req);
+      if (!session || !id) {
+        res.status(400).json({ success: false, error: 'ID_INVALIDO' });
+        return;
+      }
+      const cancelada = await llamadasVozService.cancelarSiNoArranco(id, session);
+      res.json({ success: true, cancelada });
+    } catch (e) {
+      next(e);
+    }
+  };
+
   /** GET /api/twilio/llamadas/:id — estado, para que el panel lo siga en vivo. */
   get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

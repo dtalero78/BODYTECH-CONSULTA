@@ -35,6 +35,7 @@ router.get('/voz/token', clinico, llamadasVozController.token);
 router.post('/llamadas', clinico, llamadasVozController.iniciar);
 router.get('/llamadas', auditoria, llamadasVozController.listar);
 router.get('/llamadas/:id', clinico, llamadasVozController.get);
+router.post('/llamadas/:id/cancelar', clinico, llamadasVozController.cancelar);
 router.get('/llamadas/:id/audio', auditoria, llamadasVozController.audio);
 router.post('/llamadas/:id/transcribir', auditoria, llamadasVozController.transcribir);
 

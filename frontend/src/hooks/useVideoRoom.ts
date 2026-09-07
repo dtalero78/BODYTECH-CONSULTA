@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import apiService from '../services/api.service';
 import type { VideoEngine, NormalizedParticipant, LocalVideoHandle } from '../video/video-engine';
 
@@ -125,10 +125,29 @@ export const useVideoRoom = ({
   // Lo decide el backend (COACH_BACKGROUND). Default true si no viene.
   const [coachBackgroundEnabled, setCoachBackgroundEnabled] = useState(true);
 
+  /**
+   * Id de ESTA entrada a la sala, nuevo en cada intento de conexión. Viaja con
+   * el aviso de entrada y con el de salida para que el servidor sepa a cuál
+   * corresponde cada uno.
+   *
+   * Hace falta porque una misma persona entra dos veces seguidas más de lo que
+   * parece: el link llega por WhatsApp, se abre en su navegador interno y
+   * después en el navegador de verdad. Las dos entradas comparten nombre, así
+   * que sin esto la salida de la primera borraba la presencia de la segunda y
+   * el coach dejaba de ver a alguien que seguía esperando en la sala.
+   */
+  const connIdRef = useRef<string>('');
+
   const connectToRoom = useCallback(async () => {
     try {
       setIsConnecting(true);
       setError(null);
+      // Nueva entrada: id nuevo. Si esta pestaña ya había entrado y se está
+      // reconectando, la salida de la anterior ya no puede pisar a esta.
+      connIdRef.current =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
       // El backend decide el provider (Twilio o Chime) vía VIDEO_PROVIDER y, de
       // paso, asegura la sala (no hace falta un createRoom aparte).
@@ -166,7 +185,14 @@ export const useVideoRoom = ({
       // Registrar conexión para reportes (si se proporcionó rol)
       if (role) {
         try {
-          await apiService.trackParticipantConnected(roomName, identity, role, documento, medicoCode);
+          await apiService.trackParticipantConnected(
+            roomName,
+            identity,
+            role,
+            documento,
+            medicoCode,
+            connIdRef.current
+          );
         } catch (err) {
           console.error('Error tracking participant connection:', err);
         }
@@ -236,7 +262,7 @@ export const useVideoRoom = ({
       // Registrar desconexión para reportes (si se proporcionó rol)
       if (role) {
         try {
-          apiService.trackParticipantDisconnected(roomName, identity);
+          apiService.trackParticipantDisconnected(roomName, identity, connIdRef.current);
         } catch (err) {
           console.error('Error tracking participant disconnection:', err);
         }
@@ -269,7 +295,7 @@ export const useVideoRoom = ({
         // sendBeacon garantiza el envío incluso si la ventana se cierra
         const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
         const url = `${apiBaseUrl}/api/video/events/participant-disconnected`;
-        const data = JSON.stringify({ roomName, identity });
+        const data = JSON.stringify({ roomName, identity, connId: connIdRef.current });
         navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
         room.disconnect();
       }
@@ -283,7 +309,7 @@ export const useVideoRoom = ({
       if (room) {
         if (role) {
           try {
-            apiService.trackParticipantDisconnected(roomName, identity);
+            apiService.trackParticipantDisconnected(roomName, identity, connIdRef.current);
           } catch (err) {
             console.error('Error tracking participant disconnection:', err);
           }

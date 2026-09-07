@@ -49,11 +49,14 @@ const trackParticipantConnectedSchema = z.object({
   role: z.enum(['doctor', 'patient']),
   documento: z.string().optional(),
   medicoCode: z.string().optional(),
+  // Id de esta entrada a la sala; distingue dos entradas de la misma persona.
+  connId: z.string().max(64).optional(),
 });
 
 const trackParticipantDisconnectedSchema = z.object({
   roomName: z.string().min(1),
   identity: z.string().min(1),
+  connId: z.string().max(64).optional(),
 });
 
 // Diagnóstico del cliente. Lista blanca de eventos + payload acotado: esto es un
@@ -335,10 +338,10 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { roomName, identity, role, documento, medicoCode } = parsed.data;
+    const { roomName, identity, role, documento, medicoCode, connId } = parsed.data;
 
     try {
-      sessionTracker.trackParticipantConnected(roomName, identity, role, documento, medicoCode);
+      sessionTracker.trackParticipantConnected(roomName, identity, role, documento, medicoCode, connId);
 
       res.status(200).json({
         success: true,
@@ -363,10 +366,10 @@ class VideoController {
     if (!parsed.success) {
       return validationResponse(res, parsed.error);
     }
-    const { roomName, identity } = parsed.data;
+    const { roomName, identity, connId } = parsed.data;
 
     try {
-      sessionTracker.trackParticipantDisconnected(roomName, identity);
+      sessionTracker.trackParticipantDisconnected(roomName, identity, connId);
 
       res.status(200).json({
         success: true,

@@ -193,7 +193,8 @@ class ApiService {
     identity: string,
     role: 'doctor' | 'patient',
     documento?: string,
-    medicoCode?: string
+    medicoCode?: string,
+    connId?: string
   ): Promise<void> {
     await this.client.post('/api/video/events/participant-connected', {
       roomName,
@@ -201,6 +202,7 @@ class ApiService {
       role,
       documento,
       medicoCode,
+      connId,
     });
   }
 
@@ -240,10 +242,15 @@ class ApiService {
   /**
    * Registrar que un participante se desconectó (para reportes)
    */
-  async trackParticipantDisconnected(roomName: string, identity: string): Promise<void> {
+  async trackParticipantDisconnected(
+    roomName: string,
+    identity: string,
+    connId?: string
+  ): Promise<void> {
     await this.client.post('/api/video/events/participant-disconnected', {
       roomName,
       identity,
+      connId,
     });
   }
 

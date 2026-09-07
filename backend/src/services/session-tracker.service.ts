@@ -7,6 +7,16 @@ interface SessionParticipant {
   role: 'doctor' | 'patient';
   connectedAt: Date;
   disconnectedAt?: Date;
+  /**
+   * Id de ESTA entrada a la sala. La misma persona puede entrar dos veces
+   * seguidas —el link llega por WhatsApp, se abre en su navegador interno y
+   * después en el navegador de verdad— y las dos entradas comparten `identity`.
+   * Sin distinguirlas, la salida de la primera borraba la presencia de la
+   * segunda: al coach el aviso se le prendía un segundo y desaparecía, con la
+   * persona todavía esperando en la sala. (Pasó el 7-sep con una afiliada de
+   * las 7:20.) Opcional: un navegador con el bundle viejo no lo manda.
+   */
+  connId?: string;
 }
 
 interface VideoSession {
@@ -109,8 +119,17 @@ class SessionTrackerService {
   /**
    * Registra que un participante se conectó a la sala
    */
-  trackParticipantConnected(roomName: string, identity: string, role: 'doctor' | 'patient', documento?: string, medicoCode?: string): void {
-    console.log(`[SessionTracker] Participant connected: ${identity} (${role}) to room ${roomName}, medicoCode: ${medicoCode}`);
+  trackParticipantConnected(
+    roomName: string,
+    identity: string,
+    role: 'doctor' | 'patient',
+    documento?: string,
+    medicoCode?: string,
+    connId?: string
+  ): void {
+    console.log(
+      `[SessionTracker] Participant connected: ${identity} (${role}) to room ${roomName}, medicoCode: ${medicoCode}${connId ? `, conn: ${connId}` : ''}`
+    );
 
     if (!this.sessions.has(roomName)) {
       this.sessions.set(roomName, {
@@ -134,10 +153,14 @@ class SessionTrackerService {
       session.medicoCode = medicoCode;
     }
 
+    // Reentrada: esta conexión REEMPLAZA a la anterior de la misma persona, y
+    // vuelve a contar como presente aunque la anterior ya se hubiera marcado
+    // como ida.
     session.participants.set(identity, {
       identity,
       role,
       connectedAt: new Date(),
+      connId,
     });
 
     console.log(`[SessionTracker] Current participants in ${roomName}: ${session.participants.size}`);
@@ -169,8 +192,10 @@ class SessionTrackerService {
   /**
    * Registra que un participante se desconectó de la sala
    */
-  trackParticipantDisconnected(roomName: string, identity: string): void {
-    console.log(`[SessionTracker] Participant disconnected: ${identity} from room ${roomName}`);
+  trackParticipantDisconnected(roomName: string, identity: string, connId?: string): void {
+    console.log(
+      `[SessionTracker] Participant disconnected: ${identity} from room ${roomName}${connId ? `, conn: ${connId}` : ''}`
+    );
 
     const session = this.sessions.get(roomName);
     if (!session) {
@@ -179,6 +204,16 @@ class SessionTrackerService {
     }
 
     const participant = session.participants.get(identity);
+
+    // Salida VIEJA: la pestaña anterior terminando de cerrarse mientras la nueva
+    // ya está dentro. Ignorarla es el punto de todo esto — si se aplicara, se
+    // borraría la presencia de alguien que sigue en la sala.
+    if (connId && participant?.connId && participant.connId !== connId) {
+      console.log(
+        `[SessionTracker] Salida de una entrada anterior de ${identity} en ${roomName} (${connId} ≠ ${participant.connId}), ignorada`
+      );
+      return;
+    }
 
     // Idempotencia: colgar + beforeunload + cleanup del componente disparan esto
     // 2-3 veces para el mismo participante. Sin el guard se re-emite el evento de

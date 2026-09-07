@@ -114,6 +114,57 @@ describe('presencia con dos entradas de la misma persona', () => {
     expect(emitidos.filter((e) => e.evento === 'patient-disconnected')).toHaveLength(1);
   });
 
+  // El otro lado del problema: el navegador del afiliado muchas veces NO avisa
+  // al irse (celular que cierra la pestaña, cambia de app o pierde señal). La
+  // caída del socket es la única señal fiable, y antes se descartaba: el coach
+  // veía "Conectado" con la sala vacía (7-sep, 08:01 → 08:04).
+  describe('marcarPacienteFuera (caída del socket)', () => {
+    it('apaga la presencia sin necesitar el nombre del afiliado', () => {
+      const sala = 'consulta-socket';
+      sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'conn-1');
+      expect(presente(sala)).toBe(true);
+
+      sessionTracker.marcarPacienteFuera(sala, 'socket caído');
+
+      expect(presente(sala)).toBe(false);
+      expect(emitidos.filter((e) => e.evento === 'patient-disconnected')).toHaveLength(1);
+    });
+
+    // La guarda de salidas viejas no puede bloquear esta, que es la vigente.
+    it('funciona aunque la persona haya entrado dos veces', () => {
+      const sala = 'consulta-socket-2';
+      sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'conn-1');
+      sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'conn-2');
+
+      sessionTracker.marcarPacienteFuera(sala, 'socket caído');
+      expect(presente(sala)).toBe(false);
+    });
+
+    it('no toca al coach, solo al afiliado', () => {
+      const sala = 'consulta-socket-3';
+      sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'c1');
+      sessionTracker.trackParticipantConnected(sala, 'Dr. X', 'doctor', undefined, MEDICO, 'c2');
+
+      sessionTracker.marcarPacienteFuera(sala, 'socket caído');
+
+      const s = sessionTracker.getActiveSessions().find((x) => x.roomName === sala);
+      expect(s?.patientConnected).toBe(false);
+      expect(s?.doctorConnected).toBe(true);
+    });
+
+    it('una sala que no existe no rompe nada', () => {
+      expect(() => sessionTracker.marcarPacienteFuera('no-existe', 'x')).not.toThrow();
+    });
+
+    it('llamarlo dos veces solo avisa una vez', () => {
+      const sala = 'consulta-socket-4';
+      sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'c1');
+      sessionTracker.marcarPacienteFuera(sala, 'socket caído');
+      sessionTracker.marcarPacienteFuera(sala, 'socket caído');
+      expect(emitidos.filter((e) => e.evento === 'patient-disconnected')).toHaveLength(1);
+    });
+  });
+
   it('el coach recibe el aviso de entrada en cada reingreso', () => {
     const sala = 'consulta-avisos';
     sessionTracker.trackParticipantConnected(sala, PACIENTE, 'patient', DOC, MEDICO, 'conn-1');

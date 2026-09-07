@@ -190,6 +190,33 @@ class SessionTrackerService {
   }
 
   /**
+   * Da por ido al afiliado de una sala SIN necesitar su identity.
+   *
+   * Existe porque la presencia no puede depender de que el navegador avise al
+   * salir: en celular eso falla seguido —cerrar la pestaña, cambiar de app,
+   * perder señal— y entonces el afiliado se quedaba encendido en el panel con
+   * la sala vacía. (Pasó el 7-sep a las 08:01: se cayó, nunca llegó el aviso, y
+   * a las 08:04 la coach veía "Conectado" y no había nadie.)
+   *
+   * La señal fiable es la caída del socket de telemedicina, que el servidor sí
+   * detecta solo. Ese socket guarda al afiliado como "Patient", no con su
+   * nombre, así que acá se busca por ROL: el único paciente presente de la sala.
+   * Se reenvía su propio `connId` para que la guarda de salidas viejas lo deje
+   * pasar — esta salida sí es la de la entrada vigente.
+   */
+  marcarPacienteFuera(roomName: string, motivo: string): void {
+    const session = this.sessions.get(roomName);
+    if (!session) return;
+    for (const p of session.participants.values()) {
+      if (p.role === 'patient' && !p.disconnectedAt) {
+        console.log(`[SessionTracker] Afiliado dado por ido en ${roomName} (${motivo})`);
+        this.trackParticipantDisconnected(roomName, p.identity, p.connId);
+        return;
+      }
+    }
+  }
+
+  /**
    * Registra que un participante se desconectó de la sala
    */
   trackParticipantDisconnected(roomName: string, identity: string, connId?: string): void {

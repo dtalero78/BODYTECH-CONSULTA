@@ -1,4 +1,5 @@
 import { Server, Socket } from 'socket.io';
+import { sessionTracker } from './session-tracker.service';
 
 interface TelemedicineSession {
   roomName: string;
@@ -248,6 +249,16 @@ class TelemedicineSocketService {
           session.patientSocketId = undefined;
           session.patientIdentity = undefined;
           this.io?.of('/telemedicine').to(roomName).emit('patient-disconnected');
+
+          // Y apagar su presencia en el panel. Esta caída es la ÚNICA señal
+          // fiable de que el afiliado se fue: su navegador muchas veces no
+          // alcanza a avisar (celular que cierra la pestaña, cambia de app o
+          // pierde señal), y sin esto quedaba encendido con la sala vacía.
+          try {
+            sessionTracker.marcarPacienteFuera(roomName, 'socket caído');
+          } catch (e) {
+            console.error('[Telemedicine] No se pudo apagar la presencia:', e);
+          }
         }
       }
     }

@@ -36,15 +36,13 @@ async function main(): Promise<void> {
   let entradas = 0;
 
   for (;;) {
+    // Se lleva TODO lo que la consulta tenga lleno, no un extracto: la historia
+    // común tiene que servir para atender, no sólo para saber que hubo una cita.
     const filas = await postgresService.query(
-      `SELECT "_id", "numeroId", "primerNombre", "primerApellido", "medico", "origen",
-              "fechaConsulta", "fechaAtencion",
-              motivo_consulta_texto, hallazgos_descripcion, "mdConceptoFinal",
-              "mdRecomendacionesMedicasAdicionales",
-              cc_peso_nuevo, cc_estatura_nuevo, tas, tad, fcr
-         FROM "HistoriaClinica"
-        WHERE "numeroId" IS NOT NULL AND "numeroId" <> ''
-        ORDER BY "_id" LIMIT $1 OFFSET $2`,
+      `SELECT jsonb_strip_nulls(to_jsonb(h)) AS todo
+         FROM "HistoriaClinica" h
+        WHERE h."numeroId" IS NOT NULL AND h."numeroId" <> ''
+        ORDER BY h."_id" LIMIT $1 OFFSET $2`,
       [LOTE, offset],
     );
     if (!filas || filas.length === 0) break;
@@ -54,7 +52,8 @@ async function main(): Promise<void> {
     const cliente = await pool.connect();
     try {
       await cliente.query('BEGIN');
-      for (const h of filas) {
+      for (const fila of filas) {
+        const h = fila.todo as Record<string, unknown>;
         const doc = String(h.numeroId).replace(/\D/g, '');
         if (!doc) continue;
         const nombre = [h.primerNombre, h.primerApellido].filter(Boolean).join(' ').trim() || null;
@@ -74,7 +73,9 @@ async function main(): Promise<void> {
           `INSERT INTO historia_entradas
              (documento, app, servicio, origen_id, profesional, fecha, resumen, datos)
            VALUES ($1, 'consulta', $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (app, origen_id) DO NOTHING`,
+           ON CONFLICT (app, origen_id) DO UPDATE
+             SET resumen = EXCLUDED.resumen, datos = EXCLUDED.datos,
+                 fecha = EXCLUDED.fecha, actualizada_en = NOW()`,
           [
             doc,
             // El origen de la cita ES el servicio; lo demás es la consulta de siempre.
@@ -89,14 +90,7 @@ async function main(): Promise<void> {
               ? String(h.fechaConsulta ?? h.fechaAtencion)
               : null,
             partes.length > 0 ? partes.join(' · ') : null,
-            JSON.stringify({
-              peso: h.cc_peso_nuevo ?? null,
-              estatura: h.cc_estatura_nuevo ?? null,
-              tensionSistolica: h.tas ?? null,
-              tensionDiastolica: h.tad ?? null,
-              frecuenciaCardiaca: h.fcr ?? null,
-              recomendaciones: h.mdRecomendacionesMedicasAdicionales ?? null,
-            }),
+            JSON.stringify(h),
           ],
         );
         entradas++;

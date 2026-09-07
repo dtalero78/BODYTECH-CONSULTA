@@ -169,24 +169,25 @@ class CarpetaService {
   /**
    * Refleja UNA consulta de Consulta en la carpeta de su paciente.
    *
-   * Se queda con lo que otro profesional necesita leer, no con las 350
-   * columnas: el motivo, los hallazgos, la conducta y las medidas. Quien quiera
-   * el detalle completo abre la consulta en su aplicación.
+   * Lleva TODO lo que el profesional escribió, no un extracto. Si el médico de
+   * la UMV abre lo que hizo el coach de Trepsi y sólo ve el motivo y el peso,
+   * la historia común no le sirve para atender.
+   *
+   * `jsonb_strip_nulls` deja sólo los campos llenos: de las 350 columnas, una
+   * consulta usa 90 en promedio. Por eso `datos` es JSONB y no columnas fijas —
+   * cada servicio guarda lo suyo con su propia forma, y ninguno tiene que
+   * caber en el molde del otro.
    */
   async reflejarDesdeConsulta(historiaId: string): Promise<boolean> {
     try {
       const filas = await postgresService.query(
-        `SELECT "_id", "numeroId", "primerNombre", "primerApellido", "medico", "origen",
-                "fechaConsulta", "fechaAtencion",
-                motivo_consulta_texto, hallazgos_descripcion,
-                "mdConceptoFinal", "mdRecomendacionesMedicasAdicionales",
-                cc_peso_nuevo, cc_estatura_nuevo, tas, tad, fcr
-           FROM "HistoriaClinica" WHERE "_id" = $1`,
+        `SELECT jsonb_strip_nulls(to_jsonb(h)) AS todo FROM "HistoriaClinica" h WHERE h."_id" = $1`,
         [historiaId],
       );
-      const h = filas?.[0];
+      const h = (filas?.[0]?.todo ?? null) as Record<string, unknown> | null;
       if (!h || !h.numeroId) return false;
 
+      // El resumen es para leer de un vistazo; el detalle completo va en `datos`.
       const partes = [
         h.motivo_consulta_texto && `Motivo: ${h.motivo_consulta_texto}`,
         h.hallazgos_descripcion && `Hallazgos: ${h.hallazgos_descripcion}`,
@@ -213,14 +214,7 @@ class CarpetaService {
           profesion: null,
           fecha: String(h.fechaConsulta || h.fechaAtencion || ''),
           resumen: partes.length > 0 ? partes.join(' · ') : null,
-          datos: {
-            peso: h.cc_peso_nuevo ?? null,
-            estatura: h.cc_estatura_nuevo ?? null,
-            tensionSistolica: h.tas ?? null,
-            tensionDiastolica: h.tad ?? null,
-            frecuenciaCardiaca: h.fcr ?? null,
-            recomendaciones: h.mdRecomendacionesMedicasAdicionales ?? null,
-          },
+          datos: h,
         },
       );
     } catch (e) {

@@ -50,6 +50,23 @@ const FROM = process.env.TWILIO_VOICE_FROM || '+576016284820';
 /** Segundos que suena el celular del paciente antes de rendirse. */
 const TIMEOUT_PACIENTE_SEG = 30;
 
+/**
+ * Tope de duración de la conversación, en segundos: Twilio cuelga solo al
+ * llegar. El default de `<Dial>` son 4 HORAS, y ahí estaba el problema — cuando
+ * contesta un contestador nadie corta, la línea queda abierta y el minutaje se
+ * multiplica sin que nadie se entere.
+ *
+ * OJO: es un corte seco, no distingue quién contestó. La llamada real más larga
+ * que tenemos duró 37 s (confirmar la cita y mandar al WhatsApp), así que 20 s
+ * corta conversaciones legítimas por la mitad. Se eligió a sabiendas y por eso
+ * es una variable de entorno: subirlo no necesita despliegue. La alternativa sin
+ * ese costo era detectar el contestador (machineDetection) y colgar solo ahí.
+ */
+const LIMITE_CONVERSACION_SEG = Math.max(
+  5,
+  Number(process.env.LLAMADA_LIMITE_SEG) || 20
+);
+
 /** Una llamada sin cierre por webhook después de esto se da por caída. */
 const MINUTOS_LLAMADA_HUERFANA = 20;
 
@@ -243,6 +260,7 @@ export function twimlParaCoach(p: {
     `<Response>` +
     `<Say ${SAY}>Conectando con ${nombre}.</Say>` +
     `<Dial callerId="${escapeXml(FROM)}" timeout="${TIMEOUT_PACIENTE_SEG}"` +
+    ` timeLimit="${LIMITE_CONVERSACION_SEG}"` +
     ` record="record-from-answer-dual"` +
     ` recordingStatusCallback="${u('/grabacion')}" recordingStatusCallbackMethod="POST"` +
     ` recordingStatusCallbackEvent="completed"` +

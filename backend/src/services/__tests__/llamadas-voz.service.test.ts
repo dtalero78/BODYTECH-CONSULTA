@@ -109,6 +109,12 @@ describe('TwiML', () => {
     base,
   });
 
+  // El default de <Dial> son 4 HORAS: un contestador que atiende deja la línea
+  // abierta y el minutaje se dispara. El tope lo cierra Twilio solo.
+  it('la conversación tiene tope de duración', () => {
+    expect(coach).toContain('timeLimit="20"');
+  });
+
   it('graba los dos canales desde que contesta el paciente', () => {
     expect(coach).toContain('record="record-from-answer-dual"');
     expect(coach).toContain('recordingStatusCallback="https://bodytech.app/api/twilio/llamadas/42/grabacion"');

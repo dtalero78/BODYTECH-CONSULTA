@@ -3,7 +3,7 @@ import { X, Upload, Trash2 } from 'lucide-react';
 import profesionalesService, {
   Profesional,
   ProfesionalInput,
-  Rol,
+  RolDirectorio,
 } from '../../services/profesionales.service';
 
 // Tamaño máximo de la firma en bytes (base64 ya codificado pesa ~33% más
@@ -56,7 +56,8 @@ function downscaleToDataUrl(file: File, maxSide: number, quality: number): Promi
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: (p: Profesional) => void;
+  /** `null` cuando el rol no agenda en Consulta: no hay ficha que devolver. */
+  onSaved: (p: Profesional | null) => void;
   // Si llega `editing`, el modal está en modo edición.
   editing: Profesional | null;
   onError: (message: string) => void;
@@ -86,7 +87,12 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
   const [form, setForm] = useState<ProfesionalInput>(EMPTY);
   // La cuenta con la que va a entrar. Se pide en el mismo paso: una persona se
   // crea una vez, no en dos pantallas.
-  const [cuenta, setCuenta] = useState({ email: '', password: '', rol: 'coach' });
+  const [cuenta, setCuenta] = useState({
+    email: '',
+    password: '',
+    app: 'consulta' as 'consulta' | 'acc' | 'prepagadas',
+    rol: 'coach',
+  });
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -117,13 +123,25 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     }
     // La cuenta arranca en blanco cada vez, con la clave ya generada: si hay que
     // buscar el botón para que aparezca, la mitad de las veces no se genera.
-    setCuenta({ email: '', password: generarClave(), rol: EMPTY.rol });
+    setCuenta({ email: '', password: generarClave(), app: 'consulta', rol: EMPTY.rol });
   }, [editing, isOpen]);
 
   // El rol de la cuenta sigue al de la ficha mientras no se toque a mano: un
   // coach de la ficha no debería entrar como médico por descuido.
   useEffect(() => {
-    setCuenta((c) => (c.email ? c : { ...c, rol: form.rol }));
+    setCuenta((c) => {
+      if (c.email) return c;
+      // Quien atiende en Consulta entra a Consulta; el fisio y el evaluador
+      // son de ACC. Es sólo el valor por defecto: se puede cambiar.
+      const esDeAcc = form.rol === 'fisioterapeuta' || form.rol === 'evaluador';
+      return esDeAcc
+        ? { ...c, app: 'acc' as const, rol: 'fisioterapeuta' }
+        : {
+            ...c,
+            app: 'consulta' as const,
+            rol: form.rol === 'medico' || form.rol === 'coach' ? form.rol : 'auxiliar',
+          };
+    });
   }, [form.rol]);
 
   async function handleFirmaUpload(file: File) {
@@ -169,6 +187,11 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     }
   }
 
+  // Sólo médicos y coaches tienen agenda en Consulta. A los demás se les crea
+  // la persona en el directorio y su cuenta, y nada más: no hay a quién
+  // atender acá, y la base tampoco los aceptaría en la tabla de agenda.
+  const conAgenda = form.rol === 'medico' || form.rol === 'coach';
+
   if (!isOpen) return null;
 
   function update<K extends keyof ProfesionalInput>(key: K, value: ProfesionalInput[K]) {
@@ -177,8 +200,12 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.codigo.trim() || !form.primerNombre.trim() || !form.primerApellido.trim()) {
-      onError('Código, primer nombre y primer apellido son obligatorios.');
+    if (!form.primerNombre.trim() || !form.primerApellido.trim()) {
+      onError('El nombre y el apellido son obligatorios.');
+      return;
+    }
+    if (conAgenda && !form.codigo.trim()) {
+      onError('Un médico o coach necesita su código de agenda.');
       return;
     }
     if (!editing && !(form.documento ?? '').trim()) {
@@ -202,6 +229,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
           ? {
               email: cuenta.email.trim().toLowerCase(),
               password: cuenta.password,
+              app: cuenta.app,
               rol: cuenta.rol,
             }
           : undefined,
@@ -299,14 +327,23 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol *</label>
               <select
                 value={form.rol}
-                onChange={(e) => update('rol', e.target.value as Rol)}
+                onChange={(e) => update('rol', e.target.value as RolDirectorio)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="medico">Médico</option>
                 <option value="coach">Coach</option>
+                <option value="nutricionista">Nutricionista</option>
+                <option value="fisioterapeuta">Fisioterapeuta</option>
+                <option value="evaluador">Evaluador</option>
+                <option value="administrativo">Administrativo</option>
               </select>
+              {!conAgenda && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Este rol no agenda en Consulta: queda en el directorio, sin agenda acá.
+                </p>
+              )}
             </div>
-            <div>
+            <div className={conAgenda ? '' : 'hidden'}>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                 Código * <span className="text-gray-400">(único por sede)</span>
               </label>
@@ -573,17 +610,34 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Entra a</label>
                   <select
-                    value={cuenta.rol}
-                    onChange={(e) => setCuenta({ ...cuenta, rol: e.target.value })}
+                    value={cuenta.app}
+                    onChange={(e) => {
+                      const app = e.target.value as 'consulta' | 'acc' | 'prepagadas';
+                      setCuenta({ ...cuenta, app, rol: ROLES_APP[app][0] });
+                    }}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="medico">medico</option>
-                    <option value="coach">coach</option>
-                    <option value="auxiliar">auxiliar</option>
+                    <option value="consulta">Consulta</option>
+                    <option value="acc">ACC</option>
+                    <option value="prepagadas">Prepagadas</option>
                   </select>
                 </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol en esa aplicación</label>
+                <select
+                  value={cuenta.rol}
+                  onChange={(e) => setCuenta({ ...cuenta, rol: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {ROLES_APP[cuenta.app].map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -633,6 +687,16 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     </div>
   );
 }
+
+/**
+ * Los roles de cada aplicación. No hay un vocabulario común a propósito: un
+ * fisioterapeuta no existe en Prepagadas. Espeja `ROLES_POR_APP` del backend.
+ */
+const ROLES_APP: Record<'consulta' | 'acc' | 'prepagadas', string[]> = {
+  consulta: ['medico', 'coach', 'auxiliar', 'coordinador', 'admin', 'torre'],
+  acc: ['fisioterapeuta', 'admin'],
+  prepagadas: ['profesional', 'asesor', 'admin'],
+};
 
 /** Contraseña provisional legible: sin caracteres que se confundan al dictarla. */
 function generarClave(): string {

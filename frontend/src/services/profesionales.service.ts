@@ -16,6 +16,13 @@ function authHeaders() {
 }
 
 export type Rol = 'medico' | 'coach';
+
+/**
+ * Los roles del DIRECTORIO. Toda persona de la plataforma entra por el alta de
+ * profesional, no sólo quien atiende en Consulta; pero sólo `medico` y `coach`
+ * tienen agenda acá, y son los únicos que la ficha acepta.
+ */
+export type RolDirectorio = Rol | 'nutricionista' | 'fisioterapeuta' | 'evaluador' | 'administrativo';
 export type Modalidad = 'presencial' | 'virtual';
 
 export interface Profesional {
@@ -45,7 +52,8 @@ export interface Profesional {
 }
 
 export interface ProfesionalInput {
-  rol: Rol;
+  rol: RolDirectorio;
+  /** Sólo hace falta para quien va a tener agenda. */
   codigo: string;
   documento?: string | null;
   primerNombre: string;
@@ -69,6 +77,8 @@ export interface ProfesionalInput {
   cuenta?: {
     email: string;
     password: string;
+    /** A qué aplicación entra: no todo el que se crea acá trabaja en Consulta. */
+    app: 'consulta' | 'acc' | 'prepagadas';
     rol: string;
     sedes?: string[];
     esGlobal?: boolean;
@@ -77,7 +87,8 @@ export interface ProfesionalInput {
 
 /** Lo que devuelve el alta: además de la ficha, qué pasó con las otras dos partes. */
 export interface AltaProfesional {
-  profesional: Profesional;
+  /** `null` cuando el rol no agenda en Consulta: la persona y su cuenta sí quedaron. */
+  profesional: Profesional | null;
   /** `true` si la persona ya estaba en el directorio (lo normal si viene de RRHH). */
   yaEstabaEnDirectorio: boolean;
   cuentaCreada: boolean;

@@ -11,7 +11,7 @@ import profesionalesService from '../services/profesionales.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
-import usuariosService from '../services/usuarios.service';
+import usuariosGlobalService from '../services/usuarios-global.service';
 import { asegurarPersona } from '../services/directorio-escritura.service';
 import { revisarAlta, Actor } from '../helpers/usuarios-permisos.helper';
 
@@ -25,12 +25,35 @@ function actorDe(req: Request): Actor {
 // Schemas
 // ---------------------------------------------------------------------------
 
+/**
+ * Los roles del DIRECTORIO: toda persona de la plataforma entra por acá, no
+ * sólo quien atiende en Consulta. Un fisioterapeuta de ACC o una coordinadora
+ * también son gente que hay que dar de alta.
+ */
+const rolDirectorioEnum = z.enum([
+  'medico',
+  'coach',
+  'nutricionista',
+  'fisioterapeuta',
+  'evaluador',
+  'administrativo',
+]);
+
+/**
+ * De esos, los únicos que Consulta AGENDA. A los demás no se les crea ficha de
+ * agenda —no tendrían a quién atender acá— y la base tampoco los aceptaría:
+ * `profesionales_rol_chk` sólo admite estos dos.
+ */
+const ROLES_CON_AGENDA = ['medico', 'coach'] as const;
+
 const rolEnum = z.enum(['medico', 'coach']);
 const modalidadEnum = z.enum(['presencial', 'virtual']);
 
 const profesionalCreateSchema = z.object({
-  rol: rolEnum,
-  codigo: z.string().min(1).max(80),
+  rol: rolDirectorioEnum,
+  // Sólo hace falta para quien va a tener agenda; a un fisioterapeuta de ACC no
+  // se le inventa un código de Consulta.
+  codigo: z.string().max(80).optional(),
   // Cédula, para cruzar con el directorio compartido. Sólo dígitos: es lo que
   // usa el directorio como llave, y aceptar puntos o guiones haría que la misma
   // persona no cruzara según cómo la escribieron.
@@ -63,14 +86,21 @@ const profesionalCreateSchema = z.object({
     .object({
       email: z.string().email('Correo inválido.'),
       password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.'),
-      rol: z.enum(['medico', 'coach', 'auxiliar', 'coordinador', 'admin', 'torre']),
+      // A qué aplicación entra. Un fisioterapeuta de ACC no tiene por qué
+      // recibir una cuenta de Consulta sólo porque se creó desde acá.
+      app: z.enum(['consulta', 'acc', 'prepagadas']).default('consulta'),
+      rol: z.string().min(1),
       sedes: z.array(z.string()).optional(),
       esGlobal: z.boolean().optional(),
     })
     .optional(),
 });
 
-const profesionalUpdateSchema = profesionalCreateSchema.partial().refine(
+// Editar toca la FICHA de agenda, que sólo existe para médicos y coaches.
+const profesionalUpdateSchema = profesionalCreateSchema
+  .partial()
+  .extend({ rol: rolEnum.optional(), codigo: z.string().min(1).max(80).optional() })
+  .refine(
   (v) => Object.keys(v).length > 0,
   'Debe enviar al menos un campo.'
 );
@@ -240,14 +270,23 @@ class ProfesionalesController {
       // Si va a crear cuenta, los límites de privilegio son los MISMOS que en el
       // panel de usuarios: un coordinador no reparte roles ni sedes ajenas por
       // esta otra puerta.
+      const conAgenda = (ROLES_CON_AGENDA as readonly string[]).includes(d.rol);
+      if (conAgenda && !d.codigo) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'CODIGO_REQUERIDO', message: 'Un médico o coach necesita su código de agenda.' },
+        });
+        return;
+      }
+
       if (d.cuenta) {
         const fallo = revisarAlta(actorDe(req), {
-          app: 'consulta',
+          app: d.cuenta.app,
           rol: d.cuenta.rol,
           esGlobal: d.cuenta.esGlobal,
           sedes: d.cuenta.sedes ?? [sedeId],
-          // El vínculo con la ficha existe por construcción: se crea acá mismo.
-          profesionalId: 0,
+          // El vínculo con la ficha existe por construcción cuando hay agenda.
+          profesionalId: conAgenda ? 0 : null,
         });
         if (fallo) {
           res.status(fallo.code === 'FORBIDDEN' ? 403 : 400).json({
@@ -263,7 +302,7 @@ class ProfesionalesController {
       const enDirectorio = await asegurarPersona({
         documento: d.documento,
         nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
-        rol: d.rol === 'coach' ? 'coach' : 'medico',
+        rol: d.rol,
         cargo: d.especialidad ?? null,
         ambito: sedeId === 'corporativo' ? 'corporativo' : 'virtual',
       });
@@ -278,44 +317,53 @@ class ProfesionalesController {
         return;
       }
 
-      // PASO 2 — la ficha de agenda de Consulta.
-      const result = await profesionalesService.create(d, sedeId);
-      if (!result.ok || !result.data) {
-        res.status(result.status).json({ success: false, error: result.error });
-        return;
+      // PASO 2 — la ficha de agenda, SÓLO para quien Consulta agenda. Un
+      // fisioterapeuta de ACC o una coordinadora no tienen a quién atender acá,
+      // y la base tampoco los aceptaría en esa tabla.
+      let ficha: { id: number } | null = null;
+      if (conAgenda) {
+        const result = await profesionalesService.create(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { ...d, codigo: d.codigo as string, rol: d.rol as 'medico' | 'coach' } as any,
+          sedeId,
+        );
+        if (!result.ok || !result.data) {
+          res.status(result.status).json({ success: false, error: result.error });
+          return;
+        }
+        ficha = result.data;
       }
-      const ficha = result.data;
 
       // PASO 3 — la cuenta, enganchada a la ficha recién creada. Si falla, la
       // ficha queda: se le crea la cuenta después desde el panel de usuarios, y
       // el mensaje lo dice en vez de fingir que todo salió bien.
       let cuenta: { creada: boolean; error?: string } = { creada: false };
       if (d.cuenta) {
-        const r = await usuariosService.create({
+        const r = await usuariosGlobalService.crear({
           email: d.cuenta.email,
-          passwordHash: await usuariosService.hashPassword(d.cuenta.password),
+          password: d.cuenta.password,
           nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
-          rol: d.cuenta.rol as never,
-          esGlobal: d.cuenta.esGlobal ?? false,
-          sedes: d.cuenta.esGlobal ? [] : (d.cuenta.sedes ?? [sedeId]),
-          profesionalId: ficha.id,
-          celular: d.celular ?? null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
+          documento: d.documento,
+          app: d.cuenta.app,
+          rol: d.cuenta.rol,
+          alcance:
+            d.cuenta.app === 'consulta'
+              ? {
+                  sedes: d.cuenta.esGlobal ? [] : (d.cuenta.sedes ?? [sedeId]),
+                  esGlobal: d.cuenta.esGlobal ?? false,
+                  profesionalId: ficha?.id ?? null,
+                }
+              : {},
+        });
         cuenta = r.ok
           ? { creada: true }
-          : {
-              creada: false,
-              error:
-                r.error === 'EMAIL_TAKEN'
-                  ? 'Ya existe una cuenta con ese correo. La ficha sí quedó creada.'
-                  : 'No se pudo crear la cuenta. La ficha sí quedó creada.',
-            };
+          : { creada: false, error: 'No se pudo crear la cuenta. Lo demás sí quedó.' };
       }
 
-      res.status(result.status).json({
+      res.status(201).json({
         success: true,
         data: ficha,
+        conAgenda,
         directorio: { yaEstaba: !enDirectorio.creada },
         cuenta,
       });

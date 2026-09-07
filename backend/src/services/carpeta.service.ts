@@ -106,12 +106,21 @@ class CarpetaService {
       CREATE INDEX IF NOT EXISTS idx_historia_problemas_documento
         ON historia_problemas (documento) WHERE vigente
     `);
-    // Las tres aplicaciones LEEN la carpeta. Escribir la sigue haciendo cada
-    // una por su lado, desde su propio backend.
+    // Las tres aplicaciones LEEN la historia. Escribir su entrada la hace cada
+    // una desde su propio backend, así que quien ya escribe necesita además
+    // INSERT: ACC lo hace al registrar una valoración. Prepagadas todavía no,
+    // y por eso sigue con lectura nada más — el permiso se da cuando se usa.
     for (const rol of ['acc_app', 'prepagadas_app']) {
       await pool
         .query(`GRANT SELECT ON historia_entradas, historia_problemas TO ${rol}`)
         .catch(() => undefined);
+    }
+    for (const sql of [
+      'GRANT INSERT, UPDATE ON historia_entradas TO acc_app',
+      'GRANT USAGE, SELECT ON SEQUENCE historia_entradas_id_seq TO acc_app',
+      'GRANT INSERT, UPDATE ON afiliados TO acc_app',
+    ]) {
+      await pool.query(sql).catch(() => undefined);
     }
   }
 

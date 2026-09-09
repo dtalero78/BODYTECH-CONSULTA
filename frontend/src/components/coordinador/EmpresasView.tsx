@@ -19,25 +19,26 @@ interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }
 
-/** El mes anterior, que es el que casi siempre se informa. */
-function mesPasado(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+const iso = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** Primer y último día del mes `YYYY-MM`. */
-function rangoDelMes(mes: string): { desde: string; hasta: string } {
-  const [a, m] = mes.split('-').map(Number);
-  const ultimo = new Date(a, m, 0).getDate();
-  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, '0')}` };
+/**
+ * El rango de un mes corrido hacia atrás. `0` es el mes en curso, `1` el
+ * anterior. El periodo se puede cambiar a mano: hay informes que cubren una
+ * jornada de tres días en campo y otros un trimestre.
+ */
+function rangoDeMes(atras: number): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth() - atras, 1);
+  const ultimo = new Date(hoy.getFullYear(), hoy.getMonth() - atras + 1, 0);
+  return { desde: iso(primero), hasta: iso(ultimo) };
 }
 
 export function EmpresasView({ showToast }: Props) {
-  // El mes del informe. Uno solo para toda la tabla: se informa un mes a la vez,
-  // y ponerle su propio selector a cada fila sería pedir el mismo dato N veces.
-  const [mes, setMes] = useState(mesPasado());
+  // El periodo del informe. Uno solo para toda la tabla: se informa un periodo a
+  // la vez, y ponerle su propio selector a cada fila sería pedir el mismo dato
+  // tantas veces como empresas haya.
+  const [periodo, setPeriodo] = useState(() => rangoDeMes(1));
   const [generando, setGenerando] = useState<string | null>(null);
 
   /**
@@ -45,7 +46,11 @@ export function EmpresasView({ showToast }: Props) {
    * necesita el token de sesión, y un `<a href>` no lo manda.
    */
   async function generarInforme(empresa: string) {
-    const { desde, hasta } = rangoDelMes(mes);
+    const { desde, hasta } = periodo;
+    if (desde > hasta) {
+      showToast({ type: 'error', message: 'La fecha de inicio es posterior a la de fin.' });
+      return;
+    }
     setGenerando(empresa);
     try {
       const url = `${import.meta.env.VITE_API_BASE_URL || ''}/api/informe-corporativo/pdf?empresa=${encodeURIComponent(empresa)}&desde=${desde}&hasta=${hasta}`;
@@ -59,7 +64,7 @@ export function EmpresasView({ showToast }: Props) {
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `Informe ${empresa} ${mes}.pdf`;
+      a.download = `Informe ${empresa} ${desde} a ${hasta}.pdf`;
       a.click();
       URL.revokeObjectURL(a.href);
       showToast({ type: 'success', message: `Informe de ${empresa} generado.` });
@@ -209,21 +214,36 @@ export function EmpresasView({ showToast }: Props) {
         </form>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
-        <label className={SECTION_LABEL} htmlFor="mes-informe">
-          Mes del informe
-        </label>
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <span className={SECTION_LABEL}>Periodo del informe</span>
         <input
-          id="mes-informe"
-          type="month"
-          value={mes}
-          onChange={(ev) => setMes(ev.target.value)}
-          className="h-[30px] px-2.5 border border-zinc-300 rounded-md text-[12.5px] bg-white"
+          type="date"
+          aria-label="Desde"
+          value={periodo.desde}
+          onChange={(ev) => setPeriodo({ ...periodo, desde: ev.target.value })}
+          className={FECHA}
         />
-        <span className="text-[11.5px] text-zinc-400">
-          El informe sale de las valoraciones cerradas en ese mes.
-        </span>
+        <span className="text-[12.5px] text-zinc-400">a</span>
+        <input
+          type="date"
+          aria-label="Hasta"
+          value={periodo.hasta}
+          onChange={(ev) => setPeriodo({ ...periodo, hasta: ev.target.value })}
+          className={FECHA}
+        />
+        {/* Atajos, porque el caso corriente es «el mes pasado» y nadie debería
+            teclear dos fechas para eso. */}
+        <button onClick={() => setPeriodo(rangoDeMes(1))} className={ATAJO}>
+          Mes pasado
+        </button>
+        <button onClick={() => setPeriodo(rangoDeMes(0))} className={ATAJO}>
+          Este mes
+        </button>
       </div>
+      <p className="text-[11.5px] text-zinc-400 mb-4">
+        El informe cuenta las valoraciones cerradas dentro del periodo. Las citas agendadas y no
+        atendidas entran como inasistencias.
+      </p>
 
       <div className="border border-zinc-200 rounded-lg overflow-x-auto bg-white">
         <table className="w-full text-[12.5px] border-collapse">
@@ -281,3 +301,9 @@ export function EmpresasView({ showToast }: Props) {
     </div>
   );
 }
+
+const FECHA =
+  'h-[30px] px-2.5 border border-zinc-300 rounded-md text-[12.5px] bg-white text-zinc-800';
+
+const ATAJO =
+  'h-[30px] px-2.5 border border-zinc-300 rounded-md text-[12px] text-zinc-600 hover:bg-zinc-50';

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Upload, Trash2 } from 'lucide-react';
+import authService from '../../services/auth.service';
 import profesionalesService, {
   Profesional,
   ProfesionalInput,
@@ -92,7 +93,22 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     password: '',
     app: 'consulta' as 'consulta' | 'acc' | 'prepagadas',
     rol: 'coach',
+    // El alcance se ELIGE. Antes se heredaba de la petición y toda cuenta nueva
+    // nacía atada a 'bsl', que no es una sede: es el valor por defecto que
+    // quedó de cuando la plataforma era de un solo sitio.
+    sedes: [] as string[],
+    esGlobal: false,
+    programas: [] as string[],
   });
+  const [sedesDisponibles, setSedesDisponibles] = useState<{ sedeId: string; nombre: string }[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    authService
+      .getSedes()
+      .then((s) => setSedesDisponibles(s))
+      .catch(() => setSedesDisponibles([]));
+  }, [isOpen]);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -123,7 +139,15 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     }
     // La cuenta arranca en blanco cada vez, con la clave ya generada: si hay que
     // buscar el botón para que aparezca, la mitad de las veces no se genera.
-    setCuenta({ email: '', password: generarClave(), app: 'consulta', rol: EMPTY.rol });
+    setCuenta({
+      email: '',
+      password: generarClave(),
+      app: 'consulta',
+      rol: EMPTY.rol,
+      sedes: [],
+      esGlobal: false,
+      programas: [],
+    });
   }, [editing, isOpen]);
 
   // El rol de la cuenta sigue al de la ficha mientras no se toque a mano: un
@@ -216,6 +240,16 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       onError('La contraseña provisional debe tener al menos 8 caracteres.');
       return;
     }
+    if (
+      !editing &&
+      cuenta.email.trim() &&
+      cuenta.app === 'consulta' &&
+      !cuenta.esGlobal &&
+      cuenta.sedes.length === 0
+    ) {
+      onError('Elegí a qué sedes accede la cuenta, o marcá acceso a todas.');
+      return;
+    }
     setSaving(true);
     try {
       if (editing) {
@@ -231,6 +265,9 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
               password: cuenta.password,
               app: cuenta.app,
               rol: cuenta.rol,
+              sedes: cuenta.esGlobal ? [] : cuenta.sedes,
+              esGlobal: cuenta.esGlobal,
+              programas: cuenta.programas,
             }
           : undefined,
       });
@@ -639,6 +676,77 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                   ))}
                 </select>
               </div>
+              {cuenta.app === 'consulta' && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">
+                    Qué alcanza a ver
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={cuenta.esGlobal}
+                      onChange={(e) => setCuenta({ ...cuenta, esGlobal: e.target.checked })}
+                    />
+                    Todas las sedes
+                  </label>
+                  {!cuenta.esGlobal && (
+                    <div className="border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-y-1.5">
+                      {sedesDisponibles.length === 0 ? (
+                        <p className="text-xs text-gray-400">No hay sedes para asignar.</p>
+                      ) : (
+                        sedesDisponibles.map((s) => (
+                          <label key={s.sedeId} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={cuenta.sedes.includes(s.sedeId)}
+                              onChange={() =>
+                                setCuenta({
+                                  ...cuenta,
+                                  sedes: cuenta.sedes.includes(s.sedeId)
+                                    ? cuenta.sedes.filter((x) => x !== s.sedeId)
+                                    : [...cuenta.sedes, s.sedeId],
+                                })
+                              }
+                            />
+                            {s.nombre}
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  <label className="block text-xs font-medium text-gray-500 mt-4 mb-2">
+                    Programa <span className="text-gray-400">(puede ser más de uno)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROGRAMAS.map((pr) => {
+                      const puesto = cuenta.programas.includes(pr.v);
+                      return (
+                        <button
+                          key={pr.v}
+                          type="button"
+                          onClick={() =>
+                            setCuenta({
+                              ...cuenta,
+                              programas: puesto
+                                ? cuenta.programas.filter((x) => x !== pr.v)
+                                : [...cuenta.programas, pr.v],
+                            })
+                          }
+                          className={`px-2.5 py-1 rounded-md border text-xs ${
+                            puesto
+                              ? 'bg-blue-50 border-blue-300 text-blue-800'
+                              : 'bg-white border-gray-200 text-gray-500'
+                          }`}
+                        >
+                          {pr.t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
                   Contraseña provisional
@@ -692,6 +800,14 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
  * Los roles de cada aplicación. No hay un vocabulario común a propósito: un
  * fisioterapeuta no existe en Prepagadas. Espeja `ROLES_POR_APP` del backend.
  */
+/** Las líneas de atención. Mismo vocabulario que el origen de las citas. */
+const PROGRAMAS = [
+  { v: 'trepsi', t: 'Trepsi' },
+  { v: 'umv', t: 'UMV' },
+  { v: 'corporativo', t: 'Corporativo' },
+  { v: 'nativa', t: 'Nativa' },
+];
+
 const ROLES_APP: Record<'consulta' | 'acc' | 'prepagadas', string[]> = {
   consulta: ['medico', 'coach', 'auxiliar', 'coordinador', 'admin', 'torre'],
   acc: ['fisioterapeuta', 'admin'],

@@ -82,6 +82,8 @@ export interface ProfesionalInput {
     rol: string;
     sedes?: string[];
     esGlobal?: boolean;
+    /** A qué programa pertenece: trepsi, umv, corporativo, nativa. */
+    programas?: string[];
   };
 }
 

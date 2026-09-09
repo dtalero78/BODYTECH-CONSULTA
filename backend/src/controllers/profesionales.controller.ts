@@ -11,6 +11,7 @@ import profesionalesService from '../services/profesionales.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
+import usuariosService from '../services/usuarios.service';
 import usuariosGlobalService from '../services/usuarios-global.service';
 import { asegurarPersona } from '../services/directorio-escritura.service';
 import { revisarAlta, Actor } from '../helpers/usuarios-permisos.helper';
@@ -90,8 +91,13 @@ const profesionalCreateSchema = z.object({
       // recibir una cuenta de Consulta sólo porque se creó desde acá.
       app: z.enum(['consulta', 'acc', 'prepagadas']).default('consulta'),
       rol: z.string().min(1),
+      // Sin valor por defecto a propósito. Antes caía a la sede de la petición
+      // —que es 'bsl', el valor heredado de cuando la plataforma era de un solo
+      // sitio— y toda cuenta nueva nacía acotada a una sede que no existe.
       sedes: z.array(z.string()).optional(),
       esGlobal: z.boolean().optional(),
+      /** A qué programa pertenece: trepsi, umv, corporativo, nativa. */
+      programas: z.array(z.enum(['trepsi', 'umv', 'corporativo', 'mybodytech', 'nativa'])).optional(),
     })
     .optional(),
 });
@@ -280,11 +286,23 @@ class ProfesionalesController {
       }
 
       if (d.cuenta) {
+        // Una cuenta de Consulta sin alcance no ve nada, y ponerle uno por
+        // descuido es peor: hay que decirlo.
+        if (d.cuenta.app === 'consulta' && !d.cuenta.esGlobal && (d.cuenta.sedes ?? []).length === 0) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: 'ALCANCE_REQUERIDO',
+              message: 'Elegí a qué sedes accede, o marcá acceso a todas.',
+            },
+          });
+          return;
+        }
         const fallo = revisarAlta(actorDe(req), {
           app: d.cuenta.app,
           rol: d.cuenta.rol,
           esGlobal: d.cuenta.esGlobal,
-          sedes: d.cuenta.sedes ?? [sedeId],
+          sedes: d.cuenta.sedes ?? [],
           // El vínculo con la ficha existe por construcción cuando hay agenda.
           profesionalId: conAgenda ? 0 : null,
         });
@@ -339,25 +357,46 @@ class ProfesionalesController {
       // el mensaje lo dice en vez de fingir que todo salió bien.
       let cuenta: { creada: boolean; error?: string } = { creada: false };
       if (d.cuenta) {
-        const r = await usuariosGlobalService.crear({
-          email: d.cuenta.email,
-          password: d.cuenta.password,
-          nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
-          documento: d.documento,
-          app: d.cuenta.app,
-          rol: d.cuenta.rol,
-          alcance:
-            d.cuenta.app === 'consulta'
-              ? {
-                  sedes: d.cuenta.esGlobal ? [] : (d.cuenta.sedes ?? [sedeId]),
-                  esGlobal: d.cuenta.esGlobal ?? false,
-                  profesionalId: ficha?.id ?? null,
-                }
-              : {},
-        });
-        cuenta = r.ok
-          ? { creada: true }
-          : { creada: false, error: 'No se pudo crear la cuenta. Lo demás sí quedó.' };
+        if (d.cuenta.app === 'consulta') {
+          // Por la tabla LOCAL, que refleja en la global. Escribir directo en la
+          // global dejaba una cuenta de segunda: sin fila local no hay vistas
+          // guardadas, ni auditoría, ni respaldo de login, y el panel Team no
+          // podía editarle las sedes ni la ficha. Pasó con una cuenta real.
+          const r = await usuariosService.create({
+            email: d.cuenta.email,
+            passwordHash: await usuariosService.hashPassword(d.cuenta.password),
+            nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
+            rol: d.cuenta.rol as never,
+            esGlobal: d.cuenta.esGlobal ?? false,
+            sedes: d.cuenta.esGlobal ? [] : (d.cuenta.sedes ?? []),
+            profesionalId: ficha?.id ?? null,
+            celular: d.celular ?? null,
+            programas: d.cuenta.programas ?? [],
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+          cuenta = r.ok
+            ? { creada: true }
+            : {
+                creada: false,
+                error:
+                  r.error === 'EMAIL_TAKEN'
+                    ? 'Ya existe una cuenta con ese correo. Lo demás sí quedó.'
+                    : 'No se pudo crear la cuenta. Lo demás sí quedó.',
+              };
+        } else {
+          const r = await usuariosGlobalService.crear({
+            email: d.cuenta.email,
+            password: d.cuenta.password,
+            nombre: [d.primerNombre, d.primerApellido].filter(Boolean).join(' '),
+            documento: d.documento,
+            app: d.cuenta.app,
+            rol: d.cuenta.rol,
+            alcance: d.cuenta.sedes && d.cuenta.sedes.length > 0 ? { sedes: d.cuenta.sedes } : {},
+          });
+          cuenta = r.ok
+            ? { creada: true }
+            : { creada: false, error: 'No se pudo crear la cuenta. Lo demás sí quedó.' };
+        }
       }
 
       res.status(201).json({

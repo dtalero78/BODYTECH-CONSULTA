@@ -702,13 +702,20 @@ class PostgresService {
           activa   BOOLEAN      NOT NULL DEFAULT true
         )
       `);
+      // Sólo `bsl`, que es el DEFAULT de la columna `sede_id` y por lo tanto
+      // tiene filas apuntándole. Las otras cuatro que se sembraban acá
+      // —Chapinero, Salitre, Medellín, Cali— eran inventadas: nunca tuvieron
+      // una ficha ni una cuenta, pero salían en todos los selectores y se
+      // colaron hasta la copia de sedes de ACC, donde alguien podía agendar
+      // en un gimnasio que no existe. Se borraron; sembrarlas de nuevo las
+      // resucitaba en cada despliegue.
+      //
+      // El catálogo REAL de la cadena son las 94 sedes del armario compartido.
+      // Que Consulta lo use es la migración pendiente; hasta entonces esta
+      // tabla guarda líneas de atención, no lugares.
       await this.query(`
         INSERT INTO sedes (sede_id, nombre, ciudad) VALUES
-          ('bsl',          'Bodytech Sede Principal', 'Bogotá'),
-          ('bt-chapinero', 'Bodytech Chapinero',      'Bogotá'),
-          ('bt-salitre',   'Bodytech Salitre',        'Bogotá'),
-          ('bt-medellin',  'Bodytech Medellín',       'Medellín'),
-          ('bt-cali',      'Bodytech Cali',           'Cali')
+          ('bsl', 'Bodytech Sede Principal', 'Bogotá')
         ON CONFLICT (sede_id) DO NOTHING
       `);
       // Médico Corporativo. No es un lugar: el examen ocupacional se hace en la

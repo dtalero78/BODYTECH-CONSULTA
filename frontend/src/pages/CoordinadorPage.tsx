@@ -53,9 +53,11 @@ interface NavBadge {
  * Hoja donde cae una fila por cada valoración del Médico Corporativo al cerrar
  * la historia (la escribe `corporativo-sheet.service.ts` en el backend).
  *
- * Va acá y no en una variable de entorno a propósito: no es un secreto — quien
- * la abre igual tiene que estar autorizado en Google— y tenerla en el código la
- * deja rastreable desde el botón que la usa.
+ * Va acá y no en una variable de entorno porque no cambia y así queda
+ * rastreable desde el botón que la usa. Ojo con lo que eso implica: este archivo
+ * termina en el bundle público, así que la URL es pública — y la hoja está
+ * compartida como "cualquiera con el enlace". Cualquiera que mire el JS del
+ * sitio puede abrirla.
  */
 const EXCEL_INFORMES_URL =
   'https://docs.google.com/spreadsheets/d/1IZvnkd_HX-TRtHvmWGktYzaoKxFqQ4IKdKNIBh8vzTg/edit';
@@ -167,23 +169,6 @@ export function CoordinadorPage() {
     [],
   );
 
-  // "Excel Informes": la hoja de valoraciones del Médico Corporativo.
-  //
-  // Va por lista de emails y no por rol por la misma razón que el ítem de
-  // arriba, y por una más: quien manda de verdad acá NO es esta app sino
-  // Google. La hoja lleva datos de pacientes —nombre, cédula, celular,
-  // diagnósticos— y sólo la ve quien esté autorizado en el Drive. Mostrarle el
-  // botón a un coordinador que no está compartido lo manda a la pantalla de
-  // "Solicitar acceso", que es el mismo problema que un ítem que lleva a un 403.
-  //
-  // Regla para mantener esto: agregar a alguien acá es DESPUÉS de compartirle la
-  // hoja, nunca antes.
-  const EXCEL_INFORMES_ALLOWED = ['danieltalero78@gmail.com'];
-  const isExcelInformesUser = useMemo(
-    () => EXCEL_INFORMES_ALLOWED.includes((authService.getUser()?.email || '').toLowerCase()),
-    [],
-  );
-
   // Info del usuario para el footer del sidebar (nueva auth RBAC: getUser()).
   const userInfo = useMemo(() => {
     const user = authService.getUser();
@@ -291,15 +276,18 @@ export function CoordinadorPage() {
               onClick={() => setView('indicadores')}
               badge={badges.indicadores}
             />
-            {isExcelInformesUser && (
-              <NavItem
-                icon={<FileSpreadsheet className="w-[15px] h-[15px]" />}
-                label="Excel Informes"
-                onClick={() =>
-                  window.open(EXCEL_INFORMES_URL, '_blank', 'noopener,noreferrer')
-                }
-              />
-            )}
+            {/* Sin lista de permitidos: la hoja está compartida como "cualquiera
+                con el enlace" (decisión de Daniel, 9-sep-2026), así que todo el
+                que llega al panel puede abrirla. Si algún día se vuelve a
+                restringir en Drive, hay que volver a poner el gate — un ítem que
+                lleva a "Solicitar acceso" es peor que no tenerlo. */}
+            <NavItem
+              icon={<FileSpreadsheet className="w-[15px] h-[15px]" />}
+              label="Excel Informes"
+              onClick={() =>
+                window.open(EXCEL_INFORMES_URL, '_blank', 'noopener,noreferrer')
+              }
+            />
             <NavItem
               icon={<ShieldCheck className="w-[15px] h-[15px]" />}
               label="Calidad"

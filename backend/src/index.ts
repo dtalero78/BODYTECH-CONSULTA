@@ -35,10 +35,12 @@ import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
 import trepsiWebhookService from './services/trepsi-webhook.service';
 import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
 import whatsappLeadsService from './services/whatsapp-leads.service';
+import corporativoSheetService from './services/corporativo-sheet.service';
 import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
 import linkAutoAdminRoutes from './routes/link-auto-admin.routes';
+import corporativoSheetAdminRoutes from './routes/corporativo-sheet-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
 import auditRoutes from './routes/audit.routes';
 import bodyvibeRoutes from './routes/bodyvibe.routes';
@@ -256,6 +258,9 @@ app.use('/api/bodyvibe', bodyvibeLogMiddleware, bodyvibeRoutes);
 app.use('/api/vistas', vistasGuardadasRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
 app.use('/api/admin/link-auto', requireRole('admin'), linkAutoAdminRoutes);
+// Volcado de valoraciones del Médico Corporativo a Google Sheets: bitácora,
+// pasada manual y reencolado de valoraciones ya cerradas.
+app.use('/api/admin/corporativo-sheet', requireRole('admin'), corporativoSheetAdminRoutes);
 // Público (sin auth): Twilio toma el PNG del tablero de aquí como media.
 app.use('/api/public/gestion-report-image', gestionReportImageRoutes);
 // Integración Trepsi (B2B, API Key). Mismo origen sirve staging y prod —
@@ -412,6 +417,23 @@ if (process.env.NODE_ENV !== 'test') {
     });
   }, WHATSAPP_LEADS_INTERVAL_MS);
   console.log(`🟢 [WhatsApp-Leads] Worker iniciado (cada ${WHATSAPP_LEADS_INTERVAL_MS / 1000}s)`);
+}
+
+// Worker de las valoraciones del Médico Corporativo: red de seguridad del
+// volcado a Google Sheets. El caso normal es que la fila salga en el mismo
+// momento en que el médico cierra la consulta; este barrido sólo recoge lo que
+// quedó pendiente porque Google no respondió, con backoff. Sin
+// CORPORATIVO_SHEET_URL no hace nada.
+const CORPORATIVO_SHEET_INTERVAL_MS = 60_000;
+if (process.env.NODE_ENV !== 'test' && process.env.CORPORATIVO_SHEET_URL) {
+  setInterval(() => {
+    corporativoSheetService.despacharPendientes().catch((e) => {
+      console.error('[corporativo-sheet] worker error:', e?.message ?? e);
+    });
+  }, CORPORATIVO_SHEET_INTERVAL_MS);
+  console.log(
+    `📋 [Corporativo-Sheet] Worker iniciado (cada ${CORPORATIVO_SHEET_INTERVAL_MS / 1000}s)`
+  );
 }
 
 // Worker del Informe de Gestión: cada 5 min chequea si ya pasó la hora objetivo

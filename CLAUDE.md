@@ -187,6 +187,24 @@ La vía de diarización ([diarizacion.service.ts](backend/src/services/video/dia
 - **Contexto objetivo (`ContextoConsulta`).** Dos ítems no son evaluables desde el transcript, así que `calidad.service` los inyecta como datos duros: la **puntualidad** (`fechaAtencion` agendada vs. el `MIN(created_at)` de `room_historia_map` / `video_sessions`, formateada en UTC-5) y el **diligenciamiento de la historia clínica** (cobertura de las 57 columnas de `COLUMNAS_HISTORIA_AUDITORIA` por sección + contenido de los campos narrativos). La cámara encendida no es verificable: el prompt indica no penalizarla sin evidencia en el audio.
 - Al agregar o repesar ítems, mantené `checkPesos`/`checkPuntos` en verde (1.0 y 100) y actualizá `backend/src/helpers/__tests__/rubrica-calidad.test.ts`.
 
+### Valoraciones del Médico Corporativo → Google Sheets
+
+Para revisar las valoraciones ocupacionales había que abrirlas de a una: descargar el PDF de cada historia a una carpeta ("valoraciones") y leerlas por separado. Nadie podía contestar "¿cuántas hicimos este mes en tal empresa y cómo salieron?" sin abrir decenas de archivos.
+
+Ahora, cuando el médico aprieta **"Finalizar consulta"** (`POST /api/video/medical-history/:id/finalizar`), la valoración entera queda como **una fila** de un Google Sheet. Código en [backend/src/services/corporativo-sheet.service.ts](backend/src/services/corporativo-sheet.service.ts).
+
+**Es un reflejo, no la fuente.** El dato ya está en `HistoriaClinica` —cada campo se auto-guarda mientras el médico escribe— antes de llegar a la hoja. Por eso el encolado es fire-and-forget desde el controlador: que Google falle NO puede impedirle a un médico cerrar una consulta. Si el POST falla, la fila queda `pendiente` en `corporativo_sheet_envio` y un worker reintenta cada minuto con backoff (1s/10s/1min/5min/30min/2h, `fallido` a los 6 intentos).
+
+**El filtro "sólo corporativo" vive en un solo lugar** (`esCorporativa`): "Finalizar consulta" es el mismo botón de todos los paneles. Se mira el `origen` de la cita —que lo elige quien agenda— y sólo si viene vacío se cae al respaldo de la especialidad del profesional, que cubre filas viejas anteriores al campo. Una consulta de Trepsi o de la UMV no toca la hoja.
+
+**Idempotencia: la PK de la cola es la historia, y el Apps Script hace upsert por `historiaId` en la columna A.** Finalizar dos veces la misma consulta ACTUALIZA su fila; no crea una segunda. Por eso `historiaId` tiene que seguir siendo la primera columna de `COLUMNAS` — moverla haría que cada cierre agregue una fila nueva. Hay un test que lo cuida.
+
+**El otro lado es una Apps Script web app** vinculada a la hoja (mismo patrón que `whatsapp-leads.service.ts`): `doPost` valida el token, escribe/reescribe el encabezado si cambió el juego de columnas, y hace el upsert bajo `LockService`. El POST usa `redirect: 'manual'` **a propósito**: Apps Script responde 302 al `/exec` y la escritura YA ocurrió; seguir ese redirect devuelve un error de Google que nos haría creer que falló → reintento → fila escrita dos veces. **El 302 es el éxito.**
+
+Detalles del formato que no son cosméticos: los booleanos salen `Sí`/`No` (la hoja la lee gente) pero un antecedente `NULL` queda **en blanco** —es "nadie lo preguntó", no "no"—; los números van como número para que el Sheet los promedie, y un campo vacío queda vacío y no en `0` (un IMC en 0 se leería como una medición tomada); las fechas se convierten a UTC-5 porque producción corre en UTC.
+
+Operación (admin): `GET /api/admin/corporativo-sheet/estado?limit=N` (bitácora), `POST /dispatch` (pasada manual), `POST /reencolar?desde=YYYY-MM-DD` (poblar la hoja con valoraciones ya cerradas o rehacer una tanda `fallido`; no duplica). Apagado por defecto: sin `CORPORATIVO_SHEET_URL` el worker no arranca y el encolado no envía.
+
 ### Ordenes panel
 
 Route: `/ordenes` → `OrdenesPage.tsx`. Full CRUD for medical orders linked to a `historia_id`. JWT must be injected in every request — `OrdenesPage.tsx` explicitly sets the auth header to avoid 401s. No dedicated ordenes service/routes file; uses the video API layer.
@@ -466,6 +484,14 @@ TWILIO_VOICE_FROM=+576016284820                # número saliente (el que ya con
 TWILIO_VOICE_APP_SID=APcfe7cad0b40333dda10b8e744b9f0b2e   # TwiML App "Bodytech · Llamada del coach" (voice_url=/softphone)
 # El token de voz lo firma la API Key de siempre (TWILIO_API_KEY_SID/SECRET, Standard).
 # PUBLIC_BASE_URL también la usan estos webhooks (Twilio tiene que alcanzarnos).
+
+# Valoraciones del Médico Corporativo → Google Sheets.
+# La web app de Apps Script está vinculada a la hoja "Valoraciones — Médico
+# Corporativo" y desplegada con "Execute as: Me / Who has access: Anyone"
+# (el backend no tiene cuenta de Google; el candado es el token).
+# Sin la URL, el worker no arranca y nada se envía — no rompe el cierre.
+CORPORATIVO_SHEET_URL=https://script.google.com/macros/s/.../exec
+CORPORATIVO_SHEET_TOKEN=...                    # debe coincidir con TOKEN en el Apps Script
 
 # PostgreSQL (Digital Ocean managed)
 POSTGRES_HOST=...db.ondigitalocean.com

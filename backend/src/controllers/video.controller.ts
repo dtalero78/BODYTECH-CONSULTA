@@ -15,6 +15,7 @@ import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
 import historiaMutationService from '../services/historia-mutation.service';
+import corporativoSheetService from '../services/corporativo-sheet.service';
 import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
 import { enviarLinkPaciente } from '../services/link-paciente.service';
 
@@ -600,6 +601,13 @@ class VideoController {
         res.status(404).json({ success: false, error: 'Historia no encontrada' });
         return;
       }
+      // Reflejo de la valoración en la hoja de cálculo del Médico Corporativo.
+      // Fire-and-forget y con el filtro adentro (`encolar` descarta lo que no
+      // sea corporativo): la historia ya quedó guardada y marcada como atendida,
+      // así que un problema con Google no puede impedirle al médico cerrar.
+      corporativoSheetService.encolar(historiaId).catch((e) => {
+        console.error('[corporativo-sheet] encolar falló:', e?.message ?? e);
+      });
       res.json({ success: true });
     } catch (error) {
       next(error);

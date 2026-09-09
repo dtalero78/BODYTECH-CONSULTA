@@ -1443,6 +1443,35 @@ class PostgresService {
         END $$
       `);
 
+      // ===== Valoraciones del Médico Corporativo → Google Sheets =====
+      // Una fila por valoración cerrada. NO es la fuente del dato —la historia
+      // ya está guardada en `HistoriaClinica`— sino la cola que garantiza que
+      // el reflejo llegue a la hoja aunque Google esté caído en ese momento.
+      //
+      // La PK es la historia y no un serial: re-finalizar la misma consulta
+      // vuelve a poner la fila en pendiente (el Apps Script actualiza la fila
+      // que ya está en la hoja) en vez de encolar un segundo envío.
+      //   pendiente = por enviar (con backoff en proximo_intento_at)
+      //   enviado   = la hoja lo aceptó
+      //   fallido   = agotó los reintentos; se rehace desde el panel de admin
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS corporativo_sheet_envio (
+          historia_id        TEXT PRIMARY KEY,
+          estado             TEXT        NOT NULL DEFAULT 'pendiente',
+          intentos           INTEGER     NOT NULL DEFAULT 0,
+          proximo_intento_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ultimo_error       TEXT,
+          encolado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          enviado_en         TIMESTAMPTZ,
+          CONSTRAINT corporativo_sheet_envio_estado_chk
+            CHECK (estado IN ('pendiente', 'enviado', 'fallido'))
+        )
+      `);
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_corporativo_sheet_pendientes
+          ON corporativo_sheet_envio (estado, proximo_intento_at)
+      `);
+
       // ===== Llamada del coach al paciente (en vivo, grabada) =====
       // Una fila por intento de llamada. El coach la arranca desde el panel;
       // Twilio marca primero al coach y después al paciente (puente por

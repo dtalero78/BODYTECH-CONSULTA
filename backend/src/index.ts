@@ -26,6 +26,7 @@ import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
 import accesosRoutes from './routes/accesos.routes';
 import usuariosGlobalRoutes from './routes/usuarios-global.routes';
+import informeCorporativoRoutes from './routes/informe-corporativo.routes';
 import carpetaRoutes from './routes/carpeta.routes';
 import usuariosGlobalService from './services/usuarios-global.service';
 import carpetaService from './services/carpeta.service';
@@ -220,6 +221,13 @@ app.use('/api/accesos', requireRole('admin'), accesosRoutes);
 // Creación de Usuarios: el panel único de las tres aplicaciones. Sólo admin —
 // crea cuentas con el rol que se le indique, en cualquiera de las tres.
 app.use('/api/usuarios-global', requireRole('admin', 'coordinador'), usuariosGlobalRoutes);
+// El informe mensual que se le entrega a la empresa cliente. Sale de las
+// historias, no de un registro aparte.
+app.use(
+  '/api/informe-corporativo',
+  requireRole('admin', 'coordinador', 'medico'),
+  informeCorporativoRoutes,
+);
 // LA historia clínica de la persona, la del armario. La lee quien atiende.
 app.use(
   '/api/carpeta',

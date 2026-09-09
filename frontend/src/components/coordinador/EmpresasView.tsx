@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { Building, Plus, RefreshCw, X } from 'lucide-react';
+import { Building, Plus, RefreshCw, X, FileText } from 'lucide-react';
 import empresasService, { Empresa } from '../../services/empresas.service';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, CTA_PRIMARY } from './_tokens';
 
@@ -19,7 +19,57 @@ interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
 }
 
+/** El mes anterior, que es el que casi siempre se informa. */
+function mesPasado(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Primer y último día del mes `YYYY-MM`. */
+function rangoDelMes(mes: string): { desde: string; hasta: string } {
+  const [a, m] = mes.split('-').map(Number);
+  const ultimo = new Date(a, m, 0).getDate();
+  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, '0')}` };
+}
+
 export function EmpresasView({ showToast }: Props) {
+  // El mes del informe. Uno solo para toda la tabla: se informa un mes a la vez,
+  // y ponerle su propio selector a cada fila sería pedir el mismo dato N veces.
+  const [mes, setMes] = useState(mesPasado());
+  const [generando, setGenerando] = useState<string | null>(null);
+
+  /**
+   * Pide el PDF y lo baja. Va por fetch y no por un enlace porque la ruta
+   * necesita el token de sesión, y un `<a href>` no lo manda.
+   */
+  async function generarInforme(empresa: string) {
+    const { desde, hasta } = rangoDelMes(mes);
+    setGenerando(empresa);
+    try {
+      const url = `${import.meta.env.VITE_API_BASE_URL || ''}/api/informe-corporativo/pdf?empresa=${encodeURIComponent(empresa)}&desde=${desde}&hasta=${hasta}`;
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('bsl_auth_token') ?? ''}` },
+      });
+      if (!r.ok) {
+        const cuerpo = await r.json().catch(() => null);
+        throw new Error(cuerpo?.message ?? 'No se pudo generar el informe.');
+      }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Informe ${empresa} ${mes}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast({ type: 'success', message: `Informe de ${empresa} generado.` });
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : 'Error' });
+    } finally {
+      setGenerando(null);
+    }
+  }
+
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [creando, setCreando] = useState(false);
@@ -159,11 +209,27 @@ export function EmpresasView({ showToast }: Props) {
         </form>
       )}
 
+      <div className="flex items-center gap-2 mb-4">
+        <label className={SECTION_LABEL} htmlFor="mes-informe">
+          Mes del informe
+        </label>
+        <input
+          id="mes-informe"
+          type="month"
+          value={mes}
+          onChange={(ev) => setMes(ev.target.value)}
+          className="h-[30px] px-2.5 border border-zinc-300 rounded-md text-[12.5px] bg-white"
+        />
+        <span className="text-[11.5px] text-zinc-400">
+          El informe sale de las valoraciones cerradas en ese mes.
+        </span>
+      </div>
+
       <div className="border border-zinc-200 rounded-lg overflow-x-auto bg-white">
         <table className="w-full text-[12.5px] border-collapse">
           <thead>
             <tr className="bg-zinc-50 border-b border-zinc-200">
-              {['Empresa', 'NIT', 'Agregada por', ''].map((h, i) => (
+              {['Empresa', 'NIT', 'Agregada por', 'Informe del mes', ''].map((h, i) => (
                 <th key={i} className={`px-3 py-2 text-left ${SECTION_LABEL}`}>
                   {h}
                 </th>
@@ -173,7 +239,7 @@ export function EmpresasView({ showToast }: Props) {
           <tbody>
             {empresas.length === 0 && !cargando && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-zinc-400">
+                <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">
                   Todavía no hay empresas. Agregá la primera con “Nueva empresa”.
                 </td>
               </tr>
@@ -186,6 +252,16 @@ export function EmpresasView({ showToast }: Props) {
                 </td>
                 <td className="px-3 py-2 text-zinc-500 text-[11.5px]">
                   {e.creadaPor === 'semilla' ? 'carga inicial' : (e.creadaPor ?? '—')}
+                </td>
+                <td className="px-3 py-2">
+                  <button
+                    onClick={() => generarInforme(e.nombre)}
+                    disabled={generando !== null}
+                    className="inline-flex items-center gap-1.5 h-[26px] px-2.5 border border-zinc-300 rounded-md text-[11.5px] text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    <FileText className="w-[13px] h-[13px]" />
+                    {generando === e.nombre ? 'Generando…' : 'Generar PDF'}
+                  </button>
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button

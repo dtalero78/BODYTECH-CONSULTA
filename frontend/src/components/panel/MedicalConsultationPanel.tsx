@@ -70,6 +70,7 @@ export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
     data?.ocupacion,
     data?.eps,
     data?.tipoVinculacion,
+    data?.sedeSlug,
   ].filter(isFilled).length;
 
   // ----- t2: Anamnesis (3 secciones) -----
@@ -134,7 +135,7 @@ export function computeTabsCount(data: MedicalHistoryFull | null): TabDef[] {
   const t4Filled = t4Keys.filter(isFilled).length;
 
   return [
-    { id: 't1', label: 'Datos Básicos', filled: t1Filled, total: 13 },
+    { id: 't1', label: 'Datos Básicos', filled: t1Filled, total: 14 },
     { id: 't2', label: 'Anamnesis', filled: t2Filled, total: 3 },
     { id: 't3', label: 'Clasificación de riesgo', shortLabel: 'Riesgo', filled: t3Filled, total: 3, warn: t3Warn },
     { id: 't4', label: 'Examen físico', filled: t4Filled, total: 15 },

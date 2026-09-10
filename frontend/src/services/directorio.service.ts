@@ -89,6 +89,22 @@ async function get<T>(path: string, params?: Record<string, string | undefined>)
   return data.data as T;
 }
 
+export interface SedeCatalogo {
+  slug: string;
+  nombre: string;
+  ciudad: string | null;
+  regional: string | null;
+}
+
+/**
+ * Las sedes activas del padrón, para los campos que las piden (la sede del
+ * afiliado en Datos Básicos). A diferencia del resto de este servicio, basta
+ * con tener sesión: no trae la planta.
+ */
+export function catalogoSedes(): Promise<SedeCatalogo[]> {
+  return get<SedeCatalogo[]>('/sedes-catalogo');
+}
+
 export default {
   /** Devuelve las filas Y el resumen, por eso no pasa por `get<T>()`. */
   cotejo: async (): Promise<{ filas: CotejoProfesional[]; resumen: CotejoResumen }> => {

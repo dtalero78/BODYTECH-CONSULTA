@@ -189,6 +189,10 @@ class PostgresService {
           ADD COLUMN IF NOT EXISTS "tipo_vinculacion" VARCHAR(30),
           ADD COLUMN IF NOT EXISTS "entidad_territorial" VARCHAR(120),
           ADD COLUMN IF NOT EXISTS "categoria_discapacidad" VARCHAR(30),
+          -- Sede del afiliado en el padrón del armario (bodytech_profesionales,
+          -- sedes.slug). NO es "sede_id": esa es la línea de programa (bsl,
+          -- corporativo...) y es la que decide quién ve cada historia.
+          ADD COLUMN IF NOT EXISTS "sede_slug" VARCHAR(80),
 
           -- Anamnesis
           ADD COLUMN IF NOT EXISTS "objetivo_bodytech" TEXT,

@@ -4,6 +4,7 @@ import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, SelectField, PhoneField } from '../fields';
 import { usePersistField } from '../hooks/usePersistField';
+import { useSedesCatalogo } from '../hooks/useSedesCatalogo';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 
@@ -237,6 +238,24 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
   const [openModal, setOpenModal] = useState<ModalKey>(null);
   const persistField = usePersistField(historiaId, onPatchLocal);
 
+  // Sede del afiliado: sale del padrón de sedes del armario, no de una lista
+  // escrita acá. Se guarda el `slug`, que es la llave del padrón.
+  const { sedes, error: sedesError } = useSedesCatalogo();
+  const sedeOpts = useMemo<ReadonlyArray<DropdownOption>>(() => {
+    const opts = sedes.map((s) => ({
+      value: s.slug,
+      label: s.ciudad ? `${s.nombre} · ${s.ciudad}` : s.nombre,
+    }));
+    // Una sede ya guardada que salió del padrón (la desactivaron) se sigue
+    // mostrando: si no, el campo se vería vacío y nadie sabría qué tenía.
+    const actual = data?.sedeSlug;
+    if (actual && sedes.length > 0 && !sedes.some((s) => s.slug === actual)) {
+      opts.unshift({ value: actual, label: `${actual} (ya no está en el padrón)` });
+    }
+    return opts;
+  }, [sedes, data?.sedeSlug]);
+  const sedeNombre = sedes.find((s) => s.slug === data?.sedeSlug)?.nombre;
+
   // Valores por defecto que deben quedar guardados aunque el médico no toque el
   // campo: Zona Territorial → "Urbana", Categoría de Discapacidad → "Sin
   // discapacidad". Se persisten una sola vez por historia cuando el campo está
@@ -286,6 +305,7 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
     data?.eps,
     data?.tipoVinculacion,
     data?.categoriaDiscapacidad,
+    data?.sedeSlug,
   ];
 
   const fechaNac = data?.fechaNacimiento as string | Date | null | undefined;
@@ -326,7 +346,7 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
     infoBasicaFilled === 0
       ? 'Sin información'
       : infoState === 'complete'
-        ? `${data?.eps || '—'} · ${data?.tipoVinculacion || '—'}`
+        ? `${data?.eps || '—'} · ${data?.tipoVinculacion || '—'} · ${sedeNombre || data?.sedeSlug || '—'}`
         : `${infoBasicaFilled} de ${infoBasicaVals.length} campos completos`;
 
   return (
@@ -583,6 +603,22 @@ export function DatosBasicosTab({ historiaId, data, isMaxed, onPatchLocal }: Dat
             onSaved={onPatchLocal}
             label="Categoría de Discapacidad"
             options={CATEGORIA_DISCAPACIDAD_OPTS}
+          />
+          <SelectField
+            historiaId={historiaId}
+            field="sede_slug"
+            initialValue={data?.sedeSlug}
+            onSaved={onPatchLocal}
+            label="Sede"
+            options={sedeOpts}
+            placeholder={
+              sedesError
+                ? 'No se pudo cargar el padrón de sedes'
+                : sedes.length === 0
+                  ? 'Cargando sedes…'
+                  : 'Seleccionar sede'
+            }
+            searchable
           />
         </div>
       </Modal>

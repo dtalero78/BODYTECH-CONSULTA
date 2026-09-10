@@ -90,6 +90,8 @@ export interface MedicalHistoryFull {
   tipoVinculacion?: string;
   entidadTerritorial?: string;
   categoriaDiscapacidad?: string;
+  /** Sede del padrón del armario (su `slug`). No es `sede_id`, que es la línea de programa. */
+  sedeSlug?: string;
 
   // ---- Phase 1: Anamnesis (placeholder hasta phase 2) ----
   objetivoBodytech?: string;

@@ -7,6 +7,7 @@
 //   GET /resumen        → conteos, cobertura por rol, sedes por regional
 //   GET /sedes          → las 94 sedes con cuánta gente tiene cada una
 //   GET /profesionales  → la planta (?rol= &sede= &q=)
+//   GET /sedes-catalogo → solo nombre y ciudad de cada sede; basta la sesión
 //
 // ── Por qué el acceso va por email y no por rol ─────────────────────────────
 // Esta pantalla muestra la planta COMPLETA de la cadena — 141 nombres con su
@@ -44,6 +45,32 @@ function requireDirectorioAccess(req: Request, res: Response, next: NextFunction
   }
   next();
 }
+
+/**
+ * El catálogo de sedes, sin la planta: nombre y ciudad de las sedes activas.
+ *
+ * Va ANTES del candado a propósito. La historia clínica registra la sede del
+ * afiliado según el padrón (Datos Básicos → Sede), y quien la llena es el
+ * médico o el coach, que no están en `DIRECTORIO_ALLOWED`. Lo que el candado
+ * protege es la gente —nombres y cédulas de la planta— y esto no la trae: ni
+ * profesionales ni cuántos hay por sede. Basta con tener sesión.
+ */
+router.get('/sedes-catalogo', async (req: Request, res: Response) => {
+  if (!getSession(req)) {
+    res.status(401).json({ success: false, error: 'NO_SESSION' });
+    return;
+  }
+  try {
+    const sedes = await directorioService.sedes();
+    res.json({
+      success: true,
+      data: sedes.map(({ slug, nombre, ciudad, regional }) => ({ slug, nombre, ciudad, regional })),
+    });
+  } catch (e) {
+    console.error('[directorio] sedes-catalogo:', e);
+    res.status(503).json({ success: false, error: 'DIRECTORIO_NO_DISPONIBLE' });
+  }
+});
 
 router.use(requireDirectorioAccess);
 

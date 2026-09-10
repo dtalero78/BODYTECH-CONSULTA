@@ -52,6 +52,7 @@ export const EDITABLE_FIELD_DEFS: ReadonlyArray<EditableFieldDef> = [
   { field: 'tipo_vinculacion', type: 'string' },
   { field: 'entidad_territorial', type: 'string' },
   { field: 'categoria_discapacidad', type: 'string' },
+  { field: 'sede_slug', type: 'string' },
 
   // ---- Anamnesis ----
   { field: 'objetivo_bodytech', type: 'string' },

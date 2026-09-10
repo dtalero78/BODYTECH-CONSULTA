@@ -19,9 +19,12 @@ export interface TabDef<T extends string = TabId> {
    */
   shortLabel?: string;
   /**
-   * Etiquetas de los campos obligatorios que faltan. Se muestran en el tooltip
-   * del ítem: el equipo médico reportó que veía una sección incompleta sin
-   * ninguna forma de saber qué le faltaba por diligenciar.
+   * Etiquetas de los campos obligatorios que faltan. Un panel que las declara
+   * obtiene la alerta completa: punto ámbar mientras falte algo y la lista
+   * escrita debajo del ítem, siempre a la vista. Antes vivían solo en el
+   * tooltip —que en una tableta no existe— y el punto se ponía verde con el
+   * primer campo lleno, así que una sección en 1/6 se veía terminada. El panel
+   * que no las declara (la consulta en vivo) conserva el comportamiento de antes.
    */
   faltantes?: ReadonlyArray<string>;
 }
@@ -64,6 +67,8 @@ export function PanelSideNav<T extends string = TabId>({
   const totalFilled = tabs.reduce((a, t) => a + t.filled, 0);
   const totalFields = tabs.reduce((a, t) => a + t.total, 0);
   const pct = totalFields > 0 ? Math.round((totalFilled / totalFields) * 100) : 0;
+  const declaraFaltantes = tabs.some((t) => t.faltantes !== undefined);
+  const totalFaltantes = tabs.reduce((a, t) => a + (t.faltantes?.length ?? 0), 0);
 
   return (
     <aside
@@ -143,6 +148,17 @@ export function PanelSideNav<T extends string = TabId>({
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {declaraFaltantes && (
+              <div
+                className={`mt-1.5 text-[11px] font-medium ${
+                  totalFaltantes > 0 ? 'text-[var(--p-warn)]' : 'text-[var(--p-ok)]'
+                }`}
+              >
+                {totalFaltantes > 0
+                  ? `Faltan ${totalFaltantes} ${totalFaltantes === 1 ? 'campo' : 'campos'} por llenar`
+                  : 'Todo diligenciado'}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -165,19 +181,24 @@ function SideNavItem<T extends string>({
   collapsed: boolean;
   onClick: () => void;
 }) {
+  const pendientes = tab.faltantes ?? [];
   const dot = tab.warn
     ? 'bg-[var(--p-warn)]'
-    : tab.filled === 0
-      ? 'bg-[var(--p-text-3)]'
-      : 'bg-[var(--p-ok)]';
+    : tab.faltantes !== undefined
+      ? pendientes.length > 0
+        ? 'bg-[var(--p-warn)]'
+        : 'bg-[var(--p-ok)]'
+      : tab.filled === 0
+        ? 'bg-[var(--p-text-3)]'
+        : 'bg-[var(--p-ok)]';
 
   const stateCls = active
     ? 'bg-[var(--p-surface)] text-[var(--p-text)] shadow-[inset_0_0_0_1px_var(--p-line)]'
     : 'text-[var(--p-text-2)] hover:bg-[var(--p-input-2)] hover:text-[var(--p-text)]';
 
   const title =
-    tab.faltantes && tab.faltantes.length > 0
-      ? `${tab.label} — ${tab.filled}/${tab.total}\nFalta: ${tab.faltantes.join(', ')}`
+    pendientes.length > 0
+      ? `${tab.label} — ${tab.filled}/${tab.total}\nFalta: ${pendientes.join(', ')}`
       : `${tab.label} — ${tab.filled}/${tab.total}${tab.total > 0 ? ' · completo' : ''}`;
 
   return (
@@ -186,8 +207,8 @@ function SideNavItem<T extends string>({
       onClick={onClick}
       title={title}
       aria-current={active ? 'page' : undefined}
-      className={`relative w-full flex items-center gap-[11px] rounded-md text-[13.5px] font-medium transition-colors ${
-        collapsed ? 'justify-center px-0 py-[9px]' : 'px-[10px] py-[7px]'
+      className={`relative w-full block rounded-md text-[13.5px] font-medium transition-colors ${
+        collapsed ? 'px-0 py-[9px]' : 'px-[10px] py-[7px]'
       } ${stateCls}`}
     >
       {active && (
@@ -197,24 +218,34 @@ function SideNavItem<T extends string>({
         />
       )}
 
-      <span
-        className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded-full text-[10px] font-bold shrink-0 ${
-          active
-            ? 'bg-[var(--p-accent)] text-[var(--p-on-accent)]'
-            : 'bg-[var(--p-input-2)] text-[var(--p-text-3)]'
-        }`}
-      >
-        {tab.icon ?? index}
+      <span className={`flex items-center gap-[11px] ${collapsed ? 'justify-center' : ''}`}>
+        <span
+          className={`inline-flex items-center justify-center w-[20px] h-[20px] rounded-full text-[10px] font-bold shrink-0 ${
+            active
+              ? 'bg-[var(--p-accent)] text-[var(--p-on-accent)]'
+              : 'bg-[var(--p-input-2)] text-[var(--p-text-3)]'
+          }`}
+        >
+          {tab.icon ?? index}
+        </span>
+
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1 text-left">{tab.shortLabel ?? tab.label}</span>
+            <span className="text-[10.5px] font-semibold text-[var(--p-text-3)] tabular-nums shrink-0">
+              {tab.filled}/{tab.total}
+            </span>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+          </>
+        )}
       </span>
 
-      {!collapsed && (
-        <>
-          <span className="truncate flex-1 text-left">{tab.shortLabel ?? tab.label}</span>
-          <span className="text-[10.5px] font-semibold text-[var(--p-text-3)] tabular-nums shrink-0">
-            {tab.filled}/{tab.total}
-          </span>
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
-        </>
+      {/* La alerta escrita: qué falta en esta sección, sin pasar el mouse.
+          Sangrada al ancho del círculo + el gap, para que arranque bajo el nombre. */}
+      {!collapsed && pendientes.length > 0 && (
+        <span className="block pl-[31px] pt-0.5 text-left text-[11px] leading-snug font-normal text-[var(--p-warn)] line-clamp-2">
+          Falta: {pendientes.join(', ')}
+        </span>
       )}
 
       {collapsed && (

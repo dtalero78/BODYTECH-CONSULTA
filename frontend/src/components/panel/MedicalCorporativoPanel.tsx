@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Cloud, CloudOff, CheckCircle2, Loader2 } from 'lucide-react';
+import { Cloud, CloudOff, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import apiService from '../../services/api.service';
 import { PatientStrip } from './PatientStrip';
 import { PanelSideNav, type TabDef } from './PanelSideNav';
@@ -210,6 +210,7 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const yaFinalizada = finalizadaLocal || tieneValor(data?.fechaConsulta);
   const pendientes = tabs.flatMap((t) => t.faltantes ?? []);
+  const seccionesIncompletas = tabs.filter((t) => (t.faltantes?.length ?? 0) > 0);
 
   async function finalizar() {
     if (!historiaId || finalizando) return;
@@ -326,9 +327,10 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
         </div>
       </div>
 
-      {/* Confirmación de cierre. Lista lo que falta pero NO bloquea: hay campos
-          que legítimamente no aplican a cada paciente, y el criterio de si la
-          historia está completa es del médico, no del formulario. */}
+      {/* Confirmación de cierre. Lista lo que falta, sección por sección y con
+          salto directo a cada una, pero NO bloquea: hay campos que legítimamente
+          no aplican a cada paciente, y el criterio de si la historia está
+          completa es del médico, no del formulario. */}
       {confirmOpen && (
         <div className="absolute inset-0 z-50 grid place-items-center bg-[rgba(var(--p-scrim-rgb),0.55)] p-6">
           <div className="w-full max-w-md rounded-2xl bg-[var(--p-surface)] border border-[var(--p-line)] p-5 shadow-xl">
@@ -338,15 +340,39 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
               consulta queda registrada como atendida.
             </div>
 
-            {pendientes.length > 0 ? (
+            {seccionesIncompletas.length > 0 ? (
               <div className="mb-4 rounded-xl border border-[rgba(var(--p-warn-rgb),0.35)] bg-[rgba(var(--p-warn-rgb),0.08)] p-3">
-                <div className="text-[12px] font-semibold text-[var(--p-warn)] mb-1.5">
-                  Quedan {pendientes.length} campos sin diligenciar
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--p-warn)] mb-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  {pendientes.length === 1
+                    ? 'Queda 1 campo sin diligenciar'
+                    : `Quedan ${pendientes.length} campos sin diligenciar`}
                 </div>
-                <div className="text-[12px] text-[var(--p-text-2)] leading-relaxed">
-                  {pendientes.slice(0, 8).join(', ')}
-                  {pendientes.length > 8 ? ` y ${pendientes.length - 8} más` : ''}
-                </div>
+                {/* Todos, agrupados por sección. Antes era una lista corrida
+                    cortada a los 8 primeros, sin decir en qué sección estaba
+                    cada uno: había que salir a buscarlos. */}
+                <ul className="max-h-[240px] overflow-y-auto space-y-1 m-0 p-0 list-none">
+                  {seccionesIncompletas.map((t) => (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(t.id);
+                          setConfirmOpen(false);
+                        }}
+                        className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[rgba(var(--p-warn-rgb),0.12)] transition"
+                      >
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span className="text-[12px] font-semibold text-[var(--p-text)]">{t.label}</span>
+                          <span className="text-[11px] font-medium text-[var(--p-accent)] shrink-0">Ir →</span>
+                        </span>
+                        <span className="block text-[12px] text-[var(--p-text-2)] leading-relaxed">
+                          {(t.faltantes ?? []).join(', ')}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : (
               <div className="mb-4 rounded-xl border border-[rgba(var(--p-ok-rgb),0.30)] bg-[rgba(var(--p-ok-rgb),0.08)] p-3 text-[12px] font-semibold text-[var(--p-ok)]">
@@ -369,7 +395,7 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[12.5px] font-semibold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition disabled:opacity-60"
               >
                 {finalizando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                {finalizando ? 'Finalizando…' : 'Finalizar'}
+                {finalizando ? 'Finalizando…' : pendientes.length > 0 ? 'Finalizar igual' : 'Finalizar'}
               </button>
             </div>
           </div>

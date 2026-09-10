@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
+import digitalizarService from '../services/digitalizar.service';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
@@ -146,6 +147,17 @@ export function CoordinadorPage() {
       .catch(() => setPuedeConstruir(false));
   }, []);
 
+  // Digitalizar es solo para la coordinación de la UMV. Quién puede lo decide el
+  // backend (DIGITALIZAR_PERMITIDOS) y acá se pregunta, como con BodyVibeTech:
+  // una copia de la lista en el frontend es una copia que se desactualiza.
+  const [puedeDigitalizar, setPuedeDigitalizar] = useState(false);
+  useEffect(() => {
+    digitalizarService
+      .acceso()
+      .then(setPuedeDigitalizar)
+      .catch(() => setPuedeDigitalizar(false));
+  }, []);
+
   // "Aplicaciones" solo aparece si hay al menos una publicada para esta
   // persona. Mismo criterio que los anclajes: nada que lleve a una pantalla
   // vacía. Si falla la consulta, tampoco aparece.
@@ -263,14 +275,17 @@ export function CoordinadorPage() {
               badge={badges.ordenes}
             />
             {/* Pantallazo de "Citas asignadas" de MyBodytech → lista de
-                afiliados que abren su ficha en MyBodytech con un clic. */}
-            <NavItem
-              icon={<ScanText className="w-[15px] h-[15px]" />}
-              label="Digitalizar"
-              active={view === 'digitalizar'}
-              onClick={() => setView('digitalizar')}
-              badge={badges.digitalizar}
-            />
+                afiliados que abren su ficha en MyBodytech con un clic. Solo
+                para la coordinación de la UMV: lo decide el backend. */}
+            {puedeDigitalizar && (
+              <NavItem
+                icon={<ScanText className="w-[15px] h-[15px]" />}
+                label="Digitalizar"
+                active={view === 'digitalizar'}
+                onClick={() => setView('digitalizar')}
+                badge={badges.digitalizar}
+              />
+            )}
             <NavItem
               icon={<Fingerprint className="w-[15px] h-[15px]" />}
               label="Torniquete"
@@ -421,7 +436,7 @@ export function CoordinadorPage() {
               reportCount={reportOrdenesCount}
             />
           )}
-          {view === 'digitalizar' && (
+          {view === 'digitalizar' && puedeDigitalizar && (
             <DigitalizarView key={`dig-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'torniquete' && (

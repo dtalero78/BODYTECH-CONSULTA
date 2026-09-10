@@ -58,6 +58,19 @@ function error(e: unknown, generico: string): Error {
 }
 
 export default {
+  /**
+   * Si esta persona puede usar Digitalizar. Lo decide el backend; ante
+   * cualquier error, no: una pestaña que lleva a un 403 es peor que no tenerla.
+   */
+  async acceso(): Promise<boolean> {
+    try {
+      const { data } = await axios.get(`${API}/acceso`);
+      return Boolean(data?.data?.puede);
+    } catch {
+      return false;
+    }
+  },
+
   async listar(fecha: string): Promise<CitaDigitalizada[]> {
     try {
       const { data } = await axios.get(API, { params: { fecha } });

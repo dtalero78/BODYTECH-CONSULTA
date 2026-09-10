@@ -2,8 +2,9 @@
 // Router /api/digitalizar/* — Pantallazo de "Citas asignadas" de MyBodytech →
 // filas que abren la ficha del afiliado en MyBodytech con un clic.
 //
-// Montado con requireRole('admin', 'coordinador') en index.ts: devuelve
-// nombres, cédulas y teléfonos de afiliados. Todo se acota a las sedes del
+// Montado con requireRole('admin', 'coordinador') en index.ts, y además solo
+// para los correos de DIGITALIZAR_PERMITIDOS —la coordinación de la UMV—: ver
+// digitalizar-acceso.ts. Devuelve nombres, cédulas y teléfonos de afiliados. Todo se acota a las sedes del
 // usuario con effectiveSedes; al guardar, la fila toma la primera sede del
 // usuario (el pantallazo trae el gimnasio de MyBodytech, que no es un sede_id).
 // ============================================================================
@@ -14,6 +15,7 @@ import digitalizarService from '../services/digitalizar.service';
 import { leerFranjas } from '../services/digitalizar-ocr.service';
 import { normalizarDocumento } from '../helpers/padron.helper';
 import { effectiveSedes, getSession } from '../middleware/rbac.middleware';
+import { puedeDigitalizar } from '../services/digitalizar-acceso';
 
 const router = Router();
 
@@ -66,6 +68,37 @@ function idDe(req: Request, res: Response): number | null {
 function invalido(res: Response, message: string | undefined): void {
   res.status(400).json({ success: false, error: 'VALIDACION', message: message ?? 'Datos inválidos.' });
 }
+
+/**
+ * ¿Esta persona puede usar Digitalizar? Lo pregunta el panel para decidir si
+ * dibuja la pestaña. Va ANTES del candado a propósito: tiene que poder
+ * contestarle "no" a un coordinador que no está en la lista.
+ */
+router.get('/acceso', (req: Request, res: Response) => {
+  res.json({ success: true, data: { puede: puedeDigitalizar(getSession(req)?.email) } });
+});
+
+/**
+ * Candado de todo lo demás: sesión Y correo en DIGITALIZAR_PERMITIDOS. Este es
+ * el que manda; que el panel no dibuje la pestaña es solo para no mostrar un
+ * botón que lleva a un 403.
+ */
+router.use((req: Request, res: Response, next: NextFunction) => {
+  const session = getSession(req);
+  if (!session) {
+    res.status(401).json({ success: false, error: 'NO_SESSION' });
+    return;
+  }
+  if (!puedeDigitalizar(session.email)) {
+    res.status(403).json({
+      success: false,
+      error: 'FORBIDDEN',
+      message: 'Digitalizar es solo para la coordinación de la UMV.',
+    });
+    return;
+  }
+  next();
+});
 
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   const fecha = FECHA.safeParse(req.query.fecha);

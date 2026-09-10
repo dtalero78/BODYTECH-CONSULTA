@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
+import { posicionMenu } from './posicionMenu';
 
 export interface DropdownOption {
   value: string;
@@ -44,18 +45,24 @@ export function Dropdown({
     return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
-  // Posicionar como fixed al abrir para escapar overflow:hidden del modal
+  // Posicionar como fixed al abrir para escapar overflow:hidden del modal. Se
+  // recalcula con el scroll y el resize: el menú está fuera del flujo, y si el
+  // modal se desplaza con el menú abierto, quedaría flotando lejos de su campo.
   useLayoutEffect(() => {
-    if (!open || !btnRef.current) return;
-    const rect = btnRef.current.getBoundingClientRect();
-    setDropdownStyle({
-      position: 'fixed',
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: rect.width,
-      zIndex: 9999,
-    });
-  }, [open]);
+    if (!open) return;
+    const ubicar = () => {
+      if (!btnRef.current) return;
+      // Alto natural: buscador + lista (230) + pie de atajos.
+      setDropdownStyle(posicionMenu(btnRef.current.getBoundingClientRect(), searchable ? 310 : 270));
+    };
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('scroll', ubicar, true);
+    return () => {
+      window.removeEventListener('resize', ubicar);
+      window.removeEventListener('scroll', ubicar, true);
+    };
+  }, [open, searchable]);
 
   // Cerrar al click fuera — verifica tanto el trigger como el portal
   useEffect(() => {
@@ -126,16 +133,15 @@ export function Dropdown({
           // `panel-theme` va acá porque el menú se portalea a `document.body`,
           // fuera del árbol del panel: sin la clase no heredaría las `--p-*` y
           // los colores quedarían sin resolver.
-          className="panel-theme bg-[var(--p-surface-5)] border border-[var(--p-accent)] rounded-2xl shadow-2xl overflow-hidden"
+          className="panel-theme bg-[var(--p-surface-5)] border border-[var(--p-accent)] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
           style={{
-            ...dropdownStyle,
-            transformOrigin: 'top center',
             animation: 'panelScaleY 180ms ease-out',
+            ...dropdownStyle,
           }}
           onKeyDown={handleKey}
         >
           {searchable && (
-            <div className="flex items-center gap-2 px-3.5 py-2.5 border-b border-[var(--p-line)] bg-[var(--p-surface-4)]">
+            <div className="shrink-0 flex items-center gap-2 px-3.5 py-2.5 border-b border-[var(--p-line)] bg-[var(--p-surface-4)]">
               <Search size={14} className="text-[var(--p-text-3)]" />
               <input
                 ref={searchRef}
@@ -146,7 +152,7 @@ export function Dropdown({
               />
             </div>
           )}
-          <ul className="max-h-[230px] overflow-y-auto p-1.5 list-none m-0">
+          <ul className="max-h-[230px] min-h-0 flex-1 overflow-y-auto p-1.5 list-none m-0">
             {filtered.length === 0 ? (
               <li className="px-4 py-4 text-center text-xs text-[var(--p-text-3)]">Sin resultados</li>
             ) : (
@@ -168,7 +174,7 @@ export function Dropdown({
               ))
             )}
           </ul>
-          <div className="px-3 py-2 border-t border-[var(--p-line)] bg-[var(--p-surface-4)] flex justify-between text-[10.5px] text-[var(--p-text-3)]">
+          <div className="shrink-0 px-3 py-2 border-t border-[var(--p-line)] bg-[var(--p-surface-4)] flex justify-between text-[10.5px] text-[var(--p-text-3)]">
             <span>↑↓ navegar</span>
             <span>Enter seleccionar · Esc cerrar</span>
           </div>

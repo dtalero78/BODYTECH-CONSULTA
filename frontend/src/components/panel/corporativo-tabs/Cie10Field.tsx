@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { posicionMenu } from '../posicionMenu';
 import { Search, X, Loader2 } from 'lucide-react';
 import { useFieldAutoSave } from '../hooks/useFieldAutoSave';
 import type { Cie10Entry } from './cie10-catalogo';
@@ -118,11 +119,21 @@ export function Cie10Field({ historiaId, field, initialValue, onSaved, label = '
     setActiveIndex(0);
   }, [query]);
 
-  // Posición fija bajo el input, para escapar del overflow del modal.
+  // Posición fija junto al input, para escapar del overflow del modal. Abre hacia
+  // arriba si abajo no cabe (ver `posicionMenu`), y sigue al campo con el scroll.
   useLayoutEffect(() => {
-    if (!open || !wrapRef.current) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    setListStyle({ position: 'fixed', top: r.bottom + 6, left: r.left, width: r.width, zIndex: 9999 });
+    if (!open) return;
+    const ubicar = () => {
+      if (!wrapRef.current) return;
+      setListStyle(posicionMenu(wrapRef.current.getBoundingClientRect(), 272));
+    };
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('scroll', ubicar, true);
+    return () => {
+      window.removeEventListener('resize', ubicar);
+      window.removeEventListener('scroll', ubicar, true);
+    };
   }, [open, codigos.length]);
 
   // Cerrar al click fuera (trigger o lista).
@@ -233,10 +244,10 @@ export function Cie10Field({ historiaId, field, initialValue, onSaved, label = '
         createPortal(
           <div
             ref={listRef}
-            className="panel-theme bg-[var(--p-surface-5)] border border-[var(--p-accent)] rounded-2xl shadow-2xl overflow-hidden"
-            style={{ ...listStyle, transformOrigin: 'top center', animation: 'panelScaleY 180ms ease-out' }}
+            className="panel-theme bg-[var(--p-surface-5)] border border-[var(--p-accent)] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            style={{ animation: 'panelScaleY 180ms ease-out', ...listStyle }}
           >
-            <ul className="max-h-[260px] overflow-y-auto p-1.5 list-none m-0">
+            <ul className="max-h-[260px] min-h-0 flex-1 overflow-y-auto p-1.5 list-none m-0">
               {cargando ? (
                 <li className="px-4 py-4 flex items-center justify-center gap-2 text-xs text-[var(--p-text-3)]">
                   <Loader2 size={14} className="animate-spin" /> Cargando catálogo…

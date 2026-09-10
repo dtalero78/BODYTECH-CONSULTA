@@ -20,6 +20,7 @@
 //   MYBODYTECH_RIPS_ORG           (default '1')
 // ============================================================================
 
+import { fetch, ProxyAgent, type Dispatcher } from 'undici';
 import postgresService from './postgres.service';
 import integrationLogService from './integration-log.service';
 
@@ -32,6 +33,35 @@ function cfg() {
     brand: process.env.MYBODYTECH_RIPS_BRAND || '1',
     org: process.env.MYBODYTECH_RIPS_ORG || '1',
   };
+}
+
+// Proxy de salida con IP fija (droplet). Si MYBODYTECH_RIPS_PROXY_URL está
+// definida, TODAS las llamadas al validador salen por ahí, de modo que mybodytech
+// pueda hacer allowlist de una sola IP. Sin la variable, salida directa.
+let _dispatcher: Dispatcher | undefined;
+let _dispatcherResolved = false;
+function ripsDispatcher(): Dispatcher | undefined {
+  if (_dispatcherResolved) return _dispatcher;
+  _dispatcherResolved = true;
+  const p = process.env.MYBODYTECH_RIPS_PROXY_URL;
+  if (p) {
+    try {
+      const u = new URL(p);
+      const uri = `${u.protocol}//${u.host}`;
+      const token = u.username
+        ? `Basic ${Buffer.from(
+            `${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}`
+          ).toString('base64')}`
+        : undefined;
+      _dispatcher = new ProxyAgent(token ? { uri, token } : uri);
+    } catch (e) {
+      console.error(
+        '[mybodytech-rips] MYBODYTECH_RIPS_PROXY_URL inválida:',
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  return _dispatcher;
 }
 
 function isConfigured(): boolean {
@@ -50,6 +80,7 @@ async function getAccessToken(): Promise<string> {
       client_secret: c.clientSecret,
     }),
     signal: AbortSignal.timeout(15000),
+    dispatcher: ripsDispatcher(),
   });
   if (!res.ok) throw new Error(`OAuth mybodytech respondió ${res.status}`);
   const j = (await res.json()) as { access_token?: string };
@@ -112,6 +143,7 @@ class MybodytechRipsService {
         },
         body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(20000),
+        dispatcher: ripsDispatcher(),
       });
       httpStatus = res.status;
       responseBody = await res.json().catch(() => null);

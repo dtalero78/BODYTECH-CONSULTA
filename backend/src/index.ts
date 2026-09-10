@@ -22,6 +22,7 @@ import usuariosRoutes from './routes/usuarios.routes';
 import directorioRoutes from './routes/directorio.routes';
 import padronRoutes from './routes/padron.routes';
 import empresasRoutes from './routes/empresas.routes';
+import digitalizarRoutes from './routes/digitalizar.routes';
 import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
 import accesosRoutes from './routes/accesos.routes';
@@ -138,6 +139,9 @@ app.use(
 // de a toda la API: el resto de los endpoints reciben formularios, no archivos,
 // y un límite chico ahí es una defensa gratis contra un POST enorme.
 app.use('/api/auth/registro', express.json({ limit: '1mb' }));
+// "Digitalizar" (panel Coordinador) manda los pantallazos de MyBodytech como
+// data URLs, partidos en franjas de unos cientos de KB cada una.
+app.use('/api/digitalizar', express.json({ limit: '8mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -214,6 +218,9 @@ app.use('/api/padron', requireRole('admin', 'coordinador'), padronRoutes);
 // Catálogo de empresas cliente. El médico corporativo LEE (para su formulario)
 // y el coordinador da de alta; por eso el rol se exige por ruta, no acá.
 app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresasRoutes);
+// Pantallazos de "Citas asignadas" de MyBodytech → lista de afiliados que el
+// coordinador revisa en MyBodytech. Devuelve nombres, cédulas y teléfonos.
+app.use('/api/digitalizar', requireRole('admin', 'coordinador'), digitalizarRoutes);
 // Mapa de accesos entre las tres aplicaciones hermanas (fase 1 de unificar el
 // login). No autentica: sólo muestra. Sólo admin — es el mapa de acceso de
 // toda la organización.

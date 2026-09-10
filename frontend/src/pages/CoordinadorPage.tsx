@@ -19,6 +19,7 @@ import {
   Users,
   Building,
   FileSpreadsheet,
+  ScanText,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -30,6 +31,7 @@ import { UsuariosPanelView } from '../components/coordinador/UsuariosPanelView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
 import { IdentidadesView } from '../components/coordinador/IdentidadesView';
 import { EmpresasView } from '../components/coordinador/EmpresasView';
+import { DigitalizarView } from '../components/coordinador/DigitalizarView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
 
@@ -39,6 +41,7 @@ type View =
   | 'calendario'
   | 'torniquete'
   | 'ordenes'
+  | 'digitalizar'
   | 'identidades'
   | 'empresas'
   | 'indicadores'
@@ -76,6 +79,7 @@ export function CoordinadorPage() {
     calendario: undefined,
     torniquete: undefined,
     ordenes: undefined,
+    digitalizar: undefined,
     indicadores: undefined,
     directorio: undefined,
     identidades: undefined,
@@ -258,6 +262,15 @@ export function CoordinadorPage() {
               onClick={() => setView('ordenes')}
               badge={badges.ordenes}
             />
+            {/* Pantallazo de "Citas asignadas" de MyBodytech → lista de
+                afiliados que abren su ficha en MyBodytech con un clic. */}
+            <NavItem
+              icon={<ScanText className="w-[15px] h-[15px]" />}
+              label="Digitalizar"
+              active={view === 'digitalizar'}
+              onClick={() => setView('digitalizar')}
+              badge={badges.digitalizar}
+            />
             <NavItem
               icon={<Fingerprint className="w-[15px] h-[15px]" />}
               label="Torniquete"
@@ -407,6 +420,9 @@ export function CoordinadorPage() {
               showToast={showToast}
               reportCount={reportOrdenesCount}
             />
+          )}
+          {view === 'digitalizar' && (
+            <DigitalizarView key={`dig-${reloadKey}`} showToast={showToast} />
           )}
           {view === 'torniquete' && (
             <TorniqueteView key={`torn-${reloadKey}`} showToast={showToast} />

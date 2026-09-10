@@ -209,6 +209,20 @@ Operación (admin): `GET /api/admin/corporativo-sheet/estado?limit=N` (bitácora
 
 Route: `/ordenes` → `OrdenesPage.tsx`. Full CRUD for medical orders linked to a `historia_id`. JWT must be injected in every request — `OrdenesPage.tsx` explicitly sets the auth header to avoid 401s. No dedicated ordenes service/routes file; uses the video API layer.
 
+### Digitalizar: pantallazos de MyBodytech (panel Coordinador)
+
+La coordinación de MyBodytech copiaba cédula por cédula de "Citas asignadas" (`mybodytech.co/quotes`) a un Excel, y pegaba cada una en el buscador de afiliados para ver si la persona estaba activa o ya tenía cita. Mientras la integración directa con MyBodytech no esté aprobada, el puente es un pantallazo: el coordinador lo pega (Ctrl+V) en **Coordinador → Digitalizar** ([DigitalizarView.tsx](frontend/src/components/coordinador/DigitalizarView.tsx)), la plataforma lo convierte en filas de `citas_digitalizadas` (`/api/digitalizar`, admin/coordinador), y un clic en la fila abre la ficha en MyBodytech — `https://mybodytech.co/general-list?page=1&filter=<cédula>` (`urlMyBodytech`), siempre en la misma pestaña con nombre `mybodytech`. Acordado con Karen Ariza el 10-sep-2026.
+
+**Una cédula mal leída abre la ficha de otra persona**, así que la lectura tiene dos defensas, medidas contra un pantallazo real:
+- **Franjas sin reducir.** OpenAI reduce toda imagen hasta que su lado corto mida 768 px, y a ese tamaño la cédula pierde dígitos (3 de 10 mal). El navegador (`prepararImagen`) parte el pantallazo en franjas de 2000×700 px con 20% de solape, que llegan intactas.
+- **Dos modelos cruzados** ([digitalizar-ocr.service.ts](backend/src/services/digitalizar-ocr.service.ts)). Cada franja la leen `gpt-5-mini` (0 cédulas mal, ~20 s) y `gpt-4.1` (1 mal, ~4 s); `DIGITALIZAR_MODELOS` los cambia, en orden de preferencia. `consolidarLecturas` ([digitalizar.helper.ts](backend/src/helpers/digitalizar.helper.ts)) junta las lecturas por persona (misma cédula, o misma hora + mismo nombre) y la fila cortada por el borde de una franja no vota. Donde las lecturas no coinciden —o hay una sola— el campo queda en `dudas`, las otras lecturas en `alternativas`, y la pantalla dice "Verificar cédula". Corregir o confirmar con el lápiz lo limpia y deja `verificada_por`.
+
+Idempotencia: UNIQUE `(fecha, sede_id, numero_id)` — pegar pantallazos que se solapan no duplica, y si otro pantallazo lee otra cédula para la misma hora y nombre se agrega como alternativa en vez de crear otra fila. "Repetida" = la cédula ya salió otro día en esta tabla (lo que el Excel de coordinación pintaba de rojo a mano).
+
+**No escribe en `HistoriaClinica`, a propósito**: es una lista de trabajo (a quién revisar), no una cita agendada. Ahí aparecería en el calendario, los indicadores y el link automático de WhatsApp, y la persona puede estar inactiva.
+
+Pendiente, acordado en la misma reunión y en este orden: (1) WhatsApp al afiliado para que agende su consulta virtual, (2) cambiar el mensaje de conexión que hoy sale con texto de nutrición, (3) tipificar cada gestión (no contestó, teléfono malo, inactivo…) y que se llene un Excel, como el de las valoraciones del Médico Corporativo — falta que Karen pase su catálogo de tipificaciones.
+
 ### Envío del link de videollamada al paciente
 
 El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):

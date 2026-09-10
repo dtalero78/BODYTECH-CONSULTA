@@ -1866,6 +1866,55 @@ class PostgresService {
          WHERE h."_id" = v.entidad_id AND h."reprogramaciones" = 0
       `);
 
+      // ----------------------------------------------------------------------
+      // Citas de MyBodytech digitalizadas desde un pantallazo (panel
+      // Coordinador → "Digitalizar"). Ver digitalizar.service.ts.
+      //
+      // No van a "HistoriaClinica": son una lista de trabajo del coordinador
+      // —a quién revisar en MyBodytech—, no una cita agendada acá. Meterlas
+      // ahí las haría aparecer en el calendario, en los indicadores y en el
+      // link automático de WhatsApp, y esa persona puede estar inactiva.
+      //
+      // `sede_id` NOT NULL con 'bsl' por defecto (lo mismo que COALESCE en
+      // sedeFilter) para que la llave única no deje pasar dos NULL iguales.
+      //
+      // `dudas` / `alternativas`: cada pantallazo lo leen dos modelos y se
+      // cruzan. Donde no coinciden, el campo queda en `dudas` y las otras
+      // lecturas en `alternativas`, para que el coordinador lo verifique antes
+      // de abrir la ficha. `nombre_key` (nombre normalizado) es con lo que se
+      // reconoce a la misma persona leída con otra cédula en otro pantallazo.
+      // ----------------------------------------------------------------------
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS citas_digitalizadas (
+          id              BIGSERIAL PRIMARY KEY,
+          fecha           DATE NOT NULL,
+          sede_id         TEXT NOT NULL DEFAULT 'bsl',
+          numero_id       TEXT NOT NULL,
+          nombre          TEXT NOT NULL,
+          nombre_key      TEXT NOT NULL DEFAULT '',
+          dudas           TEXT[] NOT NULL DEFAULT '{}',
+          alternativas    JSONB NOT NULL DEFAULT '{}',
+          verificada_por  TEXT,
+          hora            TEXT,
+          sede_mbt        TEXT,
+          tipo            TEXT,
+          telefono        TEXT,
+          modalidad       TEXT,
+          estado_mbt      TEXT,
+          subido_por      TEXT,
+          creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          revisado_en     TIMESTAMPTZ,
+          revisado_por    TEXT,
+          CONSTRAINT citas_digitalizadas_uq UNIQUE (fecha, sede_id, numero_id)
+        )
+      `);
+      // Para "Repetida": la misma cédula en fechas anteriores.
+      await this.query(
+        `CREATE INDEX IF NOT EXISTS idx_citas_digitalizadas_doc
+           ON citas_digitalizadas (numero_id, fecha)`
+      );
+
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {
       console.error('❌ [PostgreSQL] Error ejecutando migraciones:', error);

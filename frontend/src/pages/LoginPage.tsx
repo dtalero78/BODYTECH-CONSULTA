@@ -170,7 +170,7 @@ export function LoginPage() {
           no era para él después de teclear su cédula.
         */}
         <div className="mt-6 pt-5 border-t border-zinc-100 text-center">
-          <p className="text-[13px] text-zinc-500">¿Sos fisioterapeuta del programa de Composición Corporal?</p>
+          <p className="text-[13px] text-zinc-500">¿Eres profesional del programa de Composición Corporal?</p>
           <button
             type="button"
             onClick={() => navigate('/registro')}

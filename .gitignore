@@ -41,3 +41,6 @@ my-video/
 
 # app-tutorial-video skill workspace
 .tutorial-video/
+
+# Resultados de las corridas de `claude plugin eval` (se regeneran)
+plugins/*/evals/results/

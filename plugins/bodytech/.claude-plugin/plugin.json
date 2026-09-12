@@ -1,0 +1,8 @@
+{
+  "name": "bodytech",
+  "description": "Reglas del repositorio BODYTECH-CONSULTA que son fáciles de violar sin querer: día en Colombia (UTC-5), agregar un campo al panel de historia clínica, lectura de antecedentes booleanos y envío de WhatsApp por plantilla.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Equipo BSL"
+  }
+}

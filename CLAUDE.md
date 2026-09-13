@@ -86,7 +86,7 @@ Digital Ocean PostgreSQL accessed via [backend/src/services/postgres.service.ts]
 
 Main tables:
 - `HistoriaClinica` — visit/consultation row keyed by `_id`, with `numeroId` (patient document), `medico` (doctor code), `fechaAtencion` (scheduled), `fechaConsulta` (attended), ~150 snake_case clinical fields, and `transcription_status` / `transcription_text`.
-- `formularios` — patient intake form keyed by `numero_id`, with 27 personal antecedent flags and 8 family antecedent flags. Joined via `LEFT JOIN` in [backend/src/services/medical-history.service.ts](backend/src/services/medical-history.service.ts).
+- `formularios` — patient intake form keyed by `numero_id`, with 27 personal antecedent flags and 8 family antecedent flags. Read in [backend/src/services/historia-query.service.ts](backend/src/services/historia-query.service.ts) as a **second query, not a JOIN**: `WHERE wix_id = $1 OR numero_id = $2 ORDER BY fecha_registro DESC LIMIT 1`, so a patient with several intake forms contributes only the most recent one.
 - `room_historia_map` — maps Twilio `room_name` (PK) to `historia_id` so the recording webhook can find the right record.
 - `ordenes` — medical orders with CRUD, linked to `historia_id`.
 - `citas` — appointments (schedule, list, status).
@@ -99,7 +99,7 @@ Main tables:
 
 **Timezone gotcha — Colombia is UTC-5.** "Today" queries must convert via `Date.UTC(y, m, d, 5, 0, 0)` for start-of-day and `Date.UTC(y, m, d+1, 4, 59, 59, 999)` for end-of-day. See `getDailyStats` and `getPendingPatients` in `medical-panel.service.ts`. Don't use `new Date()` directly — local server TZ in production is UTC.
 
-**Boolean coercion gotcha.** Antecedent columns store positives as `true`, `'true'`, `'Sí'`, or `'SI'` (different ingestion paths). Always check all four when reading. See [backend/src/services/medical-history.service.ts](backend/src/services/medical-history.service.ts) lines ~208-245.
+**Boolean coercion gotcha.** Antecedent columns store positives as `true`, `'true'`, `'Sí'`, or `'SI'` (different ingestion paths). Always check all four when reading: [backend/src/services/historia-query.service.ts](backend/src/services/historia-query.service.ts) lines ~208-245 does it for the 27 personal and 8 family flags. Writing is wider and already solved — `coerceValue()` in [backend/src/services/historia-field-coercion.service.ts](backend/src/services/historia-field-coercion.service.ts) also accepts `'sí'`, `'si'` and `'1'`; don't write a second coercion. A `NULL` means **nobody asked**, not "no": leave it blank when exporting.
 
 ### Multi-sede login and auth
 
@@ -143,11 +143,11 @@ Triggered automatically after every call ends:
 
 1. When the doctor connects (`role === 'doctor'`), `useVideoRoom.ts` POSTs `{ roomName, historiaId }` to `POST /api/video/events/session-start`, which calls `linkRoomToHistoria()` in [backend/src/services/transcription.service.ts](backend/src/services/transcription.service.ts). This writes a row to `room_historia_map` and sets `transcription_status = 'pending'` on the `HistoriaClinica`.
 2. When the recording is ready, Twilio calls `POST /api/video/webhooks/recording-ready`. The webhook validates the Twilio signature (`TWILIO_AUTH_TOKEN`), responds 200 immediately, then runs `processRecording()` in the background.
-3. `processRecording()` pipeline: looks up `historia_id` from `room_historia_map` → sets status `processing` → downloads audio from Twilio with Basic auth → sends to OpenAI Whisper (`whisper-1`, `language: es`) → sends transcript to GPT-4o-mini with a prompt that extracts only explicitly-mentioned fields → PATCHes each extracted field individually via `updateMedicalHistoryField()` from `medical-history.service.ts` → sets status `done` (or `error`).
+3. `processRecording()` pipeline: looks up `historia_id` from `room_historia_map` → sets status `processing` → downloads audio from Twilio with Basic auth → sends to OpenAI Whisper (`whisper-1`, `language: es`) → sends transcript to GPT-4o-mini with a prompt that extracts only explicitly-mentioned fields → PATCHes each extracted field individually via `medicalHistoryService.updateField()` → sets status `done` (or `error`).
 4. Extracted fields: `motivo_consulta_texto`, `ant_patologico_obs`, `ant_farmacologico_obs`, `ant_alergicos_obs`, `hallazgos_descripcion`, `hallazgos_dolor`, `cc_peso_nuevo`, `cc_estatura_nuevo`, `tas`, `tad`, `fcr`.
 5. `MedicalConsultationPanel` polls the medical history GET every 30s while `transcriptionStatus === 'processing'`; on `done` it refetches and shows a badge in `PanelHeader` ("Transcripción lista · Revisar").
 
-**Critical:** use `EDITABLE_FIELDS` and `updateMedicalHistoryField` from `medical-history.service.ts` — do not create duplicate PATCH logic.
+**Critical:** use `EDITABLE_FIELDS` and `medicalHistoryService.updateField()` — do not create duplicate PATCH logic. Importing them from `medical-history.service.ts` still works and is what the code does, but that file is only a barrel today: to *edit* the whitelist go to `historia-field-coercion.service.ts`, and for the write path to `historia-mutation.service.ts`. (`updateMedicalHistoryField` is the controller method in `video.controller.ts`, not a service function.)
 
 ### Calidad module (Anthropic Managed Agents)
 
@@ -385,10 +385,10 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 - `services/postgres.service.ts` — `pg.Pool`, `query()`, migrations
 - `services/auth.service.ts` — multi-sede login, JWT generation
 - `services/medical-panel.service.ts` — daily stats, paginated pending list, search, "no contesta"
-- `services/medical-history.service.ts` — historia clínica read/write; exports `EDITABLE_FIELDS` whitelist + `updateMedicalHistoryField()`; handles 27+8 antecedent boolean coercion
+- `services/medical-history.service.ts` — **barrel only** (~37 lines): re-exports the three files below so legacy imports keep working. Nothing to edit here
 - `services/historia-clinica-postgres.service.ts` — historia clínica DB layer
-- `services/historia-field-coercion.service.ts` — boolean/enum coercion logic
-- `services/historia-query.service.ts` / `historia-mutation.service.ts` — CQRS split for historia queries vs mutations
+- `services/historia-field-coercion.service.ts` — where `EDITABLE_FIELD_DEFS` (the whitelist, exported as `EDITABLE_FIELDS`) and `coerceValue()` actually live
+- `services/historia-query.service.ts` / `historia-mutation.service.ts` — CQRS split: reads (incl. the 27+8 antecedent coercion) vs writes (`updateField`, `updateMedicalHistory`)
 - `services/transcription.service.ts` — post-call pipeline: `linkRoomToHistoria()` + `processRecording()` (Whisper → GPT-4o-mini → PATCH fields)
 - `services/session-tracker.service.ts` — in-memory tracker, sends WhatsApp report on full disconnect
 - `services/telemedicine-socket.service.ts` — Socket.io rooms for postural analysis
@@ -549,7 +549,7 @@ VITE_API_BASE_URL=http://localhost:3000   # dev only; empty/unset in prod
 5. Expose to the frontend via `frontend/src/services/api.service.ts` or a domain-specific service
 
 ### Adding a new panel tab field (auto-save pattern)
-1. Add the column to `EDITABLE_FIELDS` in `medical-history.service.ts` with its type
+1. Add the column to `EDITABLE_FIELD_DEFS` in `historia-field-coercion.service.ts` with its type (`string` | `number` | `boolean` | `date`)
 2. Add the field to `MedicalHistoryFull` in `panel/types.ts`
 3. Add the migration `ADD COLUMN IF NOT EXISTS` in `postgres.service.ts → runMigrations()`
 4. Render via `useFieldAutoSave` in the relevant tab — debounce fires `PATCH /api/video/medical-history/:id/field` automatically
@@ -570,7 +570,7 @@ Always use `whatsapp.service.ts` with the approved template. Do not construct `w
 
 - **Doctor sees skeleton-loading forever** — patient hasn't emitted the first `pose-data-update`. Check patient browser console for MediaPipe / camera errors. The doctor's "Iniciar Análisis" button is disabled until `isPosturalAnalysisConnected` is true; if it isn't, Socket.io hasn't connected yet (give it 2-3s after entering the room).
 - **Background blur returns 403** — assets are being fetched from the Twilio CDN. Confirm `assetsPath: '/twilio-processors'` and that the public folder still has the TFLite/WASM bundle.
-- **"Condiciones Especiales" tags missing for a patient** — the `formularios` row uses `'SI'` / `'Sí'` / `'true'`. The boolean coercion in `medical-history.service.ts` must check all four; missing one will silently hide that condition.
+- **"Condiciones Especiales" tags missing for a patient** — the `formularios` row uses `'SI'` / `'Sí'` / `'true'`. The boolean coercion in `historia-query.service.ts` (~lines 208-245) must check all four; missing one will silently hide that condition.
 - **`new Date()` shows the wrong day** — production runs in UTC. Always convert to UTC-5 before computing day boundaries.
 - **Transcription stays in `processing` forever** — the Twilio webhook (`/api/video/webhooks/recording-ready`) may not be registered in the Twilio console, or the signature validation fails (check `TWILIO_AUTH_TOKEN`). Also check that the room type is `group` (not `go`) — `go` rooms don't support recording rules. `group-small` is deprecated (error 53126).
 - **Calculated fields reset on first render** — `Calculated.tsx` guards against overwriting an existing value; if a field appears blank on load, check that the GET response returns the field in camelCase and that it's in `MedicalHistoryFull`.
@@ -604,7 +604,7 @@ These docs go deeper than this file — read them when working on a specific are
 - Layout 75/25 en `VideoRoom.tsx` con toggle Maximize2/Minimize2 (atajos `M` / `N`).
 - Auto-save: `useAutoSave` / `useFieldAutoSave` con debounce 800ms → `PATCH /api/video/medical-history/:id/field`. Aggregator de estado vía `SaveContext`.
 - Schema: ~150 columnas snake_case en `HistoriaClinica` (idempotente con `ADD COLUMN IF NOT EXISTS`, en `postgres.service.ts → runMigrations()`).
-- `EDITABLE_FIELDS` whitelist en `medical-history.service.ts` con tipos por campo. Coerción de booleanos consistente (`true | 'true' | 'Sí' | 'SI'`).
+- `EDITABLE_FIELDS` whitelist con tipos por campo (entonces en `medical-history.service.ts`; hoy en `historia-field-coercion.service.ts`, tras el refactor CQRS). Coerción de booleanos consistente (`true | 'true' | 'Sí' | 'SI'`).
 - Tab t1 Datos Básicos completo (3 cards: Identidad, Residencia, Información Básica).
 
 ### Phase 2 — Anamnesis + Riesgo + Examen Físico (completo)

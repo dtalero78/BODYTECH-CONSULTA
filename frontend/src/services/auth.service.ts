@@ -11,6 +11,7 @@
 // ============================================================================
 
 import axios from 'axios';
+import { guardar as guardarPaneles, olvidar as olvidarPaneles, type TokenPanel } from './paneles.service';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -52,7 +53,12 @@ export interface SessionUser {
 export type ProgramaHermano = 'prepagadas' | 'acc';
 
 export type PasswordLoginOutcome =
-  | { program: 'consulta'; user: SessionUser }
+  | {
+      program: 'consulta';
+      user: SessionUser;
+      /** Vinieron tokens de las apps hermanas: es alguien de SUPERUSUARIOS, y su inicio es /paneles. */
+      paneles: boolean;
+    }
   | { program: ProgramaHermano; token: string; redirectUrl: string };
 
 /** Mensaje legible para errores del login por email+contraseña. */
@@ -226,7 +232,12 @@ class AuthService {
     }
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
-    return { program: 'consulta', user: user as SessionUser };
+    // Los tokens de las hermanas son de ESTE login: los de una sesión anterior
+    // se tiran aunque esta no traiga ninguno.
+    olvidarPaneles();
+    const paneles = Array.isArray(data.paneles);
+    if (paneles) guardarPaneles(data.paneles as TokenPanel[]);
+    return { program: 'consulta', user: user as SessionUser, paneles };
   }
 
   /** Solicita el enlace de reset de contraseña por email (Resend). */
@@ -280,6 +291,8 @@ class AuthService {
     localStorage.removeItem(ROL_KEY);
     localStorage.removeItem(ESP_KEY);
     localStorage.removeItem(USER_KEY);
+    // Los tokens de ACC y Prepagadas de la página de paneles: son de esta sesión.
+    olvidarPaneles();
   }
 
   getRol(): 'medico' | 'coach' | null {

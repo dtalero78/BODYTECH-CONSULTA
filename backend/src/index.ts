@@ -23,6 +23,7 @@ import directorioRoutes from './routes/directorio.routes';
 import padronRoutes from './routes/padron.routes';
 import empresasRoutes from './routes/empresas.routes';
 import digitalizarRoutes from './routes/digitalizar.routes';
+import panelesRoutes from './routes/paneles.routes';
 import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
 import accesosRoutes from './routes/accesos.routes';
@@ -221,6 +222,10 @@ app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresas
 // Pantallazos de "Citas asignadas" de MyBodytech → lista de afiliados que el
 // coordinador revisa en MyBodytech. Devuelve nombres, cédulas y teléfonos.
 app.use('/api/digitalizar', requireRole('admin', 'coordinador'), digitalizarRoutes);
+// Paneles: la puerta del creador de la plataforma a Consulta, ACC y
+// Prepagadas. Admin, y además solo los correos de SUPERUSUARIOS (dentro del
+// router): desde ahí se piden tokens de las otras apps.
+app.use('/api/paneles', requireRole('admin'), panelesRoutes);
 // Mapa de accesos entre las tres aplicaciones hermanas (fase 1 de unificar el
 // login). No autentica: sólo muestra. Sólo admin — es el mapa de acceso de
 // toda la organización.

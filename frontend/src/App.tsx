@@ -25,8 +25,8 @@ import { queryClient } from './lib/queryClient';
 // `LoginPage` queda fuera a propósito: es la primera pantalla de casi todos, y
 // diferirla sólo agregaría un viaje al servidor antes del primer pintado.
 //
-// Todas son exportaciones con nombre salvo BodyVibeTech y AppsPublicados, que
-// son `export default` — de ahí las dos formas del import.
+// Todas son exportaciones con nombre salvo BodyVibeTech, AppsPublicados y
+// Paneles, que son `export default` — de ahí las dos formas del import.
 // ---------------------------------------------------------------------------
 const DoctorPage = lazy(() => import('./pages/DoctorPage').then((m) => ({ default: m.DoctorPage })));
 const DoctorRoomPage = lazy(() =>
@@ -85,6 +85,7 @@ const ResetPasswordPage = lazy(() =>
 );
 const BodyVibeTechPage = lazy(() => import('./pages/BodyVibeTechPage'));
 const AppsPublicadosPage = lazy(() => import('./pages/AppsPublicadosPage'));
+const PanelesPage = lazy(() => import('./pages/PanelesPage'));
 
 // Devtools sólo en dev. En build de producción `import.meta.env.DEV === false`
 // y el lazy import nunca se evalúa, por lo que el chunk queda fuera del
@@ -271,6 +272,19 @@ function App() {
               element={
                 <RequireRole roles={['admin', 'coordinador', 'medico', 'coach', 'auxiliar', 'torre']}>
                   <AppsPublicadosPage />
+                </RequireRole>
+              }
+            />
+
+            {/* Paneles: la puerta del creador de la plataforma a las pantallas
+                de Consulta, ACC y Prepagadas. El rol es el primer filtro; quién
+                la usa de verdad lo decide el backend (SUPERUSUARIOS) y la
+                página lo pregunta. */}
+            <Route
+              path="/paneles"
+              element={
+                <RequireRole roles={['admin']}>
+                  <PanelesPage />
                 </RequireRole>
               }
             />

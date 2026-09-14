@@ -107,6 +107,17 @@ Doctors log in via `POST /api/auth/login` with a doctor code. The backend resolv
 
 Frontend: `MedicalPanelPage.tsx` handles login state; after auth, the JWT is stored and injected into all API requests via the axios client in `api.service.ts`. `OrdenesPage.tsx` explicitly injects the JWT to avoid 401s on protected routes.
 
+### Paneles: la puerta del creador a las tres apps
+
+La cascada del login decide sola a qué app entra cada correo: quien tiene cuenta en Consulta nunca llega a ACC ni a Prepagadas, así que mirar las tres pedía una cuenta de prueba por app. **`/paneles`** ([PanelesPage.tsx](frontend/src/pages/PanelesPage.tsx)) junta en una página las pantallas de Consulta —se abren acá— y las de ACC y Prepagadas —en otra pestaña, entrando como admin—. Pedido el 14-sep-2026.
+
+- **Solo `SUPERUSUARIOS`** (correos separados por coma, [paneles-acceso.ts](backend/src/services/paneles-acceso.ts)); sin la variable, o vacía, solo el autor. Va por correo y no por rol por lo mismo que Digitalizar: `admin` la abriría a todos los administradores. El panel le pregunta a `GET /api/paneles/acceso` si dibuja "Paneles" en el menú SISTEMA, y quien entra con esa cuenta aterriza en `/paneles`.
+- **No hay llave maestra.** Consulta no firma tokens de otra app. Al iniciar sesión, a un superusuario se le piden los tokens de ACC y Prepagadas **con la contraseña que acaba de escribir** (`authService.tokensHermanas`, en paralelo), y cada app la valida contra su propio acceso en `persona_apps`. Estar en la lista sin acceso de admin en ACC es no poder entrar a ACC.
+- **Los tokens de las hermanas duran 12 h**, y la sesión de Consulta con "recordarme" 30 días. Vencidos, la página pide la contraseña y `POST /api/paneles/entrar` se la pasa **solo** a la app elegida, con el correo de la sesión —nunca uno del cuerpo—. Contraseña mala es 422, no 401: la sesión de Consulta sigue bien. Viven en `localStorage` (`bsl_paneles`); cada login los reemplaza y el logout los borra.
+- **ACC lee `ir`** en su `/sso` (`#t=…&ir=/valoraciones`) para abrir una pantalla puntual; Prepagadas lo ignora y abre sus indicadores.
+
+Fijado en [paneles.routes.test.ts](backend/src/routes/__tests__/paneles.routes.test.ts) y [paneles.service.test.ts](frontend/src/services/__tests__/paneles.service.test.ts).
+
 ### Real-time layer: Socket.io for telemedicine and session reports
 
 A single `socket.io` server is attached to the same `http.Server` as Express (see [backend/src/index.ts](backend/src/index.ts)). It is consumed by two services:
@@ -366,6 +377,7 @@ Defined in [frontend/src/App.tsx](frontend/src/App.tsx). Note: `/` redirects to 
 | `/ordenes` / `/ordenes-login` | Medical orders CRUD panel + its login |
 | `/calidad` | Calidad evaluation module |
 | `/coordinador` / `/coordinador-login` | Coordinador panel (profesionales, calendario, ordenes) + its login |
+| `/paneles` | Botones a las pantallas de Consulta, ACC y Prepagadas — solo `SUPERUSUARIOS` (ver "Paneles") |
 | `/bot-trepsi` | Public Trepsi integration assistant chat |
 | `/reprogramar/:id` | Reschedule-an-appointment page |
 | `/doctor` | Manual room creation page |

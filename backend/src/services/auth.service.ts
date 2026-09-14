@@ -371,28 +371,65 @@ class AuthService {
     password: string
   ): Promise<HermanaLoginResult> {
     for (const hermana of lista) {
-      try {
-        const resp = await fetch(`${hermana.url}/api/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!resp.ok) continue;
-        const data = (await resp.json()) as { token?: string };
-        if (!data?.token) continue;
-        return {
-          ok: true,
-          programa: hermana.programa,
-          token: data.token,
-          redirectUrl: `${hermana.url}/sso`,
-        };
-      } catch {
-        // Una hermana caída no puede impedir que las demás respondan.
-        continue;
-      }
+      const intento = await this.probarUna(hermana, email, password);
+      if (intento.ok) return intento;
     }
     return { ok: false };
+  }
+
+  /** Un intento contra UNA hermana. Caída o rechazo son `ok:false`, nunca una excepción. */
+  private async probarUna(
+    hermana: { programa: string; url: string },
+    email: string,
+    password: string
+  ): Promise<HermanaLoginResult> {
+    try {
+      const resp = await fetch(`${hermana.url}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) return { ok: false };
+      const data = (await resp.json()) as { token?: string };
+      if (!data?.token) return { ok: false };
+      return {
+        ok: true,
+        programa: hermana.programa,
+        token: data.token,
+        redirectUrl: `${hermana.url}/sso`,
+      };
+    } catch {
+      // Una hermana caída no puede impedir que las demás respondan.
+      return { ok: false };
+    }
+  }
+
+  /**
+   * Los tokens de TODAS las hermanas donde estas credenciales autentican, en
+   * paralelo. Es para la página de paneles (`esSuperusuario`), no para el
+   * login de todos: `loginHermanas` prueba en orden justamente para que la
+   * contraseña no viaje a apps que no son de la persona, y quien usa los
+   * paneles tiene cuenta en cada una. `programas` acota a esas —el reingreso
+   * desde la página pide una sola—.
+   *
+   * Consulta no firma nada en nombre de otra app: cada token lo emite su app
+   * después de validar la contraseña contra su propio acceso. Nunca lanza.
+   */
+  async tokensHermanas(
+    email: string,
+    password: string,
+    programas?: ReadonlyArray<string>
+  ): Promise<Array<{ programa: string; token: string; redirectUrl: string }>> {
+    const lista = programas
+      ? APPS_HERMANAS.filter((h) => programas.includes(h.programa))
+      : APPS_HERMANAS;
+    const intentos = await Promise.all(lista.map((h) => this.probarUna(h, email, password)));
+    return intentos.flatMap((r) =>
+      r.ok && r.programa && r.token && r.redirectUrl
+        ? [{ programa: r.programa, token: r.token, redirectUrl: r.redirectUrl }]
+        : []
+    );
   }
 
   /** @deprecated Usar `loginHermanas`. Se mantiene por compatibilidad. */

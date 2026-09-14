@@ -12,10 +12,12 @@ import { FONT_INTER } from '../components/coordinador/_tokens';
  * `//`. Sin ese filtro, `?volver=//otro-sitio` convierte al login en un
  * trampolín para mandar gente a donde sea con nuestra dirección en la barra.
  */
-function destinoTrasEntrar(rol: Parameters<typeof homePathForRole>[0]): string {
+function destinoTrasEntrar(rol: Parameters<typeof homePathForRole>[0], conPaneles = false): string {
   const pedido = new URLSearchParams(window.location.search).get('volver');
   if (pedido && pedido.startsWith('/') && !pedido.startsWith('//')) return pedido;
-  return homePathForRole(rol);
+  // Quien está en SUPERUSUARIOS aterriza en la página de paneles. El login lo
+  // sabe porque la respuesta trajo los tokens de las apps hermanas.
+  return conPaneles ? '/paneles' : homePathForRole(rol);
 }
 
 /**
@@ -54,7 +56,7 @@ export function LoginPage() {
         window.location.href = `${outcome.redirectUrl}#t=${encodeURIComponent(outcome.token)}`;
         return;
       }
-      navigate(destinoTrasEntrar(outcome.user.role), { replace: true });
+      navigate(destinoTrasEntrar(outcome.user.role, outcome.paneles), { replace: true });
     } catch (err) {
       setError(passwordLoginErrorMessage(err));
     } finally {

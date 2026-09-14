@@ -20,10 +20,12 @@ import {
   Building,
   FileSpreadsheet,
   ScanText,
+  LayoutDashboard,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
 import digitalizarService from '../services/digitalizar.service';
+import panelesService from '../services/paneles.service';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
@@ -156,6 +158,16 @@ export function CoordinadorPage() {
       .acceso()
       .then(setPuedeDigitalizar)
       .catch(() => setPuedeDigitalizar(false));
+  }, []);
+
+  // Paneles: la puerta del creador a las tres apps. Mismo criterio que
+  // Digitalizar — lo decide el backend (SUPERUSUARIOS) y acá se pregunta.
+  const [puedePaneles, setPuedePaneles] = useState(false);
+  useEffect(() => {
+    panelesService
+      .acceso()
+      .then(setPuedePaneles)
+      .catch(() => setPuedePaneles(false));
   }, []);
 
   // "Aplicaciones" solo aparece si hay al menos una publicada para esta
@@ -334,6 +346,13 @@ export function CoordinadorPage() {
           <div className={`${SECTION_LABEL} px-3 pb-2`}>SISTEMA</div>
           <div className="space-y-0.5">
 
+            {puedePaneles && (
+              <NavItem
+                icon={<LayoutDashboard className="w-[15px] h-[15px]" />}
+                label="Paneles"
+                onClick={() => navigate('/paneles')}
+              />
+            )}
             {puedeConstruir && (
               <NavItem
                 icon={<Sparkles className="w-[15px] h-[15px]" />}

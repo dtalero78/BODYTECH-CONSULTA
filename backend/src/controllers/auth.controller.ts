@@ -16,6 +16,7 @@ import authService from '../services/auth.service';
 import usuariosService from '../services/usuarios.service';
 import usuariosGlobalService from '../services/usuarios-global.service';
 import emailService from '../services/email.service';
+import { esSuperusuario } from '../services/paneles-acceso';
 
 const loginSchema = z.object({
   medicoCode: z.string().min(1),
@@ -105,10 +106,18 @@ class AuthController {
       const { email, password, remember } = parsed.data;
       const result = await authService.loginWithPassword(email, password, remember ?? false);
       if (result.ok) {
+        // Página de paneles: a quien está en SUPERUSUARIOS se le piden también
+        // los tokens de las apps hermanas con la contraseña que acaba de
+        // escribir, para que entre a cualquiera sin volver a tipearla. Si una
+        // no contesta, el login sigue igual: la página la pide después.
+        const paneles = esSuperusuario(email)
+          ? await authService.tokensHermanas(email, password).catch(() => [])
+          : undefined;
         res.status(200).json({
           success: true,
           token: result.token,
           user: result.user,
+          ...(paneles ? { paneles } : {}),
         });
         return;
       }

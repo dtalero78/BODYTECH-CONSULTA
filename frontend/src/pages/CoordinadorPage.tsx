@@ -37,6 +37,7 @@ import { EmpresasView } from '../components/coordinador/EmpresasView';
 import { DigitalizarView } from '../components/coordinador/DigitalizarView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
+import { EXCEL_VALORACIONES_URL } from '../config/enlaces';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
 type View =
@@ -54,19 +55,6 @@ interface NavBadge {
   text: string;
   variant?: 'mono' | 'alert';
 }
-
-/**
- * Hoja donde cae una fila por cada valoración del Médico Corporativo al cerrar
- * la historia (la escribe `corporativo-sheet.service.ts` en el backend).
- *
- * Va acá y no en una variable de entorno porque no cambia y así queda
- * rastreable desde el botón que la usa. Ojo con lo que eso implica: este archivo
- * termina en el bundle público, así que la URL es pública — y la hoja está
- * compartida como "cualquiera con el enlace". Cualquiera que mire el JS del
- * sitio puede abrirla.
- */
-const EXCEL_INFORMES_URL =
-  'https://docs.google.com/spreadsheets/d/1IZvnkd_HX-TRtHvmWGktYzaoKxFqQ4IKdKNIBh8vzTg/edit';
 
 export function CoordinadorPage() {
   useClarity();
@@ -325,7 +313,7 @@ export function CoordinadorPage() {
               icon={<FileSpreadsheet className="w-[15px] h-[15px]" />}
               label="Excel Informes"
               onClick={() =>
-                window.open(EXCEL_INFORMES_URL, '_blank', 'noopener,noreferrer')
+                window.open(EXCEL_VALORACIONES_URL, '_blank', 'noopener,noreferrer')
               }
             />
             <NavItem

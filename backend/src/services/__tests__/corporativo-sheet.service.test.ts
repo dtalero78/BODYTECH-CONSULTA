@@ -1,4 +1,4 @@
-import { ENCABEZADOS, formatCelda } from '../corporativo-sheet.service';
+import { ENCABEZADOS, formatCelda, huellaColumnas } from '../corporativo-sheet.service';
 
 describe('corporativo-sheet · formato de celdas', () => {
   it('los booleanos salen como Sí/No, porque la hoja la lee gente', () => {
@@ -51,5 +51,28 @@ describe('corporativo-sheet · encabezados', () => {
 
   it('no hay encabezados repetidos', () => {
     expect(new Set(ENCABEZADOS).size).toBe(ENCABEZADOS.length);
+  });
+
+  it('las columnas nuevas van después de las que ya tenía la hoja', () => {
+    // La hoja ya tiene filas escritas con 135 columnas terminando en Remisión.
+    // Una columna insertada antes correría todas las celdas siguientes de esas
+    // filas; por eso lo nuevo solo se agrega al final.
+    expect(ENCABEZADOS.indexOf('Remisión')).toBe(134);
+    for (const nueva of ['Recomendaciones generales', 'Prescripción · clases grupales', 'Aptitud', 'Riesgo de caídas (Downton)']) {
+      expect(ENCABEZADOS.indexOf(nueva)).toBeGreaterThan(134);
+    }
+  });
+
+  it('lo que necesitan los entrenadores está en la hoja', () => {
+    for (const col of ['Prescripción · cardio', 'Prescripción · fuerza', 'Prescripción · flexibilidad', 'Recomendaciones generales', 'Aptitud']) {
+      expect(ENCABEZADOS).toContain(col);
+    }
+  });
+
+  it('la huella cambia cuando cambia el juego de columnas', () => {
+    // Es lo que dispara el reenvío de las valoraciones ya cerradas: sin él, las
+    // filas viejas se quedan con las columnas nuevas en blanco.
+    expect(huellaColumnas()).toBe(huellaColumnas([...ENCABEZADOS]));
+    expect(huellaColumnas()).not.toBe(huellaColumnas([...ENCABEZADOS, 'Otra']));
   });
 });

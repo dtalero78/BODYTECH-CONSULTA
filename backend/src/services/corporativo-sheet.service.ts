@@ -9,7 +9,8 @@
 //
 // Cuando el médico aprieta "Finalizar consulta", la valoración entera queda
 // como UNA fila de un Google Sheet: una hoja que se filtra, se ordena y se
-// exporta. Deja de haber carpeta que revisar.
+// exporta. Deja de haber carpeta que revisar. Es también la hoja que el médico
+// les pasa a los entrenadores para armar el plan de entrenamiento.
 //
 // ── Es un reflejo, no la fuente ────────────────────────────────────────────
 // El dato ya quedó guardado en `HistoriaClinica` antes de llegar acá — cada
@@ -28,6 +29,7 @@
 // esta hoja.
 // ============================================================================
 
+import { createHash } from 'crypto';
 import postgresService from './postgres.service';
 
 const TIMEOUT_MS = 10_000;
@@ -48,9 +50,64 @@ interface Columna {
 }
 
 /**
+ * Un bloque de la prescripción en UNA celda que se lee de corrido:
+ * "Frecuencia: 3 días/semana · Intensidad: Zona 2 · Tiempo: 30 min".
+ *
+ * La hoja leía `mc_prescripcion_cardio/fuerza/flexibilidad`, columnas de la
+ * plantilla vieja que nadie escribe desde que el panel adoptó la prescripción
+ * FIT del rol Médico (`presc_*`). Llegaban vacías, y justo esa es la parte que
+ * los entrenadores necesitan para armar el plan (reporte del médico, 15-sep-2026).
+ * `legado` conserva la columna vieja como respaldo para historias anteriores.
+ */
+function resumenPresc(campos: ReadonlyArray<readonly [string, string]>, legado?: string): string {
+  const partes = campos.map(
+    ([col, rotulo]) =>
+      `CASE WHEN NULLIF(TRIM(h."${col}"), '') IS NULL THEN NULL ELSE '${rotulo}: ' || TRIM(h."${col}") END`
+  );
+  const unido = `NULLIF(CONCAT_WS(' · ', ${partes.join(', ')}), '')`;
+  return legado ? `COALESCE(${unido}, NULLIF(TRIM(h."${legado}"), ''))` : unido;
+}
+
+const PRESC_CARDIO = [
+  ['presc_cardio_frecuencia', 'Frecuencia'],
+  ['presc_cardio_intensidad', 'Intensidad'],
+  ['presc_cardio_tiempo', 'Tiempo'],
+  ['presc_cardio_tipo', 'Tipo'],
+  ['presc_cardio_notas', 'Notas'],
+] as const;
+
+const PRESC_FUERZA = [
+  ['presc_fuerza_frecuencia', 'Frecuencia'],
+  ['presc_fuerza_intensidad', 'Intensidad'],
+  ['presc_fuerza_series', 'Series'],
+  ['presc_fuerza_repeticiones', 'Repeticiones'],
+  ['presc_fuerza_modo_serie', 'Cada serie por'],
+  ['presc_fuerza_tipo', 'Tipo'],
+  ['presc_fuerza_notas', 'Notas'],
+] as const;
+
+const PRESC_FLEX = [
+  ['presc_flex_frecuencia', 'Frecuencia'],
+  ['presc_flex_tiempo', 'Tiempo'],
+  ['presc_flex_tipo', 'Tipo'],
+  ['presc_flex_enfasis', 'Énfasis'],
+] as const;
+
+const PRESC_CLASES = [
+  ['presc_clase_modalidad', 'Modalidad'],
+  ['presc_clase_nombre', 'Clase'],
+  ['presc_clase_reemplaza', 'Reemplaza o complementa'],
+] as const;
+
+/**
  * Las columnas de la hoja, EN ORDEN. La primera es la llave: el Apps Script
  * busca `historiaId` en la columna A para actualizar la fila en vez de agregar
  * otra, así que mover esa columna de lugar rompería la idempotencia.
+ *
+ * Una columna NUEVA va al final. La hoja ya tiene filas escritas con el orden
+ * anterior; insertar en el medio correría las celdas de las columnas
+ * siguientes. Aun al final, las filas viejas quedan con la columna en blanco
+ * hasta que se reenvían — de eso se encarga `reencolarSiCambiaronColumnas`.
  *
  * Se omiten a propósito los campos de actividad física que quedaron fuera de
  * rotación en la revisión de ago-2026 (`mc_af_horas_dia`, `mc_af_horas_semana`,
@@ -216,10 +273,16 @@ const COLUMNAS: ReadonlyArray<Columna> = [
 
   // ---- Análisis y prescripción ----
   { sql: 'h."mc_analisis"', label: 'Análisis', tipo: 'texto' },
-  { sql: 'h."mc_prescripcion_cardio"', label: 'Prescripción · cardio', tipo: 'texto' },
-  { sql: 'h."mc_prescripcion_fuerza"', label: 'Prescripción · fuerza', tipo: 'texto' },
-  { sql: 'h."mc_prescripcion_flexibilidad"', label: 'Prescripción · flexibilidad', tipo: 'texto' },
+  { sql: resumenPresc(PRESC_CARDIO, 'mc_prescripcion_cardio'), label: 'Prescripción · cardio', tipo: 'texto' },
+  { sql: resumenPresc(PRESC_FUERZA, 'mc_prescripcion_fuerza'), label: 'Prescripción · fuerza', tipo: 'texto' },
+  { sql: resumenPresc(PRESC_FLEX, 'mc_prescripcion_flexibilidad'), label: 'Prescripción · flexibilidad', tipo: 'texto' },
   { sql: 'h."mc_remision"', label: 'Remisión', tipo: 'texto' },
+
+  // ---- Agregadas el 15-sep-2026: AL FINAL, ver el comentario de arriba ----
+  { sql: 'h."presc_generales"', label: 'Recomendaciones generales', tipo: 'texto' },
+  { sql: resumenPresc(PRESC_CLASES), label: 'Prescripción · clases grupales', tipo: 'texto' },
+  { sql: 'h."aptitud"', label: 'Aptitud', tipo: 'texto' },
+  { sql: 'h."downton_riesgo"', label: 'Riesgo de caídas (Downton)', tipo: 'texto' },
 ];
 
 export const ENCABEZADOS: ReadonlyArray<string> = COLUMNAS.map((c) => c.label);
@@ -272,6 +335,11 @@ export function formatCelda(valor: unknown, tipo: Tipo): string | number {
     default:
       return String(valor).trim();
   }
+}
+
+/** Huella del juego de columnas: cambia si se agrega, quita o renombra una. */
+export function huellaColumnas(encabezados: ReadonlyArray<string> = ENCABEZADOS): string {
+  return createHash('sha1').update(encabezados.join('')).digest('hex');
 }
 
 class CorporativoSheetService {
@@ -480,6 +548,9 @@ class CorporativoSheetService {
   /**
    * Reencola valoraciones ya cerradas — para el arranque (las que se cerraron
    * antes de que existiera la hoja) o para rehacer una tanda que falló.
+   *
+   * Si la base no responde lanza, en vez de devolver 0: "no había nada que
+   * reencolar" y "no se pudo" no pueden verse igual.
    */
   async reencolar(desde?: string): Promise<number> {
     const rows = await postgresService.query(
@@ -497,7 +568,51 @@ class CorporativoSheetService {
          RETURNING historia_id`,
       [desde ?? null]
     );
-    return rows?.length ?? 0;
+    if (rows === null) throw new Error('No se pudo reencolar: la base no respondió');
+    return rows.length;
+  }
+
+  /**
+   * Si el juego de columnas cambió desde la última vez, reenvía todas las
+   * valoraciones cerradas.
+   *
+   * El Apps Script reescribe el encabezado apenas le llega una fila con las
+   * columnas nuevas, pero las filas que ya estaban quedan como estaban: con las
+   * columnas nuevas en blanco. Al sumar la prescripción (15-sep-2026) eso habría
+   * dejado sin recomendaciones justo las valoraciones que los entrenadores
+   * estaban esperando. Se guarda la huella de los encabezados; si no coincide,
+   * se reencola todo — el upsert por `historiaId` actualiza, no duplica.
+   *
+   * La huella se guarda DESPUÉS de reencolar: si algo falla en medio, el próximo
+   * arranque lo vuelve a intentar.
+   */
+  async reencolarSiCambiaronColumnas(): Promise<number> {
+    const huella = huellaColumnas();
+    await postgresService.query(
+      `CREATE TABLE IF NOT EXISTS corporativo_sheet_meta (
+         id              INT PRIMARY KEY CHECK (id = 1),
+         huella_columnas TEXT,
+         actualizado_en  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      []
+    );
+    const rows = await postgresService.query(
+      `SELECT huella_columnas FROM corporativo_sheet_meta WHERE id = 1`,
+      []
+    );
+    if (rows === null) return 0; // la base no respondió: se intenta en el próximo arranque
+    if (rows[0]?.huella_columnas === huella) return 0;
+
+    const n = await this.reencolar();
+    await postgresService.query(
+      `INSERT INTO corporativo_sheet_meta (id, huella_columnas, actualizado_en)
+            VALUES (1, $1, NOW())
+       ON CONFLICT (id) DO UPDATE
+              SET huella_columnas = EXCLUDED.huella_columnas,
+                  actualizado_en = NOW()`,
+      [huella]
+    );
+    return n;
   }
 }
 

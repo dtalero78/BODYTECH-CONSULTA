@@ -8,13 +8,19 @@ import { edadEfectiva } from '../edad';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 import { useEmpresas } from '../hooks/useEmpresas';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
 
 
 interface CorpIdentificacionTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
+
+const MODALES = ['identificacion'] as const;
 
 const GRUPO_SANGUINEO_OPTS: ReadonlyArray<DropdownOption> = [
   'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-',
@@ -41,8 +47,9 @@ function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
 }
 
-export function CorpIdentificacionTab({ historiaId, data, onPatchLocal }: CorpIdentificacionTabProps) {
+export function CorpIdentificacionTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpIdentificacionTabProps) {
   const [open, setOpen] = useState(false);
+  useAbrirSolicitado(abrir, MODALES, () => setOpen(true), onAbierto);
   const { empresas, cargando: cargandoEmpresas } = useEmpresas();
 
   // Si la historia ya trae una empresa que no está en el catálogo —porque la

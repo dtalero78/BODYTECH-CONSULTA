@@ -9,12 +9,16 @@ import { DowntonCard } from '../DowntonCard';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
 import { Cie10Field } from './Cie10Field';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
 import { useModalChain } from '../useModalChain';
 
 interface CorpDiagnosticoRiesgoTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
 
 type ModalKey = 'diagnosticos' | 'riesgo';
@@ -25,6 +29,9 @@ const ETIQUETAS: Record<ModalKey, string> = {
   diagnosticos: 'Diagnósticos',
   riesgo: 'Riesgo y aptitud',
 };
+
+/** Los que se pueden pedir desde afuera: los dos modales propios y el de Downton. */
+const MODALES = ['diagnosticos', 'riesgo', 'downton'] as const;
 
 const opt = (vals: string[]): ReadonlyArray<DropdownOption> =>
   vals.map((v) => ({ value: v, label: v }));
@@ -88,8 +95,17 @@ function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
 }
 
-export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: CorpDiagnosticoRiesgoTabProps) {
+export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpDiagnosticoRiesgoTabProps) {
   const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
+  // El modal de Downton vive dentro de DowntonCard (lo comparte con el panel de
+  // consulta), así que la solicitud se le pasa como prop.
+  const [downtonAbrir, setDowntonAbrir] = useState(false);
+  useAbrirSolicitado(
+    abrir,
+    MODALES,
+    (k) => (k === 'downton' ? setDowntonAbrir(true) : setOpenModal(k)),
+    onAbierto
+  );
 
   const dxVals = [data?.mcDxNutricional, data?.mcDxCardiovascular, data?.mcDxOsteomuscular, data?.mcDxCie10];
   const dxFilled = dxVals.filter(isFilled).length;
@@ -144,6 +160,8 @@ export function CorpDiagnosticoRiesgoTab({ historiaId, data, onPatchLocal }: Cor
         onPatchLocal={onPatchLocal}
         showEyePill={false}
         modalSize="wide"
+        abrir={downtonAbrir}
+        onAbierto={() => setDowntonAbrir(false)}
       />
 
       <Modal

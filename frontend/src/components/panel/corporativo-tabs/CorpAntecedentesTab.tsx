@@ -2,13 +2,21 @@ import { Users, User } from 'lucide-react';
 import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, TextareaField, PillToggleField } from '../fields';
+import { AccionRapida } from './LlenadoRapido';
+import { soloVacios } from './llenado';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
+import { camelCampo, tieneValor } from './completitud';
 import type { MedicalHistoryFull } from '../types';
 import { useModalChain } from '../useModalChain';
+import { FAMILIARES, PERSONALES_BOOL } from './camposCorporativo';
 
 interface CorpAntecedentesTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
 
 type ModalKey = 'familiares' | 'personales';
@@ -20,26 +28,18 @@ const ETIQUETAS: Record<ModalKey, string> = {
   personales: 'Antecedentes personales',
 };
 
-const FAMILIARES: ReadonlyArray<{ label: string; field: string }> = [
-  { label: 'Enfermedad cardiaca', field: 'mc_fam_cardiaca' },
-  { label: 'Enfermedad respiratoria', field: 'mc_fam_respiratoria' },
-  { label: 'MSC o IAM', field: 'mc_fam_msc_iam' },
-  { label: 'Hipertensión arterial', field: 'mc_fam_hta' },
-  { label: 'Enfermedad cerebrovascular', field: 'mc_fam_cerebrovascular' },
-  { label: 'Diabetes', field: 'mc_fam_diabetes' },
-  { label: 'Cáncer', field: 'mc_fam_cancer' },
-  { label: 'Otros', field: 'mc_fam_otros' },
-];
+// Las listas viven en camposCorporativo: son las mismas que deciden qué exige la historia.
 
-const PERSONALES_BOOL: ReadonlyArray<{ label: string; field: string }> = [
-  { label: 'Enfermedad cardiaca', field: 'mc_per_cardiaca' },
-  { label: 'Enfermedad respiratoria', field: 'mc_per_respiratoria' },
-  { label: 'Hipertensión arterial', field: 'mc_per_hta' },
-  { label: 'Enfermedad renal', field: 'mc_per_renal' },
-  { label: 'Enfermedad metabólica', field: 'mc_per_metabolica' },
-  { label: 'Enfermedad cerebrovascular', field: 'mc_per_cerebrovascular' },
-  { label: 'Tabaquismo', field: 'mc_per_tabaquismo' },
-  { label: 'Alcohol', field: 'mc_per_alcohol' },
+/**
+ * Los antecedentes personales que se escriben y que la historia exige. "Niega
+ * todos" les pone "Niega" si están vacíos: es lo que el médico escribía a mano
+ * en cada uno cuando el paciente no refiere nada.
+ */
+const PERSONALES_TEXTO_OBLIGATORIOS: ReadonlyArray<string> = [
+  'mc_per_osteomuscular',
+  'mc_per_quirurgicos',
+  'mc_per_alergicos',
+  'mc_per_farmacologicos',
 ];
 
 function coerceBool(v: unknown): boolean {
@@ -49,10 +49,6 @@ function coerceBool(v: unknown): boolean {
     return x === 'true' || x === 'Sí' || x === 'SI' || x === 'sí' || x === 'si';
   }
   return false;
-}
-
-function camel(s: string): string {
-  return s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**
@@ -79,38 +75,95 @@ function toDateInput(v: unknown): string {
   return '';
 }
 
-export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAntecedentesTabProps) {
-  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
+/**
+ * Subtítulo y estado de un grupo de Sí/Niega. Un antecedente sin responder NO
+ * es un antecedente negado: antes el card decía "Niega todos los antecedentes"
+ * con los ocho sin tocar, y la sección se veía lista.
+ */
+function resumenGrupo(
+  data: MedicalHistoryFull | null,
+  campos: ReadonlyArray<string>,
+  extraSinResponder = 0
+): { subtitle: string; state: 'empty' | 'partial' | 'complete'; pct: number } {
+  const positivos = campos.filter((f) => coerceBool(data?.[camelCampo(f)])).length;
+  const sinResponder = campos.filter((f) => !tieneValor(data?.[camelCampo(f)])).length + extraSinResponder;
+  const total = campos.length + extraSinResponder;
+  if (sinResponder === campos.length + extraSinResponder && positivos === 0 && extraSinResponder === 0) {
+    return { subtitle: 'Sin responder', state: 'empty', pct: 0 };
+  }
+  const partes = [
+    positivos > 0
+      ? `${positivos} de ${campos.length} antecedentes positivos`
+      : sinResponder === 0
+        ? 'Niega todos los antecedentes'
+        : null,
+    sinResponder > 0 ? `${sinResponder} sin responder` : null,
+  ].filter(Boolean);
+  return {
+    subtitle: partes.join(' · '),
+    state: sinResponder > 0 ? 'partial' : 'complete',
+    pct: Math.round(((total - sinResponder) / Math.max(total, 1)) * 100),
+  };
+}
 
-  const famActivos = FAMILIARES.map((f) => coerceBool(data?.[camel(f.field)])).filter(Boolean).length;
-  const perActivos = PERSONALES_BOOL.map((f) => coerceBool(data?.[camel(f.field)])).filter(Boolean).length;
+export function CorpAntecedentesTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpAntecedentesTabProps) {
+  const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
+  useAbrirSolicitado(abrir, ORDEN, setOpenModal, onAbierto);
+
+  const famCampos = FAMILIARES.map((f) => f.field);
+  const perCampos = PERSONALES_BOOL.map((f) => f.field);
+  const perTextosVacios = PERSONALES_TEXTO_OBLIGATORIOS.filter((f) => !tieneValor(data?.[camelCampo(f)])).length;
+
+  const fam = resumenGrupo(data, famCampos);
+  const per = resumenGrupo(data, perCampos, perTextosVacios);
+
+  const nieganFamiliares = soloVacios(data, Object.fromEntries(famCampos.map((f) => [f, false])));
+  const nieganPersonales = soloVacios(data, {
+    ...Object.fromEntries(perCampos.map((f) => [f, false])),
+    ...Object.fromEntries(PERSONALES_TEXTO_OBLIGATORIOS.map((f) => [f, 'Niega'])),
+  });
+
+  const accionFamiliares = (
+    <AccionRapida
+      label="Niega todos"
+      titulo="Marca «Niega» en los antecedentes familiares que siguen sin responder. No cambia los que ya marcaste."
+      valores={nieganFamiliares}
+      historiaId={historiaId}
+      onPatchLocal={onPatchLocal}
+    />
+  );
+  const accionPersonales = (
+    <AccionRapida
+      label="Niega todos"
+      titulo="Marca «Niega» en los antecedentes sin responder y escribe «Niega» en osteomusculares, quirúrgicos, alérgicos y farmacológicos si están vacíos. No cambia lo que ya está diligenciado."
+      valores={nieganPersonales}
+      historiaId={historiaId}
+      onPatchLocal={onPatchLocal}
+    />
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card
         icon={<Users size={16} />}
         title="Antecedentes familiares"
-        subtitle={
-          famActivos === 0
-            ? 'Niega todos los antecedentes'
-            : `${famActivos} de ${FAMILIARES.length} antecedentes positivos`
-        }
-        state={famActivos === 0 ? 'empty' : 'partial'}
-        completionPct={100}
+        subtitle={fam.subtitle}
+        state={fam.state}
+        completionPct={fam.pct}
         onEdit={() => setOpenModal('familiares')}
-      />
+      >
+        {accionFamiliares}
+      </Card>
       <Card
         icon={<User size={16} />}
         title="Antecedentes personales"
-        subtitle={
-          perActivos === 0
-            ? 'Niega todos los antecedentes'
-            : `${perActivos} de ${PERSONALES_BOOL.length} antecedentes positivos`
-        }
-        state={perActivos === 0 ? 'empty' : 'partial'}
-        completionPct={100}
+        subtitle={per.subtitle}
+        state={per.state}
+        completionPct={per.pct}
         onEdit={() => setOpenModal('personales')}
-      />
+      >
+        {accionPersonales}
+      </Card>
 
       {/* ============ Familiares ============ */}
       <Modal
@@ -123,6 +176,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
         size="wide"
       >
         <div className="flex flex-col gap-3">
+          <div className="-mt-3">{accionFamiliares}</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {FAMILIARES.map((f) => (
               <div
@@ -133,7 +187,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 <PillToggleField
                   historiaId={historiaId}
                   field={f.field}
-                  initialValue={data?.[camel(f.field)]}
+                  initialValue={data?.[camelCampo(f.field)]}
                   onSaved={onPatchLocal}
                   trueLabel="Sí"
                   falseLabel="Niega"
@@ -164,6 +218,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
         size="wide"
       >
         <div className="flex flex-col gap-4">
+          <div className="-mt-3">{accionPersonales}</div>
           {/* Los dos bloques son de naturaleza distinta y el equipo médico pidió que
               se notara: arriba lo que se responde Sí/Niega, abajo lo que se escribe.
               Antes sólo los separaba una línea punteada, sin decir qué era cada cosa. */}
@@ -178,7 +233,7 @@ export function CorpAntecedentesTab({ historiaId, data, onPatchLocal }: CorpAnte
                 <PillToggleField
                   historiaId={historiaId}
                   field={f.field}
-                  initialValue={data?.[camel(f.field)]}
+                  initialValue={data?.[camelCampo(f.field)]}
                   onSaved={onPatchLocal}
                   trueLabel="Sí"
                   falseLabel="Niega"

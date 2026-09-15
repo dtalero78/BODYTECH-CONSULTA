@@ -5,6 +5,10 @@ import { Calculated } from '../Calculated';
 import { TextField, TextareaField, SelectField } from '../fields';
 import { CalcAutosave } from './CalcAutosave';
 import { ComparacionAnterior } from './ComparacionAnterior';
+import { AccionRapida } from './LlenadoRapido';
+import { soloVacios } from './llenado';
+import { camelCampo, tieneValor } from './completitud';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
 import { edadEfectiva } from '../edad';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
@@ -20,6 +24,26 @@ const ESTABILIDAD_UNIPODAL_OPTS: ReadonlyArray<DropdownOption> = [
   'Medio: 11 a 29 seg',
   'Riesgo Alto: menor a 5 seg',
 ].map((v) => ({ value: v, label: v }));
+
+/**
+ * "Todo normal" de la revisión por sistemas. Son los mismos textos que ya
+ * sugerían los placeholders de cada campo — lo que el equipo médico escribe en
+ * un examen sin hallazgos —, ahora a un clic y solo en los campos vacíos.
+ */
+const RS_NORMAL: Readonly<Record<string, string>> = {
+  mc_rs_cabeza: 'Normal',
+  mc_rs_pares_craneales: 'Normal',
+  mc_rs_cara: 'Normal',
+  mc_rs_abd_pelvis: 'Normal',
+  mc_rs_cuello: 'Normal',
+  mc_rs_torax: 'Ruidos cardíacos y pulmonares normales',
+  mc_rs_piel: 'Normal',
+  mc_rs_abdomen: 'Normal',
+  mc_rs_pulsos: 'Simétricos, de adecuada amplitud',
+  mc_rs_fuerza_mmss: '5 de 5',
+  mc_rs_fuerza_mmii: '5 de 5',
+  mc_rs_osteomuscular: 'Sin alteraciones',
+};
 
 const FORMULAS_SIGNOS: ReadonlyArray<FormulaDef> = [
   {
@@ -104,6 +128,9 @@ interface CorpExamenFisicoTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
 
 type ModalKey = 'signos' | 'fc' | 'ruffier' | 'handgrip' | 'examen';
@@ -138,8 +165,12 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExamenFisicoTabProps) {
+/** Subtítulo de un test que no se hace de rutina: sin datos, dice que es opcional. */
+const OPCIONAL_NO_REALIZADO = 'Opcional · no realizado';
+
+export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpExamenFisicoTabProps) {
   const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
+  useAbrirSolicitado(abrir, ORDEN, setOpenModal, onAbierto);
 
   // ---- Composición corporal: IMC calculado (peso kg / talla m²) ----
   const peso = toNum(data?.mcPeso);
@@ -217,40 +248,54 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
   }
 
   // ---- Card states ----
-  const signosVals = [data?.mcFrecCard, data?.mcFrecResp, data?.mcSato2, data?.tas, data?.tad, data?.mcPerimetroAbdominal, data?.mcTalla, data?.mcPeso, data?.mcPctGrasa, data?.mcPctMusculo, data?.mcGrasaVisceral, data?.mcTmb];
-  const signosFilled = signosVals.filter(isFilled).length;
+  // Los cards cuentan solo lo que la historia exige. Los tests (Ruffier,
+  // Handgrip, push ups, abdominales, estabilidad, Wells) NO se hacen a todos los
+  // pacientes — el médico corporativo lo reportó: "los tests no deben ser
+  // obligatorios" — y contarlos dejaba cada card a medias aunque el examen
+  // estuviera completo.
+  const signosObligatorios = [data?.tas, data?.tad, data?.mcFrecCard, data?.mcTalla, data?.mcPeso];
+  const signosOpcionales = [data?.mcFrecResp, data?.mcSato2, data?.mcPerimetroAbdominal, data?.mcPctGrasa, data?.mcPctMusculo, data?.mcGrasaVisceral, data?.mcTmb, data?.mcPerimetroCadera];
+  const signosFilled = signosObligatorios.filter(isFilled).length;
+  const signosOpcFilled = signosOpcionales.filter(isFilled).length;
 
   const fcVals = [data?.mcFcPicoPruebaEsfuerzo];
   const fcFilled = fcVals.filter(isFilled).length;
 
-  // FC1 se deriva de la FC en reposo, así que cuenta como diligenciada si esta existe.
-  const ruffierVals = [data?.mcFrecCard, data?.mcRuffierFc2, data?.mcRuffierFc3];
+  // FC1 no cuenta: se deriva de la FC en reposo, así que estaba "llena" en todo
+  // paciente con signos vitales aunque el test no se hubiera hecho.
+  const ruffierVals = [data?.mcRuffierFc2, data?.mcRuffierFc3];
   const ruffierFilled = ruffierVals.filter(isFilled).length;
 
   const handgripVals = [data?.mcHandgripDer1, data?.mcHandgripIzq1, data?.mcHandgripDer2, data?.mcHandgripIzq2];
   const handgripFilled = handgripVals.filter(isFilled).length;
 
-  // Card "Examen Físico": revisión por sistemas (14) + estabilidad unipodal,
-  // Wells y observaciones. Antes el contador de Observaciones miraba `mcIcc`,
-  // que ya vive en Composición corporal, en vez de la estabilidad que sí se
-  // muestra en el modal: el card podía verse incompleto con todo diligenciado.
-  const examenVals = [
-    data?.mcRsCabeza, data?.mcRsParesCraneales, data?.mcRsCara, data?.mcRsAbdPelvis,
-    data?.mcRsCuello, data?.mcRsTorax, data?.mcRsPiel, data?.mcRsAbdomen, data?.mcRsPulsos,
-    data?.mcRsFuerzaMmss, data?.mcRsFuerzaMmii, data?.mcRsPushUps, data?.mcRsAbdominales,
-    data?.mcRsOsteomuscular,
-    data?.mcPropiocepcion, data?.mcWells, data?.mcExamenObservaciones,
-  ];
-  const examenFilled = examenVals.filter(isFilled).length;
+  const rsCampos = Object.keys(RS_NORMAL);
+  const rsFilled = rsCampos.filter((f) => tieneValor(data?.[camelCampo(f)])).length;
+  const pruebasVals = [data?.mcRsPushUps, data?.mcRsAbdominales, data?.mcPropiocepcion, data?.mcWells];
+  const pruebasFilled = pruebasVals.filter(isFilled).length;
+
+  const accionTodoNormal = (
+    <AccionRapida
+      label="Todo normal"
+      titulo="Escribe el hallazgo normal en los sistemas que siguen vacíos (cabeza «Normal», pulsos «Simétricos, de adecuada amplitud», fuerza «5 de 5»…). No cambia lo que ya escribiste."
+      valores={soloVacios(data, RS_NORMAL)}
+      historiaId={historiaId}
+      onPatchLocal={onPatchLocal}
+    />
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card
         icon={<Scale size={16} />}
         title="Signos y composición corporal"
-        subtitle={signosFilled === 0 ? 'Sin medidas registradas' : `${signosFilled} de ${signosVals.length} campos completos`}
-        state={signosFilled === 0 ? 'empty' : signosFilled === signosVals.length ? 'complete' : 'partial'}
-        completionPct={Math.round((signosFilled / signosVals.length) * 100)}
+        subtitle={
+          signosFilled === 0 && signosOpcFilled === 0
+            ? 'Sin medidas registradas'
+            : `${signosFilled} de ${signosObligatorios.length} obligatorios${signosOpcFilled ? ` · ${signosOpcFilled} opcionales` : ''}`
+        }
+        state={signosFilled === 0 ? 'empty' : signosFilled === signosObligatorios.length ? 'complete' : 'partial'}
+        completionPct={Math.round((signosFilled / signosObligatorios.length) * 100)}
         onEdit={() => setOpenModal('signos')}
       />
       <Card
@@ -272,8 +317,8 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
           ruffierCalificacion
             ? `${ruffierCalificacion} · IR ${ruffierResultado}`
             : ruffierFilled === 0
-              ? 'Sin FC1/FC2/FC3 registradas'
-              : `${ruffierFilled} de ${ruffierVals.length} campos completos`
+              ? OPCIONAL_NO_REALIZADO
+              : `${ruffierFilled} de ${ruffierVals.length} mediciones · opcional`
         }
         state={ruffierFilled === 0 ? 'empty' : ruffierFilled === ruffierVals.length ? 'complete' : 'partial'}
         completionPct={Math.round((ruffierFilled / ruffierVals.length) * 100)}
@@ -282,7 +327,11 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       <Card
         icon={<Hand size={16} />}
         title="Handgrip"
-        subtitle={handgripFilled === 0 ? 'Sin mediciones registradas' : `${handgripFilled} de ${handgripVals.length} intentos registrados`}
+        subtitle={
+          handgripFilled === 0
+            ? OPCIONAL_NO_REALIZADO
+            : `${handgripFilled} de ${handgripVals.length} intentos registrados · opcional`
+        }
         state={handgripFilled === 0 ? 'empty' : handgripFilled === handgripVals.length ? 'complete' : 'partial'}
         completionPct={Math.round((handgripFilled / handgripVals.length) * 100)}
         onEdit={() => setOpenModal('handgrip')}
@@ -290,11 +339,17 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       <Card
         icon={<Stethoscope size={16} />}
         title="Examen Físico"
-        subtitle={examenFilled === 0 ? 'Sin hallazgos registrados' : `${examenFilled} de ${examenVals.length} campos completos`}
-        state={examenFilled === 0 ? 'empty' : examenFilled === examenVals.length ? 'complete' : 'partial'}
-        completionPct={Math.round((examenFilled / examenVals.length) * 100)}
+        subtitle={
+          rsFilled === 0 && pruebasFilled === 0
+            ? 'Sin hallazgos registrados'
+            : `${rsFilled} de ${rsCampos.length} sistemas${pruebasFilled ? ` · ${pruebasFilled} pruebas` : ''}`
+        }
+        state={rsFilled === 0 ? 'empty' : rsFilled === rsCampos.length ? 'complete' : 'partial'}
+        completionPct={Math.round((rsFilled / rsCampos.length) * 100)}
         onEdit={() => setOpenModal('examen')}
-      />
+      >
+        {accionTodoNormal}
+      </Card>
 
       {/* ============ Signos y composición corporal ============ */}
       <Modal
@@ -411,7 +466,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       <Modal
         {...chain('ruffier')}
         crumb="Examen Físico · Test de Ruffier"
-        title="Test de Ruffier"
+        title="Test de Ruffier (opcional)"
         icon={<Gauge size={18} />}
         isMaxed
         showEyePill={false}
@@ -445,7 +500,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       <Modal
         {...chain('handgrip')}
         crumb="Examen Físico · Handgrip"
-        title="Handgrip (dinamometría)"
+        title="Handgrip (dinamometría) · opcional"
         icon={<Hand size={18} />}
         isMaxed
         showEyePill={false}
@@ -476,8 +531,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
         </div>
       </Modal>
 
-      {/* ============ Observaciones ============ */}
-      {/* ============ Examen Físico (revisión por sistemas + estabilidad/Wells/obs) ============ */}
+      {/* ============ Examen Físico (revisión por sistemas + pruebas opcionales) ============ */}
       <Modal
         {...chain('examen')}
         crumb="Examen Físico · Revisión y hallazgos"
@@ -489,30 +543,36 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
       >
         <div className="flex flex-col gap-5">
           <div>
-            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Revisión por sistemas</div>
-        {/* 3 columnas en pantallas anchas: son 14 campos cortos, así baja de 7 a 5 filas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-          <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
-          <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
-          <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
-          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmss" initialValue={data?.mcRsFuerzaMmss} onSaved={onPatchLocal} label="Fuerza muscular MMSS" placeholder="5 de 5" />
-          <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
-          <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
-          <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
-          <div>
-            <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
-          </div>
-        </div>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase">Revisión por sistemas</div>
+              <div className="-mt-3">{accionTodoNormal}</div>
+            </div>
+            {/* 3 columnas en pantallas anchas: son 12 campos cortos, así baja a 4 filas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              <TextField historiaId={historiaId} field="mc_rs_cabeza" initialValue={data?.mcRsCabeza} onSaved={onPatchLocal} label="Cabeza" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_pares_craneales" initialValue={data?.mcRsParesCraneales} onSaved={onPatchLocal} label="Pares craneales" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_cara" initialValue={data?.mcRsCara} onSaved={onPatchLocal} label="Cara" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_abd_pelvis" initialValue={data?.mcRsAbdPelvis} onSaved={onPatchLocal} label="ABD y pelvis" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_cuello" initialValue={data?.mcRsCuello} onSaved={onPatchLocal} label="Cuello" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_torax" initialValue={data?.mcRsTorax} onSaved={onPatchLocal} label="Tórax" placeholder="Incluye ruidos cardíacos y pulmonares" />
+              <TextField historiaId={historiaId} field="mc_rs_piel" initialValue={data?.mcRsPiel} onSaved={onPatchLocal} label="Piel" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_abdomen" initialValue={data?.mcRsAbdomen} onSaved={onPatchLocal} label="Abdomen" placeholder="normal" />
+              <TextField historiaId={historiaId} field="mc_rs_pulsos" initialValue={data?.mcRsPulsos} onSaved={onPatchLocal} label="Pulsos" placeholder="Simétricos, de adecuada amplitud" />
+              <TextField historiaId={historiaId} field="mc_rs_fuerza_mmss" initialValue={data?.mcRsFuerzaMmss} onSaved={onPatchLocal} label="Fuerza muscular MMSS" placeholder="5 de 5" />
+              <TextField historiaId={historiaId} field="mc_rs_fuerza_mmii" initialValue={data?.mcRsFuerzaMmii} onSaved={onPatchLocal} label="Fuerza muscular MMII" placeholder="5 de 5" />
+              <div>
+                <TextareaField historiaId={historiaId} field="mc_rs_osteomuscular" initialValue={data?.mcRsOsteomuscular} onSaved={onPatchLocal} label="Osteoarticular / extremidades" rows={3} />
+              </div>
+            </div>
           </div>
           <div className="pt-4 border-t border-dashed border-[var(--p-line)]">
-            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Estabilidad, flexibilidad y observaciones</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+            {/* Las pruebas van aparte y dicen que son opcionales: no se hacen a
+                todos los pacientes, y mezcladas con la revisión por sistemas
+                parecían parte de lo obligatorio. */}
+            <div className="text-[11px] font-semibold text-[var(--p-text-3)] tracking-widest uppercase mb-3">Pruebas físicas (opcionales) y observaciones</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+              <TextField historiaId={historiaId} field="mc_rs_push_ups" initialValue={data?.mcRsPushUps} onSaved={onPatchLocal} label="Push ups (a la fatiga)" type="number" min={0} max={200} />
+              <TextField historiaId={historiaId} field="mc_rs_abdominales" initialValue={data?.mcRsAbdominales} onSaved={onPatchLocal} label="Abdominales (a la fatiga)" type="number" min={0} max={200} />
               <SelectField
                 historiaId={historiaId}
                 field="mc_propiocepcion"
@@ -530,7 +590,7 @@ export function CorpExamenFisicoTab({ historiaId, data, onPatchLocal }: CorpExam
                 label="Wells (cm dedos–piso)"
                 placeholder="Prueba modificada"
               />
-              <div className="md:col-span-2 xl:col-span-3">
+              <div className="md:col-span-2 xl:col-span-4">
                 <TextareaField historiaId={historiaId} field="mc_examen_observaciones" initialValue={data?.mcExamenObservaciones} onSaved={onPatchLocal} label="Observaciones" rows={3} />
               </div>
             </div>

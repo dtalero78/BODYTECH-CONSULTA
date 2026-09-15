@@ -8,12 +8,18 @@ import { CalcAutosave } from './CalcAutosave';
 import type { FormulaDef } from '../FormulaHint';
 import type { MedicalHistoryFull } from '../types';
 import type { DropdownOption } from '../Dropdown';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
 
 interface CorpActividadFisicaTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
+
+const MODALES = ['registro'] as const;
 
 const opt = (vals: string[]): ReadonlyArray<DropdownOption> =>
   vals.map((v) => ({ value: v, label: v }));
@@ -73,8 +79,9 @@ function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
 }
 
-export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal }: CorpActividadFisicaTabProps) {
+export function CorpActividadFisicaTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpActividadFisicaTabProps) {
   const [open, setOpen] = useState(false);
+  useAbrirSolicitado(abrir, MODALES, () => setOpen(true), onAbierto);
 
   // ---- Volumen semanal: sesiones/semana × minutos por sesión ----
   const minutosSesion = toNum(data?.mcAfMinutosSesion);

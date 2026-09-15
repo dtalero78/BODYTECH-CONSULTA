@@ -214,6 +214,19 @@ Ahora, cuando el médico aprieta **"Finalizar consulta"** (`POST /api/video/medi
 
 Detalles del formato que no son cosméticos: los booleanos salen `Sí`/`No` (la hoja la lee gente) pero un antecedente `NULL` queda **en blanco** —es "nadie lo preguntó", no "no"—; los números van como número para que el Sheet los promedie, y un campo vacío queda vacío y no en `0` (un IMC en 0 se leería como una medición tomada); las fechas se convierten a UTC-5 porque producción corre en UTC.
 
+**La hoja es la que los entrenadores usan para armar el plan**, así que la prescripción tiene que estar ahí. Las columnas "Prescripción · cardio/fuerza/flexibilidad" leían `mc_prescripcion_*`, de la plantilla vieja, que nadie escribe desde que el panel adoptó la prescripción FIT (`presc_*`): llegaban vacías. Ahora cada una resume su bloque `presc_*` en una celda ("Frecuencia: … · Intensidad: …", `resumenPresc`), con la columna vieja como respaldo, y al final se sumaron Recomendaciones generales, clases grupales, Aptitud y Downton.
+
+**Una columna nueva va AL FINAL, nunca en el medio**: la hoja tiene filas escritas con el orden anterior y una inserción correría sus celdas (un test fija "Remisión" en la posición 134). Aun al final, las filas viejas quedan con la columna en blanco, por eso al arrancar `reencolarSiCambiaronColumnas` compara la huella de los encabezados con la guardada en `corporativo_sheet_meta` y, si cambió, reencola todas las valoraciones cerradas (el upsert actualiza, no duplica).
+
+**Al finalizar, la historia también va a LA carpeta del afiliado** en la base global (`carpetaService.reflejarDesdeConsulta`, desde `marcarAtendida`). Antes solo llegaba ahí lo guardado por `POST /medical-history` (panel de videollamada); el panel de 7 pestañas y el corporativo auto-guardan campo a campo y cierran con `finalizar`, así que sus historias nunca llegaban. Fire-and-forget, y "Reenviar" en el panel la vuelve a reflejar con lo corregido. Las historias cerradas antes de esto se suben con `npm run carpeta:llenar -- --aplicar` (idempotente).
+
+**Panel del médico corporativo** ([MedicalCorporativoPanel.tsx](frontend/src/components/panel/MedicalCorporativoPanel.tsx)) — ajustado tras una jornada en que el médico solo alcanzó a llenar una historia (15-sep-2026):
+- Lo que exige cada sección vive en [camposCorporativo.ts](frontend/src/components/panel/corporativo-tabs/camposCorporativo.ts), con test. **Los tests físicos (Ruffier, Handgrip, push ups, Wells…) son opcionales**: la lista de "lo que falta" se los reclamaba al finalizar. Un grupo de Sí/Niega cuenta completo solo con **todos** respondidos (antes bastaba uno).
+- Cada campo lleva `destino`: el "Ir →" de la lista abre **la ventana** donde se llena (`useAbrirSolicitado`), no solo la pestaña.
+- **"Niega todos" y "Todo normal"** (`AccionRapida`, en el card y en la ventana) llenan de un clic los campos **vacíos** y nunca pisan lo escrito. Son botones y no valores por defecto a propósito: "No" y "nadie lo preguntó" no son lo mismo en una historia clínica.
+- El header tiene "Excel de valoraciones" y, ya finalizada, "Ver Excel" / "Reenviar". Antes el único enlace a la hoja estaba en el panel del coordinador.
+- **"No asistió"** en la lista del médico corporativo es el mismo estado `NO CONTESTA` con otra etiqueta (`textosInasistencia` en `MedicalPanelPage`): un estado nuevo tocaría más de 20 lugares (calendario, indicadores, estantes, filtros del link automático).
+
 Operación (admin): `GET /api/admin/corporativo-sheet/estado?limit=N` (bitácora), `POST /dispatch` (pasada manual), `POST /reencolar?desde=YYYY-MM-DD` (poblar la hoja con valoraciones ya cerradas o rehacer una tanda `fallido`; no duplica). Apagado por defecto: sin `CORPORATIVO_SHEET_URL` el worker no arranca y el encolado no envía.
 
 ### Ordenes panel

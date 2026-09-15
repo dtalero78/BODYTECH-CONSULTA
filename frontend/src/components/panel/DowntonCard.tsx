@@ -75,6 +75,13 @@ interface DowntonCardProps {
   /** El corporativo es standalone y sin videollamada. */
   showEyePill?: boolean;
   modalSize?: 'default' | 'wide';
+  /**
+   * El panel corporativo abre este modal desde la lista de lo que falta al
+   * finalizar. Mientras sea `true` el modal queda abierto; al cerrarlo se avisa
+   * con `onAbierto` para que el que lo pidió baje la solicitud.
+   */
+  abrir?: boolean;
+  onAbierto?: () => void;
 }
 
 export function DowntonCard({
@@ -84,8 +91,15 @@ export function DowntonCard({
   onPatchLocal,
   showEyePill = true,
   modalSize = 'default',
+  abrir = false,
+  onAbierto,
 }: DowntonCardProps) {
-  const [open, setOpen] = useState(false);
+  const [abiertoLocal, setAbiertoLocal] = useState(false);
+  const open = abiertoLocal || abrir;
+  const setOpen = (v: boolean) => {
+    setAbiertoLocal(v);
+    if (!v) onAbierto?.();
+  };
 
   const score = computeDowntonScore(data);
   const cat = downtonCategoria(score);

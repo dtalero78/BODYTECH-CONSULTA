@@ -4,15 +4,22 @@ import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextField, TextareaField } from '../fields';
 import { PrescripcionTab, type PrescModalKey } from '../tabs/PrescripcionTab';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
 import type { MedicalHistoryFull } from '../types';
 
 interface CorpPrescripcionTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
 
 type ModalKey = 'analisis' | 'remision' | null;
+
+const PASOS_PRESC: ReadonlyArray<PrescModalKey> = ['generales', 'cardio', 'fuerza', 'flexibilidad', 'clases'];
+const MODALES: ReadonlyArray<string> = ['analisis', 'remision', ...PASOS_PRESC];
 
 function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
@@ -30,7 +37,7 @@ function isFilled(v: unknown): boolean {
  * Encima se conservan Análisis y Remisión, que son propios de la plantilla del
  * examen ocupacional y no existen en el panel de consulta.
  */
-export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPrescripcionTabProps) {
+export function CorpPrescripcionTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpPrescripcionTabProps) {
   const [openModal, setOpenModal] = useState<ModalKey>(null);
   // Paso abierto DENTRO de PrescripcionTab. Vive acá porque el recorrido del
   // examen ocupacional entra y sale de ese componente:
@@ -38,6 +45,16 @@ export function CorpPrescripcionTab({ historiaId, data, onPatchLocal }: CorpPres
   // Los extremos son de este tab y el medio del otro, así que alguien tiene que
   // sostener el hilo; el padre es el único que ve las dos mitades.
   const [prescStep, setPrescStep] = useState<PrescModalKey | null>(null);
+
+  useAbrirSolicitado(
+    abrir,
+    MODALES,
+    (k) => {
+      if (k === 'analisis' || k === 'remision') setOpenModal(k);
+      else setPrescStep(k as PrescModalKey);
+    },
+    onAbierto
+  );
 
   return (
     <div className="flex flex-col gap-4">

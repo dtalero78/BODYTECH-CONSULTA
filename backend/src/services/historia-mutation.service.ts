@@ -62,7 +62,19 @@ class HistoriaMutationService {
       RETURNING "_id"`,
       [historiaId]
     );
-    return rows !== null && rows.length > 0;
+    const ok = rows !== null && rows.length > 0;
+    if (ok) {
+      // LA carpeta del paciente, en la base global. El panel de 7 pestañas y el
+      // del Médico Corporativo auto-guardan campo a campo y cierran por acá, así
+      // que nunca pasaban por el PASO 4 de `updateMedicalHistory`: sus historias
+      // no llegaban a la carpeta. Se refleja al cerrar, y al volver a cerrar con
+      // lo corregido (upsert por historia, no duplica). Fire-and-forget, como
+      // allá: la base global no puede impedirle a un médico cerrar una consulta.
+      carpetaService
+        .reflejarDesdeConsulta(historiaId)
+        .catch((e) => console.error(`⚠️  [carpeta] ${e?.message ?? e}`));
+    }
+    return ok;
   }
 
   /**

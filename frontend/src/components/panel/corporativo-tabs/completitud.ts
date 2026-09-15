@@ -13,6 +13,11 @@ export interface CampoCompletitud {
   label: string;
   value: unknown;
   opcional?: boolean;
+  /**
+   * Modal donde se diligencia el campo, para que el "Ir →" de la lista de lo que
+   * falta abra esa ventana y no solo la sección.
+   */
+  destino?: string;
 }
 
 export interface ResumenCompletitud {
@@ -23,6 +28,11 @@ export interface ResumenCompletitud {
   /** Etiquetas de los obligatorios que faltan, en el orden del formulario. */
   faltantes: string[];
   pct: number;
+}
+
+/** snake_case → camelCase, el mismo mapeo que usa el backend al devolver la historia. */
+export function camelCampo(s: string): string {
+  return s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**

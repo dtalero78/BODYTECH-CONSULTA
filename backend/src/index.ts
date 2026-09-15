@@ -348,6 +348,18 @@ postgresService
       .asegurarEsquema()
       .catch((e) => console.error('⚠️ [empresas] no se pudo asegurar el catálogo:', e?.message ?? e))
   )
+  // Hoja de valoraciones: si cambiaron sus columnas, reenviar las valoraciones
+  // ya cerradas para que las filas viejas no queden con las columnas nuevas en
+  // blanco. Va después de las migraciones porque usa `corporativo_sheet_envio`.
+  .then(() => {
+    if (process.env.NODE_ENV === 'test' || !process.env.CORPORATIVO_SHEET_URL) return;
+    return corporativoSheetService
+      .reencolarSiCambiaronColumnas()
+      .then((n) => {
+        if (n > 0) console.log(`📋 [Corporativo-Sheet] Cambiaron las columnas: ${n} valoraciones reencoladas`);
+      })
+      .catch((e) => console.error('⚠️ [corporativo-sheet] no se pudo revisar las columnas:', e?.message ?? e));
+  })
   // Padrón de afiliados: un ESPEJO de las historias, no un segundo cuaderno.
   // Sobre `HistoriaClinica` sólo hace SELECT; escribe únicamente en la tabla
   // `afiliados` de la base compartida. Si falla entero, no se cae una atención.

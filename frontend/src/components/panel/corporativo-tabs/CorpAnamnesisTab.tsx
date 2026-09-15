@@ -3,13 +3,21 @@ import { Card } from '../Card';
 import { Modal } from '../Modal';
 import { TextareaField, PillToggleField } from '../fields';
 import { TemplateTextareaField } from './TemplateTextareaField';
+import { AccionRapida } from './LlenadoRapido';
+import { soloVacios } from './llenado';
+import { useAbrirSolicitado } from './useAbrirSolicitado';
+import { camelCampo, tieneValor } from './completitud';
 import type { MedicalHistoryFull } from '../types';
 import { useModalChain } from '../useModalChain';
+import { SINTOMAS } from './camposCorporativo';
 
 interface CorpAnamnesisTabProps {
   historiaId: string | undefined;
   data: MedicalHistoryFull | null;
   onPatchLocal: (field: string, value: unknown) => void;
+  /** Modal que el panel pide abrir (salto desde "lo que falta"). */
+  abrir?: string | null;
+  onAbierto?: () => void;
 }
 
 type ModalKey = 'motivo' | 'sintomas';
@@ -26,14 +34,6 @@ const ENFERMEDAD_ACTUAL_TEMPLATE =
   'deportiva de ingreso a BODYTECH. Actualmente se encuentra en buen estado ' +
   'general, asintomático cardiovascular u osteomuscular.';
 
-const SINTOMAS: ReadonlyArray<{ label: string; field: keyof MedicalHistoryFull & string }> = [
-  { label: 'Dolor torácico', field: 'mc_sint_dolor_toracico' },
-  { label: 'Palpitaciones', field: 'mc_sint_palpitaciones' },
-  { label: 'Disnea', field: 'mc_sint_disnea' },
-  { label: 'Edema de MMII', field: 'mc_sint_edema_mmii' },
-  { label: 'Síncope', field: 'mc_sint_sincope' },
-  { label: 'Claudicación', field: 'mc_sint_claudicacion' },
-];
 
 function coerceBool(v: unknown): boolean {
   if (v === true) return true;
@@ -48,17 +48,44 @@ function isFilled(v: unknown): boolean {
   return v !== null && v !== undefined && v !== '';
 }
 
-export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnesisTabProps) {
+export function CorpAnamnesisTab({ historiaId, data, onPatchLocal, abrir, onAbierto }: CorpAnamnesisTabProps) {
   const { setOpen: setOpenModal, chain } = useModalChain(ORDEN, ETIQUETAS);
-
+  useAbrirSolicitado(abrir, ORDEN, setOpenModal, onAbierto);
 
   const motivoVals = [data?.motivoConsultaTexto, data?.mcEnfermedadActual];
   const motivoFilled = motivoVals.filter(isFilled).length;
   const motivoState = motivoFilled === 0 ? 'empty' : motivoFilled === motivoVals.length ? 'complete' : 'partial';
 
-  const sintomasActivos = SINTOMAS.map((s) => coerceBool(data?.[camel(s.field)])).filter(Boolean).length;
+  // Un síntoma sin responder NO es un síntoma negado. Antes el card decía "Niega
+  // todos los síntomas" con los seis sin tocar, y la historia se veía lista.
+  const sintomasActivos = SINTOMAS.filter((s) => coerceBool(data?.[camelCampo(s.field)])).length;
+  const sintomasSinResponder = SINTOMAS.filter((s) => !tieneValor(data?.[camelCampo(s.field)])).length;
   const sintomasState: 'empty' | 'partial' | 'complete' =
-    sintomasActivos === 0 ? 'empty' : 'partial';
+    sintomasSinResponder === SINTOMAS.length ? 'empty' : sintomasSinResponder > 0 ? 'partial' : 'complete';
+  const sintomasSubtitle =
+    sintomasSinResponder === SINTOMAS.length
+      ? 'Sin responder'
+      : [
+          sintomasActivos > 0
+            ? `${sintomasActivos} de ${SINTOMAS.length} síntomas referidos`
+            : sintomasSinResponder === 0
+              ? 'Niega todos los síntomas'
+              : null,
+          sintomasSinResponder > 0 ? `${sintomasSinResponder} sin responder` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
+  const nieganSintomas = soloVacios(data, Object.fromEntries(SINTOMAS.map((s) => [s.field, false])));
+  const accionSintomas = (
+    <AccionRapida
+      label="Niega todos"
+      titulo="Marca «Niega» en los síntomas que siguen sin responder. No cambia los que ya marcaste."
+      valores={nieganSintomas}
+      historiaId={historiaId}
+      onPatchLocal={onPatchLocal}
+    />
+  );
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -77,15 +104,13 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
       <Card
         icon={<HeartPulse size={16} />}
         title="Síntomas en ejercicio"
-        subtitle={
-          sintomasActivos === 0
-            ? 'Niega todos los síntomas'
-            : `${sintomasActivos} de ${SINTOMAS.length} síntomas referidos`
-        }
+        subtitle={sintomasSubtitle}
         state={sintomasState}
-        completionPct={100}
+        completionPct={Math.round(((SINTOMAS.length - sintomasSinResponder) / SINTOMAS.length) * 100)}
         onEdit={() => setOpenModal('sintomas')}
-      />
+      >
+        {accionSintomas}
+      </Card>
 
       <Modal
         {...chain('motivo')}
@@ -119,7 +144,6 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
         </div>
       </Modal>
 
-
       <Modal
         {...chain('sintomas')}
         crumb="Anamnesis · Síntomas en ejercicio"
@@ -129,6 +153,7 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
         showEyePill={false}
         size="wide"
       >
+        <div className="-mt-3 mb-3">{accionSintomas}</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {SINTOMAS.map((s) => (
             <div
@@ -139,7 +164,7 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
               <PillToggleField
                 historiaId={historiaId}
                 field={s.field}
-                initialValue={data?.[camel(s.field)]}
+                initialValue={data?.[camelCampo(s.field)]}
                 onSaved={onPatchLocal}
                 trueLabel="Refiere"
                 falseLabel="Niega"
@@ -162,9 +187,4 @@ export function CorpAnamnesisTab({ historiaId, data, onPatchLocal }: CorpAnamnes
       </Modal>
     </div>
   );
-}
-
-// snake_case -> camelCase (mismo mapeo que usa el backend)
-function camel(s: string): string {
-  return s.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }

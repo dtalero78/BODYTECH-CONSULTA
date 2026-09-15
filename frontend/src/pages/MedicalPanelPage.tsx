@@ -89,6 +89,16 @@ const speakText = (text: string) => {
  * La hora se evalúa EN EL CLIC, no al renderizar: así no hace falta un timer que
  * refresque la tarjeta cuando llega la hora, y el dato siempre está al día.
  */
+/**
+ * Cómo se nombra la inasistencia según quién mira. El coach llama al afiliado
+ * ("no contesta"); el médico corporativo lo espera en persona ("no asistió").
+ */
+function textosInasistencia(): { boton: string; pregunta: string; marcado: string; tarjeta: string } {
+  return authService.isMedicoCorporativo()
+    ? { boton: 'No asistió', pregunta: '¿No asistió a la consulta?', marcado: 'No asistió', tarjeta: 'No asistieron' }
+    : { boton: 'No contesta', pregunta: '¿No contestó?', marcado: 'No Contesta', tarjeta: 'No contesta' };
+}
+
 function NoContestaAccion({
   patientId,
   nombre,
@@ -107,6 +117,11 @@ function NoContestaAccion({
   const [paso, setPaso] = useState<'idle' | 'confirmar' | 'antesDeHora' | 'conflicto'>('idle');
   const [horaCita, setHoraCita] = useState('');
   const [mensaje, setMensaje] = useState('');
+  // El médico corporativo examina en persona: "No contesta" es vocabulario de
+  // llamada y no lo reconoció cuando un paciente no llegó ("no supe cómo marcar
+  // que no asistió"). Es el mismo estado por debajo — lo que cambia es cómo se
+  // dice —, así calendario, indicadores y filtros siguen contándolo igual.
+  const textos = textosInasistencia();
 
   const alTocar = () => {
     const t = new Date(fechaAtencion).getTime();
@@ -157,7 +172,7 @@ function NoContestaAccion({
   if (paso === 'confirmar') {
     return (
       <div className="flex items-center justify-end gap-2 flex-wrap">
-        <span className="text-gray-400 text-[11px] md:text-xs">¿No contestó?</span>
+        <span className="text-gray-400 text-[11px] md:text-xs">{textos.pregunta}</span>
         <button
           onClick={async () => {
             const error = await onConfirmar(patientId, nombre, fechaAtencion);
@@ -187,7 +202,7 @@ function NoContestaAccion({
       onClick={alTocar}
       className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
     >
-      No contesta
+      {textos.boton}
     </button>
   );
 }
@@ -1152,7 +1167,7 @@ export function MedicalPanelPage() {
                 <div className="text-2xl md:text-3xl font-bold text-yellow-500">{stats.restantesHoy}</div>
               </div>
               <div className="bg-[#2a3942] rounded-xl p-2.5 md:p-4 text-center md:text-left">
-                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">No contesta</div>
+                <div className="text-gray-400 text-[11px] md:text-sm leading-tight mb-0.5 md:mb-1">{textosInasistencia().tarjeta}</div>
                 <div className="text-2xl md:text-3xl font-bold text-red-400">{stats.noContestaHoy ?? 0}</div>
               </div>
             </div>
@@ -1631,7 +1646,7 @@ export function MedicalPanelPage() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md">
           <div className="bg-[#202c33] border border-gray-600 rounded-lg shadow-xl px-4 py-3 flex items-center gap-3">
             <span className="text-gray-200 text-xs md:text-sm flex-1">
-              {undoNoAnswer.nombre} quedó marcado como "No Contesta".
+              {undoNoAnswer.nombre} quedó marcado como "{textosInasistencia().marcado}".
             </span>
             <button
               onClick={() => handleUndoNoAnswer(undoNoAnswer.id)}

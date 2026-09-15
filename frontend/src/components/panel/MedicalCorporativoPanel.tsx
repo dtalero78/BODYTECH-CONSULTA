@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Cloud, CloudOff, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { Cloud, CloudOff, CheckCircle2, Loader2, AlertTriangle, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import apiService from '../../services/api.service';
+import { EXCEL_VALORACIONES_URL } from '../../config/enlaces';
 import { PatientStrip } from './PatientStrip';
 import { PanelSideNav, type TabDef } from './PanelSideNav';
 import { SaveProvider, useSaveCtx } from './SaveContext';
@@ -8,6 +9,7 @@ import { useMedicalHistory } from './hooks/useMedicalHistory';
 import { useContainerWidth } from './hooks/useContainerWidth';
 import type { MedicalHistoryFull, SaveStatus } from './types';
 import { resumirCompletitud, tieneValor, type CampoCompletitud } from './corporativo-tabs/completitud';
+import { camposPorSeccion, TAB_LABELS, type CorpTabId } from './corporativo-tabs/camposCorporativo';
 import { CorpIdentificacionTab } from './corporativo-tabs/CorpIdentificacionTab';
 import { CorpAnamnesisTab } from './corporativo-tabs/CorpAnamnesisTab';
 import { CorpAntecedentesTab } from './corporativo-tabs/CorpAntecedentesTab';
@@ -20,107 +22,9 @@ interface MedicalCorporativoPanelProps {
   historiaId: string;
 }
 
-// Tabs propios de este panel — deliberadamente NO comparten el TabId de
-// `types.ts` (t1..t7) para no acoplar este panel al orchestrator estándar.
-type CorpTabId = 'c1' | 'c2' | 'c3' | 'c4' | 'c5' | 'c6' | 'c7';
+type TabCorp = TabDef<CorpTabId> & { detalle: ReadonlyArray<CampoCompletitud> };
 
-const TAB_LABELS: Record<CorpTabId, string> = {
-  c1: 'Identificación',
-  c2: 'Anamnesis',
-  c3: 'Antecedentes',
-  c4: 'Actividad física',
-  c5: 'Examen físico',
-  c6: 'Diagnóstico y riesgo',
-  c7: 'Análisis y prescripción',
-};
-
-/**
- * Campos que cuentan para la completitud de cada sección, con su etiqueta.
- *
- * Antes esto era una muestra arbitraria de columnas: la sección Antecedentes,
- * por ejemplo, contaba 4 campos de texto e ignoraba los 22 toggles Sí/No, así
- * que se podía diligenciar todo y seguir viendo 0/4. El equipo médico reportó
- * exactamente eso — "salen incompletas y no tienes cómo saber cuál falta" —
- * porque el número no correspondía a nada visible en pantalla.
- *
- * Ahora cada sección declara sus campos reales y devuelve además CUÁLES faltan,
- * que es lo que alimenta el tooltip del sidebar.
- */
-function camposPorSeccion(
-  data: MedicalHistoryFull | null
-): Record<CorpTabId, ReadonlyArray<CampoCompletitud>> {
-  const d = data;
-  return {
-    c1: [
-      { label: 'Fecha de nacimiento', value: d?.fechaNacimiento },
-      { label: 'Género', value: d?.generoBiologico },
-      { label: 'Empresa', value: d?.mcEmpresa },
-      { label: 'Ocupación', value: d?.ocupacion },
-      { label: 'EPS', value: d?.eps },
-      { label: 'Teléfono', value: d?.telefonoResidencia },
-      { label: 'Tipo de consulta', value: d?.tipoConsulta },
-      { label: 'Dirección', value: d?.mcDireccion, opcional: true },
-      { label: 'Correo', value: d?.email, opcional: true },
-      { label: 'RH', value: d?.grupoSanguineo, opcional: true },
-    ],
-    c2: [
-      { label: 'Motivo de consulta', value: d?.motivoConsultaTexto },
-      { label: 'Enfermedad actual', value: d?.mcEnfermedadActual },
-      { label: 'Síntomas en ejercicio', value: d?.mcSintDolorToracico },
-    ],
-    c3: [
-      { label: 'Antecedentes familiares', value: d?.mcFamCardiaca },
-      { label: 'Antecedentes personales', value: d?.mcPerCardiaca },
-      { label: 'Osteomusculares', value: d?.mcPerOsteomuscular },
-      { label: 'Quirúrgicos', value: d?.mcPerQuirurgicos },
-      { label: 'Alérgicos', value: d?.mcPerAlergicos },
-      { label: 'Farmacológicos', value: d?.mcPerFarmacologicos },
-    ],
-    c4: [
-      { label: 'Minutos por sesión', value: d?.mcAfMinutosSesion },
-      { label: 'Sesiones por semana', value: d?.mcAfSesionesSemana },
-      { label: 'Meses de práctica', value: d?.mcAfMeses },
-      { label: 'Experiencia en gimnasio', value: d?.mcAfExperienciaGym },
-      { label: 'Dónde entrena', value: d?.mcAfModalidad },
-      { label: 'Objetivo', value: d?.mcAfObjetivo },
-    ],
-    c5: [
-      { label: 'Peso', value: d?.mcPeso },
-      { label: 'Talla', value: d?.mcTalla },
-      { label: 'TAS', value: d?.tas },
-      { label: 'TAD', value: d?.tad },
-      { label: 'Frecuencia cardiaca', value: d?.mcFrecCard },
-      { label: 'Test de Ruffier', value: d?.mcRuffierFc2 },
-      { label: 'Handgrip', value: d?.mcHandgripDer1 },
-      // Opcionales por decisión del equipo médico: no se toman de rutina.
-      { label: 'SatO2', value: d?.mcSato2, opcional: true },
-      { label: 'Frecuencia respiratoria', value: d?.mcFrecResp, opcional: true },
-      { label: 'Perímetro abdominal', value: d?.mcPerimetroAbdominal, opcional: true },
-      { label: 'Revisión por sistemas', value: d?.mcRsTorax },
-      { label: 'Observaciones del examen', value: d?.mcExamenObservaciones, opcional: true },
-    ],
-    c6: [
-      { label: 'Dx nutricional', value: d?.mcDxNutricional },
-      { label: 'Dx cardiovascular', value: d?.mcDxCardiovascular },
-      { label: 'Dx osteomuscular', value: d?.mcDxOsteomuscular },
-      { label: 'Riesgo ACSM', value: d?.mcRiesgoAcsm },
-      { label: 'Riesgo Bodytech', value: d?.mcRiesgoBodytech },
-      { label: 'Índice Downton', value: d?.downtonRiesgo },
-      { label: 'Aptitud', value: d?.aptitud },
-    ],
-    c7: [
-      { label: 'Análisis', value: d?.mcAnalisis },
-      { label: 'Recomendaciones generales', value: d?.prescGenerales },
-      { label: 'Cardio', value: d?.prescCardioIntensidad },
-      { label: 'Fuerza', value: d?.prescFuerzaIntensidad },
-      { label: 'Flexibilidad', value: d?.prescFlexTipo },
-      { label: 'Clase grupal', value: d?.prescClaseModalidad, opcional: true },
-      { label: 'Remisión', value: d?.mcRemision, opcional: true },
-    ],
-  };
-}
-
-function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<TabDef<CorpTabId>> {
+function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<TabCorp> {
   const campos = camposPorSeccion(data);
   const short: Partial<Record<CorpTabId, string>> = {
     c6: 'Diagnóstico',
@@ -135,6 +39,7 @@ function computeCorpTabsCount(data: MedicalHistoryFull | null): ReadonlyArray<Ta
       filled: r.llenos,
       total: r.total,
       faltantes: r.faltantes,
+      detalle: campos[id].filter((c) => !c.opcional && !tieneValor(c.value)),
     };
   });
 }
@@ -148,6 +53,16 @@ function relativeTime(date: Date | null): string {
   if (m < 60) return `hace ${m} min`;
   const h = Math.floor(m / 60);
   return `hace ${h} h`;
+}
+
+/**
+ * La hoja de valoraciones, en otra pestaña. El médico se la pasa a los
+ * entrenadores para armar el plan: reportó que al terminar la historia "no me
+ * sale o no supe buscar el consolidado de Excel" — el único enlace estaba en el
+ * panel del coordinador, donde un médico no entra.
+ */
+function abrirExcel() {
+  window.open(EXCEL_VALORACIONES_URL, '_blank', 'noopener,noreferrer');
 }
 
 /** Header simple del panel corporativo — sin PDF ni toggle de maximizar (no hay video). */
@@ -175,10 +90,19 @@ function CorpHeader({ sectionTitle, saveState, onRetry }: { sectionTitle: string
       </div>
       <button
         type="button"
+        onClick={abrirExcel}
+        title="Abre el Excel de valoraciones, donde queda cada consulta finalizada con sus recomendaciones"
+        className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-[10px] text-[12.5px] font-semibold border border-[var(--p-line)] text-[var(--p-text-2)] bg-[var(--p-surface)] hover:bg-[var(--p-input-2)] transition"
+      >
+        <FileSpreadsheet size={15} className="text-[var(--p-ok)]" />
+        Excel de valoraciones
+      </button>
+      <button
+        type="button"
         onClick={() => saveState.error && onRetry()}
         title={saveLabel}
         aria-label={saveLabel}
-        className={`ml-auto w-9 h-9 rounded-[10px] grid place-items-center flex-shrink-0 border transition ${pillCls}`}
+        className={`w-9 h-9 rounded-[10px] grid place-items-center flex-shrink-0 border transition ${pillCls}`}
       >
         {saveState.error ? <CloudOff size={16} /> : <Cloud size={16} />}
       </button>
@@ -189,6 +113,9 @@ function CorpHeader({ sectionTitle, saveState, onRetry }: { sectionTitle: string
 function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const { data, loading, error, patchLocal } = useMedicalHistory(historiaId);
   const [activeTab, setActiveTab] = useState<CorpTabId>('c1');
+  // Modal que se pidió abrir desde la lista de lo que falta. La pestaña lo
+  // abre al montarse y avisa (`onAbierto`) para bajar la solicitud.
+  const [abrir, setAbrir] = useState<{ tab: CorpTabId; modal: string } | null>(null);
   const { aggregate, retryAll } = useSaveCtx();
   const rootRef = useRef<HTMLDivElement>(null);
   const width = useContainerWidth(rootRef);
@@ -198,6 +125,9 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const tabs = computeCorpTabsCount(data);
   const sectionTitle = TAB_LABELS[activeTab];
 
+  const solicitud = (tab: CorpTabId) => (abrir?.tab === tab ? abrir.modal : null);
+  const limpiarSolicitud = () => setAbrir(null);
+
   // ---- Finalizar la consulta ----
   // El panel del rol Médico marca la cita como atendida al colgar la
   // videollamada (VideoRoom). Acá no hay llamada, así que ese momento no existe
@@ -205,26 +135,42 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   // presencial. Además el equipo médico reportó que "en ningún lado me sale
   // grabar" — con auto-guardado campo a campo no había ningún cierre visible,
   // así que trabajaban creyendo que perdían todo.
+  //
+  // Finalizar también manda la valoración al Excel de valoraciones y a la
+  // carpeta del afiliado en la base global. "Reenviar" repite eso con lo que se
+  // haya corregido después (los dos destinos actualizan, no duplican).
   const [finalizando, setFinalizando] = useState(false);
   const [finalizadaLocal, setFinalizadaLocal] = useState(false);
+  const [reenviada, setReenviada] = useState(false);
+  const [errorCierre, setErrorCierre] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const yaFinalizada = finalizadaLocal || tieneValor(data?.fechaConsulta);
   const pendientes = tabs.flatMap((t) => t.faltantes ?? []);
-  const seccionesIncompletas = tabs.filter((t) => (t.faltantes?.length ?? 0) > 0);
+  const seccionesIncompletas = tabs.filter((t) => t.detalle.length > 0);
 
   async function finalizar() {
     if (!historiaId || finalizando) return;
+    const esReenvio = yaFinalizada;
     setFinalizando(true);
+    setErrorCierre(null);
     try {
       await apiService.finalizarConsulta(historiaId);
       setFinalizadaLocal(true);
+      setReenviada(esReenvio);
       setConfirmOpen(false);
     } catch {
-      // El botón vuelve a habilitarse; el estado de guardado del header sigue
-      // siendo la fuente de verdad de que los campos sí quedaron persistidos.
+      // El estado de guardado del header sigue siendo la fuente de verdad de que
+      // los campos sí quedaron persistidos; lo que falló es el cierre.
+      setErrorCierre('No se pudo finalizar. Revisa la conexión e intenta de nuevo.');
     } finally {
       setFinalizando(false);
     }
+  }
+
+  function irA(tab: CorpTabId, modal?: string) {
+    setActiveTab(tab);
+    setAbrir(modal ? { tab, modal } : null);
+    setConfirmOpen(false);
   }
 
   return (
@@ -252,26 +198,63 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
         {!loading && !error && (
           <PanelSideNav
             active={activeTab}
-            onChange={setActiveTab}
+            onChange={(id) => irA(id)}
             tabs={tabs}
             brandTitle="Médico Corporativo"
             brandSubtitle="examen ocupacional"
             collapsed={navCollapsed}
             footer={
               yaFinalizada ? (
-                <div
-                  className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold text-[var(--p-ok)] bg-[rgba(var(--p-ok-rgb),0.10)] border border-[rgba(var(--p-ok-rgb),0.30)] ${
-                    navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
-                  }`}
-                  title="La consulta quedó registrada como atendida"
-                >
-                  <CheckCircle2 size={15} className="shrink-0" />
-                  {!navCollapsed && 'Consulta finalizada'}
+                <div className="flex flex-col gap-1.5">
+                  <div
+                    className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold text-[var(--p-ok)] bg-[rgba(var(--p-ok-rgb),0.10)] border border-[rgba(var(--p-ok-rgb),0.30)] ${
+                      navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
+                    }`}
+                    title="La consulta quedó registrada como atendida"
+                  >
+                    <CheckCircle2 size={15} className="shrink-0" />
+                    {!navCollapsed && 'Consulta finalizada'}
+                  </div>
+                  {!navCollapsed && (
+                    <>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={abrirExcel}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11.5px] font-semibold border border-[var(--p-line)] text-[var(--p-text-2)] bg-[var(--p-surface)] hover:bg-[var(--p-input-2)] transition"
+                        >
+                          <FileSpreadsheet size={13} className="shrink-0 text-[var(--p-ok)]" />
+                          Ver Excel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={finalizar}
+                          disabled={finalizando}
+                          title="Si corregiste algo después de finalizar, actualiza la fila del Excel y la carpeta del afiliado."
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11.5px] font-semibold border border-[var(--p-line)] text-[var(--p-text-2)] bg-[var(--p-surface)] hover:bg-[var(--p-input-2)] transition disabled:opacity-60"
+                        >
+                          {finalizando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} className="shrink-0" />}
+                          Reenviar
+                        </button>
+                      </div>
+                      <div className="text-[11px] leading-snug text-[var(--p-text-3)]">
+                        {reenviada
+                          ? 'Enviada de nuevo: el Excel se actualiza en unos segundos.'
+                          : 'Queda en el Excel en unos segundos, con las recomendaciones para los entrenadores.'}
+                      </div>
+                    </>
+                  )}
+                  {errorCierre && !navCollapsed && (
+                    <div className="text-[11px] leading-snug text-[var(--p-danger)]">{errorCierre}</div>
+                  )}
                 </div>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmOpen(true)}
+                  onClick={() => {
+                    setErrorCierre(null);
+                    setConfirmOpen(true);
+                  }}
                   title="Finalizar consulta"
                   className={`w-full inline-flex items-center gap-2 rounded-md text-[12.5px] font-semibold bg-[var(--p-accent)] text-[var(--p-on-accent)] hover:bg-[var(--p-accent-hover)] transition ${
                     navCollapsed ? 'justify-center px-0 py-2' : 'px-3 py-2'
@@ -300,25 +283,25 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
             <PatientStrip data={data} />
             <div className="p-5 pb-16">
               {activeTab === 'c1' && (
-                <CorpIdentificacionTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpIdentificacionTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c1')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c2' && (
-                <CorpAnamnesisTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpAnamnesisTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c2')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c3' && (
-                <CorpAntecedentesTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpAntecedentesTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c3')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c4' && (
-                <CorpActividadFisicaTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpActividadFisicaTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c4')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c5' && (
-                <CorpExamenFisicoTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpExamenFisicoTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c5')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c6' && (
-                <CorpDiagnosticoRiesgoTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpDiagnosticoRiesgoTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c6')} onAbierto={limpiarSolicitud} />
               )}
               {activeTab === 'c7' && (
-                <CorpPrescripcionTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} />
+                <CorpPrescripcionTab historiaId={historiaId} data={data} onPatchLocal={patchLocal} abrir={solicitud('c7')} onAbierto={limpiarSolicitud} />
               )}
             </div>
           </>
@@ -327,17 +310,18 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
         </div>
       </div>
 
-      {/* Confirmación de cierre. Lista lo que falta, sección por sección y con
-          salto directo a cada una, pero NO bloquea: hay campos que legítimamente
-          no aplican a cada paciente, y el criterio de si la historia está
-          completa es del médico, no del formulario. */}
+      {/* Confirmación de cierre. Lista lo que falta, sección por sección, y cada
+          campo abre la ventana donde se llena. NO bloquea: hay campos que
+          legítimamente no aplican a cada paciente, y el criterio de si la
+          historia está completa es del médico, no del formulario. */}
       {confirmOpen && (
         <div className="absolute inset-0 z-50 grid place-items-center bg-[rgba(var(--p-scrim-rgb),0.55)] p-6">
           <div className="w-full max-w-md rounded-2xl bg-[var(--p-surface)] border border-[var(--p-line)] p-5 shadow-xl">
             <div className="text-[15px] font-bold text-[var(--p-text)] mb-1">Finalizar consulta</div>
             <div className="text-[13px] text-[var(--p-text-2)] mb-4">
               Los datos se guardan solos a medida que los diligencias. Al finalizar, la
-              consulta queda registrada como atendida.
+              consulta queda registrada como atendida y pasa al Excel de valoraciones y a
+              la carpeta del afiliado.
             </div>
 
             {seccionesIncompletas.length > 0 ? (
@@ -348,28 +332,26 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
                     ? 'Queda 1 campo sin diligenciar'
                     : `Quedan ${pendientes.length} campos sin diligenciar`}
                 </div>
-                {/* Todos, agrupados por sección. Antes era una lista corrida
-                    cortada a los 8 primeros, sin decir en qué sección estaba
-                    cada uno: había que salir a buscarlos. */}
-                <ul className="max-h-[240px] overflow-y-auto space-y-1 m-0 p-0 list-none">
+                {/* Cada campo es un botón que abre SU ventana. Antes el salto
+                    dejaba al médico en la pestaña y tenía que abrir card por card
+                    para encontrarlo ("me tocó devolverme varias veces"). */}
+                <ul className="max-h-[260px] overflow-y-auto space-y-2 m-0 p-0 list-none">
                   {seccionesIncompletas.map((t) => (
                     <li key={t.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab(t.id);
-                          setConfirmOpen(false);
-                        }}
-                        className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[rgba(var(--p-warn-rgb),0.12)] transition"
-                      >
-                        <span className="flex items-baseline justify-between gap-2">
-                          <span className="text-[12px] font-semibold text-[var(--p-text)]">{t.label}</span>
-                          <span className="text-[11px] font-medium text-[var(--p-accent)] shrink-0">Ir →</span>
-                        </span>
-                        <span className="block text-[12px] text-[var(--p-text-2)] leading-relaxed">
-                          {(t.faltantes ?? []).join(', ')}
-                        </span>
-                      </button>
+                      <div className="text-[12px] font-semibold text-[var(--p-text)] px-1 mb-1">{t.label}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {t.detalle.map((c) => (
+                          <button
+                            key={c.label}
+                            type="button"
+                            onClick={() => irA(t.id, c.destino)}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[var(--p-text-2)] bg-[var(--p-surface)] border border-[var(--p-line)] hover:border-[var(--p-accent)] hover:text-[var(--p-accent)] transition"
+                          >
+                            {c.label}
+                            <span className="text-[var(--p-accent)] font-semibold">→</span>
+                          </button>
+                        ))}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -378,6 +360,10 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
               <div className="mb-4 rounded-xl border border-[rgba(var(--p-ok-rgb),0.30)] bg-[rgba(var(--p-ok-rgb),0.08)] p-3 text-[12px] font-semibold text-[var(--p-ok)]">
                 Todas las secciones están completas.
               </div>
+            )}
+
+            {errorCierre && (
+              <div className="mb-3 text-[12px] text-[var(--p-danger)]">{errorCierre}</div>
             )}
 
             <div className="flex items-center justify-end gap-2">

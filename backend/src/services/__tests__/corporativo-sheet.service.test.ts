@@ -1,4 +1,10 @@
-import { ENCABEZADOS, formatCelda, huellaColumnas } from '../corporativo-sheet.service';
+jest.mock('../postgres.service', () => ({
+  __esModule: true,
+  default: { query: jest.fn() },
+}));
+
+import postgresService from '../postgres.service';
+import corporativoSheetService, { ENCABEZADOS, formatCelda, huellaColumnas } from '../corporativo-sheet.service';
 
 describe('corporativo-sheet · formato de celdas', () => {
   it('los booleanos salen como Sí/No, porque la hoja la lee gente', () => {
@@ -54,9 +60,9 @@ describe('corporativo-sheet · encabezados', () => {
   });
 
   it('las columnas nuevas van después de las que ya tenía la hoja', () => {
-    // La hoja ya tiene filas escritas con 135 columnas terminando en Remisión.
-    // Una columna insertada antes correría todas las celdas siguientes de esas
-    // filas; por eso lo nuevo solo se agrega al final.
+    // La hoja se definió con 135 columnas terminando en Remisión. Una columna
+    // insertada antes correría todas las celdas siguientes de las filas ya
+    // escritas; por eso lo nuevo solo se agrega al final.
     expect(ENCABEZADOS.indexOf('Remisión')).toBe(134);
     for (const nueva of ['Recomendaciones generales', 'Prescripción · clases grupales', 'Aptitud', 'Riesgo de caídas (Downton)']) {
       expect(ENCABEZADOS.indexOf(nueva)).toBeGreaterThan(134);
@@ -69,10 +75,56 @@ describe('corporativo-sheet · encabezados', () => {
     }
   });
 
-  it('la huella cambia cuando cambia el juego de columnas', () => {
-    // Es lo que dispara el reenvío de las valoraciones ya cerradas: sin él, las
-    // filas viejas se quedan con las columnas nuevas en blanco.
-    expect(huellaColumnas()).toBe(huellaColumnas([...ENCABEZADOS]));
-    expect(huellaColumnas()).not.toBe(huellaColumnas([...ENCABEZADOS, 'Otra']));
+  it('la huella cambia si cambia una columna o cómo se calcula', () => {
+    // Es lo que dispara el reenvío de las valoraciones ya cerradas. Que cuente
+    // también el SQL importa: corregir el cálculo de una columna deja las filas
+    // viejas tan desactualizadas como agregar una nueva.
+    const base = [{ label: 'Profesional', sql: 'p.a' }];
+    expect(huellaColumnas()).toBe(huellaColumnas());
+    expect(huellaColumnas(base)).not.toBe(huellaColumnas([{ label: 'Profesional', sql: 'p.b' }]));
+    expect(huellaColumnas(base)).not.toBe(huellaColumnas([...base, { label: 'Otra', sql: 'p.a' }]));
+  });
+});
+
+describe('corporativo-sheet · despacho', () => {
+  const query = postgresService.query as jest.Mock;
+
+  beforeEach(() => {
+    query.mockReset();
+    process.env.CORPORATIVO_SHEET_URL = 'https://ejemplo.invalid/exec';
+  });
+
+  afterEach(() => {
+    delete process.env.CORPORATIVO_SHEET_URL;
+  });
+
+  it('si la base falla al leer la historia, se reintenta — no se marca "la historia ya no existe"', async () => {
+    // Así se perdieron todas las valoraciones desde el 9-sep: la consulta de la
+    // fila fallaba (`p.nombre` no existe), `query()` devolvía null, y eso se
+    // tomaba como historia borrada → `fallido`, sin reintento y con un error
+    // que apuntaba a otro lado.
+    query
+      .mockResolvedValueOnce([{ historia_id: 'h1', intentos: 1 }]) // claim
+      .mockResolvedValueOnce(null) // la lectura de la fila: error de base
+      .mockResolvedValue([]);
+
+    const r = await corporativoSheetService.despacharPendientes();
+
+    expect(r).toEqual({ enviadas: 0, fallidas: 1 });
+    const sqls = query.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((s) => s.includes('SET estado = $2'))).toBe(false);
+    expect(sqls.some((s) => s.includes("NOW() + ($2 || ' seconds')"))).toBe(true);
+  });
+
+  it('una historia que de verdad no existe sí se marca fallida', async () => {
+    query
+      .mockResolvedValueOnce([{ historia_id: 'h1', intentos: 1 }])
+      .mockResolvedValueOnce([]) // la consulta funcionó y no trajo nada
+      .mockResolvedValue([]);
+
+    await corporativoSheetService.despacharPendientes();
+
+    const marcado = query.mock.calls.find((c) => String(c[0]).includes('SET estado = $2'));
+    expect(marcado?.[1]).toEqual(['h1', 'fallido', 'La historia ya no existe']);
   });
 });

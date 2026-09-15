@@ -129,7 +129,14 @@ const COLUMNAS: ReadonlyArray<Columna> = [
   { sql: 'h."celular"', label: 'Celular', tipo: 'texto' },
   { sql: 'h."email"', label: 'Correo', tipo: 'texto' },
   { sql: 'h."mc_direccion"', label: 'Dirección', tipo: 'texto' },
-  { sql: 'p.nombre', label: 'Profesional', tipo: 'texto' },
+  // `profesionales` guarda el nombre partido. Esta columna leía `p.nombre`, que
+  // no existe: la consulta fallaba en cada cierre y ninguna valoración llegó a
+  // la hoja desde que se creó (encontrado el 15-sep-2026).
+  {
+    sql: `NULLIF(TRIM(CONCAT_WS(' ', p.primer_nombre, p.segundo_nombre, p.primer_apellido, p.segundo_apellido)), '')`,
+    label: 'Profesional',
+    tipo: 'texto',
+  },
   { sql: 'h."medico"', label: 'Código profesional', tipo: 'texto' },
   { sql: 'h."sede_id"', label: 'Sede', tipo: 'texto' },
 
@@ -337,9 +344,17 @@ export function formatCelda(valor: unknown, tipo: Tipo): string | number {
   }
 }
 
-/** Huella del juego de columnas: cambia si se agrega, quita o renombra una. */
-export function huellaColumnas(encabezados: ReadonlyArray<string> = ENCABEZADOS): string {
-  return createHash('sha1').update(encabezados.join('')).digest('hex');
+/**
+ * Huella del juego de columnas: cambia si se agrega, quita o renombra una — o
+ * si cambia cómo se calcula. Corregir el SQL de una columna deja las filas ya
+ * escritas tan desactualizadas como agregar una nueva.
+ */
+export function huellaColumnas(
+  columnas: ReadonlyArray<{ label: string; sql: string }> = COLUMNAS
+): string {
+  return createHash('sha1')
+    .update(columnas.map((c) => `${c.label}${c.sql}`).join(''))
+    .digest('hex');
 }
 
 class CorporativoSheetService {
@@ -481,7 +496,15 @@ class CorporativoSheetService {
         LIMIT 1`,
       [historiaId]
     );
-    const row = rows?.[0];
+    // `query()` devuelve null cuando la base falla (una columna mal escrita, una
+    // caída). Eso NO es una historia borrada: se lanza para que entre al backoff
+    // con el error real. Tomarlo como "no existe" marcaba la fila `fallido` sin
+    // reintento — así se perdieron todas las valoraciones mientras la columna
+    // "Profesional" leía un `p.nombre` que no existe.
+    if (rows === null) {
+      throw new Error('No se pudo leer la historia: error de base de datos (ver log de PostgreSQL)');
+    }
+    const row = rows[0];
     if (!row) return null;
     return COLUMNAS.map((c, i) => formatCelda(row[`c${i}`], c.tipo));
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Anclaje } from '../components/bodyvibe/Anclaje';
 import bodyvibeService from '../services/bodyvibe.service';
+import digitalizarService from '../services/digitalizar.service';
 import { io } from 'socket.io-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -217,6 +218,13 @@ export function MedicalPanelPage() {
       .publicados('sueltos')
       .then((l) => setHayApps(l.length > 0))
       .catch(() => setHayApps(false));
+  }, []);
+
+  // Digitalizar (pantallazos de MyBodytech): los médicos de la UMV la usan desde
+  // acá. Quién puede lo decide el backend; el botón solo aparece si dice que sí.
+  const [puedeDigitalizar, setPuedeDigitalizar] = useState(false);
+  useEffect(() => {
+    digitalizarService.acceso().then(setPuedeDigitalizar);
   }, []);
 
   const queryClient = useQueryClient();
@@ -1127,6 +1135,17 @@ export function MedicalPanelPage() {
                 >
                   <span className="hidden sm:inline">Aplicaciones</span>
                   <span className="sm:hidden">Apps</span>
+                </button>
+              )}
+              {/* En otra pestaña: el médico sigue atendiendo desde esta lista
+                  mientras revisa los afiliados de MyBodytech. */}
+              {puedeDigitalizar && (
+                <button
+                  onClick={() => window.open('/digitalizar', 'digitalizar')}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                  title="Pega el pantallazo de Citas asignadas de MyBodytech y abre cada ficha con un clic"
+                >
+                  Digitalizar
                 </button>
               )}
               <button

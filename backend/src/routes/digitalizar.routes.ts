@@ -2,9 +2,10 @@
 // Router /api/digitalizar/* — Pantallazo de "Citas asignadas" de MyBodytech →
 // filas que abren la ficha del afiliado en MyBodytech con un clic.
 //
-// Montado con requireRole('admin', 'coordinador') en index.ts, y además solo
-// para los correos de DIGITALIZAR_PERMITIDOS —la coordinación de la UMV—: ver
-// digitalizar-acceso.ts. Devuelve nombres, cédulas y teléfonos de afiliados. Todo se acota a las sedes del
+// Montado con requireRole('admin', 'coordinador', 'medico') en index.ts, y
+// además solo para la coordinación nombrada en DIGITALIZAR_PERMITIDOS o los
+// médicos del programa UMV: ver digitalizar-acceso.ts. Devuelve nombres,
+// cédulas y teléfonos de afiliados. Todo se acota a las sedes del
 // usuario con effectiveSedes; al guardar, la fila toma la primera sede del
 // usuario (el pantallazo trae el gimnasio de MyBodytech, que no es un sede_id).
 // ============================================================================
@@ -15,7 +16,7 @@ import digitalizarService from '../services/digitalizar.service';
 import { leerFranjas } from '../services/digitalizar-ocr.service';
 import { normalizarDocumento } from '../helpers/padron.helper';
 import { effectiveSedes, getSession } from '../middleware/rbac.middleware';
-import { puedeDigitalizar } from '../services/digitalizar-acceso';
+import { puedeDigitalizarSesion } from '../services/digitalizar-acceso';
 
 const router = Router();
 
@@ -74,27 +75,36 @@ function invalido(res: Response, message: string | undefined): void {
  * dibuja la pestaña. Va ANTES del candado a propósito: tiene que poder
  * contestarle "no" a un coordinador que no está en la lista.
  */
-router.get('/acceso', (req: Request, res: Response) => {
-  res.json({ success: true, data: { puede: puedeDigitalizar(getSession(req)?.email) } });
+router.get('/acceso', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, data: { puede: await puedeDigitalizarSesion(getSession(req)) } });
+  } catch (e) {
+    next(e);
+  }
 });
 
 /**
- * Candado de todo lo demás: sesión Y correo en DIGITALIZAR_PERMITIDOS. Este es
- * el que manda; que el panel no dibuje la pestaña es solo para no mostrar un
- * botón que lleva a un 403.
+ * Candado de todo lo demás: sesión Y (correo en DIGITALIZAR_PERMITIDOS o médico
+ * del programa UMV). Este es el que manda; que el panel no dibuje el botón es
+ * solo para no mostrar algo que lleva a un 403.
  */
-router.use((req: Request, res: Response, next: NextFunction) => {
+router.use(async (req: Request, res: Response, next: NextFunction) => {
   const session = getSession(req);
   if (!session) {
     res.status(401).json({ success: false, error: 'NO_SESSION' });
     return;
   }
-  if (!puedeDigitalizar(session.email)) {
-    res.status(403).json({
-      success: false,
-      error: 'FORBIDDEN',
-      message: 'Digitalizar es solo para la coordinación de la UMV.',
-    });
+  try {
+    if (!(await puedeDigitalizarSesion(session))) {
+      res.status(403).json({
+        success: false,
+        error: 'FORBIDDEN',
+        message: 'Digitalizar es solo para la UMV.',
+      });
+      return;
+    }
+  } catch (e) {
+    next(e);
     return;
   }
   next();

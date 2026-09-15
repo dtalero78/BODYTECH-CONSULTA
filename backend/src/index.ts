@@ -221,7 +221,7 @@ app.use('/api/padron', requireRole('admin', 'coordinador'), padronRoutes);
 app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresasRoutes);
 // Pantallazos de "Citas asignadas" de MyBodytech → lista de afiliados que el
 // coordinador revisa en MyBodytech. Devuelve nombres, cédulas y teléfonos.
-app.use('/api/digitalizar', requireRole('admin', 'coordinador'), digitalizarRoutes);
+app.use('/api/digitalizar', requireRole('admin', 'coordinador', 'medico'), digitalizarRoutes);
 // Paneles: la puerta del creador de la plataforma a Consulta, ACC y
 // Prepagadas. Admin, y además solo los correos de SUPERUSUARIOS (dentro del
 // router): desde ahí se piden tokens de las otras apps.

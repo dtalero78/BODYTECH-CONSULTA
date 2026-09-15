@@ -56,6 +56,9 @@ const OrdenesPage = lazy(() =>
 const CalidadPage = lazy(() =>
   import('./pages/CalidadPage').then((m) => ({ default: m.CalidadPage }))
 );
+const DigitalizarPage = lazy(() =>
+  import('./pages/DigitalizarPage').then((m) => ({ default: m.DigitalizarPage }))
+);
 const CoordinadorPage = lazy(() =>
   import('./pages/CoordinadorPage').then((m) => ({ default: m.CoordinadorPage }))
 );
@@ -285,6 +288,18 @@ function App() {
               element={
                 <RequireRole roles={['admin']}>
                   <PanelesPage />
+                </RequireRole>
+              }
+            />
+            {/* Digitalizar fuera del panel de coordinador: la usan también los
+                médicos de la UMV desde su panel de atención. El rol es el primer
+                filtro; quién entra de verdad lo decide el backend y la página lo
+                pregunta. */}
+            <Route
+              path="/digitalizar"
+              element={
+                <RequireRole roles={['medico', 'coordinador', 'admin']}>
+                  <DigitalizarPage />
                 </RequireRole>
               }
             />

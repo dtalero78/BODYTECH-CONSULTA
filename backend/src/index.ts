@@ -351,14 +351,22 @@ postgresService
   // Hoja de valoraciones: si cambiaron sus columnas, reenviar las valoraciones
   // ya cerradas para que las filas viejas no queden con las columnas nuevas en
   // blanco. Va después de las migraciones porque usa `corporativo_sheet_envio`.
+  //
+  // Con 3 minutos de retraso, a propósito: durante un despliegue el contenedor
+  // VIEJO sigue vivo un rato, y su worker —con las columnas viejas— tomaba las
+  // filas recién reencoladas antes que el nuevo. Pasó el 15-sep-2026: las 13
+  // volvieron a fallar con el SQL roto, y como la huella ya quedó guardada no
+  // se reintentaron solas. Para cuando corre esto, DO ya apagó el viejo.
   .then(() => {
     if (process.env.NODE_ENV === 'test' || !process.env.CORPORATIVO_SHEET_URL) return;
-    return corporativoSheetService
-      .reencolarSiCambiaronColumnas()
-      .then((n) => {
-        if (n > 0) console.log(`📋 [Corporativo-Sheet] Cambiaron las columnas: ${n} valoraciones reencoladas`);
-      })
-      .catch((e) => console.error('⚠️ [corporativo-sheet] no se pudo revisar las columnas:', e?.message ?? e));
+    setTimeout(() => {
+      corporativoSheetService
+        .reencolarSiCambiaronColumnas()
+        .then((n) => {
+          if (n > 0) console.log(`📋 [Corporativo-Sheet] Cambiaron las columnas: ${n} valoraciones reencoladas`);
+        })
+        .catch((e) => console.error('⚠️ [corporativo-sheet] no se pudo revisar las columnas:', e?.message ?? e));
+    }, 3 * 60_000);
   })
   // Padrón de afiliados: un ESPEJO de las historias, no un segundo cuaderno.
   // Sobre `HistoriaClinica` sólo hace SELECT; escribe únicamente en la tabla

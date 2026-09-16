@@ -517,31 +517,16 @@ function DetalleJornada({
     .filter((f): f is { ini: number; fin: number } => f.ini !== null && f.fin !== null);
   const cubierta = (min: number) => franjas.some((f) => min >= f.ini && min <= f.fin);
 
-  // Los tramos se pliegan: un coach que entra y sale seguido puede tener 20 o
-  // más en un día y la lista tapaba las citas, que es lo que se viene a mirar.
-  // Con pocos se abren solos; con muchos hay que pedirlos.
-  const [verTramos, setVerTramos] = useState(tramos.length <= 6);
-
   return (
     <div className="grid gap-5 md:grid-cols-2">
       <div>
-        <button
-          type="button"
-          onClick={() => setVerTramos((v) => !v)}
-          disabled={tramos.length === 0}
-          className="text-[11px] uppercase tracking-[0.06em] text-zinc-500 mb-1.5 flex items-center gap-1 hover:text-zinc-700 disabled:hover:text-zinc-500 disabled:cursor-default"
-          aria-expanded={verTramos}
-        >
-          <span className={`transition-transform ${verTramos ? 'rotate-90' : ''}`}>›</span>
+        {/* La lista va SIEMPRE completa: es la prueba de la jornada y esconderla
+            obligaba a un clic extra justo donde se viene a verificar. */}
+        <div className="text-[11px] uppercase tracking-[0.06em] text-zinc-500 mb-1.5">
           Tramos conectado ({tramos.length})
-        </button>
+        </div>
         {tramos.length === 0 ? (
           <div className="text-[12px] text-zinc-400">No se conectó en todo el día.</div>
-        ) : !verTramos ? (
-          <div className="text-[12px] text-zinc-400">
-            {horaCO(tramos[0].desde)} – {horaCO(tramos[tramos.length - 1].hasta)} · clic para ver
-            los {tramos.length} tramos
-          </div>
         ) : (
           <ul className="space-y-1">
             {tramos.map((t, i) => {

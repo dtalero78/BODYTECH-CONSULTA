@@ -286,7 +286,14 @@ function FilaProfesional({
   const seConecto = p.jornadas > 0;
   const [abierto, setAbierto] = useState(false);
   const tramos = p.tramos ?? [];
-  const citas = p.citas ?? [];
+  // Solo las citas que YA pasaron. Una cita de las 15:40 vista a las 13:00 no
+  // es un incumplimiento: todavía no ocurre. Marcarla en rojo por adelantado
+  // convertía media agenda del día en una acusación falsa.
+  // En un día pasado no se filtra nada: todas ya ocurrieron.
+  const ahora = Date.now();
+  const citas = (p.citas ?? []).filter(
+    (c) => !esHoy || new Date(c.hora).getTime() <= ahora
+  );
   const hayDetalle = tramos.length > 0 || citas.length > 0;
 
   return (

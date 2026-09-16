@@ -166,8 +166,15 @@ class TorniqueteService {
             COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(t.salida_at, t.ultimo_latido_at) - t.entrada_at))), 0)::bigint AS total_seg,
             COUNT(*)::int AS jornadas
           FROM torniquete_jornadas t
+          -- Se busca SOLO por código, no por (código, sede). La jornada se
+          -- estampa con la sede de la SESIÓN, que no siempre es la de la ficha:
+          -- el 16-sep, tres profesionales con ficha en una sede y sesión en otra
+          -- salían como "No se ha conectado" llevando horas trabajadas, y el
+          -- detalle de la franja los mostraba conectados — la pantalla se
+          -- contradecía a sí misma. Ningún código se repite entre sedes
+          -- (verificado), así que no hay riesgo de mezclar a dos personas; el
+          -- alcance por sede lo sigue dando el WHERE de profesionales.
           WHERE t.codigo = p.codigo
-            AND t.sede_id = p.sede_id
             AND t.fecha = COALESCE($3::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
         ) j ON TRUE
         WHERE p.sede_id = ANY($1::text[]) AND p.activo = TRUE`,
@@ -223,10 +230,10 @@ class TorniqueteService {
       const tramos = await postgresService.query(
         `SELECT codigo, entrada_at, COALESCE(salida_at, ultimo_latido_at) AS hasta
            FROM torniquete_jornadas
-          WHERE codigo = ANY($1::text[]) AND sede_id = ANY($2::text[])
-            AND fecha = COALESCE($3::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
+          WHERE codigo = ANY($1::text[])
+            AND fecha = COALESCE($2::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
           ORDER BY entrada_at`,
-        [codigos, sedeIds, fecha]
+        [codigos, fecha]
       );
       for (const t of tramos ?? []) {
         const prof = porCodigo.get(String(t.codigo));

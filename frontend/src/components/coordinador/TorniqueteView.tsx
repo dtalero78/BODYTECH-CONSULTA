@@ -378,6 +378,21 @@ function FilaProfesional({
     {abierto && (
       <tr className="border-b border-zinc-100 bg-zinc-50/70">
         <td colSpan={6} className="px-4 py-3">
+          {/* La sección se abre desde la barra, pero adentro no había con qué
+              cerrarla: quien llegaba scrolleando al detalle no tenía salida a
+              la vista. El botón cierra la misma sección que abrió la barra. */}
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div className="text-[12px] font-medium text-zinc-600">
+              Jornada de {p.nombre} · {p.codigo}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAbierto(false)}
+              className="text-[11px] text-zinc-500 hover:text-zinc-800 border border-zinc-300 rounded px-2 py-0.5 shrink-0"
+            >
+              Cerrar ✕
+            </button>
+          </div>
           <DetalleJornada tramos={tramos} citas={citas} />
         </td>
       </tr>

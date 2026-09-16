@@ -284,7 +284,13 @@ function FilaProfesional({
   foto: string | null;
 }) {
   const seConecto = p.jornadas > 0;
+  const [abierto, setAbierto] = useState(false);
+  const tramos = p.tramos ?? [];
+  const citas = p.citas ?? [];
+  const hayDetalle = tramos.length > 0 || citas.length > 0;
+
   return (
+    <>
     <tr className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50/60">
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2.5">
@@ -344,12 +350,32 @@ function FilaProfesional({
         )}
       </td>
       <td className="px-4 py-2.5 w-[38%] min-w-[220px]">
-        <LineaJornada tramos={p.tramos ?? []} citas={p.citas ?? []} />
+        {hayDetalle ? (
+          <button
+            type="button"
+            onClick={() => setAbierto((v) => !v)}
+            className="w-full text-left cursor-pointer"
+            title={abierto ? 'Ocultar detalle' : 'Ver el detalle de la jornada'}
+            aria-expanded={abierto}
+          >
+            <LineaJornada tramos={tramos} citas={citas} />
+          </button>
+        ) : (
+          <LineaJornada tramos={tramos} citas={citas} />
+        )}
       </td>
       <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-zinc-900" style={{ fontFamily: FONT_MONO }}>
         {duracion(p.minutosConectado)}
       </td>
     </tr>
+    {abierto && (
+      <tr className="border-b border-zinc-100 bg-zinc-50/70">
+        <td colSpan={6} className="px-4 py-3">
+          <DetalleJornada tramos={tramos} citas={citas} />
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 
@@ -443,6 +469,100 @@ function LineaJornada({
         <span>12</span>
         <span>16</span>
         <span>20</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DetalleJornada — la misma franja, pero legible
+//
+// La barra sirve para ver de un vistazo si hay huecos; para reclamarle a alguien
+// (o defenderlo) hacen falta las horas exactas. Acá van los tramos con su hora
+// de inicio, fin y duración, y cada cita con el veredicto: si el coach estaba
+// conectado a esa hora o no.
+// ---------------------------------------------------------------------------
+
+function DetalleJornada({
+  tramos,
+  citas,
+}: {
+  tramos: Array<{ desde: string; hasta: string }>;
+  citas: Array<{ hora: string; paciente: string; atendida: boolean }>;
+}) {
+  const franjas = tramos
+    .map((t) => ({ ini: minutosDesdeInicio(t.desde), fin: minutosDesdeInicio(t.hasta) }))
+    .filter((f): f is { ini: number; fin: number } => f.ini !== null && f.fin !== null);
+  const cubierta = (min: number) => franjas.some((f) => min >= f.ini && min <= f.fin);
+
+  return (
+    <div className="grid gap-5 md:grid-cols-2">
+      <div>
+        <div className="text-[11px] uppercase tracking-[0.06em] text-zinc-500 mb-1.5">
+          Tramos conectado ({tramos.length})
+        </div>
+        {tramos.length === 0 ? (
+          <div className="text-[12px] text-zinc-400">No se conectó en todo el día.</div>
+        ) : (
+          <ul className="space-y-1">
+            {tramos.map((t, i) => {
+              const ini = minutosDesdeInicio(t.desde);
+              const fin = minutosDesdeInicio(t.hasta);
+              const mins = ini !== null && fin !== null ? Math.max(0, Math.round(fin - ini)) : 0;
+              return (
+                <li
+                  key={`d${i}`}
+                  className="flex items-center gap-2 text-[12px] text-zinc-700 tabular-nums"
+                  style={{ fontFamily: FONT_MONO }}
+                >
+                  <span className="inline-block w-2 h-2 rounded-sm bg-emerald-400/80 shrink-0" />
+                  <span>
+                    {horaCO(t.desde)} – {horaCO(t.hasta)}
+                  </span>
+                  <span className="text-zinc-400">
+                    ({mins < 1 ? 'menos de 1 min' : duracion(mins)})
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div>
+        <div className="text-[11px] uppercase tracking-[0.06em] text-zinc-500 mb-1.5">
+          Citas del día ({citas.length})
+        </div>
+        {citas.length === 0 ? (
+          <div className="text-[12px] text-zinc-400">Sin citas agendadas.</div>
+        ) : (
+          <ul className="space-y-1">
+            {citas.map((c, i) => {
+              const min = minutosDesdeInicio(c.hora);
+              const ok = c.atendida || (min !== null && cubierta(min));
+              return (
+                <li key={`q${i}`} className="flex items-start gap-2 text-[12px]">
+                  <span
+                    className={`inline-block w-2 h-2 rounded-sm shrink-0 mt-1 ${
+                      ok ? 'bg-zinc-400' : 'bg-red-500'
+                    }`}
+                  />
+                  <span className="tabular-nums text-zinc-700" style={{ fontFamily: FONT_MONO }}>
+                    {horaCO(c.hora)}
+                  </span>
+                  <span className="text-zinc-700 truncate">{c.paciente || 'Sin nombre'}</span>
+                  <span className={ok ? 'text-zinc-400' : 'text-red-600 font-medium'}>
+                    {c.atendida
+                      ? '· atendida'
+                      : ok
+                        ? '· estaba conectado'
+                        : '· NO estaba conectado'}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );

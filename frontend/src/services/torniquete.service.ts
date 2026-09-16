@@ -29,6 +29,10 @@ export interface BoardProfesional {
   ultimaSalida: string | null;
   minutosConectado: number;
   jornadas: number;
+  /** Franjas reales de conexión del día (el total dice cuánto; esto, cuándo). */
+  tramos?: Array<{ desde: string; hasta: string }>;
+  /** Citas del día, para ver cuáles cayeron en un hueco sin coach. */
+  citas?: Array<{ hora: string; paciente: string; atendida: boolean }>;
 }
 
 export interface BoardResult {

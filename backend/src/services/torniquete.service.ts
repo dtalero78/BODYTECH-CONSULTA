@@ -45,6 +45,17 @@ export interface BoardProfesional {
   minutosConectado: number;
   /** Nº de tramos de conexión del día. */
   jornadas: number;
+  /**
+   * Franjas reales de conexión del día. El total de minutos dice CUÁNTO estuvo;
+   * esto dice CUÁNDO — que es lo que hace falta para contestar "¿estaba el coach
+   * cuando entró el afiliado?". El tablero colapsaba el día en primera entrada,
+   * última salida y total, así que un hueco de una hora en mitad de la jornada
+   * era invisible (16-sep-2026: una afiliada esperó sola su cita de las 9:40
+   * dentro de un hueco de 09:01 a 10:06).
+   */
+  tramos: Array<{ desde: string; hasta: string }>;
+  /** Citas del día de ese profesional, para ver cuáles cayeron en un hueco. */
+  citas: Array<{ hora: string; paciente: string; atendida: boolean }>;
 }
 
 export interface BoardResult {
@@ -184,6 +195,8 @@ class TorniqueteService {
         ultimaSalida: r.ultima_salida ? this.tsToIso(r.ultima_salida) : null,
         minutosConectado: Math.round(totalSeg / 60),
         jornadas,
+        tramos: [],
+        citas: [],
       };
     });
 
@@ -199,6 +212,54 @@ class TorniqueteService {
       }
       return a.nombre.localeCompare(b.nombre);
     });
+
+    // Tramos y citas van en consultas aparte (una fila por tramo / por cita) en
+    // vez de agregarse en el LATERAL: el LATERAL ya devuelve UNA fila por
+    // profesional y meterle arrays lo volvería ilegible.
+    const codigos = profesionales.map((p) => p.codigo);
+    if (codigos.length > 0) {
+      const porCodigo = new Map(profesionales.map((p) => [p.codigo, p]));
+
+      const tramos = await postgresService.query(
+        `SELECT codigo, entrada_at, COALESCE(salida_at, ultimo_latido_at) AS hasta
+           FROM torniquete_jornadas
+          WHERE codigo = ANY($1::text[]) AND sede_id = ANY($2::text[])
+            AND fecha = COALESCE($3::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
+          ORDER BY entrada_at`,
+        [codigos, sedeIds, fecha]
+      );
+      for (const t of tramos ?? []) {
+        const prof = porCodigo.get(String(t.codigo));
+        if (prof) prof.tramos.push({ desde: this.tsToIso(t.entrada_at), hasta: this.tsToIso(t.hasta) });
+      }
+
+      // Guarda regex antes del ::timestamptz: `fechaAtencion` es TEXT y una fila
+      // mal formada abortaría la consulta del día entero (mismo criterio que
+      // link-auto.getCandidatas).
+      const citas = await postgresService.query(
+        `SELECT "medico" AS codigo,
+                ("fechaAtencion"::timestamptz) AS hora,
+                COALESCE("primerNombre",'') || ' ' || COALESCE("primerApellido",'') AS paciente,
+                ("fechaConsulta" IS NOT NULL) AS atendida
+           FROM "HistoriaClinica"
+          WHERE "medico" = ANY($1::text[])
+            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            AND (("fechaAtencion"::timestamptz) AT TIME ZONE 'America/Bogota')::date
+                = COALESCE($2::date, (NOW() AT TIME ZONE 'America/Bogota')::date)
+          ORDER BY 2`,
+        [codigos, fecha]
+      );
+      for (const c of citas ?? []) {
+        const prof = porCodigo.get(String(c.codigo));
+        if (prof) {
+          prof.citas.push({
+            hora: this.tsToIso(c.hora),
+            paciente: String(c.paciente || '').trim(),
+            atendida: c.atendida === true,
+          });
+        }
+      }
+    }
 
     const ahoraEnLinea = profesionales.filter((p) => p.enLinea).length;
     return { fecha: fechaRef, sedeIds, ahoraEnLinea, profesionales };

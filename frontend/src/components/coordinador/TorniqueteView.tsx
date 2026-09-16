@@ -235,19 +235,20 @@ export function TorniqueteView({ showToast }: Props) {
                 <th className="text-left font-semibold px-4 py-2.5">Estado</th>
                 <th className="text-right font-semibold px-4 py-2.5">Entrada</th>
                 <th className="text-right font-semibold px-4 py-2.5">Salida</th>
+                <th className="text-left font-semibold px-4 py-2.5">Jornada (05:00 – 20:00)</th>
                 <th className="text-right font-semibold px-4 py-2.5">Conectado hoy</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
                     Cargando…
                   </td>
                 </tr>
               ) : profs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
                     No hay profesionales activos en la(s) sede(s) seleccionada(s).
                   </td>
                 </tr>
@@ -342,10 +343,108 @@ function FilaProfesional({
           '—'
         )}
       </td>
+      <td className="px-4 py-2.5 w-[38%] min-w-[220px]">
+        <LineaJornada tramos={p.tramos ?? []} citas={p.citas ?? []} />
+      </td>
       <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-zinc-900" style={{ fontFamily: FONT_MONO }}>
         {duracion(p.minutosConectado)}
       </td>
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LineaJornada — cuándo estuvo conectado, y dónde caen sus citas
+//
+// El total de minutos dice CUÁNTO estuvo; esto dice CUÁNDO. Es la diferencia
+// entre "trabajó 1h 26m" y "no estaba a las 9:40, que es cuando su afiliada
+// entró a esperarlo". Una cita fuera de toda franja se pinta en rojo: es
+// exactamente el caso que hay que poder ver de un vistazo.
+// ---------------------------------------------------------------------------
+
+const HORA_INI = 5;  // 05:00
+const HORA_FIN = 20; // 20:00
+const MIN_TOTAL = (HORA_FIN - HORA_INI) * 60;
+
+/** Minutos desde las 05:00 en hora Colombia; null si cae fuera de la ventana. */
+function minutosDesdeInicio(iso: string): number | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const partes = new Intl.DateTimeFormat('es-CO', {
+    timeZone: 'America/Bogota',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const h = Number(partes.find((x) => x.type === 'hour')?.value ?? NaN);
+  const m = Number(partes.find((x) => x.type === 'minute')?.value ?? NaN);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return (h - HORA_INI) * 60 + m;
+}
+
+const pct = (min: number) => Math.max(0, Math.min(100, (min / MIN_TOTAL) * 100));
+
+function LineaJornada({
+  tramos,
+  citas,
+}: {
+  tramos: Array<{ desde: string; hasta: string }>;
+  citas: Array<{ hora: string; paciente: string; atendida: boolean }>;
+}) {
+  if (tramos.length === 0 && citas.length === 0) {
+    return <span className="text-zinc-300 text-[12px]">—</span>;
+  }
+
+  const franjas = tramos
+    .map((t) => ({ ini: minutosDesdeInicio(t.desde), fin: minutosDesdeInicio(t.hasta) }))
+    .filter((f): f is { ini: number; fin: number } => f.ini !== null && f.fin !== null);
+
+  /** ¿La cita cayó dentro de alguna franja de conexión? */
+  const cubierta = (min: number) => franjas.some((f) => min >= f.ini && min <= f.fin);
+
+  return (
+    <div>
+      <div className="relative h-5 rounded bg-zinc-100 overflow-hidden">
+        {franjas.map((f, i) => (
+          <div
+            key={`t${i}`}
+            className="absolute top-0 bottom-0 bg-emerald-400/70"
+            style={{ left: `${pct(f.ini)}%`, width: `${Math.max(0.6, pct(f.fin) - pct(f.ini))}%` }}
+          />
+        ))}
+        {citas.map((c, i) => {
+          const min = minutosDesdeInicio(c.hora);
+          if (min === null) return null;
+          const ok = c.atendida || cubierta(min);
+          const hora = new Intl.DateTimeFormat('es-CO', {
+            timeZone: 'America/Bogota',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }).format(new Date(c.hora));
+          return (
+            <div
+              key={`c${i}`}
+              title={`${hora} · ${c.paciente}${
+                c.atendida ? ' · atendida' : ok ? '' : ' · el coach NO estaba conectado'
+              }`}
+              className={`absolute top-0 bottom-0 w-[2px] ${ok ? 'bg-zinc-500/60' : 'bg-red-500'}`}
+              style={{ left: `${pct(min)}%` }}
+            />
+          );
+        })}
+      </div>
+      <div
+        className="flex justify-between text-[9px] text-zinc-400 mt-0.5 tabular-nums"
+        style={{ fontFamily: FONT_MONO }}
+      >
+        <span>05</span>
+        <span>09</span>
+        <span>12</span>
+        <span>16</span>
+        <span>20</span>
+      </div>
+    </div>
   );
 }
 

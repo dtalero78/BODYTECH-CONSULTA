@@ -8,10 +8,13 @@
 // un tenant ahí). Estos endpoints son un PROXY a la API de la plataforma
 // (`/api/irischat/*`) — ver bsl-plataforma-chat.service. NO hay webhook inbound
 // aquí: Twilio apunta a mediconecta.bodytech.app y no se debe repointar.
+//
+// Con Athletic encendido, el hilo junta los dos números (cada mensaje dice su
+// `marca`) y la respuesta sale por el número al que el paciente escribió.
 // ============================================================================
 
 import { Request, Response } from 'express';
-import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
+import { mensajesDelPaciente, responderAlPaciente } from '../services/bsl-plataforma-chat.service';
 
 class WhatsappChatController {
   /** GET /mensajes?celular=... → hilo de la conversación. */
@@ -22,7 +25,7 @@ class WhatsappChatController {
         res.status(400).json({ success: false, error: 'celular requerido' });
         return;
       }
-      const data = await bslPlataformaChatService.getMensajes(celular);
+      const data = await mensajesDelPaciente(celular);
       res.status(200).json({ success: true, celular: data.celular, mensajes: data.mensajes });
     } catch (error: any) {
       console.error('[WA-Chat] getMensajes error:', error?.message ?? error);
@@ -38,7 +41,7 @@ class WhatsappChatController {
         res.status(400).json({ success: false, error: 'celular y texto requeridos' });
         return;
       }
-      const mensaje = await bslPlataformaChatService.sendReply(celular, texto.trim());
+      const mensaje = await responderAlPaciente(celular, texto.trim());
       if (!mensaje) {
         res.status(422).json({
           success: false,

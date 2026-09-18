@@ -25,7 +25,9 @@
 import whatsappService from './whatsapp.service';
 import postgresService from './postgres.service';
 import trepsiWebhookService from './trepsi-webhook.service';
-import bslPlataformaChatService from './bsl-plataforma-chat.service';
+import { plataformaDe } from './bsl-plataforma-chat.service';
+import { marcaDeEnvioParaHistoria } from './marca.service';
+import { Marca, whatsappFromDeMarca } from '../helpers/marca.helper';
 
 /** SID por defecto de la plantilla de cita (bodytech_cita_v2, 2 botones). */
 const TEMPLATE_CITA_FALLBACK = 'HX83c2dd7da8954757ee34a310d4f17e62';
@@ -285,6 +287,8 @@ export interface EnviarLinkResult {
   error?: string;
   messageSid?: string;
   via: 'plataforma' | 'twilio' | 'ninguno';
+  /** Por qué número salió: el de Bodytech o el de Athletic (ver marca.helper). */
+  marca?: Marca;
 }
 
 export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLinkResult> {
@@ -299,10 +303,12 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
     usarPlataforma = true,
   } = i;
 
-  // Se intenta primero POR la plataforma (mismo Twilio del tenant BODYTECH →
-  // +5716284820) para que el mensaje quede en el hilo del chat. Si la
-  // plataforma falla, cae al envío directo por Twilio: el paciente igual
-  // recibe, aunque no quede registrado en el chat.
+  // Se intenta primero POR la plataforma, en el tenant de la marca del paciente
+  // (BODYTECH → +5716284820, ATHLETIC → +15055871860), para que el mensaje quede
+  // en el hilo del chat. Si la plataforma falla, cae al envío directo por
+  // Twilio DESDE EL MISMO NÚMERO: el paciente igual recibe, aunque no quede
+  // registrado en el chat. La plantilla es la misma para las dos marcas.
+  const marca = await marcaDeEnvioParaHistoria(historiaId);
   const templateSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID || TEMPLATE_CITA_FALLBACK;
   const variables: Record<string, string> = {
     '1': patientName,
@@ -314,20 +320,21 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
 
   let result: EnviarLinkResult;
   const viaPlataforma = usarPlataforma
-    ? await bslPlataformaChatService.enviarPlantilla(phoneWithPlus, templateSid, variables)
+    ? await plataformaDe(marca).enviarPlantilla(phoneWithPlus, templateSid, variables)
     : false;
 
   if (viaPlataforma) {
-    result = { success: true, via: 'plataforma' };
+    result = { success: true, via: 'plataforma', marca };
   } else {
     const r = await whatsappService.sendTemplateMessage(
       phone,
       roomNameWithParams,
       patientName,
       appointmentTime,
-      historiaId
+      historiaId,
+      whatsappFromDeMarca(marca)
     );
-    result = { ...r, via: r.success ? 'twilio' : 'ninguno' };
+    result = { ...r, via: r.success ? 'twilio' : 'ninguno', marca };
   }
 
   if (!result.success) return result;
@@ -376,17 +383,18 @@ export async function enviarRecordatorioPaciente(i: {
     '3': i.historiaId, // botón Reprogramar → /reprogramar/{{3}}
   };
   const phoneWithPlus = i.phone.startsWith('+') ? i.phone : `+${i.phone}`;
+  const marca = await marcaDeEnvioParaHistoria(i.historiaId);
 
   let result: EnviarLinkResult;
   const viaPlataforma =
     i.usarPlataforma === false
       ? false
-      : await bslPlataformaChatService.enviarPlantilla(phoneWithPlus, templateSid, variables);
+      : await plataformaDe(marca).enviarPlantilla(phoneWithPlus, templateSid, variables);
   if (viaPlataforma) {
-    result = { success: true, via: 'plataforma' };
+    result = { success: true, via: 'plataforma', marca };
   } else {
-    const r = await whatsappService.sendContentTemplate(i.phone, templateSid, variables);
-    result = { ...r, via: r.success ? 'twilio' : 'ninguno' };
+    const r = await whatsappService.sendContentTemplate(i.phone, templateSid, variables, whatsappFromDeMarca(marca));
+    result = { ...r, via: r.success ? 'twilio' : 'ninguno', marca };
   }
   if (!result.success) return result;
 

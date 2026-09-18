@@ -9,6 +9,7 @@
 //   GET  /mes?year=&month=&medico=     → conteos por día del mes
 //   GET  /dia?fecha=&medico=           → citas del día + resumen por médico
 //   GET  /indicadores?from=&to=&medico= → KPIs (agendadas/atendidas/no contactadas)
+//   GET  /no-contesta-auditoria?from=&to=&medico= → "No contesta" con el paciente en la sala
 //   GET  /horarios-disponibles?fecha=&profesionalId=&modalidad=
 //   GET  /disponibilidad-dia?fecha=&modalidad=   → disponibilidad de todos los profesionales ese día
 //   GET  /disponibilidad-mes?year=&month=&modalidad= → overrides por día del mes
@@ -33,6 +34,7 @@ router.get('/indicadores', operativo, calendarioController.getIndicadores);
 router.get('/indicadores-eventos', operativo, calendarioController.getIndicadoresEventos);
 router.get('/tiempos-atencion', operativo, calendarioController.getTiemposAtencion);
 router.get('/no-contacto', operativo, calendarioController.getNoContacto);
+router.get('/no-contesta-auditoria', operativo, calendarioController.getNoContestaAuditoria);
 router.get('/horarios-disponibles', horarios, calendarioController.getHorariosDisponibles);
 router.get('/disponibilidad-dia', operativo, calendarioController.getDisponibilidadDia);
 router.get('/disponibilidad-mes', operativo, calendarioController.getDisponibilidadMes);

@@ -21,6 +21,7 @@ import {
   FileSpreadsheet,
   ScanText,
   LayoutDashboard,
+  PhoneOff,
 } from 'lucide-react';
 import authService from '../services/auth.service';
 import bodyvibeService from '../services/bodyvibe.service';
@@ -29,6 +30,7 @@ import panelesService from '../services/paneles.service';
 import { CalendarioView } from '../components/coordinador/CalendarioView';
 import { OrdenesView } from '../components/coordinador/OrdenesView';
 import { IndicadoresView } from '../components/coordinador/IndicadoresView';
+import { NoContestaAuditoriaView } from '../components/coordinador/NoContestaAuditoriaView';
 import { TorniqueteView } from '../components/coordinador/TorniqueteView';
 import { UsuariosPanelView } from '../components/coordinador/UsuariosPanelView';
 import { DirectorioView } from '../components/coordinador/DirectorioView';
@@ -49,6 +51,7 @@ type View =
   | 'identidades'
   | 'empresas'
   | 'indicadores'
+  | 'noContesta'
   | 'directorio';
 
 interface NavBadge {
@@ -72,6 +75,7 @@ export function CoordinadorPage() {
     ordenes: undefined,
     digitalizar: undefined,
     indicadores: undefined,
+    noContesta: undefined,
     directorio: undefined,
     identidades: undefined,
     empresas: undefined,
@@ -304,6 +308,14 @@ export function CoordinadorPage() {
               onClick={() => setView('indicadores')}
               badge={badges.indicadores}
             />
+            {/* "No contesta" cruzado con la sala: en cuántos el paciente sí
+                entró y el coach no. Mismo alcance que Indicadores. */}
+            <NavItem
+              icon={<PhoneOff className="w-[15px] h-[15px]" />}
+              label="Auditoría No contesta"
+              active={view === 'noContesta'}
+              onClick={() => setView('noContesta')}
+            />
             {/* Sin lista de permitidos: la hoja está compartida como "cualquiera
                 con el enlace" (decisión de Daniel, 9-sep-2026), así que todo el
                 que llega al panel puede abrirla. Si algún día se vuelve a
@@ -451,6 +463,9 @@ export function CoordinadorPage() {
           )}
           {view === 'indicadores' && (
             <IndicadoresView key={`ind-${reloadKey}`} showToast={showToast} />
+          )}
+          {view === 'noContesta' && (
+            <NoContestaAuditoriaView key={`nca-${reloadKey}`} showToast={showToast} />
           )}
 
           {view === 'directorio' && isDirectorioUser && (

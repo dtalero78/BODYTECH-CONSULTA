@@ -185,6 +185,50 @@ export interface TiempoAtencion {
   hora_atendida: string | null;
 }
 
+// Auditoría de "No contesta": citas marcadas "No contesta" en las que el
+// paciente SÍ entró a la sala y el coach nunca abrió la consulta.
+//   en_sala = entró antes de que lo marcaran · despues = llegó a tiempo pero
+//   ya estaba marcado · tarde = llegó más de 15 min después de la hora.
+export type LlegadaPaciente = 'en_sala' | 'despues' | 'tarde';
+
+export interface CasoEspera {
+  historiaId: string;
+  medicoCodigo: string;
+  paciente: string;
+  cita: string;
+  pacienteEntro: string;
+  marcado: string | null;
+  llegada: LlegadaPaciente;
+  atendiaOtro: boolean;
+  llamo: boolean;
+}
+
+export interface AuditoriaCoach {
+  medicoCodigo: string;
+  nombre: string;
+  citas: number;
+  noContesta: number;
+  llamadosAntes: number;
+  casos: number;
+  enSala: number;
+  atendiaOtro: number;
+}
+
+export interface AuditoriaNoContesta {
+  from: string;
+  to: string;
+  citas: number;
+  noContesta: number;
+  llamadosAntes: number;
+  casos: number;
+  enSala: number;
+  despues: number;
+  tarde: number;
+  atendiaOtro: number;
+  porCoach: AuditoriaCoach[];
+  casosDetalle: CasoEspera[];
+}
+
 class CalendarioService {
   // `signal` permite abortar la petición cuando el usuario cambia de filtro
   // antes de que llegue la respuesta anterior (ver reloadMes en CalendarioView).
@@ -244,6 +288,22 @@ class CalendarioService {
       { headers: authHeaders() }
     );
     return res.data?.data?.items ?? [];
+  }
+
+  async getNoContestaAuditoria(
+    from: string,
+    to: string,
+    medico?: string,
+    sedes?: string[]
+  ): Promise<AuditoriaNoContesta> {
+    const params = new URLSearchParams({ from, to });
+    if (medico) params.set('medico', medico);
+    if (sedes && sedes.length > 0) params.set('sedes', sedes.join(','));
+    const res = await axios.get(
+      `${API_BASE_URL}/api/calendario/no-contesta-auditoria?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data?.data;
   }
 
   async getIndicadoresEventos(

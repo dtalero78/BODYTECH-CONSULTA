@@ -761,7 +761,7 @@ function NoContactoDetail({
 // KpiCard
 // ---------------------------------------------------------------------------
 
-function KpiCard({
+export function KpiCard({
   label,
   value,
   caption,
@@ -826,7 +826,7 @@ function KpiCard({
 // DateField
 // ---------------------------------------------------------------------------
 
-function DateField({
+export function DateField({
   label,
   value,
   min,
@@ -918,7 +918,7 @@ function FilterSelect({
 // SedeMultiSelect (copia local del filtro del calendario)
 // ---------------------------------------------------------------------------
 
-function SedeMultiSelect({
+export function SedeMultiSelect({
   sedes,
   value,
   onChange,

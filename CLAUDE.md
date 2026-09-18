@@ -274,6 +274,14 @@ El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos 
 
 Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=` (bitácora por tipo). El dry-run no escribe nada y dice a quién le llegaría; con `historiaId` el tipo `link` ignora la ventana de minutos ("mandáselo ya"). Ambos apagados por defecto (`LINK_AUTO_ENABLED`, `RECORDATORIO_ENABLED`).
 
+### Auditoría No contesta (panel Coordinador → ANÁLISIS)
+
+"No contesta" lo marca el coach a mano y nada lo contrastaba con la sala. Al cruzarlo el 18-sep-2026: en 53 de 234 "No contesta" (5–18 sep) **el paciente sí entró a la videollamada y el coach nunca abrió la consulta**; en 34 el paciente ya estaba cuando lo marcaron, y solo 25 de los 234 tuvieron una llamada con el botón antes de marcarse. La pantalla **Auditoría No contesta** ([NoContestaAuditoriaView.tsx](frontend/src/components/coordinador/NoContestaAuditoriaView.tsx), `GET /api/calendario/no-contesta-auditoria`, [no-contesta-auditoria.service.ts](backend/src/services/no-contesta-auditoria.service.ts)) lo muestra por rango de fechas y por coach, con los casos y export a Excel.
+
+- **Tres señales**: el paciente entró = `client_diag` `session-info` con role `patient` (existe desde el 19-ago-2026; por eso el filtro no deja fechas anteriores); el coach entró = fila en `room_historia_map` para esa historia; la hora de la marca = `audit_log` acción `no_contesta`.
+- **Un caso exige que el coach NUNCA haya entrado.** "Ya estaba al marcar" = entró antes del clic; "Llegó después" = hasta 15 min después de la hora pero ya marcado. No mide cuánto esperó el paciente, solo que llegó. La clasificación es una función pura (`clasificarLlegada`/`resumirAuditoria`) con test.
+- Excluye Médico Corporativo (presencial) y Trepsi canceladas; solo citas cuya hora ya pasó. Los CTE van `MATERIALIZED` a propósito: sin eso el planificador repetía el cruce salas × entradas por cita (12 s → 0,4 s).
+
 ### Athletic: el mismo WhatsApp, desde otro número
 
 Athletic es una marca de Bodytech: mismos coaches, panel y citas. Lo único que cambia para el paciente es **quién le escribe**: a uno de Athletic le tiene que llegar el WhatsApp desde el número de Athletic (**+1 505 587-1860**, sender `XE5e6ee355b819e271d9e96c5ef18d7d03`, misma WABA que Bodytech), no desde el de Bodytech. Código en [marca.helper.ts](backend/src/helpers/marca.helper.ts).

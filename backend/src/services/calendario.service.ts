@@ -33,7 +33,7 @@ const TREPSI_FALLBACK_SEDE = 'bsl';
 // `sedes`, así que no pasaban ningún filtro y eran invisibles para el coordinador
 // (2 citas del 31-ago-2026 confirmadas ausentes del panel del día).
 // Asume que la tabla en la query se llama "HistoriaClinica" (sin alias).
-const EFFECTIVE_SEDE_SQL = `
+export const EFFECTIVE_SEDE_SQL = `
   CASE WHEN "HistoriaClinica"."sede_id" IN ('trepsi', 'mybodytech')
        THEN COALESCE(
               (SELECT p.sede_id FROM profesionales p
@@ -107,7 +107,7 @@ function getMonthRange(year: number, month1Indexed: number): { startUtc: string;
  * [from, to] (ambos YYYY-MM-DD, inclusivos) en hora Colombia. `to` cubre el día
  * completo (fin exclusivo = medianoche del día siguiente a `to`, hora Colombia).
  */
-function getRangeUtc(from: string, to: string): { startUtc: string; endUtc: string } {
+export function getRangeUtc(from: string, to: string): { startUtc: string; endUtc: string } {
   const mf = from.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const mt = to.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!mf) throw new Error(`Fecha inválida: ${from}. Esperado YYYY-MM-DD.`);

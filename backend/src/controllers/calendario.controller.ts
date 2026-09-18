@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import calendarioService from '../services/calendario.service';
+import noContestaAuditoriaService from '../services/no-contesta-auditoria.service';
 import auditService from '../services/audit.service';
 import disponibilidadFechaService from '../services/disponibilidad-fecha.service';
 import postgresService from '../services/postgres.service';
@@ -206,6 +207,33 @@ class CalendarioController {
       }
       const filas = await calendarioService.getTiemposAtencion(from, to, sedes);
       res.status(200).json({ success: true, data: { desde: from, hasta: to, filas } });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Auditoría de "No contesta": en cuántos el paciente SÍ entró a la sala y el
+  // coach nunca abrió la consulta. Ver no-contesta-auditoria.service.
+  getNoContestaAuditoria = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sedes = await resolveSedes(req);
+      const from = typeof req.query.from === 'string' ? req.query.from : '';
+      const to = typeof req.query.to === 'string' ? req.query.to : '';
+      const medico =
+        typeof req.query.medico === 'string' && req.query.medico ? req.query.medico : undefined;
+      if (!from || !to) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PARAMS', message: 'from y to son requeridos (YYYY-MM-DD).' },
+        });
+        return;
+      }
+      const result = await noContestaAuditoriaService.getAuditoria(from, to, sedes, medico);
+      if (!result.ok) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.status(200).json({ success: true, data: result.data });
     } catch (err) {
       next(err);
     }

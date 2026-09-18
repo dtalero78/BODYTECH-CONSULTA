@@ -11,7 +11,7 @@
 //   noContactadas = estado NO CONTESTA
 // ============================================================================
 
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment, ReactNode } from 'react';
 import { BarraVista, ColumnaVista } from '../vistas/BarraVista';
 import { Anclaje } from '../bodyvibe/Anclaje';
 import { ChevronDown, ChevronRight, X, Download, LineChart, Users } from 'lucide-react';
@@ -31,6 +31,7 @@ import {
   initialsOf,
   avatarFotoFor,
 } from './_tokens';
+import { Ayuda } from './Ayuda';
 
 interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
@@ -769,6 +770,7 @@ export function KpiCard({
   accent,
   unavailable = false,
   title,
+  ayuda,
 }: {
   label: string;
   value: number;
@@ -779,6 +781,8 @@ export function KpiCard({
   unavailable?: boolean;
   /** Tooltip sobre la etiqueta (marca un ° al lado). */
   title?: string;
+  /** Explicación del concepto: un ⓘ al lado de la etiqueta. */
+  ayuda?: ReactNode;
 }) {
   const dot =
     accent === 'green'
@@ -808,6 +812,7 @@ export function KpiCard({
           {label}
           {title && <span className="text-zinc-400 cursor-help"> °</span>}
         </span>
+        {ayuda && <Ayuda texto={ayuda} />}
       </div>
       <div
         className={`mt-2 text-[34px] font-semibold tabular-nums leading-none ${valCls}`}

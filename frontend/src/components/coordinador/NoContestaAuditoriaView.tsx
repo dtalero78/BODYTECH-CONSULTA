@@ -8,7 +8,7 @@
 // Fuente: GET /api/calendario/no-contesta-auditoria (no-contesta-auditoria.service).
 // ============================================================================
 
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment, ReactNode } from 'react';
 import { ChevronRight, Download, PhoneOff } from 'lucide-react';
 import calendarioService, {
   AuditoriaNoContesta,
@@ -25,6 +25,7 @@ import {
   MonoAvatar,
   initialsOf,
 } from './_tokens';
+import { Ayuda } from './Ayuda';
 
 interface Props {
   showToast: (t: { type: 'success' | 'error'; message: string }) => void;
@@ -108,11 +109,76 @@ function fecha(iso: string): string {
   });
 }
 
-const LLEGADA: Record<LlegadaPaciente, { texto: string; cls: string }> = {
-  en_sala: { texto: 'Ya estaba en la sala', cls: 'bg-red-50 text-red-700 border-red-200' },
-  despues: { texto: 'Llegó después de la marca', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-  tarde: { texto: 'Llegó tarde (+15 min)', cls: 'bg-zinc-50 text-zinc-500 border-zinc-200' },
+// Qué significa cada concepto. Un solo lugar para el texto: lo usan las
+// tarjetas, los encabezados de la tabla y la lista de casos, y dos copias
+// terminan diciendo cosas distintas.
+const AYUDA = {
+  citas:
+    'Citas del coach en el rango cuya hora ya pasó. No cuenta Médico Corporativo (es presencial) ni citas Trepsi canceladas.',
+  noContesta:
+    'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció.',
+  pacienteEnSala:
+    'El paciente abrió el link y entró a la sala de video, pero el coach nunca abrió esa consulta. Aun así, la cita quedó como «No contesta».',
+  yaEstaba:
+    'El caso más claro: el paciente ya había entrado a la sala cuando el coach hizo clic en «No contesta». Llegó y nadie lo atendió.',
+  atendiaOtro:
+    'A esa hora el coach estaba en otra consulta: abrió otra entre 25 minutos antes de la cita y el momento de la marca. Suele indicar que se le cruzó la agenda.',
+  llamo:
+    'El coach usó el botón «Llamar» antes de marcar «No contesta». Lo esperado es llamar siempre antes de marcar.',
+  entro:
+    'Hora en que el paciente se conectó a la sala de video. No dice cuánto tiempo se quedó esperando.',
+  marco: 'Hora en que el coach hizo clic en «No contesta».',
 };
+
+const LLEGADA: Record<LlegadaPaciente, { texto: string; cls: string; ayuda: string }> = {
+  en_sala: {
+    texto: 'Ya estaba en la sala',
+    cls: 'bg-red-50 text-red-700 border-red-200',
+    ayuda: 'Entró a la sala antes de que el coach marcara «No contesta».',
+  },
+  despues: {
+    texto: 'Llegó después de la marca',
+    cls: 'bg-amber-50 text-amber-700 border-amber-200',
+    ayuda: 'Entró hasta 15 minutos después de la hora de la cita, pero el coach ya lo había marcado «No contesta».',
+  },
+  tarde: {
+    texto: 'Llegó tarde (+15 min)',
+    cls: 'bg-zinc-50 text-zinc-500 border-zinc-200',
+    ayuda: 'Entró más de 15 minutos después de la hora de la cita.',
+  },
+};
+
+const AYUDA_QUE_PASO: ReactNode = (
+  <div className="space-y-1.5">
+    {(Object.keys(LLEGADA) as LlegadaPaciente[]).map((k) => (
+      <div key={k}>
+        <b>{LLEGADA[k].texto}:</b> {LLEGADA[k].ayuda.charAt(0).toLowerCase() + LLEGADA[k].ayuda.slice(1)}
+      </div>
+    ))}
+  </div>
+);
+
+/** Encabezado de tabla con su ⓘ. */
+function Th({
+  children,
+  ayuda,
+  alinear = 'left',
+  className = 'px-4 py-2.5',
+}: {
+  children: ReactNode;
+  ayuda?: ReactNode;
+  alinear?: 'left' | 'right';
+  className?: string;
+}) {
+  return (
+    <th className={`font-semibold ${className} ${alinear === 'right' ? 'text-right' : 'text-left'}`}>
+      <span className={`inline-flex items-center gap-1 ${alinear === 'right' ? 'justify-end' : ''}`}>
+        {children}
+        {ayuda && <Ayuda texto={ayuda} />}
+      </span>
+    </th>
+  );
+}
 
 export function NoContestaAuditoriaView({ showToast }: Props) {
   const [{ from, to }, setRango] = useState(() => rangoDe('30d'));
@@ -289,6 +355,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${pct(data.noContesta, data.citas)} de ${data.citas} citas` : undefined}
             loading={loading}
             accent="amber"
+            ayuda={`${AYUDA.noContesta} El porcentaje es sobre todas las citas del rango.`}
           />
           <KpiCard
             label="Paciente en sala"
@@ -296,7 +363,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${pct(data.casos, data.noContesta)} de los No contesta` : undefined}
             loading={loading}
             accent="red"
-            title="El paciente entró a la sala de video y el coach nunca abrió la consulta de esa cita."
+            ayuda={`${AYUDA.pacienteEnSala} El porcentaje es sobre los «No contesta».`}
           />
           <KpiCard
             label="Ya estaba al marcar"
@@ -304,7 +371,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${data.despues} llegaron después · ${data.tarde} tarde` : undefined}
             loading={loading}
             accent="red"
-            title="De los anteriores: el paciente entró a la sala ANTES de que el coach marcara «No contesta»."
+            ayuda={AYUDA.yaEstaba}
           />
           <KpiCard
             label="Atendía a otro"
@@ -312,7 +379,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${pct(data.atendiaOtro, data.casos)} de los casos` : undefined}
             loading={loading}
             accent="zinc"
-            title="El coach abrió otra consulta entre 25 minutos antes de la cita y la marca: se le cruzó la agenda."
+            ayuda={AYUDA.atendiaOtro}
           />
           <KpiCard
             label="Llamados antes de marcar"
@@ -320,7 +387,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${pct(data.llamadosAntes, data.noContesta)} de los No contesta` : undefined}
             loading={loading}
             accent="ink"
-            title="«No contesta» en los que el coach usó el botón «Llamar» antes de marcar."
+            ayuda={AYUDA.llamo}
           />
         </div>
       </div>
@@ -335,13 +402,13 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 text-[11px] uppercase tracking-[0.06em]">
-                <th className="font-semibold px-4 py-2.5 text-left">Coach</th>
-                <th className="font-semibold px-4 py-2.5 text-right">Citas</th>
-                <th className="font-semibold px-4 py-2.5 text-right">No contesta</th>
-                <th className="font-semibold px-4 py-2.5 text-right">Paciente en sala</th>
-                <th className="font-semibold px-4 py-2.5 text-right">Ya estaba al marcar</th>
-                <th className="font-semibold px-4 py-2.5 text-right">Atendía a otro</th>
-                <th className="font-semibold px-4 py-2.5 text-right">Llamó antes</th>
+                <Th>Coach</Th>
+                <Th alinear="right" ayuda={AYUDA.citas}>Citas</Th>
+                <Th alinear="right" ayuda={AYUDA.noContesta}>No contesta</Th>
+                <Th alinear="right" ayuda={AYUDA.pacienteEnSala}>Paciente en sala</Th>
+                <Th alinear="right" ayuda={AYUDA.yaEstaba}>Ya estaba al marcar</Th>
+                <Th alinear="right" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
+                <Th alinear="right" ayuda={AYUDA.llamo}>Llamó antes</Th>
               </tr>
             </thead>
             <tbody>
@@ -466,14 +533,14 @@ function CasosCoach({ casos }: { casos: CasoEspera[] }) {
       <table className="w-full text-[12.5px]">
         <thead>
           <tr className="text-zinc-400 text-[10.5px] uppercase tracking-[0.06em] border-b border-zinc-100">
-            <th className="font-semibold px-3 py-2 text-left">Fecha</th>
-            <th className="font-semibold px-3 py-2 text-left">Cita</th>
-            <th className="font-semibold px-3 py-2 text-left">Paciente</th>
-            <th className="font-semibold px-3 py-2 text-left">Entró</th>
-            <th className="font-semibold px-3 py-2 text-left">Marcó</th>
-            <th className="font-semibold px-3 py-2 text-left">Qué pasó</th>
-            <th className="font-semibold px-3 py-2 text-left">Atendía a otro</th>
-            <th className="font-semibold px-3 py-2 text-left">Llamó</th>
+            <Th className="px-3 py-2">Fecha</Th>
+            <Th className="px-3 py-2">Cita</Th>
+            <Th className="px-3 py-2">Paciente</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA.entro}>Entró</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA.marco}>Marcó</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA_QUE_PASO}>Qué pasó</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA.llamo}>Llamó</Th>
           </tr>
         </thead>
         <tbody>
@@ -491,9 +558,11 @@ function CasosCoach({ casos }: { casos: CasoEspera[] }) {
                 {hora(c.marcado)}
               </td>
               <td className="px-3 py-1.5">
-                <span className={`inline-block px-2 py-0.5 rounded border text-[11.5px] font-medium ${LLEGADA[c.llegada].cls}`}>
-                  {LLEGADA[c.llegada].texto}
-                </span>
+                <Ayuda texto={LLEGADA[c.llegada].ayuda}>
+                  <span className={`inline-block px-2 py-0.5 rounded border text-[11.5px] font-medium ${LLEGADA[c.llegada].cls}`}>
+                    {LLEGADA[c.llegada].texto}
+                  </span>
+                </Ayuda>
               </td>
               <td className="px-3 py-1.5 text-zinc-600">{c.atendiaOtro ? 'Sí' : 'No'}</td>
               <td className="px-3 py-1.5 text-zinc-600">{c.llamo ? 'Sí' : 'No'}</td>

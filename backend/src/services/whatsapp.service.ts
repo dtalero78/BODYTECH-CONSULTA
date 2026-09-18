@@ -54,6 +54,9 @@ class WhatsAppService {
    *
    * `rescheduleId` es opcional para compatibilidad con la plantilla anterior
    * (que sólo usa {{1}}-{{3}}); la nueva plantilla con 2 botones lo requiere.
+   *
+   * `from` es el número de salida; sin él, el de Bodytech (TWILIO_WHATSAPP_FROM).
+   * Lo pasa quien le escribe a un paciente de Athletic (ver marca.helper).
    */
   async sendTemplateMessage(
     phone: string,
@@ -61,12 +64,14 @@ class WhatsAppService {
     patientName: string,
     appointmentTime: string,
     rescheduleId?: string,
+    from?: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
     const toNumber = this.formatPhoneNumber(phone);
+    const fromNumber = from || this.fromNumber;
 
     try {
-      console.log(`📱 [Twilio WA] Enviando template a ${toNumber} (intento ${attempt}/${this.maxRetries})`);
+      console.log(`📱 [Twilio WA] Enviando template a ${toNumber} desde ${fromNumber} (intento ${attempt}/${this.maxRetries})`);
 
       const variables: Record<string, string> = {
         '1': patientName,
@@ -76,7 +81,7 @@ class WhatsAppService {
       if (rescheduleId) variables['4'] = rescheduleId;
 
       const msg = await this.client.messages.create({
-        from: this.fromNumber,
+        from: fromNumber,
         to: toNumber,
         contentSid: this.templateSid,
         contentVariables: JSON.stringify(variables),
@@ -89,7 +94,7 @@ class WhatsAppService {
         const wait = Math.pow(2, attempt) * 1000;
         console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
         await this.sleep(wait);
-        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, rescheduleId, attempt + 1);
+        return this.sendTemplateMessage(phone, roomNameWithParams, patientName, appointmentTime, rescheduleId, from, attempt + 1);
       }
       const msg = this.getErrorMessage(error);
       console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);
@@ -185,25 +190,29 @@ class WhatsAppService {
    *
    * Ej.: confirmación de reprogramación con `cita_reprogramada`
    *   {{1}} nombre · {{2}} fecha · {{3}} hora.
+   *
+   * `from` es el número de salida; sin él, el de Bodytech (TWILIO_WHATSAPP_FROM).
    */
   async sendContentTemplate(
     phone: string,
     contentSid: string,
     variables: Record<string, string>,
+    from?: string,
     attempt: number = 1
   ): Promise<{ success: boolean; error?: string; messageSid?: string }> {
     if (!contentSid) {
       return { success: false, error: 'contentSid vacío' };
     }
     const toNumber = this.formatPhoneNumber(phone);
+    const fromNumber = from || this.fromNumber;
 
     try {
       console.log(
-        `📱 [Twilio WA] Enviando plantilla ${contentSid} a ${toNumber} (intento ${attempt}/${this.maxRetries})`
+        `📱 [Twilio WA] Enviando plantilla ${contentSid} a ${toNumber} desde ${fromNumber} (intento ${attempt}/${this.maxRetries})`
       );
 
       const msg = await this.client.messages.create({
-        from: this.fromNumber,
+        from: fromNumber,
         to: toNumber,
         contentSid,
         contentVariables: JSON.stringify(variables),
@@ -216,7 +225,7 @@ class WhatsAppService {
         const wait = Math.pow(2, attempt) * 1000;
         console.warn(`⚠️  [Twilio WA] Intento ${attempt} falló, reintentando en ${wait / 1000}s`);
         await this.sleep(wait);
-        return this.sendContentTemplate(phone, contentSid, variables, attempt + 1);
+        return this.sendContentTemplate(phone, contentSid, variables, from, attempt + 1);
       }
       const msg = this.getErrorMessage(error);
       console.error(`❌ [Twilio WA] Error tras ${attempt} intentos: ${msg}`);

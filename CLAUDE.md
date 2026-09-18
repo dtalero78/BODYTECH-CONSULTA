@@ -274,6 +274,17 @@ El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos 
 
 Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=` (bitácora por tipo). El dry-run no escribe nada y dice a quién le llegaría; con `historiaId` el tipo `link` ignora la ventana de minutos ("mandáselo ya"). Ambos apagados por defecto (`LINK_AUTO_ENABLED`, `RECORDATORIO_ENABLED`).
 
+### Athletic: el mismo WhatsApp, desde otro número
+
+Athletic es una marca de Bodytech: mismos coaches, panel y citas. Lo único que cambia para el paciente es **quién le escribe**: a uno de Athletic le tiene que llegar el WhatsApp desde el número de Athletic (**+1 505 587-1860**, sender `XE5e6ee355b819e271d9e96c5ef18d7d03`, misma WABA que Bodytech), no desde el de Bodytech. Código en [marca.helper.ts](backend/src/helpers/marca.helper.ts).
+
+- **La marca es `HistoriaClinica."codEmpresa"`**: Trepsi manda `empresa` = `BODYTECH-COLOMBIA` o `ATHLETIC` y se guarda en mayúsculas. **Solo `ATHLETIC` es Athletic**; vacío o cualquier otro valor es Bodytech. Solo Trepsi llena el campo, y alcanza: los pacientes de Athletic llegan **únicamente** por Trepsi. La columna `empresa` NO es la marca.
+- **Las plantillas no cambian con la marca.** Las tres que recibe el paciente (link `bodytech_nutricion_v1`, recordatorio `bodytech_recordatorio_v1`, `cita_reprogramada`) tienen texto neutro y están aprobadas en la WABA que comparten los dos números. Cambian el **número de salida** y el **tenant de bsl-plataforma**. Ojo: el `.env` local todavía apunta a `bodytech_saludo`, que sí dice "Bodytech" y ya no se usa. Producción usa `HXe0d406bf…`.
+- **bsl-plataforma admite UN número por tenant**, así que Athletic es su propio tenant, `ATHLETIC`. No tiene dominio: se le envía con `X-Tenant-Id: ATHLETIC`, y los webhooks de Twilio lo encuentran **por el número** (`tenantPorNumeroWhatsapp` en bsl-plataforma). Necesita **su propio usuario**, porque la plataforma ata el JWT al tenant y un token de BODYTECH con `X-Tenant-Id: ATHLETIC` responde `TENANT_MISMATCH`.
+- **Los cuatro puntos que le escriben al paciente** eligen marca: el link y el recordatorio ([link-paciente.service.ts](backend/src/services/link-paciente.service.ts), la marca se lee por `historiaId` en `marca.service`), la confirmación de reprogramada (`video.controller.reprogramarCita`) y el chat del panel. En los tres primeros, el respaldo por Twilio directo sale **desde el mismo número de la marca**, nunca "se arregla" mandándolo por el otro.
+- **El chat no mira la marca del paciente, mira dónde escribió.** Lee los dos hilos (cada mensaje trae `marca`) y responde por el número al que el paciente escribió por **última** vez: la ventana de 24 h es de ese número, y por el otro saldría error 63016. Un paciente de Athletic que le escribió al número de Bodytech recibe la respuesta desde Bodytech, y está bien.
+- **Apagado por defecto.** `ATHLETIC_WHATSAPP_ENABLED=true` **y** `ATHLETIC_PLATAFORMA_USER`/`_PASS` a la vez; si falta cualquiera, todo sale por Bodytech como antes. El usuario no es opcional: el worker de link-auto apaga la plataforma para toda la corrida apenas un envío cae a Twilio (`plataformaViva`), así que un Athletic sin usuario dejaría sin chat también a los pacientes de Bodytech. Si la lectura de `codEmpresa` falla, también cae a Bodytech: recibir el mensaje desde el número de la otra marca es mejor que no recibirlo.
+
 ### Llamada del coach al paciente (en vivo, grabada)
 
 Distinta del robot de siempre (`/api/twilio/voice-call`, que reproduce `pbxBody.mp3` sin coach en la línea). Acá el coach **habla** con el paciente y la conversación **queda grabada**. Código en [backend/src/services/llamadas-voz.service.ts](backend/src/services/llamadas-voz.service.ts).
@@ -521,6 +532,13 @@ LINK_AUTO_MAX_INTENTOS=3                       # corta el reintento contra un n�
 LINK_AUTO_SOLO_CELULARES=                      # lista blanca CSV (modo observación)
 LINK_AUTO_SEDES=                               # CSV de sede_id, para el rollout escalonado
 LINK_AUTO_EXIGIR_PROFESIONAL=false             # exige que el `medico` exista y esté activo
+
+# Athletic: a sus pacientes se les escribe desde su propio número (ver "Athletic").
+# Los tres juntos o no enciende: sin usuario de la plataforma, todo sigue por Bodytech.
+ATHLETIC_WHATSAPP_ENABLED=false
+ATHLETIC_PLATAFORMA_USER=                      # usuario del tenant ATHLETIC en bsl-plataforma
+ATHLETIC_PLATAFORMA_PASS=
+ATHLETIC_WHATSAPP_FROM=whatsapp:+15055871860   # opcional; ese es el default
 
 # Llamada del coach al paciente (en vivo, grabada). Twilio marca al celular del
 # coach (usuarios.celular) y después al paciente. Los webhooks validan firma con

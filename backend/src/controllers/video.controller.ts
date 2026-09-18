@@ -16,7 +16,9 @@ import calendarioService from '../services/calendario.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
 import historiaMutationService from '../services/historia-mutation.service';
 import corporativoSheetService from '../services/corporativo-sheet.service';
-import bslPlataformaChatService from '../services/bsl-plataforma-chat.service';
+import { plataformaDe } from '../services/bsl-plataforma-chat.service';
+import { marcaDeEnvioParaHistoria } from '../services/marca.service';
+import { whatsappFromDeMarca } from '../helpers/marca.helper';
 import { enviarLinkPaciente } from '../services/link-paciente.service';
 
 // ============================================================================
@@ -755,15 +757,23 @@ class VideoController {
           '2': fechaLegible,
           '3': hora,
         };
-        // Por la plataforma (queda en el chat); fallback a Twilio directo.
-        const fallbackDirecto = () =>
-          whatsappService.sendContentTemplate(celular, reprogramadaSid, vars).catch(() => {});
-        bslPlataformaChatService
-          .enviarPlantilla(celular, reprogramadaSid, vars)
-          .then((ok) => {
-            if (!ok) fallbackDirecto();
+        // Por la plataforma (queda en el chat); fallback a Twilio directo. Las dos
+        // vías salen por el número de la marca del paciente (Bodytech o Athletic);
+        // la plantilla es la misma.
+        marcaDeEnvioParaHistoria(id)
+          .then((marca) => {
+            const fallbackDirecto = () =>
+              whatsappService
+                .sendContentTemplate(celular, reprogramadaSid, vars, whatsappFromDeMarca(marca))
+                .catch(() => {});
+            return plataformaDe(marca)
+              .enviarPlantilla(celular, reprogramadaSid, vars)
+              .then((ok) => {
+                if (!ok) fallbackDirecto();
+              })
+              .catch(() => fallbackDirecto());
           })
-          .catch(() => fallbackDirecto());
+          .catch(() => {});
       }
 
       res.status(200).json({ success: true, fecha, hora });

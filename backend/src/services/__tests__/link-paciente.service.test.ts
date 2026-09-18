@@ -22,9 +22,21 @@ jest.mock('../trepsi-webhook.service', () => ({
   __esModule: true,
   default: { enqueueLink: jest.fn() },
 }));
-jest.mock('../bsl-plataforma-chat.service', () => ({
+// Un tenant de la plataforma por marca. `default` es el de Bodytech, que es por
+// donde sale todo mientras Athletic esté apagado.
+jest.mock('../bsl-plataforma-chat.service', () => {
+  const bodytech = { enviarPlantilla: jest.fn() };
+  const athletic = { enviarPlantilla: jest.fn() };
+  return {
+    __esModule: true,
+    default: bodytech,
+    athleticPlataformaChatService: athletic,
+    plataformaDe: (marca: string) => (marca === 'athletic' ? athletic : bodytech),
+  };
+});
+jest.mock('../marca.service', () => ({
   __esModule: true,
-  default: { enviarPlantilla: jest.fn() },
+  marcaDeEnvioParaHistoria: jest.fn(),
 }));
 
 import {
@@ -40,7 +52,14 @@ import {
 import whatsappService from '../whatsapp.service';
 import postgresService from '../postgres.service';
 import trepsiWebhookService from '../trepsi-webhook.service';
-import bslPlataformaChatService from '../bsl-plataforma-chat.service';
+import bslPlataformaChatService, { athleticPlataformaChatService } from '../bsl-plataforma-chat.service';
+import { marcaDeEnvioParaHistoria } from '../marca.service';
+
+// Salvo que un test diga otra cosa, el paciente es de Bodytech — que es también
+// lo que pasa con TODOS mientras Athletic esté apagado.
+beforeEach(() => {
+  (marcaDeEnvioParaHistoria as jest.Mock).mockResolvedValue('bodytech');
+});
 
 describe('formatHoraCita', () => {
   const casos: [string, string][] = [
@@ -428,5 +447,105 @@ describe('enviarRecordatorioPaciente', () => {
     // Pero sí queda en el hilo del chat.
     expect(registrarMensaje).toHaveBeenCalledTimes(1);
     expect(registrarMensaje.mock.calls[0][0]).toBe('+573001234567');
+  });
+});
+
+// ===========================================================================
+// Athletic: el mismo mensaje, desde otro número. La marca elige el tenant de la
+// plataforma y el número del envío directo — nunca la plantilla.
+// ===========================================================================
+
+describe('la marca del paciente elige por qué número sale', () => {
+  const marcaDe = marcaDeEnvioParaHistoria as jest.Mock;
+  const bodytechPlantilla = bslPlataformaChatService.enviarPlantilla as jest.Mock;
+  const athleticPlantilla = athleticPlataformaChatService.enviarPlantilla as jest.Mock;
+  const sendTemplate = whatsappService.sendTemplateMessage as jest.Mock;
+  const sendContent = whatsappService.sendContentTemplate as jest.Mock;
+  const envOriginal = process.env;
+
+  const link = {
+    historiaId: 'hc-ath',
+    phone: '573001234567',
+    patientName: 'Ana',
+    appointmentTime: '09:00 a. m.',
+    roomNameWithParams: 'consulta-x?nombre=Ana',
+    origen: 'auto' as const,
+    esperarEfectos: true,
+  };
+
+  beforeEach(() => {
+    process.env = { ...envOriginal, TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID: 'HXrecordatorio' };
+    delete process.env.ATHLETIC_WHATSAPP_FROM;
+    (postgresService.query as jest.Mock).mockResolvedValue([]);
+    (postgresService.registrarMensajeSaliente as jest.Mock).mockResolvedValue(undefined);
+    (trepsiWebhookService.enqueueLink as jest.Mock).mockResolvedValue({ enqueued: false, reason: 'NOT_TREPSI' });
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    process.env = envOriginal;
+    jest.restoreAllMocks();
+  });
+
+  it('a un paciente de Athletic el link le llega por el tenant ATHLETIC', async () => {
+    marcaDe.mockResolvedValue('athletic');
+    athleticPlantilla.mockResolvedValue(true);
+
+    const r = await enviarLinkPaciente(link);
+
+    expect(r).toMatchObject({ success: true, via: 'plataforma', marca: 'athletic' });
+    expect(marcaDe).toHaveBeenCalledWith('hc-ath');
+    expect(bodytechPlantilla).not.toHaveBeenCalled();
+  });
+
+  // El riesgo real: que el respaldo "arregle" el envío mandándolo por Bodytech.
+  it('si la plataforma de Athletic falla, el directo sale DESDE EL NÚMERO DE ATHLETIC', async () => {
+    marcaDe.mockResolvedValue('athletic');
+    athleticPlantilla.mockResolvedValue(false);
+    sendTemplate.mockResolvedValue({ success: true, messageSid: 'SMa' });
+
+    const r = await enviarLinkPaciente(link);
+
+    expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'athletic' });
+    expect(sendTemplate.mock.calls[0][5]).toBe('whatsapp:+15055871860');
+  });
+
+  it('la plantilla es la misma para las dos marcas', async () => {
+    process.env.TWILIO_WHATSAPP_TEMPLATE_SID = 'HXlink';
+    marcaDe.mockResolvedValue('athletic');
+    athleticPlantilla.mockResolvedValue(true);
+
+    await enviarLinkPaciente(link);
+
+    expect(athleticPlantilla.mock.calls[0][1]).toBe('HXlink');
+  });
+
+  // `undefined` = "el de siempre": whatsapp.service usa TWILIO_WHATSAPP_FROM.
+  it('Bodytech sigue saliendo por su número de siempre', async () => {
+    bodytechPlantilla.mockResolvedValue(false);
+    sendTemplate.mockResolvedValue({ success: true, messageSid: 'SMb' });
+
+    const r = await enviarLinkPaciente(link);
+
+    expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'bodytech' });
+    expect(athleticPlantilla).not.toHaveBeenCalled();
+    expect(sendTemplate.mock.calls[0][5]).toBeUndefined();
+  });
+
+  it('el recordatorio de un paciente de Athletic también sale por Athletic', async () => {
+    marcaDe.mockResolvedValue('athletic');
+    athleticPlantilla.mockResolvedValue(false);
+    sendContent.mockResolvedValue({ success: true, messageSid: 'SMr' });
+
+    const r = await enviarRecordatorioPaciente({
+      historiaId: 'hc-ath',
+      phone: '573001234567',
+      patientName: 'Ana',
+      appointmentTime: '09:00 a. m.',
+    });
+
+    expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'athletic' });
+    expect(athleticPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
+    expect(sendContent.mock.calls[0][3]).toBe('whatsapp:+15055871860');
   });
 });

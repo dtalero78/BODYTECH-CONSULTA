@@ -13,7 +13,6 @@ import { ChevronRight, Download, PhoneOff } from 'lucide-react';
 import calendarioService, {
   AuditoriaNoContesta,
   CasoEspera,
-  LlegadaPaciente,
 } from '../../services/calendario.service';
 import authService, { Sede } from '../../services/auth.service';
 import { KpiCard, DateField, SedeMultiSelect } from './IndicadoresView';
@@ -118,9 +117,7 @@ const AYUDA = {
   noContesta:
     'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció.',
   coachNoSeConecto:
-    'El paciente abrió el link y se conectó a la videollamada, pero el coach nunca entró a esa consulta. Aun así, la cita quedó como «No contesta».',
-  conectadoAlMarcar:
-    'El caso más claro: el paciente ya se había conectado a la videollamada cuando el coach hizo clic en «No contesta», y el coach nunca entró a atenderlo.',
+    'El paciente abrió el link y se conectó a tiempo a la videollamada (a más tardar 15 minutos después de la hora de la cita), pero el coach nunca entró. Aun así, la cita quedó como «No contesta». No importa si el coach marcó antes o después de que el paciente llegara.',
   atendiaOtro:
     'A esa hora el coach estaba en otra consulta: abrió otra entre 25 minutos antes de la cita y el momento de la marca. Suele indicar que se le cruzó la agenda.',
   llamo:
@@ -129,34 +126,6 @@ const AYUDA = {
     'Hora en que el paciente se conectó a la videollamada. No dice cuánto tiempo se quedó esperando.',
   marco: 'Hora en que el coach hizo clic en «No contesta».',
 };
-
-const LLEGADA: Record<LlegadaPaciente, { texto: string; cls: string; ayuda: string }> = {
-  en_sala: {
-    texto: 'Conectado antes de la marca',
-    cls: 'bg-red-50 text-red-700 border-red-200',
-    ayuda: 'Se conectó a la videollamada antes de que el coach marcara «No contesta».',
-  },
-  despues: {
-    texto: 'Se conectó después de la marca',
-    cls: 'bg-amber-50 text-amber-700 border-amber-200',
-    ayuda: 'Se conectó hasta 15 minutos después de la hora de la cita, pero el coach ya lo había marcado «No contesta».',
-  },
-  tarde: {
-    texto: 'Se conectó tarde (+15 min)',
-    cls: 'bg-zinc-50 text-zinc-500 border-zinc-200',
-    ayuda: 'Se conectó más de 15 minutos después de la hora de la cita.',
-  },
-};
-
-const AYUDA_QUE_PASO: ReactNode = (
-  <div className="space-y-1.5">
-    {(Object.keys(LLEGADA) as LlegadaPaciente[]).map((k) => (
-      <div key={k}>
-        <b>{LLEGADA[k].texto}:</b> {LLEGADA[k].ayuda.charAt(0).toLowerCase() + LLEGADA[k].ayuda.slice(1)}
-      </div>
-    ))}
-  </div>
-);
 
 /** Encabezado de tabla con su ⓘ. */
 function Th({
@@ -261,7 +230,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
       const XLSX = await import('xlsx');
       const nombre = new Map(data.porCoach.map((c) => [c.medicoCodigo, c.nombre]));
       const aoa: (string | number)[][] = [
-        ['Coach', 'Código', 'Fecha', 'Hora cita', 'Paciente', 'Entró a la sala', 'Marcó No contesta', 'Qué pasó', 'Atendía a otro', 'Llamó antes de marcar'],
+        ['Coach', 'Código', 'Fecha', 'Hora cita', 'Paciente', 'Se conectó', 'Marcó No contesta', 'Atendía a otro', 'Llamó antes de marcar'],
         ...data.casosDetalle.map((c) => [
           nombre.get(c.medicoCodigo) ?? c.medicoCodigo,
           c.medicoCodigo,
@@ -270,7 +239,6 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           c.paciente,
           hora(c.pacienteEntro),
           hora(c.marcado),
-          LLEGADA[c.llegada].texto,
           c.atendiaOtro ? 'Sí' : 'No',
           c.llamo ? 'Sí' : 'No',
         ]),
@@ -278,7 +246,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = [
         { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 30 },
-        { wch: 15 }, { wch: 17 }, { wch: 26 }, { wch: 14 }, { wch: 20 },
+        { wch: 12 }, { wch: 17 }, { wch: 14 }, { wch: 20 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Coach no se conectó');
@@ -348,7 +316,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           })}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
           <KpiCard
             label="No contesta"
             value={data?.noContesta ?? 0}
@@ -364,14 +332,6 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             loading={loading}
             accent="red"
             ayuda={`${AYUDA.coachNoSeConecto} El porcentaje es sobre los «No contesta».`}
-          />
-          <KpiCard
-            label="Paciente conectado al marcar"
-            value={data?.enSala ?? 0}
-            caption={data ? `${data.despues} se conectaron después · ${data.tarde} tarde` : undefined}
-            loading={loading}
-            accent="red"
-            ayuda={AYUDA.conectadoAlMarcar}
           />
           <KpiCard
             label="Atendía a otro"
@@ -406,7 +366,6 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                 <Th alinear="right" ayuda={AYUDA.citas}>Citas</Th>
                 <Th alinear="right" ayuda={AYUDA.noContesta}>No contesta</Th>
                 <Th alinear="right" ayuda={AYUDA.coachNoSeConecto}>Coach no se conectó</Th>
-                <Th alinear="right" ayuda={AYUDA.conectadoAlMarcar}>Paciente conectado al marcar</Th>
                 <Th alinear="right" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
                 <Th alinear="right" ayuda={AYUDA.llamo}>Llamó antes</Th>
               </tr>
@@ -414,11 +373,11 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
                 </tr>
               ) : !data || data.porCoach.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
                     No hay citas «No contesta» en el rango.
                   </td>
                 </tr>
@@ -463,9 +422,6 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                         >
                           {c.casos}
                         </td>
-                        <td className={`px-4 py-2.5 text-right tabular-nums ${c.enSala > 0 ? 'text-red-700' : 'text-zinc-400'}`} style={num}>
-                          {c.enSala}
-                        </td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
                           {c.atendiaOtro}
                         </td>
@@ -476,7 +432,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                       </tr>
                       {abierto && (
                         <tr className="bg-zinc-50/70">
-                          <td colSpan={7} className="px-4 pb-3 pt-1">
+                          <td colSpan={6} className="px-4 pb-3 pt-1">
                             <CasosCoach casos={casosDe(c.medicoCodigo)} />
                           </td>
                         </tr>
@@ -496,7 +452,6 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                     <span className="text-zinc-400 text-[11px] ml-1 font-normal">({pct(data.noContesta, data.citas)})</span>
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.casos}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.enSala}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.atendiaOtro}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>
                     {data.llamadosAntes}
@@ -513,10 +468,8 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
       <div className="mt-4 text-[12px] leading-relaxed text-zinc-500 max-w-[860px]">
         <p>
           <b className="text-zinc-600">Coach no se conectó</b>: el paciente se conectó a la videollamada de esa
-          cita y el coach nunca entró. <b className="text-zinc-600">Paciente conectado al marcar</b>: se conectó
-          antes del clic en «No contesta». <b className="text-zinc-600">Se conectó después</b>: hasta 15 minutos
-          después de la hora, pero ya estaba marcado. No mide cuánto tiempo esperó el paciente, solo que se
-          conectó.
+          cita a tiempo (a más tardar 15 minutos después de la hora) y el coach nunca entró. Quien se conectó
+          más tarde no se cuenta. No mide cuánto tiempo esperó el paciente, solo que se conectó.
         </p>
         <p className="mt-1">
           Sin Médico Corporativo (es presencial) ni citas Trepsi canceladas. Datos desde el 20 de agosto de
@@ -536,9 +489,8 @@ function CasosCoach({ casos }: { casos: CasoEspera[] }) {
             <Th className="px-3 py-2">Fecha</Th>
             <Th className="px-3 py-2">Cita</Th>
             <Th className="px-3 py-2">Paciente</Th>
-            <Th className="px-3 py-2" ayuda={AYUDA.entro}>Entró</Th>
+            <Th className="px-3 py-2" ayuda={AYUDA.entro}>Se conectó</Th>
             <Th className="px-3 py-2" ayuda={AYUDA.marco}>Marcó</Th>
-            <Th className="px-3 py-2" ayuda={AYUDA_QUE_PASO}>Qué pasó</Th>
             <Th className="px-3 py-2" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
             <Th className="px-3 py-2" ayuda={AYUDA.llamo}>Llamó</Th>
           </tr>
@@ -556,13 +508,6 @@ function CasosCoach({ casos }: { casos: CasoEspera[] }) {
               </td>
               <td className="px-3 py-1.5 tabular-nums text-zinc-600" style={{ fontFamily: FONT_MONO }}>
                 {hora(c.marcado)}
-              </td>
-              <td className="px-3 py-1.5">
-                <Ayuda texto={LLEGADA[c.llegada].ayuda}>
-                  <span className={`inline-block px-2 py-0.5 rounded border text-[11.5px] font-medium ${LLEGADA[c.llegada].cls}`}>
-                    {LLEGADA[c.llegada].texto}
-                  </span>
-                </Ayuda>
               </td>
               <td className="px-3 py-1.5 text-zinc-600">{c.atendiaOtro ? 'Sí' : 'No'}</td>
               <td className="px-3 py-1.5 text-zinc-600">{c.llamo ? 'Sí' : 'No'}</td>

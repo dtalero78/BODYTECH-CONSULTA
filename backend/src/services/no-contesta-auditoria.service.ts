@@ -2,11 +2,10 @@
 // no-contesta-auditoria.service — ¿El "No contesta" fue del paciente?
 //
 // "No contesta" lo marca el coach a mano, y hasta acá nada lo contrastaba con
-// lo que pasó en la sala. Al cruzarlo (18-sep-2026) salió que en 53 de 234
-// "No contesta" el paciente SÍ había entrado a la videollamada y el coach nunca
-// abrió la consulta; en 34 el paciente ya estaba ahí cuando lo marcaron. Esta
-// es la cuenta que alimenta la pantalla "Auditoría No contesta" del
-// coordinador.
+// lo que pasó en la sala. Al cruzarlo (18-sep-2026) salió que en 47 de 235
+// "No contesta" el paciente se conectó a tiempo a la videollamada y el coach
+// nunca entró. Esta es la cuenta que alimenta la pantalla "Auditoría No
+// contesta" del coordinador.
 //
 // Las tres señales, y de dónde salen:
 //   · el paciente entró → `client_diag`, evento `session-info` con role
@@ -16,33 +15,23 @@
 //     conecta a la consulta de esa cita.
 //   · cuándo se marcó   → `audit_log`, acción 'no_contesta' (el clic).
 //
-// No mide cuánto se quedó el paciente: solo que llegó. Por eso la categoría
-// fuerte es "ya estaba en la sala" (entró ANTES de la marca) y se separa de
-// quien llegó después.
+// Un caso ("Coach no se conectó") = el paciente se conectó A TIEMPO y el coach
+// no entró nunca. No importa si el coach marcó antes o después de que el
+// paciente llegara: al principio se separaban, y la diferencia confundía sin
+// cambiar el hallazgo (Daniel, 18-sep). Quien se conectó más de 15 min tarde
+// no cuenta: ahí marcar "No contesta" es razonable. No mide cuánto se quedó el
+// paciente, solo que llegó.
 // ============================================================================
 
 import postgresService from './postgres.service';
 import { EFFECTIVE_SEDE_SQL, getRangeUtc, ServiceResult } from './calendario.service';
 
-/** Hasta cuántos minutos después de la hora de la cita se considera que llegó a tiempo. */
+/** Hasta cuántos minutos después de la hora de la cita el paciente llegó a tiempo. */
 export const MINUTOS_A_TIEMPO = 15;
 
-/**
- * Cómo llegó el paciente respecto de la marca:
- *   en_sala  = entró antes de que el coach marcara "No contesta".
- *   despues  = entró a tiempo (≤ 15 min de la hora), pero ya lo habían marcado.
- *   tarde    = entró más de 15 min después de la hora, ya marcado.
- */
-export type Llegada = 'en_sala' | 'despues' | 'tarde';
-
-export function clasificarLlegada(citaMs: number, entroMs: number, marcadoMs: number | null): Llegada {
-  if (marcadoMs !== null && entroMs < marcadoMs) return 'en_sala';
-  const aTiempo = entroMs <= citaMs + MINUTOS_A_TIEMPO * 60_000;
-  // Sin hora de marca (se marcó por otra vía que no deja el clic en la
-  // bitácora) no se puede decir que ya lo habían marcado: se juzga solo por la
-  // hora de llegada.
-  if (marcadoMs === null) return aTiempo ? 'en_sala' : 'tarde';
-  return aTiempo ? 'despues' : 'tarde';
+/** Conectarse antes de la hora también es a tiempo. */
+export function llegoATiempo(citaMs: number, entroMs: number): boolean {
+  return entroMs <= citaMs + MINUTOS_A_TIEMPO * 60_000;
 }
 
 /** Un "No contesta" tal como sale de la base. */
@@ -65,7 +54,7 @@ export interface ConteoCoach {
   no_contesta: number | string;
 }
 
-/** Un paciente que entró a la sala y el coach nunca abrió la consulta. */
+/** Un paciente que se conectó a tiempo y el coach nunca entró. */
 export interface CasoEspera {
   historiaId: string;
   medicoCodigo: string;
@@ -73,7 +62,6 @@ export interface CasoEspera {
   cita: string;
   pacienteEntro: string;
   marcado: string | null;
-  llegada: Llegada;
   atendiaOtro: boolean;
   llamo: boolean;
 }
@@ -85,9 +73,8 @@ export interface AuditoriaCoach {
   noContesta: number;
   /** "No contesta" con al menos una llamada del botón antes de marcar. */
   llamadosAntes: number;
-  /** Paciente en la sala y el coach no entró. */
+  /** "Coach no se conectó": el paciente llegó a tiempo y el coach no entró. */
   casos: number;
-  enSala: number;
   atendiaOtro: number;
 }
 
@@ -98,9 +85,6 @@ export interface AuditoriaNoContesta {
   noContesta: number;
   llamadosAntes: number;
   casos: number;
-  enSala: number;
-  despues: number;
-  tarde: number;
   atendiaOtro: number;
   porCoach: AuditoriaCoach[];
   casosDetalle: CasoEspera[];
@@ -138,7 +122,6 @@ export function resumirAuditoria(
         noContesta: 0,
         llamadosAntes: 0,
         casos: 0,
-        enSala: 0,
         atendiaOtro: 0,
       };
       coaches.set(codigo, c);
@@ -162,17 +145,13 @@ export function resumirAuditoria(
       c.llamadosAntes += 1;
       llamadosAntes += 1;
     }
-    // Un caso es que el paciente llegó y el coach NUNCA entró. Si el coach
-    // entró, se vieron (o pudieron verse): eso ya no es un paciente esperando.
+    // Un caso es que el paciente llegó a tiempo y el coach NUNCA entró. Si el
+    // coach entró, se vieron (o pudieron verse): eso ya no es un paciente
+    // esperando.
     if (!f.paciente_entro_at || f.coach_entro) continue;
+    if (!llegoATiempo(ms(f.cita), ms(f.paciente_entro_at))) continue;
 
-    const llegada = clasificarLlegada(
-      ms(f.cita),
-      ms(f.paciente_entro_at),
-      f.marcado_at ? ms(f.marcado_at) : null
-    );
     c.casos += 1;
-    if (llegada === 'en_sala') c.enSala += 1;
     if (f.atendia_otro) c.atendiaOtro += 1;
     casosDetalle.push({
       historiaId: f.historia_id,
@@ -181,7 +160,6 @@ export function resumirAuditoria(
       cita: iso(f.cita),
       pacienteEntro: iso(f.paciente_entro_at),
       marcado: f.marcado_at ? iso(f.marcado_at) : null,
-      llegada,
       atendiaOtro: !!f.atendia_otro,
       llamo,
     });
@@ -202,9 +180,6 @@ export function resumirAuditoria(
     noContesta: todos.reduce((acc, c) => acc + c.noContesta, 0),
     llamadosAntes,
     casos: casosDetalle.length,
-    enSala: casosDetalle.filter((c) => c.llegada === 'en_sala').length,
-    despues: casosDetalle.filter((c) => c.llegada === 'despues').length,
-    tarde: casosDetalle.filter((c) => c.llegada === 'tarde').length,
     atendiaOtro: casosDetalle.filter((c) => c.atendiaOtro).length,
     porCoach,
     casosDetalle,

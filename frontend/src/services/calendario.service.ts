@@ -186,11 +186,8 @@ export interface TiempoAtencion {
 }
 
 // Auditoría de "No contesta": citas marcadas "No contesta" en las que el
-// paciente SÍ entró a la sala y el coach nunca abrió la consulta.
-//   en_sala = entró antes de que lo marcaran · despues = llegó a tiempo pero
-//   ya estaba marcado · tarde = llegó más de 15 min después de la hora.
-export type LlegadaPaciente = 'en_sala' | 'despues' | 'tarde';
-
+// paciente se conectó a tiempo (hasta 15 min después de la hora) y el coach
+// nunca entró ("Coach no se conectó").
 export interface CasoEspera {
   historiaId: string;
   medicoCodigo: string;
@@ -198,7 +195,6 @@ export interface CasoEspera {
   cita: string;
   pacienteEntro: string;
   marcado: string | null;
-  llegada: LlegadaPaciente;
   atendiaOtro: boolean;
   llamo: boolean;
 }
@@ -210,7 +206,6 @@ export interface AuditoriaCoach {
   noContesta: number;
   llamadosAntes: number;
   casos: number;
-  enSala: number;
   atendiaOtro: number;
 }
 
@@ -221,9 +216,6 @@ export interface AuditoriaNoContesta {
   noContesta: number;
   llamadosAntes: number;
   casos: number;
-  enSala: number;
-  despues: number;
-  tarde: number;
   atendiaOtro: number;
   porCoach: AuditoriaCoach[];
   casosDetalle: CasoEspera[];

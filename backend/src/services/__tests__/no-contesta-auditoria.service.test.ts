@@ -3,8 +3,7 @@
 //
 // Este número se va a usar para hablar con coaches con nombre propio, así que
 // lo que más importa probar es que NO acuse de más: si el coach entró a la
-// sala, no es un caso; si el paciente llegó después de la marca, no se cuenta
-// como "ya estaba en la sala".
+// sala, no es un caso; si el paciente se conectó más de 15 min tarde, tampoco.
 // ============================================================================
 
 jest.mock('../postgres.service', () => ({
@@ -13,7 +12,7 @@ jest.mock('../postgres.service', () => ({
 }));
 
 import noContestaAuditoriaService, {
-  clasificarLlegada,
+  llegoATiempo,
   resumirAuditoria,
   FilaNoContesta,
 } from '../no-contesta-auditoria.service';
@@ -40,28 +39,16 @@ function fila(over: Partial<FilaNoContesta> = {}): FilaNoContesta {
   };
 }
 
-describe('clasificarLlegada', () => {
+describe('llegoATiempo', () => {
   const t = CITA.getTime();
 
-  it('entró antes de la marca → ya estaba en la sala', () => {
-    expect(clasificarLlegada(t, min(3).getTime(), min(8).getTime())).toBe('en_sala');
+  it('conectarse antes de la hora o hasta 15 min después es a tiempo', () => {
+    expect(llegoATiempo(t, min(-10).getTime())).toBe(true);
+    expect(llegoATiempo(t, min(15).getTime())).toBe(true);
   });
 
-  it('entró a tiempo pero después de la marca → llegó después', () => {
-    expect(clasificarLlegada(t, min(9).getTime(), min(5).getTime())).toBe('despues');
-  });
-
-  it('entrar en el mismo instante de la marca no cuenta como "ya estaba"', () => {
-    expect(clasificarLlegada(t, min(5).getTime(), min(5).getTime())).toBe('despues');
-  });
-
-  it('entró más de 15 min tarde, ya marcado → tarde', () => {
-    expect(clasificarLlegada(t, min(16).getTime(), min(5).getTime())).toBe('tarde');
-  });
-
-  it('sin hora de marca se juzga solo por la hora de llegada', () => {
-    expect(clasificarLlegada(t, min(15).getTime(), null)).toBe('en_sala');
-    expect(clasificarLlegada(t, min(16).getTime(), null)).toBe('tarde');
+  it('más de 15 min después ya es tarde', () => {
+    expect(llegoATiempo(t, min(16).getTime())).toBe(false);
   });
 });
 
@@ -86,29 +73,36 @@ describe('resumirAuditoria', () => {
     expect(r.porCoach[0].llamadosAntes).toBe(1);
   });
 
-  it('clasifica cada caso y lo atribuye a su coach', () => {
+  it('si el paciente se conectó más de 15 min tarde no es un caso', () => {
+    const r = resumirAuditoria('d', 'h', [{ medico: 'C1', citas: 5, no_contesta: 1 }], [
+      fila({ paciente_entro_at: min(40), marcado_at: min(5) }),
+    ], nombres);
+    expect(r.casos).toBe(0);
+  });
+
+  it('no importa si el coach marcó antes o después de que el paciente llegara', () => {
     const r = resumirAuditoria(
       'd',
       'h',
       [
-        { medico: 'C1', citas: 10, no_contesta: 3 },
+        { medico: 'C1', citas: 10, no_contesta: 2 },
         { medico: 'C2', citas: 8, no_contesta: 1 },
       ],
       [
+        // Llegó antes de la marca.
         fila({ historia_id: 'a', paciente_entro_at: min(-2), marcado_at: min(10), atendia_otro: true }),
+        // Llegó después de la marca, pero a tiempo.
         fila({ historia_id: 'b', paciente_entro_at: min(8), marcado_at: min(5) }),
-        fila({ historia_id: 'c', paciente_entro_at: min(40), marcado_at: min(5) }),
         fila({ historia_id: 'd', medico: 'C2', paciente_entro_at: min(1), marcado_at: min(6), llamadas_antes: 1 }),
       ],
       nombres
     );
-    expect(r).toMatchObject({ casos: 4, enSala: 2, despues: 1, tarde: 1, atendiaOtro: 1, llamadosAntes: 1 });
+    expect(r).toMatchObject({ casos: 3, atendiaOtro: 1, llamadosAntes: 1 });
     const c1 = r.porCoach.find((c) => c.medicoCodigo === 'C1')!;
-    expect(c1).toMatchObject({ nombre: 'Juan Mendez', casos: 3, enSala: 1, atendiaOtro: 1 });
+    expect(c1).toMatchObject({ nombre: 'Juan Mendez', casos: 2, atendiaOtro: 1 });
     expect(r.casosDetalle.find((c) => c.historiaId === 'd')).toMatchObject({
       medicoCodigo: 'C2',
       paciente: 'Ana Rojas',
-      llegada: 'en_sala',
       llamo: true,
     });
   });
@@ -156,7 +150,7 @@ describe('getAuditoria', () => {
     const r = await noContestaAuditoriaService.getAuditoria('2026-09-05', '2026-09-18', ['bsl'], 'C1');
 
     expect(r.ok).toBe(true);
-    expect(r.data).toMatchObject({ casos: 1, enSala: 1 });
+    expect(r.data).toMatchObject({ casos: 1 });
     expect(r.data!.porCoach[0].nombre).toBe('Juan Mendez');
     for (const [sql, params] of query.mock.calls.slice(0, 2)) {
       expect(params).toEqual([

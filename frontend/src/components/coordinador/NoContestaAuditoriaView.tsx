@@ -117,34 +117,34 @@ const AYUDA = {
     'Citas del coach en el rango cuya hora ya pasó. No cuenta Médico Corporativo (es presencial) ni citas Trepsi canceladas.',
   noContesta:
     'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció.',
-  pacienteEnSala:
-    'El paciente abrió el link y entró a la sala de video, pero el coach nunca abrió esa consulta. Aun así, la cita quedó como «No contesta».',
-  yaEstaba:
-    'El caso más claro: el paciente ya había entrado a la sala cuando el coach hizo clic en «No contesta». Llegó y nadie lo atendió.',
+  coachNoSeConecto:
+    'El paciente abrió el link y se conectó a la videollamada, pero el coach nunca entró a esa consulta. Aun así, la cita quedó como «No contesta».',
+  conectadoAlMarcar:
+    'El caso más claro: el paciente ya se había conectado a la videollamada cuando el coach hizo clic en «No contesta», y el coach nunca entró a atenderlo.',
   atendiaOtro:
     'A esa hora el coach estaba en otra consulta: abrió otra entre 25 minutos antes de la cita y el momento de la marca. Suele indicar que se le cruzó la agenda.',
   llamo:
     'El coach usó el botón «Llamar» antes de marcar «No contesta». Lo esperado es llamar siempre antes de marcar.',
   entro:
-    'Hora en que el paciente se conectó a la sala de video. No dice cuánto tiempo se quedó esperando.',
+    'Hora en que el paciente se conectó a la videollamada. No dice cuánto tiempo se quedó esperando.',
   marco: 'Hora en que el coach hizo clic en «No contesta».',
 };
 
 const LLEGADA: Record<LlegadaPaciente, { texto: string; cls: string; ayuda: string }> = {
   en_sala: {
-    texto: 'Ya estaba en la sala',
+    texto: 'Conectado antes de la marca',
     cls: 'bg-red-50 text-red-700 border-red-200',
-    ayuda: 'Entró a la sala antes de que el coach marcara «No contesta».',
+    ayuda: 'Se conectó a la videollamada antes de que el coach marcara «No contesta».',
   },
   despues: {
-    texto: 'Llegó después de la marca',
+    texto: 'Se conectó después de la marca',
     cls: 'bg-amber-50 text-amber-700 border-amber-200',
-    ayuda: 'Entró hasta 15 minutos después de la hora de la cita, pero el coach ya lo había marcado «No contesta».',
+    ayuda: 'Se conectó hasta 15 minutos después de la hora de la cita, pero el coach ya lo había marcado «No contesta».',
   },
   tarde: {
-    texto: 'Llegó tarde (+15 min)',
+    texto: 'Se conectó tarde (+15 min)',
     cls: 'bg-zinc-50 text-zinc-500 border-zinc-200',
-    ayuda: 'Entró más de 15 minutos después de la hora de la cita.',
+    ayuda: 'Se conectó más de 15 minutos después de la hora de la cita.',
   },
 };
 
@@ -281,7 +281,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
         { wch: 15 }, { wch: 17 }, { wch: 26 }, { wch: 14 }, { wch: 20 },
       ];
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Paciente en sala');
+      XLSX.utils.book_append_sheet(wb, ws, 'Coach no se conectó');
       XLSX.writeFile(wb, `no_contesta_paciente_en_sala_${from}_${to}.xlsx`);
     } catch {
       showToast({ type: 'error', message: 'No se pudo exportar el Excel.' });
@@ -358,20 +358,20 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             ayuda={`${AYUDA.noContesta} El porcentaje es sobre todas las citas del rango.`}
           />
           <KpiCard
-            label="Paciente en sala"
+            label="Coach no se conectó"
             value={data?.casos ?? 0}
             caption={data ? `${pct(data.casos, data.noContesta)} de los No contesta` : undefined}
             loading={loading}
             accent="red"
-            ayuda={`${AYUDA.pacienteEnSala} El porcentaje es sobre los «No contesta».`}
+            ayuda={`${AYUDA.coachNoSeConecto} El porcentaje es sobre los «No contesta».`}
           />
           <KpiCard
-            label="Ya estaba al marcar"
+            label="Paciente conectado al marcar"
             value={data?.enSala ?? 0}
-            caption={data ? `${data.despues} llegaron después · ${data.tarde} tarde` : undefined}
+            caption={data ? `${data.despues} se conectaron después · ${data.tarde} tarde` : undefined}
             loading={loading}
             accent="red"
-            ayuda={AYUDA.yaEstaba}
+            ayuda={AYUDA.conectadoAlMarcar}
           />
           <KpiCard
             label="Atendía a otro"
@@ -405,8 +405,8 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                 <Th>Coach</Th>
                 <Th alinear="right" ayuda={AYUDA.citas}>Citas</Th>
                 <Th alinear="right" ayuda={AYUDA.noContesta}>No contesta</Th>
-                <Th alinear="right" ayuda={AYUDA.pacienteEnSala}>Paciente en sala</Th>
-                <Th alinear="right" ayuda={AYUDA.yaEstaba}>Ya estaba al marcar</Th>
+                <Th alinear="right" ayuda={AYUDA.coachNoSeConecto}>Coach no se conectó</Th>
+                <Th alinear="right" ayuda={AYUDA.conectadoAlMarcar}>Paciente conectado al marcar</Th>
                 <Th alinear="right" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
                 <Th alinear="right" ayuda={AYUDA.llamo}>Llamó antes</Th>
               </tr>
@@ -512,11 +512,11 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
       {/* Cómo se mide: sin esto el número se discute en vez de usarse. */}
       <div className="mt-4 text-[12px] leading-relaxed text-zinc-500 max-w-[860px]">
         <p>
-          <b className="text-zinc-600">Paciente en sala</b>: el navegador del paciente se conectó a la sala de
-          esa cita y el coach nunca abrió la consulta. <b className="text-zinc-600">Ya estaba al marcar</b>:
-          entró antes del clic en «No contesta». <b className="text-zinc-600">Llegó después</b>: entró hasta 15
-          minutos después de la hora, pero ya estaba marcado. No mide cuánto tiempo esperó el paciente, solo que
-          llegó.
+          <b className="text-zinc-600">Coach no se conectó</b>: el paciente se conectó a la videollamada de esa
+          cita y el coach nunca entró. <b className="text-zinc-600">Paciente conectado al marcar</b>: se conectó
+          antes del clic en «No contesta». <b className="text-zinc-600">Se conectó después</b>: hasta 15 minutos
+          después de la hora, pero ya estaba marcado. No mide cuánto tiempo esperó el paciente, solo que se
+          conectó.
         </p>
         <p className="mt-1">
           Sin Médico Corporativo (es presencial) ni citas Trepsi canceladas. Datos desde el 20 de agosto de

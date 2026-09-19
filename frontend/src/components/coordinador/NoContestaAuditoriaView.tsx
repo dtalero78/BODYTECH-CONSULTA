@@ -115,13 +115,17 @@ const AYUDA = {
   citas:
     'Citas del coach en el rango cuya hora ya pasó. No cuenta Médico Corporativo (es presencial) ni citas Trepsi canceladas.',
   noContesta:
-    'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció.',
+    'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció. «Paciente nunca se conectó», «Paciente se conectó tarde» y «Coach no se conectó» son partes de este total.',
+  nuncaSeConecto:
+    'De los «No contesta»: el paciente nunca se conectó a la videollamada de esa cita.',
+  tarde:
+    'De los «No contesta»: el paciente se conectó más de 15 minutos después de la hora de la cita y el coach no entró. Aquí marcar «No contesta» es razonable.',
   coachNoSeConecto:
     'El paciente abrió el link y se conectó a tiempo a la videollamada (a más tardar 15 minutos después de la hora de la cita), pero el coach nunca entró. Aun así, la cita quedó como «No contesta». No importa si el coach marcó antes o después de que el paciente llegara.',
   atendiaOtro:
-    'A esa hora el coach estaba en otra consulta: abrió otra entre 25 minutos antes de la cita y el momento de la marca. Suele indicar que se le cruzó la agenda.',
+    'De los «Coach no se conectó»: a esa hora el coach estaba en otra consulta (abrió otra entre 25 minutos antes de la cita y el momento de la marca). Suele indicar que se le cruzó la agenda.',
   llamo:
-    'El coach usó el botón «Llamar» antes de marcar «No contesta». Lo esperado es llamar siempre antes de marcar.',
+    '«No contesta» en los que el coach usó el botón «Llamar» antes de marcar. Lo esperado es llamar siempre antes de marcar.',
   entro:
     'Hora en que el paciente se conectó a la videollamada. No dice cuánto tiempo se quedó esperando.',
   marco: 'Hora en que el coach hizo clic en «No contesta».',
@@ -316,7 +320,14 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           })}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+          <KpiCard
+            label="Citas"
+            value={data?.citas ?? 0}
+            loading={loading}
+            accent="ink"
+            ayuda={AYUDA.citas}
+          />
           <KpiCard
             label="No contesta"
             value={data?.noContesta ?? 0}
@@ -326,9 +337,25 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             ayuda={`${AYUDA.noContesta} El porcentaje es sobre todas las citas del rango.`}
           />
           <KpiCard
+            label="Paciente nunca se conectó"
+            value={data?.nuncaSeConecto ?? 0}
+            caption={data ? `${pct(data.nuncaSeConecto, data.noContesta)} de No contesta` : undefined}
+            loading={loading}
+            accent="zinc"
+            ayuda={AYUDA.nuncaSeConecto}
+          />
+          <KpiCard
+            label="Paciente se conectó tarde"
+            value={data?.tarde ?? 0}
+            caption={data ? `${pct(data.tarde, data.noContesta)} de No contesta` : undefined}
+            loading={loading}
+            accent="zinc"
+            ayuda={AYUDA.tarde}
+          />
+          <KpiCard
             label="Coach no se conectó"
             value={data?.casos ?? 0}
-            caption={data ? `${pct(data.casos, data.noContesta)} de los No contesta` : undefined}
+            caption={data ? `${pct(data.casos, data.noContesta)} de No contesta` : undefined}
             loading={loading}
             accent="red"
             ayuda={`${AYUDA.coachNoSeConecto} El porcentaje es sobre los «No contesta».`}
@@ -336,15 +363,15 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           <KpiCard
             label="Atendía a otro"
             value={data?.atendiaOtro ?? 0}
-            caption={data ? `${pct(data.atendiaOtro, data.casos)} de los casos` : undefined}
+            caption={data ? `${pct(data.atendiaOtro, data.casos)} de coach no conectado` : undefined}
             loading={loading}
             accent="zinc"
             ayuda={AYUDA.atendiaOtro}
           />
           <KpiCard
-            label="Llamados antes de marcar"
+            label="Coach llamó antes"
             value={data?.llamadosAntes ?? 0}
-            caption={data ? `${pct(data.llamadosAntes, data.noContesta)} de los No contesta` : undefined}
+            caption={data ? `${pct(data.llamadosAntes, data.noContesta)} de No contesta` : undefined}
             loading={loading}
             accent="ink"
             ayuda={AYUDA.llamo}
@@ -365,19 +392,21 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                 <Th>Coach</Th>
                 <Th alinear="right" ayuda={AYUDA.citas}>Citas</Th>
                 <Th alinear="right" ayuda={AYUDA.noContesta}>No contesta</Th>
+                <Th alinear="right" ayuda={AYUDA.nuncaSeConecto}>Paciente nunca se conectó</Th>
+                <Th alinear="right" ayuda={AYUDA.tarde}>Paciente se conectó tarde</Th>
                 <Th alinear="right" ayuda={AYUDA.coachNoSeConecto}>Coach no se conectó</Th>
                 <Th alinear="right" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
-                <Th alinear="right" ayuda={AYUDA.llamo}>Llamó antes</Th>
+                <Th alinear="right" ayuda={AYUDA.llamo}>Coach llamó antes</Th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
                 </tr>
               ) : !data || data.porCoach.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
                     No hay citas «No contesta» en el rango.
                   </td>
                 </tr>
@@ -414,6 +443,12 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                           {c.noContesta}
                           <span className="text-zinc-400 text-[11px] ml-1">({pct(c.noContesta, c.citas)})</span>
                         </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
+                          {c.nuncaSeConecto}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
+                          {c.tarde}
+                        </td>
                         <td
                           className={`px-4 py-2.5 text-right tabular-nums ${
                             c.casos > 0 ? 'font-semibold text-red-700' : 'text-zinc-400'
@@ -432,7 +467,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                       </tr>
                       {abierto && (
                         <tr className="bg-zinc-50/70">
-                          <td colSpan={6} className="px-4 pb-3 pt-1">
+                          <td colSpan={8} className="px-4 pb-3 pt-1">
                             <CasosCoach casos={casosDe(c.medicoCodigo)} />
                           </td>
                         </tr>
@@ -451,6 +486,8 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                     {data.noContesta}
                     <span className="text-zinc-400 text-[11px] ml-1 font-normal">({pct(data.noContesta, data.citas)})</span>
                   </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.nuncaSeConecto}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.tarde}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.casos}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.atendiaOtro}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>
@@ -467,9 +504,11 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
       {/* Cómo se mide: sin esto el número se discute en vez de usarse. */}
       <div className="mt-4 text-[12px] leading-relaxed text-zinc-500 max-w-[860px]">
         <p>
-          <b className="text-zinc-600">Coach no se conectó</b>: el paciente se conectó a la videollamada de esa
-          cita a tiempo (a más tardar 15 minutos después de la hora) y el coach nunca entró. Quien se conectó
-          más tarde no se cuenta. No mide cuánto tiempo esperó el paciente, solo que se conectó.
+          Cada «No contesta» es una de estas partes: <b className="text-zinc-600">paciente nunca se conectó</b>;{' '}
+          <b className="text-zinc-600">paciente se conectó tarde</b> (más de 15 minutos después de la hora); o{' '}
+          <b className="text-zinc-600">coach no se conectó</b> (el paciente se conectó a tiempo y el coach nunca
+          entró). Los pocos casos en que los dos se conectaron no están en ninguna. No mide cuánto tiempo esperó el
+          paciente, solo que se conectó.
         </p>
         <p className="mt-1">
           Sin Médico Corporativo (es presencial) ni citas Trepsi canceladas. Datos desde el 20 de agosto de

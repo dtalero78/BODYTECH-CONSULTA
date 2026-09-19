@@ -205,6 +205,8 @@ export interface AuditoriaCoach {
   citas: number;
   noContesta: number;
   llamadosAntes: number;
+  nuncaSeConecto: number;
+  tarde: number;
   casos: number;
   atendiaOtro: number;
 }
@@ -215,6 +217,8 @@ export interface AuditoriaNoContesta {
   citas: number;
   noContesta: number;
   llamadosAntes: number;
+  nuncaSeConecto: number;
+  tarde: number;
   casos: number;
   atendiaOtro: number;
   porCoach: AuditoriaCoach[];

@@ -64,20 +64,26 @@ describe('resumirAuditoria', () => {
     expect(r.noContesta).toBe(1);
   });
 
-  it('si el paciente nunca entró no es un caso, pero la llamada previa sí cuenta', () => {
+  it('si el paciente nunca entró cuenta como "nunca se conectó", y la llamada previa también cuenta', () => {
     const r = resumirAuditoria('d', 'h', [{ medico: 'C1', citas: 5, no_contesta: 1 }], [
       fila({ paciente_entro_at: null, llamadas_antes: 2 }),
     ], nombres);
-    expect(r.casos).toBe(0);
-    expect(r.llamadosAntes).toBe(1);
-    expect(r.porCoach[0].llamadosAntes).toBe(1);
+    expect(r).toMatchObject({ casos: 0, nuncaSeConecto: 1, tarde: 0, llamadosAntes: 1 });
+    expect(r.porCoach[0]).toMatchObject({ nuncaSeConecto: 1, llamadosAntes: 1 });
   });
 
-  it('si el paciente se conectó más de 15 min tarde no es un caso', () => {
+  it('si el paciente se conectó más de 15 min tarde cuenta como "tarde", no como caso', () => {
     const r = resumirAuditoria('d', 'h', [{ medico: 'C1', citas: 5, no_contesta: 1 }], [
       fila({ paciente_entro_at: min(40), marcado_at: min(5) }),
     ], nombres);
-    expect(r.casos).toBe(0);
+    expect(r).toMatchObject({ casos: 0, tarde: 1, nuncaSeConecto: 0 });
+  });
+
+  it('si los dos se conectaron no cae en ninguna de las partes, aunque el paciente haya llegado tarde', () => {
+    const r = resumirAuditoria('d', 'h', [{ medico: 'C1', citas: 5, no_contesta: 1 }], [
+      fila({ paciente_entro_at: min(40), coach_entro: true }),
+    ], nombres);
+    expect(r).toMatchObject({ casos: 0, tarde: 0, nuncaSeConecto: 0 });
   });
 
   it('no importa si el coach marcó antes o después de que el paciente llegara', () => {

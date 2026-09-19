@@ -15,12 +15,17 @@
 //     conecta a la consulta de esa cita.
 //   · cuándo se marcó   → `audit_log`, acción 'no_contesta' (el clic).
 //
-// Un caso ("Coach no se conectó") = el paciente se conectó A TIEMPO y el coach
-// no entró nunca. No importa si el coach marcó antes o después de que el
-// paciente llegara: al principio se separaban, y la diferencia confundía sin
-// cambiar el hallazgo (Daniel, 18-sep). Quien se conectó más de 15 min tarde
-// no cuenta: ahí marcar "No contesta" es razonable. No mide cuánto se quedó el
-// paciente, solo que llegó.
+// Cada "No contesta" cae en una de estas partes (pedidas por Daniel, 19-sep):
+//   · Paciente nunca se conectó.
+//   · Paciente se conectó tarde: más de 15 min después de la hora, y el coach
+//     no entró. Ahí marcar "No contesta" es razonable.
+//   · Coach no se conectó (el "caso"): el paciente se conectó A TIEMPO y el
+//     coach no entró nunca.
+//   · Los dos se conectaron: no se muestra como indicador.
+// En "Coach no se conectó" no importa si el coach marcó antes o después de que
+// el paciente llegara: al principio se separaban, y la diferencia confundía sin
+// cambiar el hallazgo (Daniel, 18-sep). No mide cuánto se quedó el paciente,
+// solo que llegó.
 // ============================================================================
 
 import postgresService from './postgres.service';
@@ -73,6 +78,10 @@ export interface AuditoriaCoach {
   noContesta: number;
   /** "No contesta" con al menos una llamada del botón antes de marcar. */
   llamadosAntes: number;
+  /** "No contesta" en los que el paciente nunca se conectó. */
+  nuncaSeConecto: number;
+  /** El paciente se conectó más de 15 min tarde y el coach no entró. */
+  tarde: number;
   /** "Coach no se conectó": el paciente llegó a tiempo y el coach no entró. */
   casos: number;
   atendiaOtro: number;
@@ -84,6 +93,8 @@ export interface AuditoriaNoContesta {
   citas: number;
   noContesta: number;
   llamadosAntes: number;
+  nuncaSeConecto: number;
+  tarde: number;
   casos: number;
   atendiaOtro: number;
   porCoach: AuditoriaCoach[];
@@ -121,6 +132,8 @@ export function resumirAuditoria(
         citas: 0,
         noContesta: 0,
         llamadosAntes: 0,
+        nuncaSeConecto: 0,
+        tarde: 0,
         casos: 0,
         atendiaOtro: 0,
       };
@@ -145,11 +158,17 @@ export function resumirAuditoria(
       c.llamadosAntes += 1;
       llamadosAntes += 1;
     }
-    // Un caso es que el paciente llegó a tiempo y el coach NUNCA entró. Si el
-    // coach entró, se vieron (o pudieron verse): eso ya no es un paciente
-    // esperando.
-    if (!f.paciente_entro_at || f.coach_entro) continue;
-    if (!llegoATiempo(ms(f.cita), ms(f.paciente_entro_at))) continue;
+    if (!f.paciente_entro_at) {
+      c.nuncaSeConecto += 1;
+      continue;
+    }
+    // Si el coach entró, se vieron (o pudieron verse): eso ya no es un
+    // paciente esperando, llegue a la hora que llegue.
+    if (f.coach_entro) continue;
+    if (!llegoATiempo(ms(f.cita), ms(f.paciente_entro_at))) {
+      c.tarde += 1;
+      continue;
+    }
 
     c.casos += 1;
     if (f.atendia_otro) c.atendiaOtro += 1;
@@ -178,6 +197,8 @@ export function resumirAuditoria(
     to,
     citas: todos.reduce((acc, c) => acc + c.citas, 0),
     noContesta: todos.reduce((acc, c) => acc + c.noContesta, 0),
+    nuncaSeConecto: todos.reduce((acc, c) => acc + c.nuncaSeConecto, 0),
+    tarde: todos.reduce((acc, c) => acc + c.tarde, 0),
     llamadosAntes,
     casos: casosDetalle.length,
     atendiaOtro: casosDetalle.filter((c) => c.atendiaOtro).length,

@@ -115,7 +115,7 @@ const AYUDA = {
   citas:
     'Citas del coach en el rango cuya hora ya pasó. No cuenta Médico Corporativo (es presencial) ni citas Trepsi canceladas.',
   noContesta:
-    'Citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció. «Paciente nunca se conectó», «Paciente se conectó tarde» y «Coach no se conectó» son partes de este total.',
+    'Todas las citas que el coach marcó como «No contesta», es decir, en las que dijo que el paciente no apareció. «Paciente nunca se conectó», «Paciente se conectó tarde» y «Coach no se conectó» son partes de este total (los pocos casos en que se conectaron los dos no están en ninguna). El porcentaje es sobre las citas totales.',
   nuncaSeConecto:
     'De los «No contesta»: el paciente nunca se conectó a la videollamada de esa cita.',
   tarde:
@@ -137,19 +137,33 @@ function Th({
   ayuda,
   alinear = 'left',
   className = 'px-4 py-2.5',
+  sub,
 }: {
   children: ReactNode;
   ayuda?: ReactNode;
   alinear?: 'left' | 'right';
   className?: string;
+  /** Segunda línea: sobre qué es el porcentaje de la columna. */
+  sub?: string;
 }) {
   return (
-    <th className={`font-semibold ${className} ${alinear === 'right' ? 'text-right' : 'text-left'}`}>
+    <th className={`font-semibold align-bottom ${className} ${alinear === 'right' ? 'text-right' : 'text-left'}`}>
       <span className={`inline-flex items-center gap-1 ${alinear === 'right' ? 'justify-end' : ''}`}>
         {children}
         {ayuda && <Ayuda texto={ayuda} />}
       </span>
+      {sub && <div className="mt-0.5 text-[10.5px] font-normal normal-case tracking-normal text-zinc-400">{sub}</div>}
     </th>
+  );
+}
+
+/** Valor con su porcentaje en gris al lado. */
+function Celda({ valor, base, cls = 'text-zinc-700' }: { valor: number; base: number; cls?: string }) {
+  return (
+    <td className={`px-4 py-2.5 text-right tabular-nums ${cls}`} style={{ fontFamily: FONT_MONO }}>
+      {valor}
+      <span className="text-zinc-400 text-[11px] ml-1 font-normal">({pct(valor, base)})</span>
+    </td>
   );
 }
 
@@ -320,21 +334,13 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           })}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200">
           <KpiCard
-            label="Citas"
+            label="Citas totales"
             value={data?.citas ?? 0}
             loading={loading}
             accent="ink"
             ayuda={AYUDA.citas}
-          />
-          <KpiCard
-            label="No contesta"
-            value={data?.noContesta ?? 0}
-            caption={data ? `${pct(data.noContesta, data.citas)} de ${data.citas} citas` : undefined}
-            loading={loading}
-            accent="amber"
-            ayuda={`${AYUDA.noContesta} El porcentaje es sobre todas las citas del rango.`}
           />
           <KpiCard
             label="Paciente nunca se conectó"
@@ -358,15 +364,7 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             caption={data ? `${pct(data.casos, data.noContesta)} de No contesta` : undefined}
             loading={loading}
             accent="red"
-            ayuda={`${AYUDA.coachNoSeConecto} El porcentaje es sobre los «No contesta».`}
-          />
-          <KpiCard
-            label="Atendía a otro"
-            value={data?.atendiaOtro ?? 0}
-            caption={data ? `${pct(data.atendiaOtro, data.casos)} de coach no conectado` : undefined}
-            loading={loading}
-            accent="zinc"
-            ayuda={AYUDA.atendiaOtro}
+            ayuda={AYUDA.coachNoSeConecto}
           />
           <KpiCard
             label="Coach llamó antes"
@@ -375,6 +373,14 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             loading={loading}
             accent="ink"
             ayuda={AYUDA.llamo}
+          />
+          <KpiCard
+            label="Total No contesta"
+            value={data?.noContesta ?? 0}
+            caption={data ? `${pct(data.noContesta, data.citas)} de las citas` : undefined}
+            loading={loading}
+            accent="amber"
+            ayuda={AYUDA.noContesta}
           />
         </div>
       </div>
@@ -390,23 +396,22 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
             <thead>
               <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 text-[11px] uppercase tracking-[0.06em]">
                 <Th>Coach</Th>
-                <Th alinear="right" ayuda={AYUDA.citas}>Citas</Th>
-                <Th alinear="right" ayuda={AYUDA.noContesta}>No contesta</Th>
-                <Th alinear="right" ayuda={AYUDA.nuncaSeConecto}>Paciente nunca se conectó</Th>
-                <Th alinear="right" ayuda={AYUDA.tarde}>Paciente se conectó tarde</Th>
-                <Th alinear="right" ayuda={AYUDA.coachNoSeConecto}>Coach no se conectó</Th>
-                <Th alinear="right" ayuda={AYUDA.atendiaOtro}>Atendía a otro</Th>
-                <Th alinear="right" ayuda={AYUDA.llamo}>Coach llamó antes</Th>
+                <Th alinear="right" ayuda={AYUDA.citas}>Citas totales</Th>
+                <Th alinear="right" ayuda={AYUDA.nuncaSeConecto} sub="% de No contesta">Paciente nunca se conectó</Th>
+                <Th alinear="right" ayuda={AYUDA.tarde} sub="% de No contesta">Paciente se conectó tarde</Th>
+                <Th alinear="right" ayuda={AYUDA.coachNoSeConecto} sub="% de No contesta">Coach no se conectó</Th>
+                <Th alinear="right" ayuda={AYUDA.llamo} sub="% de No contesta">Coach llamó antes</Th>
+                <Th alinear="right" ayuda={AYUDA.noContesta} sub="% de las citas">Total No contesta</Th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">Cargando…</td>
                 </tr>
               ) : !data || data.porCoach.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                     No hay citas «No contesta» en el rango.
                   </td>
                 </tr>
@@ -439,35 +444,19 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                         <td className="px-4 py-2.5 text-right tabular-nums text-zinc-700" style={num}>
                           {c.citas}
                         </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={num}>
-                          {c.noContesta}
-                          <span className="text-zinc-400 text-[11px] ml-1">({pct(c.noContesta, c.citas)})</span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
-                          {c.nuncaSeConecto}
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
-                          {c.tarde}
-                        </td>
-                        <td
-                          className={`px-4 py-2.5 text-right tabular-nums ${
-                            c.casos > 0 ? 'font-semibold text-red-700' : 'text-zinc-400'
-                          }`}
-                          style={num}
-                        >
-                          {c.casos}
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
-                          {c.atendiaOtro}
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-zinc-600" style={num}>
-                          {c.llamadosAntes}
-                          <span className="text-zinc-400 text-[11px] ml-1">de {c.noContesta}</span>
-                        </td>
+                        <Celda valor={c.nuncaSeConecto} base={c.noContesta} />
+                        <Celda valor={c.tarde} base={c.noContesta} />
+                        <Celda
+                          valor={c.casos}
+                          base={c.noContesta}
+                          cls={c.casos > 0 ? 'font-semibold text-red-700' : 'text-zinc-400'}
+                        />
+                        <Celda valor={c.llamadosAntes} base={c.noContesta} />
+                        <Celda valor={c.noContesta} base={c.citas} cls="text-amber-700" />
                       </tr>
                       {abierto && (
                         <tr className="bg-zinc-50/70">
-                          <td colSpan={8} className="px-4 pb-3 pt-1">
+                          <td colSpan={7} className="px-4 pb-3 pt-1">
                             <CasosCoach casos={casosDe(c.medicoCodigo)} />
                           </td>
                         </tr>
@@ -482,18 +471,11 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
                 <tr className="bg-zinc-50 border-t border-zinc-200 font-semibold text-zinc-800">
                   <td className="px-4 py-2.5">Total</td>
                   <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.citas}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-amber-700" style={{ fontFamily: FONT_MONO }}>
-                    {data.noContesta}
-                    <span className="text-zinc-400 text-[11px] ml-1 font-normal">({pct(data.noContesta, data.citas)})</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.nuncaSeConecto}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.tarde}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-red-700" style={{ fontFamily: FONT_MONO }}>{data.casos}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>{data.atendiaOtro}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums" style={{ fontFamily: FONT_MONO }}>
-                    {data.llamadosAntes}
-                    <span className="text-zinc-400 text-[11px] ml-1 font-normal">de {data.noContesta}</span>
-                  </td>
+                  <Celda valor={data.nuncaSeConecto} base={data.noContesta} cls="text-zinc-800" />
+                  <Celda valor={data.tarde} base={data.noContesta} cls="text-zinc-800" />
+                  <Celda valor={data.casos} base={data.noContesta} cls="text-red-700" />
+                  <Celda valor={data.llamadosAntes} base={data.noContesta} cls="text-zinc-800" />
+                  <Celda valor={data.noContesta} base={data.citas} cls="text-amber-700" />
                 </tr>
               </tfoot>
             )}
@@ -507,8 +489,9 @@ export function NoContestaAuditoriaView({ showToast }: Props) {
           Cada «No contesta» es una de estas partes: <b className="text-zinc-600">paciente nunca se conectó</b>;{' '}
           <b className="text-zinc-600">paciente se conectó tarde</b> (más de 15 minutos después de la hora); o{' '}
           <b className="text-zinc-600">coach no se conectó</b> (el paciente se conectó a tiempo y el coach nunca
-          entró). Los pocos casos en que los dos se conectaron no están en ninguna. No mide cuánto tiempo esperó el
-          paciente, solo que se conectó.
+          entró). Los pocos casos en que se conectaron los dos no están en ninguna, por eso las partes pueden sumar
+          un poco menos que el total. Los porcentajes de las columnas son sobre el total de «No contesta»; el del
+          total, sobre las citas.
         </p>
         <p className="mt-1">
           Sin Médico Corporativo (es presencial) ni citas Trepsi canceladas. Datos desde el 20 de agosto de

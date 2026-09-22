@@ -40,6 +40,13 @@ interface Patient {
   medico?: string;
   motivoConsulta?: string;
   tipoExamen?: string;
+  /**
+   * ¿Ya se marcó el botón "Llamar" para esta cita? Es lo que habilita el
+   * "No contesta" en el panel: marcar la inasistencia de alguien a quien nunca
+   * se llamó era el hallazgo de la Auditoría No contesta (209 de 234 casos
+   * entre el 5 y el 18-sep-2026 no tenían ni una llamada).
+   */
+  llamadaHecha?: boolean;
 }
 
 interface PaginatedPatients {
@@ -312,7 +319,9 @@ class MedicalPanelService {
       const patientsResult = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "atendido", "pvEstado", "codEmpresa", "empresa",
-                "medico", "motivoConsulta", "tipoExamen"
+                "medico", "motivoConsulta", "tipoExamen",
+                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
+                  AS llamada_hecha
          FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
@@ -359,7 +368,8 @@ class MedicalPanelService {
         empresaListado: row.codEmpresa || row.empresa || 'SIN EMPRESA',
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
-        tipoExamen: row.tipoExamen || ''
+        tipoExamen: row.tipoExamen || '',
+        llamadaHecha: row.llamada_hecha === true
       }));
 
       return {
@@ -391,7 +401,9 @@ class MedicalPanelService {
       const result = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "fechaConsulta", "atendido", "pvEstado", "codEmpresa",
-                "empresa", "medico", "motivoConsulta", "tipoExamen"
+                "empresa", "medico", "motivoConsulta", "tipoExamen",
+                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
+                  AS llamada_hecha
          FROM "HistoriaClinica"
          WHERE ("numeroId" = $1 OR "celular" = $1)${sf}
          ORDER BY "fechaAtencion" DESC
@@ -420,7 +432,8 @@ class MedicalPanelService {
         empresaListado: row.codEmpresa || row.empresa || 'SIN EMPRESA',
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
-        tipoExamen: row.tipoExamen || ''
+        tipoExamen: row.tipoExamen || '',
+        llamadaHecha: row.llamada_hecha === true
       };
     } catch (error) {
       console.error('❌ Error buscando paciente en PostgreSQL:', error);
@@ -791,9 +804,10 @@ class MedicalPanelService {
         `INSERT INTO "HistoriaClinica" (
            "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
            "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
-           "fechaAtencion", "horaAtencion", "atendido", "ciudad", "sede_id", "origen"
+           "fechaAtencion", "horaAtencion", "atendido", "ciudad", "sede_id", "origen",
+           "mc_empresa"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                    "celular", "empresa", "codEmpresa", "tipoExamen", "examenes", "medico",
                    "fechaAtencion", "horaAtencion", "atendido", "ciudad"`,
@@ -816,6 +830,13 @@ class MedicalPanelService {
           data.ciudad ?? null,
           sedeId,
           origen,
+          // El informe corporativo y la hoja de valoraciones agrupan por
+          // `mc_empresa`, que es el campo "Empresa" del panel del médico. La
+          // orden traía la empresa solo en `empresa`, así que una cita
+          // corporativa nacía fuera del informe de su propia empresa hasta que
+          // el médico la volviera a elegir a mano. Solo para corporativo: en
+          // las demás, `empresa` es otra cosa (convenio, aseguradora).
+          origen === 'corporativo' ? data.empresa?.trim() || null : null,
         ]
       );
 

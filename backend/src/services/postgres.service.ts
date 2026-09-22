@@ -1447,6 +1447,40 @@ class PostgresService {
         END $$
       `);
 
+      // ===== Alarma "cita sin profesional conectado" =====
+      // Bitácora y candado del aviso que sale al grupo de WhatsApp cuando llegó
+      // la hora de una cita y el profesional no tiene ni un latido de jornada
+      // desde entonces. La PK es (fecha, historia_id): una alarma por cita y
+      // por día, por más pasadas que corra el worker.
+      //   claimed = reclamada por una pasada (se re-toma a los 15 min)
+      //   enviada = el grupo la recibió
+      //   error   = WHAPI falló; se reintenta hasta 3 veces
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS alarma_cita_envio (
+          fecha        DATE        NOT NULL,
+          historia_id  TEXT        NOT NULL,
+          estado       TEXT        NOT NULL DEFAULT 'claimed',
+          intentos     INTEGER     NOT NULL DEFAULT 0,
+          medico       TEXT,
+          sede_id      TEXT,
+          hora_cita    TEXT,
+          paciente     TEXT,
+          message_id   TEXT,
+          error        TEXT,
+          claimed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          enviada_at   TIMESTAMPTZ,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (fecha, historia_id),
+          CONSTRAINT alarma_cita_envio_estado_chk
+            CHECK (estado IN ('claimed', 'enviada', 'error'))
+        )
+      `);
+
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_alarma_cita_envio_fecha_estado
+          ON alarma_cita_envio (fecha, estado)
+      `);
+
       // ===== Valoraciones del Médico Corporativo → Google Sheets =====
       // Una fila por valoración cerrada. NO es la fuente del dato —la historia
       // ya está guardada en `HistoriaClinica`— sino la cola que garantiza que

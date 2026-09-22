@@ -43,6 +43,7 @@ import monitorIntegracionRoutes from './routes/monitor-integracion.routes';
 import whatsappChatRoutes from './routes/whatsapp-chat.routes';
 import gestionReportAdminRoutes from './routes/gestion-report-admin.routes';
 import linkAutoAdminRoutes from './routes/link-auto-admin.routes';
+import alarmaCitaAdminRoutes from './routes/alarma-cita-admin.routes';
 import corporativoSheetAdminRoutes from './routes/corporativo-sheet-admin.routes';
 import gestionReportImageRoutes from './routes/gestion-report-image.routes';
 import auditRoutes from './routes/audit.routes';
@@ -50,6 +51,7 @@ import bodyvibeRoutes from './routes/bodyvibe.routes';
 import vistasGuardadasRoutes from './routes/vistas-guardadas.routes';
 import gestionReportService from './services/gestion-report.service';
 import linkAutoService from './services/link-auto.service';
+import alarmaCitaService from './services/alarma-cita.service';
 import llamadasVozService from './services/llamadas-voz.service';
 import { diarizacionService } from './services/video/diarizacion.service';
 import { trepsiMonitorMiddleware } from './middleware/trepsi-monitor.middleware';
@@ -278,6 +280,7 @@ app.use('/api/bodyvibe', bodyvibeLogMiddleware, bodyvibeRoutes);
 app.use('/api/vistas', vistasGuardadasRoutes);
 app.use('/api/admin/gestion-report', requireRole('admin'), gestionReportAdminRoutes);
 app.use('/api/admin/link-auto', requireRole('admin'), linkAutoAdminRoutes);
+app.use('/api/admin/alarma-cita', requireRole('admin'), alarmaCitaAdminRoutes);
 // Volcado de valoraciones del Médico Corporativo a Google Sheets: bitácora,
 // pasada manual y reencolado de valoraciones ya cerradas.
 app.use('/api/admin/corporativo-sheet', requireRole('admin'), corporativoSheetAdminRoutes);
@@ -512,9 +515,36 @@ if (process.env.NODE_ENV !== 'test') {
   const on = (v?: string) => v === 'true' || v === '1';
   const estado = [
     `recordatorio ${on(process.env.RECORDATORIO_ENABLED) ? `ACTIVO ${process.env.RECORDATORIO_HORA || '07:00'} COT` : 'apagado'}`,
-    `link ${on(process.env.LINK_AUTO_ENABLED) ? `ACTIVO ${process.env.LINK_AUTO_MINUTOS_ANTES || 15} min antes` : 'apagado'}`,
+    `link ${on(process.env.LINK_AUTO_ENABLED) ? `ACTIVO ${Number(process.env.LINK_AUTO_MINUTOS_ANTES ?? 0) || 0} min antes de la cita` : 'apagado'}`,
   ].join(' · ');
   console.log(`🔗 [Link-Auto] Worker iniciado cada ${LINK_AUTO_INTERVALO_MS / 60000}min — ${estado}`);
+}
+
+// Alarma "cita sin profesional conectado". El tablero de jornada ya pinta en
+// rojo la cita que cayó en un hueco, pero ese rojo solo existe para quien abre
+// el tablero — y para entonces la consulta ya se perdió. Este worker saca la
+// misma señal por WhatsApp al grupo de soporte mientras todavía se puede
+// rescatar: barre cada minuto y avisa por las citas cuya hora pasó hace más de
+// ALARMA_CITA_GRACIA_MIN si el profesional no tuvo NI UN latido desde entonces.
+// Un mensaje por pasada (no uno por cita) e idempotente por cita y día.
+// Apagado por defecto: sin ALARMA_CITA_ENABLED + WHAPI_TOKEN + grupo, no-op.
+const ALARMA_CITA_INTERVALO_MS = (Number(process.env.ALARMA_CITA_INTERVALO_MIN) || 1) * 60_000;
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    alarmaCitaService.maybeDispatch().catch((e) => {
+      console.error('[alarma-cita] worker error:', e?.message ?? e);
+    });
+  }, ALARMA_CITA_INTERVALO_MS);
+  const activa =
+    (process.env.ALARMA_CITA_ENABLED === 'true' || process.env.ALARMA_CITA_ENABLED === '1') &&
+    Boolean(process.env.WHAPI_TOKEN) &&
+    Boolean(process.env.ALARMA_CITA_GRUPO);
+  console.log(
+    `🔴 [Alarma-Cita] Worker iniciado cada ${ALARMA_CITA_INTERVALO_MS / 60000}min — ` +
+      (activa
+        ? `ACTIVA (gracia ${Number(process.env.ALARMA_CITA_GRACIA_MIN) || 3} min)`
+        : 'apagada')
+  );
 }
 
 // Transcripción de las llamadas del coach. Cada grabación se transcribe sola

@@ -4,8 +4,9 @@
 // Namespace Socket.io AISLADO (`/mapa-rutas`): no comparte salas ni eventos con
 // el postural ni el tracker, así que NO puede interferir con las llamadas.
 // - "ahora": consultas activas del sessionTracker (en memoria), clasificadas por
-//   sub-sala. Además, POR SUB-SALA, la lista de gente conectada ahora
-//   (coach/médico + paciente, con nombre) para pintarlos dentro del local.
+//   local con `zonaDe` (mapa-zonas.helper). Además, POR LOCAL, la lista de
+//   gente conectada ahora (coach/médico + paciente, con nombre) para pintarlos
+//   dentro del local.
 // - "hoy": agendadas/atendidas hoy (HistoriaClinica.fechaAtencion/fechaConsulta).
 // Cada sala se resuelve UNA vez (zona + nombres) y se cachea → el conteo/gente es
 // pura suma en memoria. Push SOLO cuando algo cambia → sin polling.
@@ -16,6 +17,7 @@ import { Server as SocketIOServer, Namespace, Socket } from 'socket.io';
 import authService from './auth.service';
 import postgresService from './postgres.service';
 import { sessionTracker } from './session-tracker.service';
+import { ZONAS_EN_VIVO, ZonaEnVivo, zonaDe } from '../helpers/mapa-zonas.helper';
 
 // Emails autorizados a ver el Mapa de Rutas en vivo (privado).
 const MAPA_ALLOWED = new Set<string>([
@@ -23,8 +25,9 @@ const MAPA_ALLOWED = new Set<string>([
   'nikolay.correal@bodytechcorp.com',
 ]);
 
-type ZoneId = 'medica-nativa' | 'nutricion-trepsi' | 'nutricion-nativa';
-const ZONES: ZoneId[] = ['medica-nativa', 'nutricion-trepsi', 'nutricion-nativa'];
+// Solo los locales con datos en esta base; Nutrición presencial y ACC no viajan.
+type ZoneId = ZonaEnVivo;
+const ZONES = ZONAS_EN_VIVO;
 
 interface Consulta {
   prof: { role: 'medico' | 'coach'; name: string; online: boolean };
@@ -50,11 +53,9 @@ interface ZoneHoy {
 }
 
 function zerosHoy(): Record<ZoneId, ZoneHoy> {
-  return {
-    'medica-nativa': { agendadas: 0, atendidas: 0 },
-    'nutricion-trepsi': { agendadas: 0, atendidas: 0 },
-    'nutricion-nativa': { agendadas: 0, atendidas: 0 },
-  };
+  const out = {} as Record<ZoneId, ZoneHoy>;
+  for (const z of ZONES) out[z] = { agendadas: 0, atendidas: 0 };
+  return out;
 }
 
 class MapaStatsService {
@@ -166,13 +167,14 @@ class MapaStatsService {
     if (this.resolving.has(roomName)) return;
     this.resolving.add(roomName);
     try {
-      // Profesional: rol + nombre (por su código).
+      // Profesional: rol + nombre + especialidad (por su código).
       let rol: 'medico' | 'coach' | null = null;
       let coach: string | null = null;
+      let especialidad: string | null = null;
       if (medicoCode) {
         try {
           const r = await postgresService.query(
-            `SELECT rol,
+            `SELECT rol, especialidad,
                     COALESCE(NULLIF(alias, ''), TRIM(BOTH ' ' FROM COALESCE(primer_nombre, '') || ' ' || COALESCE(primer_apellido, ''))) AS nombre
              FROM profesionales WHERE codigo = $1 LIMIT 1`,
             [medicoCode],
@@ -180,33 +182,33 @@ class MapaStatsService {
           const v = r?.[0]?.rol;
           rol = v === 'coach' ? 'coach' : v === 'medico' ? 'medico' : null;
           coach = r?.[0]?.nombre || null;
+          especialidad = r?.[0]?.especialidad || null;
         } catch {
           /* profesional desconocido */
         }
       }
 
-      // Origen: ¿la sala corresponde a una historia creada por Trepsi?
-      let isTrepsi = false;
+      // Origen de la historia de la sala, y si la creó Trepsi.
+      let esTrepsi = false;
+      let origen: string | null = null;
       try {
         const r = await postgresService.query(
-          `SELECT EXISTS(
-             SELECT 1 FROM trepsi_appointments t
-             JOIN room_historia_map m ON m.historia_id = t.historia_id
-             WHERE m.room_name = $1
-           ) AS is_trepsi`,
+          `SELECT h."origen",
+                  EXISTS(SELECT 1 FROM trepsi_appointments t WHERE t.historia_id = m.historia_id) AS es_trepsi
+             FROM room_historia_map m
+             LEFT JOIN "HistoriaClinica" h ON h."_id" = m.historia_id
+            WHERE m.room_name = $1
+            LIMIT 1`,
           [roomName],
         );
-        const v = r?.[0]?.is_trepsi;
-        isTrepsi = v === true || v === 't' || v === 'true';
+        const v = r?.[0]?.es_trepsi;
+        esTrepsi = v === true || v === 't' || v === 'true';
+        origen = r?.[0]?.origen ?? null;
       } catch {
-        /* origen desconocido → nativa */
+        /* origen desconocido → lo decide quién atiende */
       }
 
-      const zone: ZoneId = isTrepsi
-        ? 'nutricion-trepsi'
-        : rol === 'coach'
-          ? 'nutricion-nativa'
-          : 'medica-nativa';
+      const zone = zonaDe({ esTrepsi, origen, rol, especialidad });
       this.roomCache.set(roomName, { zone, rol, coach });
       this.schedulePush();
     } finally {
@@ -224,31 +226,37 @@ class MapaStatsService {
       const start = new Date(Date.UTC(y, m, d, 5, 0, 0, 0));
       const end = new Date(Date.UTC(y, m, d + 1, 4, 59, 59, 999));
 
+      // Agrupado por lo que decide el local; la regla la aplica `zonaDe`, la
+      // misma que clasifica las salas en vivo.
       const rows = await postgresService.query(
         `SELECT
-           SUM(CASE WHEN is_trepsi THEN 1 ELSE 0 END) AS nt_agend,
-           SUM(CASE WHEN is_trepsi AND atendida THEN 1 ELSE 0 END) AS nt_atend,
-           SUM(CASE WHEN NOT is_trepsi AND rol_coach THEN 1 ELSE 0 END) AS nn_agend,
-           SUM(CASE WHEN NOT is_trepsi AND rol_coach AND atendida THEN 1 ELSE 0 END) AS nn_atend,
-           SUM(CASE WHEN NOT is_trepsi AND NOT rol_coach THEN 1 ELSE 0 END) AS mn_agend,
-           SUM(CASE WHEN NOT is_trepsi AND NOT rol_coach AND atendida THEN 1 ELSE 0 END) AS mn_atend
-         FROM (
-           SELECT
-             (h."fechaConsulta" IS NOT NULL) AS atendida,
-             EXISTS(SELECT 1 FROM trepsi_appointments t WHERE t.historia_id = h."_id") AS is_trepsi,
-             EXISTS(SELECT 1 FROM profesionales p WHERE p.codigo = h."medico" AND p.rol = 'coach') AS rol_coach
-           FROM "HistoriaClinica" h
-           WHERE h."fechaAtencion" >= $1 AND h."fechaAtencion" <= $2
-         ) x`,
+           EXISTS(SELECT 1 FROM trepsi_appointments t WHERE t.historia_id = h."_id") AS es_trepsi,
+           h."origen" AS origen,
+           p.rol,
+           p.especialidad,
+           COUNT(*) AS agendadas,
+           COUNT(h."fechaConsulta") AS atendidas
+         FROM "HistoriaClinica" h
+         LEFT JOIN LATERAL (
+           SELECT rol, especialidad FROM profesionales
+            WHERE codigo = h."medico"
+            ORDER BY activo DESC NULLS LAST
+            LIMIT 1
+         ) p ON TRUE
+         WHERE h."fechaAtencion" >= $1 AND h."fechaAtencion" <= $2
+         GROUP BY 1, 2, 3, 4`,
         [start, end],
       );
-      const r = rows?.[0] || {};
+      if (!rows) return; // la base no respondió: se quedan los conteos anteriores
       const n = (v: unknown): number => parseInt(String(v ?? '0'), 10) || 0;
-      this.hoy = {
-        'medica-nativa': { agendadas: n(r.mn_agend), atendidas: n(r.mn_atend) },
-        'nutricion-trepsi': { agendadas: n(r.nt_agend), atendidas: n(r.nt_atend) },
-        'nutricion-nativa': { agendadas: n(r.nn_agend), atendidas: n(r.nn_atend) },
-      };
+      const hoy = zerosHoy();
+      for (const r of rows) {
+        const esTrepsi = r.es_trepsi === true || r.es_trepsi === 't' || r.es_trepsi === 'true';
+        const z = zonaDe({ esTrepsi, origen: r.origen, rol: r.rol, especialidad: r.especialidad });
+        hoy[z].agendadas += n(r.agendadas);
+        hoy[z].atendidas += n(r.atendidas);
+      }
+      this.hoy = hoy;
     } catch (e) {
       console.error('[MapaStats] Error refrescando "hoy":', e);
     }

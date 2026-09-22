@@ -48,6 +48,13 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
       "roles": null
     },
     {
+      "ruta": "/registro",
+      "componente": "RegistroPage",
+      "redirigeA": null,
+      "protegida": false,
+      "roles": null
+    },
+    {
       "ruta": "/forgot-password",
       "componente": "ForgotPasswordPage",
       "redirigeA": null,
@@ -270,6 +277,14 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
   ],
   "api": [
     {
+      "ruta": "/api/auth/registro",
+      "roles": null
+    },
+    {
+      "ruta": "/api/digitalizar",
+      "roles": null
+    },
+    {
       "ruta": "/api/...",
       "roles": null
     },
@@ -306,6 +321,62 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
       "roles": [
         "admin",
         "coordinador"
+      ]
+    },
+    {
+      "ruta": "/api/directorio",
+      "roles": null
+    },
+    {
+      "ruta": "/api/padron",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "ruta": "/api/empresas",
+      "roles": [
+        "admin",
+        "coordinador",
+        "medico"
+      ]
+    },
+    {
+      "ruta": "/api/digitalizar",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "ruta": "/api/accesos",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "ruta": "/api/usuarios-global",
+      "roles": [
+        "admin",
+        "coordinador"
+      ]
+    },
+    {
+      "ruta": "/api/informe-corporativo",
+      "roles": [
+        "admin",
+        "coordinador",
+        "medico"
+      ]
+    },
+    {
+      "ruta": "/api/carpeta",
+      "roles": [
+        "medico",
+        "coach",
+        "coordinador",
+        "admin"
       ]
     },
     {
@@ -361,6 +432,12 @@ export const CATALOGO_GENERADO: CatalogoGenerado = {
     },
     {
       "ruta": "/api/admin/link-auto",
+      "roles": [
+        "admin"
+      ]
+    },
+    {
+      "ruta": "/api/admin/corporativo-sheet",
       "roles": [
         "admin"
       ]

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Quién entra a cada local — BODYTECH-CONSULTA</title>
+<title>Servicios Médicos — Mapa de Rutas</title>
 <!--
   PLANO DE PERSONAS (CAD verde sobre oscuro). Metáfora centro comercial: el edificio
   con sus locales y las PUERTAS POR DONDE ENTRA LA GENTE (actores), no endpoints.
@@ -62,12 +62,13 @@
 <div class="info">
   <div class="eyebrow">Plano del edificio · quién entra a cada local</div>
   <h1>BODYTECH-CONSULTA</h1>
-  <p>El edificio <b>Bodytech</b> y sus <b>locales</b>. Cada <b>puerta</b> es <b>quién entra</b> (como en un centro comercial) o el <b>resultado que sale</b>. <b>Clic en un local</b> para ver su gente.</p>
+  <p>La sección <b>Servicios Médicos</b> del edificio Bodytech y sus <b>locales</b>. Cada <b>puerta</b> es <b>quién entra</b> (como en un centro comercial) o el <b>resultado que sale</b>. <b>Clic en un local</b> para ver su gente.</p>
   <div class="legend">
     <span><i style="background:var(--amber)"></i>Quién agenda la cita</span>
     <span><i style="background:var(--green)"></i>Paciente</span>
     <span><i style="background:var(--blue)"></i>Profesional</span>
     <span><i style="background:var(--gray)"></i>Resultado que sale</span>
+    <span><i style="border:1px dashed var(--grn3)"></i>Local en otra app</span>
   </div>
 </div>
 <div class="toolbar">
@@ -97,10 +98,12 @@
 <script>
 /* ===== DATOS (inyectados) ===== */
 var REPO  = 'BODYTECH-CONSULTA';
-var SUITES = [{"id":"medica","name":"UNIDAD MÉDICA VIRTUAL","x":24,"y":78,"w":576,"h":600},{"id":"nutricion","name":"NUTRICIÓN VIRTUAL","x":640,"y":78,"w":576,"h":600}];
-var ZONES = [{"id":"medica-nativa","name":"Nativa","full":"Unidad Médica Virtual · Nativa","sub":"la cita la agenda el coordinador","suite":"medica","side":"L","x":48,"y":120,"w":528,"h":540},{"id":"nutricion-trepsi","name":"Trepsi","full":"Nutrición Virtual · Trepsi","sub":"la cita la crea Trepsi","suite":"nutricion","side":"R","x":664,"y":120,"w":528,"h":255},{"id":"nutricion-nativa","name":"Nativa","full":"Nutrición Virtual · Nativa","sub":"la cita la agenda el coordinador","suite":"nutricion","side":"R","x":664,"y":405,"w":528,"h":255}];
-var DOORS = [{"id":"mn-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda y crea la cita médica.","como":"Entra al panel del coordinador en la plataforma.","zones":["medica-nativa"]},{"id":"mn-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su videoconsulta médica.","como":"Por el link que recibe en WhatsApp.","zones":["medica-nativa"]},{"id":"mn-medico","dir":"in","kind":"personal","icon":"🩺","title":"Médico","purpose":"Atiende la consulta y llena la historia clínica.","como":"Entra a la sala de video del consultorio.","zones":["medica-nativa"]},{"id":"mn-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp al terminar la consulta.","zones":["medica-nativa"]},{"id":"nt-trepsi","dir":"in","kind":"crea","icon":"🔗","title":"Trepsi","purpose":"Crea la cita de nutrición automáticamente.","como":"Entra por la integración con Trepsi.","zones":["nutricion-trepsi"]},{"id":"nt-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su consulta de nutrición.","como":"Por el link que recibe en WhatsApp.","zones":["nutricion-trepsi"]},{"id":"nt-coach","dir":"in","kind":"personal","icon":"🥗","title":"Coach","purpose":"Atiende la consulta de nutrición.","como":"Entra a la sala de video.","zones":["nutricion-trepsi"]},{"id":"nt-result","dir":"out","kind":"salida","icon":"🔁","title":"Resultado a Trepsi","purpose":"El resultado de la consulta se devuelve a Trepsi.","como":"Sale por la integración al guardar la historia.","zones":["nutricion-trepsi"]},{"id":"nt-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp.","zones":["nutricion-trepsi"]},{"id":"nn-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda y crea la cita de nutrición.","como":"Entra al panel del coordinador en la plataforma.","zones":["nutricion-nativa"]},{"id":"nn-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su consulta de nutrición.","como":"Por el link que recibe en WhatsApp.","zones":["nutricion-nativa"]},{"id":"nn-coach","dir":"in","kind":"personal","icon":"🥗","title":"Coach","purpose":"Atiende la consulta de nutrición.","como":"Entra a la sala de video.","zones":["nutricion-nativa"]},{"id":"nn-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp.","zones":["nutricion-nativa"]}];
-var LIVE = null;  // conteos en vivo por sub-sala (llegan por Socket.io /mapa-rutas)
+var SUITES = [{"id":"complementarios","name":"SERVICIOS COMPLEMENTARIOS","x":24,"y":78,"w":576,"h":780},{"id":"deportivos","name":"SERVICIOS DEPORTIVOS","x":640,"y":78,"w":576,"h":780}];
+var ZONES = [{"id":"nutricion-trepsi","name":"Coach Nutrición Trepsi","full":"Servicios Complementarios · Coach Nutrición Trepsi","sub":"participan los coaches · por videollamada","suite":"complementarios","side":"L","live":"video","y":120,"x":48,"w":528,"h":218},{"id":"nutricion-presencial","name":"Nutrición Presencial","full":"Servicios Complementarios · Nutrición Presencial","sub":"los nutricionistas usan el panel de Trepsi, sin videollamada","suite":"complementarios","side":"L","nota":"SIN VIDEOLLAMADA · SIN CONTEO AQUÍ","aviso":"sin videollamada: aún no hay conteo para este local","y":368,"x":48,"w":528,"h":218},{"id":"acc","name":"ACC","full":"Servicios Complementarios · ACC","sub":"el fisio o nutri de cada ciudad","suite":"complementarios","side":"L","aparte":true,"nota":"OTRA APP · SIN CONTEO AQUÍ","aviso":"vive en otra app: su gente no se ve desde aquí","y":616,"x":48,"w":528,"h":218},{"id":"umv","name":"Unidad Médica Virtual","full":"Servicios Deportivos · Unidad Médica Virtual","sub":"fisios con el panel de historia médica, por videollamada","suite":"deportivos","side":"R","live":"video","y":120,"x":664,"w":528,"h":218},{"id":"corporativo","name":"Médico Corporativo","full":"Servicios Deportivos · Médico Corporativo","sub":"el médico va en persona y llena la historia clínica","suite":"deportivos","side":"R","live":"hoy","aviso":"presencial: no pasa por videollamada","y":368,"x":664,"w":528,"h":218}];
+var DOORS = [{"id":"nt-trepsi","dir":"in","kind":"crea","icon":"🔗","title":"Trepsi","purpose":"Crea la cita de nutrición automáticamente.","como":"Entra por la integración con Trepsi.","zones":["nutricion-trepsi"]},{"id":"nt-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su consulta de nutrición.","como":"Por el link que recibe en WhatsApp.","zones":["nutricion-trepsi"]},{"id":"nt-coach","dir":"in","kind":"personal","icon":"🥗","title":"Coach","purpose":"Atiende la consulta por videollamada.","como":"Entra a la sala de video desde su panel.","zones":["nutricion-trepsi"]},{"id":"nt-result","dir":"out","kind":"salida","icon":"🔁","title":"Resultado a Trepsi","purpose":"El resultado de la consulta se devuelve a Trepsi.","como":"Sale por la integración al guardar la historia.","zones":["nutricion-trepsi"]},{"id":"nt-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp.","zones":["nutricion-trepsi"]},{"id":"np-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Va a su consulta de nutrición en persona.","como":"Presencial, sin videollamada.","zones":["nutricion-presencial"]},{"id":"np-nutri","dir":"in","kind":"personal","icon":"🥗","title":"Nutricionista","purpose":"Atiende en persona y llena el panel de Trepsi.","como":"Sin videollamada.","zones":["nutricion-presencial"]},{"id":"acc-afiliado","dir":"in","kind":"paciente","icon":"👤","title":"Afiliado","purpose":"Lo atiende el fisio o nutri de su ciudad.","como":"Por la app de ACC, aparte de esta.","zones":["acc"]},{"id":"acc-prof","dir":"in","kind":"personal","icon":"🧑‍⚕️","title":"Fisio o nutri","purpose":"El profesional de ACC en cada ciudad.","como":"Trabaja en la app de ACC, no en esta.","zones":["acc"]},{"id":"umv-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda la cita en el departamento UMV.","como":"Entra al panel del coordinador en la plataforma.","zones":["umv"]},{"id":"umv-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Entra a su videoconsulta.","como":"Por el link que recibe en WhatsApp.","zones":["umv"]},{"id":"umv-fisio","dir":"in","kind":"personal","icon":"🩺","title":"Fisio","purpose":"Atiende por videollamada y llena la historia médica.","como":"Entra a la sala de video con el panel de historia.","zones":["umv"]},{"id":"umv-reporte","dir":"out","kind":"salida","icon":"📩","title":"Reporte al paciente","purpose":"Resumen de la consulta para el paciente.","como":"Sale por WhatsApp al terminar la consulta.","zones":["umv"]},{"id":"mc-coord","dir":"in","kind":"crea","icon":"🗓️","title":"Coordinador","purpose":"Agenda la valoración del Médico Corporativo.","como":"Entra al panel del coordinador en la plataforma.","zones":["corporativo"]},{"id":"mc-paciente","dir":"in","kind":"paciente","icon":"👤","title":"Paciente","purpose":"Va a su examen en persona.","como":"Presencial: no recibe link de videollamada.","zones":["corporativo"]},{"id":"mc-medico","dir":"in","kind":"personal","icon":"🩺","title":"Médico","purpose":"Hace el examen y llena la historia clínica.","como":"Abre su panel en la plataforma, sin videollamada.","zones":["corporativo"]},{"id":"mc-excel","dir":"out","kind":"salida","icon":"📊","title":"Valoración al Excel","purpose":"Cada valoración queda como fila de la hoja.","como":"Sale al Google Sheet al finalizar la consulta.","zones":["corporativo"]},{"id":"mc-carpeta","dir":"out","kind":"salida","icon":"📁","title":"Carpeta del afiliado","purpose":"La historia queda en la carpeta del afiliado.","como":"Sale a la base global al finalizar la consulta.","zones":["corporativo"]}];
+/* live: 'video' = conteo de la sala en curso + del día · 'hoy' = solo del día (presencial) ·
+   sin live = el local no tiene datos en esta base (nota/aviso dicen por qué). */
+var LIVE = null;  // conteos en vivo por local (llegan por Socket.io /mapa-rutas)
 
 /* ===== helpers de datos ===== */
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -114,9 +117,9 @@ function trunc(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
 /* Texto en vivo para una puerta, según su tipo y los conteos de su sub-sala. */
 function liveFor(d){
   if(!LIVE)return '';
-  var st=LIVE[(d.zones||[])[0]];
+  var z=zoneById((d.zones||[])[0]), st=z&&LIVE[z.id];
   if(!st)return '';
-  if(d.kind==='paciente'||d.kind==='personal')return '🟢 '+st.ahora+' ahora · '+st.atendidasHoy+' hoy';
+  if(d.kind==='paciente'||d.kind==='personal')return z.live==='video'?('🟢 '+st.ahora+' ahora · '+st.atendidasHoy+' hoy'):(st.atendidasHoy+' hoy');
   if(d.kind==='crea')return st.agendadasHoy+' hoy';
   if(d.kind==='salida')return st.atendidasHoy+' hoy';
   return '';
@@ -178,9 +181,12 @@ function roomLabelTech(z,inb,out){
   var cx=z.x+z.w/2, cy=z.y+z.h/2;
   var s=txt(cx,cy-14,z.name.toUpperCase(),{fill:'var(--ink)','font-family':'var(--mono)','font-size':17,'font-weight':700,'text-anchor':'middle','letter-spacing':'.06em'});
   s+=lineS(cx-z.name.length*5.4,cy-2,cx+z.name.length*5.4,cy-2,{stroke:'var(--grn2)','stroke-width':1,opacity:.6});
-  s+=txt(cx,cy+18,trunc(z.sub,48),{fill:'var(--muted)','font-family':'var(--mono)','font-size':10.5,'text-anchor':'middle'});
+  s+=txt(cx,cy+18,trunc(z.sub,64),{fill:'var(--muted)','font-family':'var(--mono)','font-size':10.5,'text-anchor':'middle'});
   s+=txt(cx,cy+40,inb+' ENTRAN · '+out+' SALEN',{fill:'var(--grn3)','font-family':'var(--mono)','font-size':11,'text-anchor':'middle','font-weight':700,'letter-spacing':'.05em'});
-  if(LIVE&&LIVE[z.id]){var st=LIVE[z.id];s+=txt(cx,cy+63,'🟢 '+st.ahora+' EN CONSULTA · '+st.atendidasHoy+' HOY',{fill:'var(--green)','font-family':'var(--mono)','font-size':11.5,'text-anchor':'middle','font-weight':700,'letter-spacing':'.04em'});}
+  var st=LIVE&&LIVE[z.id], ls={'font-family':'var(--mono)','font-size':11.5,'text-anchor':'middle','font-weight':700,'letter-spacing':'.04em'};
+  if(st&&z.live==='video')s+=txt(cx,cy+63,'🟢 '+st.ahora+' EN CONSULTA · '+st.atendidasHoy+' HOY',Object.assign({fill:'var(--green)'},ls));
+  else if(st&&z.live==='hoy')s+=txt(cx,cy+63,'📋 '+st.atendidasHoy+' ATENDIDAS · '+st.agendadasHoy+' AGENDADAS HOY',Object.assign({fill:'var(--green)'},ls));
+  else if(z.nota)s+=txt(cx,cy+63,z.nota,Object.assign({fill:'var(--faint)'},ls));
   return s;
 }
 
@@ -195,15 +201,15 @@ var OTRAS=[
   {x:0,    y:-760, w:600, h:620},  // encima-izq
   {x:640,  y:-760, w:600, h:620},  // encima-der
   {x:1320, y:-760, w:640, h:620},  // esquina superior derecha
-  {x:1320, y:0,    w:640, h:720}   // a la derecha del edificio
+  {x:1320, y:0,    w:640, h:900}   // a la derecha del edificio (alto = FH)
 ];
 function mallContext(){
   var s='';
   // límite de todo el "centro comercial"
-  var MX=-160, MY=-860, MW=2200, MH=1740;
+  var MX=-160, MY=-860, MW=2200, MH=FH+RD+200-MY;
   s+=rect(MX,MY,MW,MH,{fill:'none',stroke:'var(--grn2)','stroke-width':1.6,'stroke-dasharray':'18 12',rx:22});
   s+=txt(MX+10,MY-20,'EDIFICIO BODYTECH · CENTRO COMERCIAL',{fill:'var(--grn2)','font-family':'var(--mono)','font-size':22,'font-weight':700,'letter-spacing':'.1em'});
-  s+=txt(MX+10,MY+6,'Bodytech es enorme — esta plataforma cubre solo UNA sección (la de abajo)',{fill:'var(--muted)','font-family':'var(--mono)','font-size':13,'letter-spacing':'.03em'});
+  s+=txt(MX+10,MY+6,'Bodytech es enorme — Servicios Médicos es solo UNA sección (la de abajo)',{fill:'var(--muted)','font-family':'var(--mono)','font-size':13,'letter-spacing':'.03em'});
   // otras áreas: mismas paredes/verde que nuestra sección (solo que vacías)
   for(var i=0;i<OTRAS.length;i++){var o=OTRAS[i];
     s+=rect(o.x,o.y,o.w,o.h,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.4,rx:6});
@@ -218,7 +224,7 @@ function mallContext(){
 }
 
 /* ===== OVERVIEW ===== */
-var FW=1240, FH=720, RD=72;
+var FW=1240, FH=900, RD=72;
 function buildOverview(){
   var s='';
   // contexto: el resto del edificio Bodytech (centro comercial) — solo representativo
@@ -230,29 +236,32 @@ function buildOverview(){
   s+=el('text',{x:FW+RD/2,y:FH/2,fill:'var(--faint)','font-family':'var(--mono)','font-size':11,'text-anchor':'middle','letter-spacing':'.34em',transform:'rotate(90 '+(FW+RD/2)+' '+(FH/2)+')'},'CARRETERA · ACCESO');
   // huella del edificio
   s+=rect(0,0,FW,FH,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.4,rx:6});
+  // nombre de la sección, arriba al centro (como en el boceto)
+  var bt='SERVICIOS MÉDICOS', btw=bt.length*13+48;
+  s+=rect(FW/2-btw/2,14,btw,38,{fill:'var(--bg)',stroke:'var(--grn)','stroke-width':1.4,rx:4});
+  s+=txt(FW/2,40,bt,{fill:'var(--ink)','font-family':'var(--mono)','font-size':20,'font-weight':700,'text-anchor':'middle','letter-spacing':'.12em'});
   // suites
   for(var k=0;k<SUITES.length;k++){var su=SUITES[k];
     s+=rect(su.x,su.y,su.w,su.h,{fill:'none',stroke:'var(--grn3)','stroke-width':1.6,rx:10,opacity:.85});
-    s+=rect(su.x+18,su.y-16,su.name.length*8.6+30,32,{fill:'var(--bg)',stroke:'var(--grn2)','stroke-width':1,rx:3});
+    s+=rect(su.x+18,su.y-16,su.name.length*10.2+30,32,{fill:'var(--bg)',stroke:'var(--grn2)','stroke-width':1,rx:3});
     s+=txt(su.x+32,su.y+5,su.name,{fill:'var(--grn3)','font-family':'var(--mono)','font-size':15,'font-weight':700,'letter-spacing':'.06em'});
-    s+=txt(su.x+su.w-14,su.y-22,'LOCAL',{fill:'var(--faint)','font-family':'var(--mono)','font-size':9,'letter-spacing':'.18em','text-anchor':'end'});
   }
   // sub-salas: TODAS las puertas van al muro que da a la carretera (z.side)
   for(var i=0;i<ZONES.length;i++){var z=ZONES[i];
     var inb=doorsOf(z.id,'in'),out=doorsOf(z.id,'out'),dl=inb.concat(out),side=z.side||'L';
     var g='';
-    g+=rect(z.x,z.y,z.w,z.h,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4});
+    g+=rect(z.x,z.y,z.w,z.h,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4,'stroke-dasharray':z.aparte?'10 7':null});
     for(var a=0;a<dl.length;a++){var cy=z.y+z.h*(a+1)/(dl.length+1);g+=doorV(z.x,z.w,cy,24,side,kindColor(dl[a].kind));}
     g+=roomLabelTech(z,inb.length,out.length);
+    if(z.aparte){var ox=(side==='R')?z.x+14:z.x+z.w-14;g+=txt(ox,z.y+20,'OTRA APP',{fill:'var(--amber)','font-family':'var(--mono)','font-size':10,'font-weight':700,'letter-spacing':'.14em','text-anchor':(side==='R')?'start':'end'});}
     var hx=(side==='R')?z.x+12:z.x+z.w-12, ha=(side==='R')?'start':'end';
     g+=txt(hx,z.y+z.h-12,'clic para entrar ▸',{fill:'var(--faint)','font-family':'var(--mono)','font-size':10,'text-anchor':ha});
     s+=el('g',{'data-zone':z.id,style:'cursor:pointer'},g);
   }
-  s+=dimH(0,FW,FH+RD+28,'sección · consulta virtual');
+  s+=dimH(0,FW,FH+RD+28,'sección · servicios médicos');
   s+=northArrow(FW+RD+46,-RD+34);
   s+=cartela(FW-360,FH+RD+56,'Quién entra a cada local','centro comercial · personas');
-  s+=txt(0,-RD-22,'◂ ESTA PLATAFORMA · CONSULTA VIRTUAL (una sección del edificio)',{fill:'var(--grn3)','font-family':'var(--mono)','font-size':20,'font-weight':700,'letter-spacing':'.06em'});
-  return {svg:s, bbox:{x:-220,y:-940,w:2360,h:1900}};
+  return {svg:s, bbox:{x:-220,y:-940,w:2360,h:FH+RD+260+940}};
 }
 
 /* ===== DETAIL ===== */
@@ -291,8 +300,10 @@ function gentePanel(z,roomX,roomW,roomY,roomH){
   var cs=(st&&st.consultas)||[];
   if(!cs.length){
     // Sin consultas: nombre fantasma del local (+ aviso si el feed está conectado).
-    s+=txt(cx,roomY+52,z.name.toUpperCase(),{fill:'rgba(127,230,166,.13)','font-family':'var(--mono)','font-size':21,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
-    if(st)s+=txt(cx,roomY+roomH/2,'— nadie en consulta ahora —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
+    s+=txt(cx,roomY+roomH/2-44,z.name.toUpperCase(),{fill:'rgba(127,230,166,.13)','font-family':'var(--mono)','font-size':21,'font-weight':700,'text-anchor':'middle','letter-spacing':'.1em'});
+    var msg=(st&&z.live==='video')?'nadie en consulta ahora':(z.live==='video'?'':z.aviso);
+    if(msg)s+=txt(cx,roomY+roomH/2,'— '+msg+' —',{fill:'var(--faint)','font-family':'var(--mono)','font-size':13,'text-anchor':'middle','font-style':'italic'});
+    if(st&&z.live==='hoy')s+=txt(cx,roomY+roomH/2+26,st.atendidasHoy+' atendidas · '+st.agendadasHoy+' agendadas hoy',{fill:'var(--green)','font-family':'var(--mono)','font-size':12,'font-weight':700,'text-anchor':'middle'});
     return s;
   }
   var G=gridOf(cs.length), cw=G.cw, cardH=G.cardH;
@@ -335,7 +346,7 @@ function buildDetail(zid){
   s+=roadV(roadCx,roomY-12,roomH+24);
   s+=el('text',{x:roadCx,y:roomY+roomH+42,fill:'var(--faint)','font-family':'var(--mono)','font-size':10,'text-anchor':'middle','letter-spacing':'.28em'},'CARRETERA');
   // muros + piso
-  s+=rect(roomX-WT,roomY-WT,roomW+2*WT,roomH+2*WT,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.2,rx:4});
+  s+=rect(roomX-WT,roomY-WT,roomW+2*WT,roomH+2*WT,{fill:'url(#poche)',stroke:'var(--grn)','stroke-width':2.2,rx:4,'stroke-dasharray':z.aparte?'12 8':null});
   s+=rect(roomX,roomY,roomW,roomH,{fill:'url(#floor)',stroke:'var(--grn2)','stroke-width':1.4});
   s+=gentePanel(z,roomX,roomW,roomY,roomH);
   // TODAS las puertas en el muro que da a la calle (izq), agrupadas entran/salen
@@ -356,9 +367,11 @@ function buildDetail(zid){
   }
   s+=dimV(roomY,roomY+roomH,roomX+roomW+WT+18,total+' puertas');
   s+=northArrow(roomX+roomW+WT+92,roomY+6);
-  s+=cartela(roomX-WT, roomY+roomH+WT+44, 'Quién entra a — '+zfull, inb.length+' entran · '+out.length+' salen');
+  s+=cartela(roomX-WT, roomY+roomH+WT+44, 'Quién entra a — '+z.name, inb.length+' entran · '+out.length+' salen');
   var bottom=roomY+roomH+WT+44+120;
-  return {svg:s, bbox:{x:tagX-24,y:40,w:(roomX+roomW+WT+150)-(tagX-24),h:bottom-40}};
+  // el encuadre incluye el título completo (nombres largos lo sacaban por la izquierda)
+  var left=Math.min(tagX-24,20), right=Math.max(roomX+roomW+WT+150, 40+('QUIÉN ENTRA A — '+zfull).length*12.6+20);
+  return {svg:s, bbox:{x:left,y:40,w:right-left,h:bottom-40}};
 }
 
 /* ===== panel lateral ===== */

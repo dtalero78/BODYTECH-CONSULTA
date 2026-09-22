@@ -447,10 +447,12 @@ async function registrarEnvio(p: {
       .catch((e) => console.error('⚠️ Error guardando video_room_name:', e?.message ?? e));
   }
 
-  // 3. El mensaje en el hilo del chat.
+  // 3. El mensaje en el hilo del chat: el texto de la plantilla que recibió el
+  //    paciente (bodytech_nutricion_v1). El link va al final porque en
+  //    WhatsApp es el botón "Conectarme", no parte del texto.
   const videoCallUrl = buildLinkPaciente(roomNameWithParams);
   try {
-    const messageBody = `Hola ${patientName},\n\nTe saludamos de VIP Salud Ocupacional.\n\nTienes una consulta médica a las ${appointmentTime}.\n\nPara ingresar haz clic en el siguiente enlace:\n${videoCallUrl}`;
+    const messageBody = `Hola ${patientName},\n\nTienes tu valoración de nutrición virtual a la hora ${appointmentTime}\n\nPara ingresar a tu videollamada toca "Conectarme".\nSi necesitas otro horario, toca "Reprogramar".\n\nConectarme: ${videoCallUrl}`;
     await postgresService.registrarMensajeSaliente(
       phoneWithPlus,
       messageBody,

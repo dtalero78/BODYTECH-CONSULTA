@@ -127,6 +127,20 @@ describe('link-auto worker', () => {
       expect(params[1]).toBe('2026-09-04T05:00:00.000Z');
     });
 
+    // El examen del Médico Corporativo es presencial: ni el recordatorio ni un
+    // "Conectarme" a una videollamada que no existe. El filtro vive en la query,
+    // así que es lo que se cuida: si alguien lo borra, esto falla.
+    it('la query de candidatas deja fuera las citas corporativas', async () => {
+      a('2026-09-03T12:05:00Z'); // 07:05 COT
+      process.env.LINK_AUTO_ENABLED = 'false';
+      query.mockResolvedValueOnce([]);
+      await linkAutoService.maybeDispatch();
+      const sql: string = query.mock.calls[0][0];
+      expect(sql).toMatch(/AND NOT \(\s*LOWER\(COALESCE\(h\."origen", ''\)\) = 'corporativo'/);
+      // Filas viejas sin origen: se cae a la especialidad del profesional.
+      expect(sql).toContain("= 'medico corporativo'");
+    });
+
     // Si se prende a media tarde, no le recuerda a nadie una cita que ya tuvo.
     it('un recordatorio tardío no incluye citas ya pasadas', async () => {
       a('2026-09-03T22:07:00Z'); // 17:07 COT
@@ -146,6 +160,20 @@ describe('link-auto worker', () => {
       expect(params[5]).toBe('link');
       expect(params[0]).toBe('2026-09-03T10:55:00.000Z'); // ahora − 5 min de gracia
       expect(params[1]).toBe('2026-09-03T11:15:00.000Z'); // ahora + 15 min
+    });
+
+    // "Justo a la hora de la consulta" (22-sep-2026). CERO minutos es un valor
+    // configurado, no un hueco: leerlo con el helper de "número positivo"
+    // caería al default y el link volvería a salir 15 minutos antes.
+    it('con 0 minutos antes, la ventana termina en este instante', async () => {
+      a('2026-09-03T11:00:00Z');
+      process.env.RECORDATORIO_ENABLED = 'false';
+      process.env.LINK_AUTO_MINUTOS_ANTES = '0';
+      query.mockResolvedValueOnce([]);
+      await linkAutoService.maybeDispatch();
+      const params = query.mock.calls[0][1];
+      expect(params[0]).toBe('2026-09-03T10:55:00.000Z'); // sigue la gracia hacia atrás
+      expect(params[1]).toBe('2026-09-03T11:00:00.000Z'); // ahora, ni un minuto antes
     });
 
     it('a las 07:05 con los dos prendidos, corren los dos (recordatorio primero)', async () => {

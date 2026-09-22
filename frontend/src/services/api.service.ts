@@ -326,8 +326,8 @@ class ApiService {
 
   /**
    * Enviar mensaje de WhatsApp con template aprobado de Twilio
-   * Template Bodytech: "Hola {{1}}, Te saludamos del Bodytech. Tienes una consulta médica a las {{2}}..."
-   * Button URL: https://bodytech.app/panel-medico/patient/{{3}}
+   * Plantilla bodytech_nutricion_v1: "Hola {{1}}, Tienes tu valoración de nutrición virtual a la hora {{2}}..."
+   * Botones: Conectarme → /panel-medico/patient/{{3}} · Reprogramar → /reprogramar/{{4}}
    *
    * @param phone - Número de teléfono sin el prefijo + (ejemplo: 573001234567)
    * @param roomNameWithParams - Path completo con query params (ejemplo: "consulta-abc123?nombre=Juan&apellido=Perez&documento=123&doctor=JUAN")

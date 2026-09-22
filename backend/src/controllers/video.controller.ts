@@ -548,8 +548,8 @@ class VideoController {
    * Body: { phone: string, roomNameWithParams: string, patientName: string, appointmentTime: string }
    *
    * Usa el template aprobado de Twilio con variables:
-   * Template VIP: "Hola {{1}}, Te saludamos de VIP Salud Ocupacional. Tienes una consulta médica a las {{2}}..."
-   * Button URL: {PUBLIC_APP_URL}/panel-medico/patient/{{3}}
+   * Plantilla bodytech_nutricion_v1: "Hola {{1}}, Tienes tu valoración de nutrición virtual a la hora {{2}}..."
+   * Botones: Conectarme → /panel-medico/patient/{{3}} · Reprogramar → /reprogramar/{{4}}
    */
   async sendWhatsApp(req: Request, res: Response, next: NextFunction): Promise<void> {
     const parsed = sendWhatsAppSchema.safeParse(req.body);

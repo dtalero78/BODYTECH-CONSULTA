@@ -495,12 +495,14 @@ if (process.env.NODE_ENV !== 'test') {
 // Worker de los WhatsApp automáticos del día. Dos mensajes, dos momentos:
 //   · RECORDATORIO a las 07:00 (RECORDATORIO_HORA) a toda la agenda: hora +
 //     botón Reprogramar, SIN link — a esa hora no hay coach en la sala.
-//   · LINK minutos antes de cada cita (LINK_AUTO_MINUTOS_ANTES): Conectarme +
+//   · LINK a la hora de cada cita (LINK_AUTO_MINUTOS_ANTES = 0): Conectarme +
 //     Reprogramar, lo mismo que manda el botón "Contactar".
 // La idempotencia es por cita y por tipo (claim en `link_auto_envio`), así que
-// repetir pasadas no duplica. Cada 5 min para que "15 minutos antes" sea 15 y
-// no 25. Ambos apagados por defecto: sin *_ENABLED, no-op.
-const LINK_AUTO_INTERVALO_MS = (Number(process.env.LINK_AUTO_INTERVALO_MIN) || 5) * 60_000;
+// repetir pasadas no duplica. El intervalo del barrido es el error máximo del
+// envío: con 5 min, una cita de las 08:00 recibía el link hasta 08:04. Por eso
+// barre cada minuto desde que el link salió a la hora en punto y no 15 antes.
+// Ambos apagados por defecto: sin *_ENABLED, no-op.
+const LINK_AUTO_INTERVALO_MS = (Number(process.env.LINK_AUTO_INTERVALO_MIN) || 1) * 60_000;
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => {
     linkAutoService.maybeDispatch().catch((e) => {

@@ -274,6 +274,17 @@ El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos 
 
 Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=` (bitácora por tipo). El dry-run no escribe nada y dice a quién le llegaría; con `historiaId` el tipo `link` ignora la ventana de minutos ("mandáselo ya"). Ambos apagados por defecto (`LINK_AUTO_ENABLED`, `RECORDATORIO_ENABLED`).
 
+### Quién cuenta como profesional en los indicadores
+
+Las citas de **MyBodytech** llegan con el nombre de la persona escrito a mano en `medico` ("PAULA ANDREA MORA PINZON") en vez de un código: son las 8 personas de la **UMV**, que no atienden por la plataforma. En Indicadores cada nombre salía como un "coach" más con 0% y hundía el promedio del equipo, y lo mismo en la imagen del Informe de Gestión que se manda por WhatsApp (22-sep-2026: la atención de 30 días se leía 62% en vez de 66%; 140 citas, 1 atendida).
+
+`TIENE_FICHA_SQL` en [calendario.service.ts](backend/src/services/calendario.service.ts) es la regla única: la cita cuenta solo si su `medico` **existe en `profesionales`**. La usan `getIndicadores()` (pantalla Indicadores + Informe de Gestión, que sale de ahí) y la Auditoría No contesta.
+
+- **Tener ficha, no estar activa.** Zharick López atiende con la ficha inactiva; exigir `activo` borraría trabajo real. Lo que nunca va a tener ficha es un nombre escrito a mano.
+- **Solo sale de la estadística de gestión**: esas citas siguen en el calendario, en Digitalizar y en la base. No se borra nada.
+- Un coach nuevo sin ficha tampoco aparecería en los indicadores — el alta crea la ficha, así que en la práctica no pasa, pero es el costo de la regla.
+- Fijado en [calendario-indicadores.service.test.ts](backend/src/services/__tests__/calendario-indicadores.service.test.ts).
+
 ### Auditoría No contesta (panel Coordinador → ANÁLISIS)
 
 "No contesta" lo marca el coach a mano y nada lo contrastaba con la sala. Al cruzarlo el 18-sep-2026: en 47 de 235 "No contesta" (5–18 sep) **el paciente se conectó a tiempo a la videollamada y el coach nunca entró**, y solo 25 de los 235 tuvieron una llamada con el botón antes de marcarse. La pantalla **Auditoría No contesta** ([NoContestaAuditoriaView.tsx](frontend/src/components/coordinador/NoContestaAuditoriaView.tsx), `GET /api/calendario/no-contesta-auditoria`, [no-contesta-auditoria.service.ts](backend/src/services/no-contesta-auditoria.service.ts)) lo muestra por rango de fechas y por coach, con los casos, un ⓘ por concepto ([Ayuda.tsx](frontend/src/components/coordinador/Ayuda.tsx)) y export a Excel.

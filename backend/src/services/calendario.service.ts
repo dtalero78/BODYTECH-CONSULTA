@@ -71,6 +71,21 @@ const CLASE_CITA_SQL = `
     ELSE 'PENDIENTE'
   END`;
 
+// ¿La cita está a nombre de alguien que EXISTE como profesional de la
+// plataforma? Las citas de MyBodytech llegan con el nombre de la persona
+// escrito a mano en `medico` ("PAULA ANDREA MORA PINZON"), no con un código:
+// son las 8 personas de la UMV, que no atienden por acá (140 citas en 30 días,
+// 1 atendida). En los indicadores cada una salía como un "coach" con 0% y
+// hundía el promedio del equipo — el 22-sep-2026 la atención del mes se leía
+// 62% en vez de 66%. Por eso NO cuentan como gestión de nadie.
+//
+// Es "tiene ficha", no "está activa": Zharick López atiende con la ficha
+// inactiva, y excluirla borraría trabajo real. Lo que nunca va a tener ficha es
+// un nombre escrito a mano. Sigue saliendo en el calendario y en Digitalizar:
+// esto solo saca sus citas de la estadística de gestión.
+export const TIENE_FICHA_SQL = `
+  EXISTS (SELECT 1 FROM profesionales pf WHERE pf.codigo = "HistoriaClinica"."medico")`;
+
 export type Modalidad = 'presencial' | 'virtual';
 
 export interface ServiceResult<T> {
@@ -653,6 +668,7 @@ class CalendarioService {
         AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
         AND "fechaAtencion"::timestamptz >= $2::timestamptz
         AND "fechaAtencion"::timestamptz < $3::timestamptz
+        AND ${TIENE_FICHA_SQL}
         ${medicoFilter}
       GROUP BY medico_codigo, clase
     `;

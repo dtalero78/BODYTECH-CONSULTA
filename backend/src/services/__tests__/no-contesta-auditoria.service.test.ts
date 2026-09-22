@@ -166,6 +166,9 @@ describe('getAuditoria', () => {
         'C1',
       ]);
       expect(sql).toContain('"HistoriaClinica"."medico" = $4');
+      // Las citas a nombre de alguien sin ficha (los nombres escritos a mano de
+      // MyBodytech) no son gestión de ningún coach: no entran ni al total.
+      expect(sql).toContain('FROM profesionales pf WHERE pf.codigo = "HistoriaClinica"."medico"');
     }
   });
 });

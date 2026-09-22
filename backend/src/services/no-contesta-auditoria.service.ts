@@ -29,7 +29,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
-import { EFFECTIVE_SEDE_SQL, getRangeUtc, ServiceResult } from './calendario.service';
+import { EFFECTIVE_SEDE_SQL, TIENE_FICHA_SQL, getRangeUtc, ServiceResult } from './calendario.service';
 
 /** Hasta cuántos minutos después de la hora de la cita el paciente llegó a tiempo. */
 export const MINUTOS_A_TIEMPO = 15;
@@ -216,6 +216,9 @@ export function resumirAuditoria(
 //    por una sala de video. Mismo criterio que `corporativo-sheet.esCorporativa`
 //    y el worker del link: manda el `origen`; si viene vacío, la especialidad.
 //  · Citas Trepsi canceladas: `trepsi.service.cancel()` no toca HistoriaClinica.
+//  · Citas a nombre de alguien sin ficha de profesional (el nombre escrito a
+//    mano de MyBodytech): no son gestión de ningún coach. Misma regla que los
+//    indicadores, `TIENE_FICHA_SQL`.
 // Solo citas cuya hora ya pasó: una cita de más tarde hoy todavía no puede ser
 // "No contesta", y contarla bajaría el porcentaje.
 const CITAS_WHERE = `
@@ -232,7 +235,8 @@ const CITAS_WHERE = `
                      = 'medico corporativo'))
       )
   AND NOT EXISTS (SELECT 1 FROM trepsi_appointments t
-                   WHERE t.historia_id = "HistoriaClinica"."_id" AND t.estado = 'cancelled')`;
+                   WHERE t.historia_id = "HistoriaClinica"."_id" AND t.estado = 'cancelled')
+  AND ${TIENE_FICHA_SQL}`;
 
 function medicoFilter(params: unknown[], medico?: string): string {
   if (!medico) return '';

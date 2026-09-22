@@ -260,7 +260,7 @@ Pendiente, acordado en la misma reunión y en este orden: (1) WhatsApp al afilia
 El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):
 
 - **Manual** — el botón "Contactar" de `MedicalPanelPage.tsx` → `POST /api/video/whatsapp/send`. El coach decide cuándo. Además dispara una llamada de voz Twilio.
-- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts) manda el link **`LINK_AUTO_MINUTOS_ANTES` minutos antes de cada cita** (default 15; barre cada 5 min). Solo WhatsApp, sin llamada. **No se manda a las 07:00**: el paciente que entraba a esa hora no encontraba coach.
+- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts) manda el link **a la hora de cada cita** (`LINK_AUTO_MINUTOS_ANTES`, hoy **0**; barre cada minuto). Solo WhatsApp, sin llamada. **No se manda a las 07:00**: el paciente que entraba a esa hora no encontraba coach. Salió 15 minutos antes hasta el 22-sep-2026: el afiliado abría el link y llegaba a una sala vacía, así que ahora sale en punto. Dos cosas van juntas y hay que mantenerlas así: `LINK_AUTO_MINUTOS_ANTES=0` **y** el barrido en 1 minuto, porque el intervalo es el error máximo del envío (con 5 min, una cita de las 08:00 recibía el link hasta 08:04). Y `0` es un valor configurado, no un hueco — por eso los minutos de la ventana se leen con un helper que acepta cero y no con el de "número positivo", que lo tomaría por falta de valor y caería al default.
 
 **El recordatorio de la mañana es OTRO mensaje, con OTRA plantilla.** A `RECORDATORIO_HORA` (07:00 COT) el mismo worker manda a toda la agenda del día `bodytech_recordatorio_v1` (`TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID`): hora de la consulta + botón Reprogramar, **sin Conectarme**. No deja rastros de link (`enviarRecordatorioPaciente`): no toca `link_enviado_at` ni la sala ni Trepsi; solo registra el mensaje en el chat. Los dos tipos comparten la query de candidatas y la bitácora `link_auto_envio`, cuya PK es `(fecha, historia_id, tipo)`.
 
@@ -270,7 +270,7 @@ El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos 
 
 **Idempotencia: por cita, en `link_auto_envio`** (PK `fecha, historia_id`), con un claim atómico `INSERT … ON CONFLICT DO UPDATE … WHERE`. A propósito **no** se usa `link_enviado_at` como candado: si el proceso muriera entre el claim y el envío, la cita quedaría marcada como contactada para siempre sin que nadie hubiera recibido nada. Esa tabla es además la bitácora ("a quién se le envió hoy y qué falló").
 
-**Filtros que no son negociables** (ver el SQL de `getCandidatas`): la guarda regex sobre `fechaAtencion` antes de cualquier `::timestamptz` (una fila mal formada abortaría la query del día entero), y `NOT EXISTS` sobre `trepsi_appointments` con `estado='cancelled'` — `trepsi.service.cancel()` **no toca `HistoriaClinica`**, así que una cita Trepsi cancelada es indistinguible de una activa, y Trepsi es el 94% del volumen.
+**Filtros que no son negociables** (ver el SQL de `getCandidatas`): la guarda regex sobre `fechaAtencion` antes de cualquier `::timestamptz` (una fila mal formada abortaría la query del día entero), y `NOT EXISTS` sobre `trepsi_appointments` con `estado='cancelled'` — `trepsi.service.cancel()` **no toca `HistoriaClinica`**, así que una cita Trepsi cancelada es indistinguible de una activa, y Trepsi es el 94% del volumen. Y las citas del **Médico Corporativo** quedan fuera de los dos mensajes: el examen es presencial y el link mandaría al paciente a una videollamada que no existe (mismo criterio que `esCorporativa`: `origen = 'corporativo'`, o especialidad del profesional si el origen viene vacío).
 
 Operación (admin): `POST /api/admin/link-auto/dispatch?tipo=link|recordatorio&fecha=&dryRun=1&limit=N&historiaId=` y `GET /api/admin/link-auto/estado?fecha=` (bitácora por tipo). El dry-run no escribe nada y dice a quién le llegaría; con `historiaId` el tipo `link` ignora la ventana de minutos ("mandáselo ya"). Ambos apagados por defecto (`LINK_AUTO_ENABLED`, `RECORDATORIO_ENABLED`).
 
@@ -294,6 +294,24 @@ Las citas de **MyBodytech** llegan con el nombre de la persona escrito a mano en
 - **"Coach no se conectó"**: el paciente se conectó a tiempo (hasta 15 min después de la hora) y el coach NUNCA entró. Al principio se separaba "el paciente ya estaba cuando lo marcaron" de "llegó después de la marca"; la diferencia confundía sin cambiar el hallazgo y Daniel pidió unirlos (18-sep). Quien se conectó más de 15 min tarde no cuenta: ahí el "No contesta" es razonable. No mide cuánto esperó el paciente. La regla es pura (`llegoATiempo`/`resumirAuditoria`) con test.
 - **No hay forma confiable de saber si el coach escribió en la historia**: el `audit_log` casi no registra el autoguardado (5 de 559 atendidas), `_updatedDate` solo lo toca Trepsi, y Trepsi ya trae peso, talla, motivo y antecedentes al crear la cita. Al revisar a mano los casos del 18-sep: sin transcripción, sin `fechaConsulta`, sin otra cita atendida del paciente ±2 días, sin mensajes del coach en el chat y el coach sin entrar a la sala ni después de marcar — la historia tenía lo mismo que un "No contesta" sin paciente. La única llamada contestada duró 14 s: la cortó `LLAMADA_LIMITE_SEG` (20 s).
 - Excluye Médico Corporativo (presencial) y Trepsi canceladas; solo citas cuya hora ya pasó. Los CTE van `MATERIALIZED` a propósito: sin eso el planificador repetía el cruce salas × entradas por cita (12 s → 0,4 s).
+
+### El "No contesta" exige haber llamado
+
+Marcar la inasistencia de alguien a quien nunca se llamó era lo normal: entre el 5 y el 18-sep-2026, **209 de 234** citas marcadas "No contesta" no tenían UNA sola llamada, y en 53 el afiliado sí había entrado a la sala. Desde el 22-sep la guarda 2 de `NoContestaAccion` ([MedicalPanelPage.tsx](frontend/src/pages/MedicalPanelPage.tsx)) lo corta: sin una llamada previa el enlace queda **inhabilitado**, con "Llame primero" al lado. La señal es una fila en `llamadas_voz` para esa cita — `getPendingPatients` y `searchPatientByDocument` la traen como `llamadaHecha` (un `EXISTS`, que ya tiene índice por `historia_id`) —, más un Set en la pestaña para la llamada recién hecha, porque el coach llama y marca en el mismo minuto y el estado en pantalla se borra a los 8 s. Cuenta la fila, no que el paciente haya contestado: si contestara no habría nada que marcar. **Dos excepciones que no se pueden quitar sin dejar citas sin forma de cerrarse**: el médico corporativo (examina en persona; ahí el botón dice "No asistió" y no es cosa de teléfono) y la cita sin celular, donde "Llamar" también está deshabilitado. La guarda es de interfaz: `PATCH /patients/:id/no-answer` sigue aceptando la marca, así que una pestaña con el bundle viejo todavía puede marcar sin llamar — la auditoría lo seguiría viendo.
+
+### Alarma: llegó la hora de la cita y el profesional no está
+
+El registro de jornada ya pintaba en rojo, sobre la línea de tiempo del tablero, la cita que cayó en un hueco de conexión del coach. Pero **ese rojo solo existe para quien abre el tablero**, y para cuando alguien lo abría la consulta ya se había perdido. La alarma ([alarma-cita.service.ts](backend/src/services/alarma-cita.service.ts)) saca la misma señal a buscar a un humano mientras todavía se puede rescatar: un WhatsApp al grupo **"Soporte de HC virtuales"**, por WHAPI.
+
+- **Por qué WHAPI y no Twilio**, que es por donde sale todo lo demás: Twilio manda a números y solo con plantilla aprobada. Un **grupo** (`…@g.us`) y texto libre solo se pueden por WHAPI. [whapi.service.ts](backend/src/services/whapi.service.ts) es el único punto de envío; el canal está **compartido con otros productos**, así que desde acá solo se envía y nunca se toca su configuración.
+- **La regla de disparo es conservadora a propósito** (son mensajes a un grupo de gente real): la cita pasó hace más de `ALARMA_CITA_GRACIA_MIN` (3) y menos de `ALARMA_CITA_MAX_MIN` (45 — un servidor caído toda la mañana no vuelca la agenda entera sobre el grupo); nadie la atendió ni la marcó; y el profesional **no tuvo ni un latido** entre la hora de la cita y ahora. Un solo latido en esa ventana cancela la alarma: lo que se persigue es la ausencia, no el bache de red de 30 segundos.
+- **El `medico` tiene que ser un profesional activo del padrón** (`JOIN profesionales … activo`). Las citas cuyo `medico` guarda un nombre escrito a mano (MyBodytech) no van a tener latidos nunca y alarmarían todos los días sin que haya nada que corregir.
+- **Un mensaje por pasada, no uno por cita.** El barrido es cada minuto; si medio equipo no se conectó, el grupo recibe UN aviso con la lista (detalla 8 y resume el resto), no doce mensajes. Y si una pasada trae más de 40 citas sin coach, **no se manda nada**: eso no es una ausencia, es un dato roto (`TOPE_CORDURA`).
+- **Idempotencia: una alarma por cita y por día**, con claim atómico en `alarma_cita_envio` (PK `fecha, historia_id`), mismo patrón que `link_auto_envio`. Una fila `claimed` se re-toma a los 15 min, así un crash entre el claim y el envío se auto-sana en vez de perder el aviso.
+- Excluye lo mismo que link-auto: Trepsi canceladas (`trepsi.service.cancel()` no toca `HistoriaClinica`) y **Médico Corporativo** (su examen es presencial: no hay nada que conectar).
+- **Apagada por defecto**: necesita `ALARMA_CITA_ENABLED=true` **y** `WHAPI_TOKEN` **y** `ALARMA_CITA_GRUPO`. Falta cualquiera y el worker es no-op.
+
+Operación (admin): `POST /api/admin/alarma-cita/dispatch?fecha=&dryRun=1&limit=N` (el dry-run devuelve el **texto exacto** que habría salido al grupo, sin escribir ni enviar), `GET /api/admin/alarma-cita/estado?fecha=` (bitácora del día) y `GET /api/admin/alarma-cita/grupos`, que lista los grupos del canal con su id — es la única forma de averiguar el del grupo de soporte, porque un id de grupo no se escribe a mano. Fijado en [alarma-cita.service.test.ts](backend/src/services/__tests__/alarma-cita.service.test.ts).
 
 ### Athletic: el mismo WhatsApp, desde otro número
 
@@ -368,6 +386,19 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 **React Query:** The frontend uses React Query for data fetching and caching. Use `invalidateQueries` with `refetchType: 'none'` to invalidate without triggering immediate refetch on every keystroke.
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
+
+### Alta de una persona: se elige el oficio, no el rol
+
+Dar de alta pedía cinco decisiones acopladas en una sola pantalla —rol de la ficha, aplicación, rol DE LA CUENTA, sedes/«todas las sedes», y unos botones sueltos «Trepsi · UMV · Corporativo · Nativa»— más el correo dos veces (el de la ficha y el del login). Ninguna decía qué iba a poder hacer la persona, y varias no son independientes: un coach de nutrición SIEMPRE es ficha `coach` + cuenta `consulta:coach` + programa `trepsi` + sede `bdt-nutricion`.
+
+Ahora [ProfesionalFormModal.tsx](frontend/src/components/coordinador/ProfesionalFormModal.tsx) va en dos pasos: **qué va a hacer** (los oficios del Mapa de Rutas, en [perfilesAlta.ts](frontend/src/components/coordinador/perfilesAlta.ts)) y **quién es**. El oficio fija rol, aplicación, rol de la cuenta, programa y sede; sólo se pregunta lo que cambia entre dos personas del mismo oficio.
+
+- **El preset es una copia editable**, no un candado: la coordinación elige sus sedes (`pideSedes`: sólo cuando el oficio no las fija y la cuenta es de Consulta) y **«Otro caso»** devuelve los controles crudos — nada de lo que se podía hacer antes dejó de poderse.
+- **La ficha va a la sede del oficio**, no a la de quien da el alta: `profesionalesService.create(input, sede)` manda `?sede=`, que `getSedeId` acepta si está en el alcance del actor. Sin eso, un coach creado por la coordinación del corporativo quedaba en la sede `corporativo`.
+- **Un solo correo** (es el de la ficha y el del login) y **un solo código**, que se propone con la cédula — que es lo que ya usan los 9 coaches de Trepsi.
+- **El resumen antes de crear** (`resumenAlta`) dice en castellano qué va a poder hacer: entra a X, tiene o no agenda, ve tal sede, queda en tal programa. Es la única parte que puede leerse sin saber cómo está hecha la base.
+- Foto, firma, licencia, alias, especialidad y duración quedan plegados y marcados como opcionales: la foto abría el formulario y parecía obligatoria.
+- Fijado en [perfilesAlta.test.ts](frontend/src/components/coordinador/__tests__/perfilesAlta.test.ts) y [ProfesionalFormModal.test.tsx](frontend/src/components/coordinador/__tests__/ProfesionalFormModal.test.tsx) (`npm test` en `frontend/`, vitest).
 
 ### Coordinador panel
 
@@ -536,7 +567,7 @@ PUBLIC_BASE_URL=https://bodytech.app           # base pública para la URL de la
 
 # WhatsApp automáticos del día (worker link-auto). Dos mensajes, dos plantillas:
 #   · recordatorio a las 07:00 (hora + Reprogramar, sin link) y
-#   · link minutos antes de cada cita (Conectarme + Reprogramar).
+#   · link a la hora de cada cita (Conectarme + Reprogramar).
 # Mandan a pacientes reales: APAGADOS por defecto, se prenden por fases
 # (primero LINK_AUTO_SOLO_CELULARES, después LINK_AUTO_SEDES, después todo).
 RECORDATORIO_ENABLED=false                     # recordatorio de la mañana
@@ -544,15 +575,28 @@ RECORDATORIO_HORA=07:00                        # hora Colombia de la tanda
 RECORDATORIO_HORA_FIN=19:00                    # tope: un servidor caído toda la mañana no manda "hoy tienes consulta" de noche
 TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID=HX870a0caca39c10f10446f005373ec92f   # bodytech_recordatorio_v1
 LINK_AUTO_ENABLED=false                        # link antes de la cita
-LINK_AUTO_MINUTOS_ANTES=15                     # cuánto antes de la cita sale el link
+LINK_AUTO_MINUTOS_ANTES=0                      # cuánto antes de la cita sale el link; 0 = en punto
 LINK_AUTO_GRACIA_MIN=5                         # si el worker estuvo caído, igual manda hasta N min después de la hora
-LINK_AUTO_INTERVALO_MIN=5                      # cada cuánto barre
+LINK_AUTO_INTERVALO_MIN=1                      # cada cuánto barre = error máximo del envío
 LINK_AUTO_MAX_POR_CORRIDA=60                   # tope de envíos por pasada
 LINK_AUTO_PAUSA_MS=1500                        # pausa entre envíos
 LINK_AUTO_MAX_INTENTOS=3                       # corta el reintento contra un número muerto
 LINK_AUTO_SOLO_CELULARES=                      # lista blanca CSV (modo observación)
 LINK_AUTO_SEDES=                               # CSV de sede_id, para el rollout escalonado
 LINK_AUTO_EXIGIR_PROFESIONAL=false             # exige que el `medico` exista y esté activo
+
+# Alarma "cita sin profesional conectado" → grupo de WhatsApp por WHAPI.
+# Los tres juntos o no enciende. El id del grupo se saca de
+# GET /api/admin/alarma-cita/grupos (no se puede escribir a mano).
+ALARMA_CITA_ENABLED=false
+WHAPI_TOKEN=                                   # canal WHAPI (compartido con otros productos)
+ALARMA_CITA_GRUPO=                             # 120363xxxxxxxxxxxx@g.us — "Soporte de HC virtuales"
+ALARMA_CITA_GRACIA_MIN=3                       # minutos después de la hora antes de avisar
+ALARMA_CITA_MAX_MIN=45                         # no alarma por citas más viejas que esto
+ALARMA_CITA_MAX_POR_CORRIDA=30
+ALARMA_CITA_INTERVALO_MIN=1                    # cada cuánto barre
+ALARMA_CITA_SEDES=                             # CSV opcional, para el rollout escalonado
+ALARMA_CITA_PANEL_URL=                         # opcional: link al tablero que va al final del mensaje
 
 # Athletic: a sus pacientes se les escribe desde su propio número (ver "Athletic").
 # Los tres juntos o no enciende: sin usuario de la plataforma, todo sigue por Bodytech.
@@ -706,7 +750,7 @@ These docs go deeper than this file — read them when working on a specific are
 - **Panel nutricional**: `/nutricion/:roomName` con `panelVariant="nutricional"` → `MedicalHistoryPanel` (somatocarta, ISAK, Heath-Carter, plan nutricional con IA). Persiste en `datosNutricionales` (JSONB). `MedicalHistoryPanel.tsx` dejó de estar huérfano.
 - **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
 - **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
-- **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link `LINK_AUTO_MINUTOS_ANTES` antes de cada cita (Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
+- **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link a la hora de cada cita (`LINK_AUTO_MINUTOS_ANTES=0`, Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
 - **Llamada del coach al paciente, grabada**: botón "Llamar" en el panel (reemplaza al robot de "Rellamar"), softphone en el navegador con Twilio Voice (`llamadas-voz.service.ts`; el paciente ve el número de Bodytech), aviso de grabación al paciente, tabla `llamadas_voz`, audio solo para coordinador/admin en la historia, y evaluable desde Calidad como fuente `voz`.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.

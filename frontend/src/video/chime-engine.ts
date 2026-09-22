@@ -148,7 +148,12 @@ export function esNavegadorEmbebido(ua: string = navigator.userAgent || ''): boo
   return /\bwv\b|Version\/4\.0|FBAN|FBAV|Instagram|Line\//i.test(ua);
 }
 
-function infoDelEquipo(micro?: boolean, camara?: boolean): Record<string, string | number | boolean> {
+function infoDelEquipo(
+  micro?: boolean,
+  camara?: boolean,
+  microNombre?: string,
+  micros?: number
+): Record<string, string | number | boolean> {
   const nav = navigator as Navigator & {
     deviceMemory?: number;
     connection?: { effectiveType?: string; downlink?: number; rtt?: number };
@@ -161,6 +166,8 @@ function infoDelEquipo(micro?: boolean, camara?: boolean): Record<string, string
     // evento lo emite una sonda tardía que se calla si no encuentra la pista.
     ...(micro === undefined ? {} : { micro }),
     ...(camara === undefined ? {} : { camara }),
+    ...(microNombre ? { microNombre } : {}),
+    ...(micros === undefined ? {} : { micros }),
     embebido: esNavegadorEmbebido(),
     nucleos: nav.hardwareConcurrency ?? 0,
     ramGb: nav.deviceMemory ?? 0,
@@ -243,6 +250,8 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
 
   private chosenVideoDeviceId: Device | null = null;
   private localAudioStream: MediaStream | null = null;
+  private microElegido = '';
+  private microsDisponibles = 0;
   private remoteAudioStream: MediaStream | null = null;
   // Observador del mezclador de audio: Chime avisa por aquí cuando el stream de
   // la reunión (voz del paciente) queda activo o se reemplaza (ver connect()).
@@ -391,7 +400,15 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
 
     // Seleccionar el primer dispositivo con deviceId real (ya con permiso concedido).
     const audioInputs = await session.audioVideo.listAudioInputDevices();
-    const chosenAudioDeviceId = audioInputs.find((d) => d.deviceId)?.deviceId ?? null;
+    const chosenAudio = audioInputs.find((d) => d.deviceId) ?? null;
+    const chosenAudioDeviceId = chosenAudio?.deviceId ?? null;
+    // Para el diagnóstico: la plataforma toma el PRIMER micrófono de la lista,
+    // que no siempre es el que la persona está usando (en Windows suele
+    // aparecer primero "Predeterminado" o el de una diadema desconectada). Un
+    // coach con micrófono "tomado" en todas sus entradas y aun así "no me oyen"
+    // es exactamente ese caso, y sin el nombre no había cómo verlo.
+    this.microElegido = (chosenAudio?.label || '').slice(0, 80);
+    this.microsDisponibles = audioInputs.length;
     if (chosenAudioDeviceId) {
       this.localAudioStream = (await session.audioVideo.startAudioInput(chosenAudioDeviceId)) || null;
       // El badge "🔇 Silenciado" del participante se muestra cuando audioTrackRef
@@ -472,11 +489,18 @@ export class ChimeVideoEngine implements VideoEngine, ChimeVideoEngineLike {
     this.pendingInitialRemotes = [];
 
     // Foto del equipo y la red con que entra esta persona. Una sola vez.
+    // `camara` se toma de si quedó elegida y arrancada una cámara, NO del stream
+    // del mosaico local: ese se enlaza después, por el observador de tiles, y en
+    // este punto todavía no existe. Leerlo de ahí dio "sin cámara" en el 100% de
+    // 718 entradas (coaches y afiliados) entre el 25-ago y el 21-sep — un dato
+    // que decía lo contrario de la realidad.
     this.reportar(
       'session-info',
       infoDelEquipo(
         this.getLocalAudioTracks().length > 0,
-        !!this.getLocalVideoStream()?.getVideoTracks?.().length
+        this.chosenVideoDeviceId !== null,
+        this.microElegido,
+        this.microsDisponibles
       )
     );
 

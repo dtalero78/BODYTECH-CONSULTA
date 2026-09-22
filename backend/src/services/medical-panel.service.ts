@@ -40,6 +40,13 @@ interface Patient {
   medico?: string;
   motivoConsulta?: string;
   tipoExamen?: string;
+  /**
+   * ¿Ya se marcó el botón "Llamar" para esta cita? Es lo que habilita el
+   * "No contesta" en el panel: marcar la inasistencia de alguien a quien nunca
+   * se llamó era el hallazgo de la Auditoría No contesta (209 de 234 casos
+   * entre el 5 y el 18-sep-2026 no tenían ni una llamada).
+   */
+  llamadaHecha?: boolean;
 }
 
 interface PaginatedPatients {
@@ -312,7 +319,9 @@ class MedicalPanelService {
       const patientsResult = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "atendido", "pvEstado", "codEmpresa", "empresa",
-                "medico", "motivoConsulta", "tipoExamen"
+                "medico", "motivoConsulta", "tipoExamen",
+                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
+                  AS llamada_hecha
          FROM "HistoriaClinica"
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
@@ -359,7 +368,8 @@ class MedicalPanelService {
         empresaListado: row.codEmpresa || row.empresa || 'SIN EMPRESA',
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
-        tipoExamen: row.tipoExamen || ''
+        tipoExamen: row.tipoExamen || '',
+        llamadaHecha: row.llamada_hecha === true
       }));
 
       return {
@@ -391,7 +401,9 @@ class MedicalPanelService {
       const result = await postgresService.query(
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "fechaConsulta", "atendido", "pvEstado", "codEmpresa",
-                "empresa", "medico", "motivoConsulta", "tipoExamen"
+                "empresa", "medico", "motivoConsulta", "tipoExamen",
+                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
+                  AS llamada_hecha
          FROM "HistoriaClinica"
          WHERE ("numeroId" = $1 OR "celular" = $1)${sf}
          ORDER BY "fechaAtencion" DESC
@@ -420,7 +432,8 @@ class MedicalPanelService {
         empresaListado: row.codEmpresa || row.empresa || 'SIN EMPRESA',
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
-        tipoExamen: row.tipoExamen || ''
+        tipoExamen: row.tipoExamen || '',
+        llamadaHecha: row.llamada_hecha === true
       };
     } catch (error) {
       console.error('❌ Error buscando paciente en PostgreSQL:', error);

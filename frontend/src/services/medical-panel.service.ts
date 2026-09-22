@@ -25,6 +25,8 @@ export interface Patient {
   empresaListado: string;
   pvEstado?: string;
   tipoExamen?: string;
+  /** ¿Ya se apretó "Llamar" para esta cita? Habilita el "No contesta". */
+  llamadaHecha?: boolean;
 }
 
 export interface PaginatedPatients {

@@ -80,12 +80,20 @@ const speakText = (text: string) => {
  * Control secundario "No contesta" de la tarjeta del afiliado.
  *
  * Nace de un incidente real: el botón era gemelo de "Atender" (misma grilla, 8px
- * de separación, mismo ancho en móvil) y marcaba de una, sin vuelta atrás. Tres
- * guardas, de menor a mayor fuerza:
+ * de separación, mismo ancho en móvil) y marcaba de una, sin vuelta atrás.
+ * Cuatro guardas, de menor a mayor fuerza:
  *
  *  1. Jerarquía — es un enlace gris debajo de "Atender", no un botón par.
- *  2. Hora — antes de la hora agendada NO deja marcar; explica por qué.
- *  3. Confirmación — dos pasos en línea, sin modal.
+ *  2. Llamada previa — sin haber apretado "Llamar" queda inhabilitado.
+ *  3. Hora — antes de la hora agendada NO deja marcar; explica por qué.
+ *  4. Confirmación — dos pasos en línea, sin modal.
+ *
+ * La guarda 2 la pidió Daniel el 22-sep-2026 y sale de la Auditoría No contesta:
+ * entre el 5 y el 18-sep, 209 de 234 citas marcadas "No contesta" no tenían UNA
+ * sola llamada, y en 53 el afiliado sí había entrado a la sala. No aplica al
+ * médico corporativo —examina en persona, ahí "No asistió" no es cosa de
+ * teléfono— ni a una cita sin celular, donde llamar no es posible y bloquear
+ * dejaría al coach sin forma de cerrar su agenda.
  *
  * La hora se evalúa EN EL CLIC, no al renderizar: así no hace falta un timer que
  * refresque la tarjeta cuando llega la hora, y el dato siempre está al día.
@@ -104,11 +112,17 @@ function NoContestaAccion({
   patientId,
   nombre,
   fechaAtencion,
+  llamadaHecha,
+  celular,
   onConfirmar,
 }: {
   patientId: string;
   nombre: string;
   fechaAtencion: Date | string;
+  /** ¿Ya se llamó a este afiliado con el botón "Llamar"? */
+  llamadaHecha: boolean;
+  /** Sin celular no hay a quién llamar: la guarda no aplica. */
+  celular?: string;
   onConfirmar: (
     patientId: string,
     nombre: string,
@@ -123,6 +137,10 @@ function NoContestaAccion({
   // que no asistió"). Es el mismo estado por debajo — lo que cambia es cómo se
   // dice —, así calendario, indicadores y filtros siguen contándolo igual.
   const textos = textosInasistencia();
+  // El médico corporativo ve al paciente en persona y una cita sin celular no
+  // se puede llamar: en esos dos casos exigir la llamada sería dejar la cita
+  // sin forma de cerrarse.
+  const exigeLlamada = !authService.isMedicoCorporativo() && !!(celular || '').trim();
 
   const alTocar = () => {
     const t = new Date(fechaAtencion).getTime();
@@ -198,6 +216,24 @@ function NoContestaAccion({
     );
   }
 
+  // Guarda 2: sin llamada previa el enlace queda inhabilitado, con el motivo al
+  // lado (en móvil no hay `title` que valga). Las dos excepciones —examen
+  // presencial y cita sin celular— se resuelven arriba, en `exigeLlamada`.
+  if (exigeLlamada && !llamadaHecha) {
+    return (
+      <div className="self-end flex items-center gap-1.5">
+        <span className="text-gray-600 text-[11px] md:text-xs">Llame primero</span>
+        <button
+          disabled
+          title="Primero llame al afiliado con el botón Llamar."
+          className="text-gray-600 text-[11px] md:text-xs underline underline-offset-2 px-1 py-1 opacity-50 cursor-not-allowed"
+        >
+          {textos.boton}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={alTocar}
@@ -256,6 +292,11 @@ export function MedicalPanelPage() {
     data: LlamadaVoz | null;
     error: string | null;
   } | null>(null);
+  /**
+   * A quiénes se les llamó en esta pestaña. Complementa el `llamadaHecha` que
+   * trae la lista del servidor, que solo se actualiza al refrescar.
+   */
+  const [llamadosEnSesion, setLlamadosEnSesion] = useState<Set<string>>(new Set());
   const [, setTick] = useState(0);
   /**
    * El softphone: un Device de Twilio por pestaña (se crea al primer "Llamar",
@@ -737,6 +778,12 @@ export function MedicalPanelPage() {
     try {
       creada = await apiService.iniciarLlamada(patient._id);
       setLlamada({ patientId: patient._id, data: creada, error: null });
+      // Habilita el "No contesta" en el acto: la llamada ya existe en
+      // `llamadas_voz`, que es lo mismo que mira el backend al armar la lista.
+      // Sin esto habría que esperar un refetch, y el coach llama y marca en el
+      // mismo minuto. Va DESPUÉS de crearla: si el micrófono no dio permiso,
+      // no hubo llamada y la guarda debe seguir puesta.
+      setLlamadosEnSesion((prev) => new Set(prev).add(patient._id));
 
       const device = await obtenerDevice();
       const call = await device.connect({ params: { llamadaId: String(creada.id) } });
@@ -764,6 +811,14 @@ export function MedicalPanelPage() {
       });
     }
   };
+
+  /**
+   * ¿A este afiliado ya se le llamó? Es lo que habilita el "No contesta".
+   * El servidor lo dice por cita (hay fila en `llamadas_voz`); el Set cubre la
+   * llamada que se acaba de hacer, antes de que la lista se vuelva a pedir.
+   */
+  const yaSeLlamo = (p: { _id: string; llamadaHecha?: boolean }): boolean =>
+    p.llamadaHecha === true || llamadosEnSesion.has(p._id);
 
   /** Colgar desde el panel: corta el tramo del navegador; Twilio cierra el del paciente. */
   const colgar = () => {
@@ -1384,11 +1439,13 @@ export function MedicalPanelPage() {
                         )}
                       </button>
 
-                      {/* Secundario, con guarda de hora y confirmación (ver NoContestaAccion). */}
+                      {/* Secundario, con guardas de llamada y hora (ver NoContestaAccion). */}
                       <NoContestaAccion
                         patientId={searchResult._id}
                         nombre={searchResult.primerNombre}
                         fechaAtencion={searchResult.fechaAtencion}
+                        llamadaHecha={yaSeLlamo(searchResult)}
+                        celular={searchResult.celular}
                         onConfirmar={handleNoAnswer}
                       />
                     </div>
@@ -1577,11 +1634,13 @@ export function MedicalPanelPage() {
                             )}
                           </button>
 
-                          {/* Secundario, con guarda de hora y confirmación (ver NoContestaAccion). */}
+                          {/* Secundario, con guardas de llamada y hora (ver NoContestaAccion). */}
                           <NoContestaAccion
                             patientId={patient._id}
                             nombre={patient.primerNombre}
                             fechaAtencion={patient.fechaAtencion}
+                            llamadaHecha={yaSeLlamo(patient)}
+                            celular={patient.celular}
                             onConfirmar={handleNoAnswer}
                           />
                         </div>

@@ -260,7 +260,7 @@ Pendiente, acordado en la misma reunión y en este orden: (1) WhatsApp al afilia
 El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):
 
 - **Manual** — el botón "Contactar" de `MedicalPanelPage.tsx` → `POST /api/video/whatsapp/send`. El coach decide cuándo. Además dispara una llamada de voz Twilio.
-- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts) manda el link **`LINK_AUTO_MINUTOS_ANTES` minutos antes de cada cita** (default 15; barre cada 5 min). Solo WhatsApp, sin llamada. **No se manda a las 07:00**: el paciente que entraba a esa hora no encontraba coach.
+- **Automático** — el worker [link-auto.service.ts](backend/src/services/link-auto.service.ts) manda el link **a la hora de cada cita** (`LINK_AUTO_MINUTOS_ANTES`, hoy **0**; barre cada minuto). Solo WhatsApp, sin llamada. **No se manda a las 07:00**: el paciente que entraba a esa hora no encontraba coach. Salió 15 minutos antes hasta el 22-sep-2026: el afiliado abría el link y llegaba a una sala vacía, así que ahora sale en punto. Dos cosas van juntas y hay que mantenerlas así: `LINK_AUTO_MINUTOS_ANTES=0` **y** el barrido en 1 minuto, porque el intervalo es el error máximo del envío (con 5 min, una cita de las 08:00 recibía el link hasta 08:04). Y `0` es un valor configurado, no un hueco — por eso los minutos de la ventana se leen con un helper que acepta cero y no con el de "número positivo", que lo tomaría por falta de valor y caería al default.
 
 **El recordatorio de la mañana es OTRO mensaje, con OTRA plantilla.** A `RECORDATORIO_HORA` (07:00 COT) el mismo worker manda a toda la agenda del día `bodytech_recordatorio_v1` (`TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID`): hora de la consulta + botón Reprogramar, **sin Conectarme**. No deja rastros de link (`enviarRecordatorioPaciente`): no toca `link_enviado_at` ni la sala ni Trepsi; solo registra el mensaje en el chat. Los dos tipos comparten la query de candidatas y la bitácora `link_auto_envio`, cuya PK es `(fecha, historia_id, tipo)`.
 
@@ -515,7 +515,7 @@ PUBLIC_BASE_URL=https://bodytech.app           # base pública para la URL de la
 
 # WhatsApp automáticos del día (worker link-auto). Dos mensajes, dos plantillas:
 #   · recordatorio a las 07:00 (hora + Reprogramar, sin link) y
-#   · link minutos antes de cada cita (Conectarme + Reprogramar).
+#   · link a la hora de cada cita (Conectarme + Reprogramar).
 # Mandan a pacientes reales: APAGADOS por defecto, se prenden por fases
 # (primero LINK_AUTO_SOLO_CELULARES, después LINK_AUTO_SEDES, después todo).
 RECORDATORIO_ENABLED=false                     # recordatorio de la mañana
@@ -523,9 +523,9 @@ RECORDATORIO_HORA=07:00                        # hora Colombia de la tanda
 RECORDATORIO_HORA_FIN=19:00                    # tope: un servidor caído toda la mañana no manda "hoy tienes consulta" de noche
 TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID=HX870a0caca39c10f10446f005373ec92f   # bodytech_recordatorio_v1
 LINK_AUTO_ENABLED=false                        # link antes de la cita
-LINK_AUTO_MINUTOS_ANTES=15                     # cuánto antes de la cita sale el link
+LINK_AUTO_MINUTOS_ANTES=0                      # cuánto antes de la cita sale el link; 0 = en punto
 LINK_AUTO_GRACIA_MIN=5                         # si el worker estuvo caído, igual manda hasta N min después de la hora
-LINK_AUTO_INTERVALO_MIN=5                      # cada cuánto barre
+LINK_AUTO_INTERVALO_MIN=1                      # cada cuánto barre = error máximo del envío
 LINK_AUTO_MAX_POR_CORRIDA=60                   # tope de envíos por pasada
 LINK_AUTO_PAUSA_MS=1500                        # pausa entre envíos
 LINK_AUTO_MAX_INTENTOS=3                       # corta el reintento contra un número muerto
@@ -685,7 +685,7 @@ These docs go deeper than this file — read them when working on a specific are
 - **Panel nutricional**: `/nutricion/:roomName` con `panelVariant="nutricional"` → `MedicalHistoryPanel` (somatocarta, ISAK, Heath-Carter, plan nutricional con IA). Persiste en `datosNutricionales` (JSONB). `MedicalHistoryPanel.tsx` dejó de estar huérfano.
 - **Integración Trepsi (bidireccional)**: inbound `/api/v1/integrations/trepsi` (API Key, idempotente por `cita_id`, tablas `trepsi_appointments`); outbound webhook BSL → Trepsi (`trepsi-webhook.service.ts`, cola persistente `trepsi_webhook_outbox`, backoff exponencial, `dispatchPending()` cada 30s); admin `/api/admin/trepsi-webhook`.
 - **Bot Trepsi**: `/bot-trepsi` — asistente GPT-4o-mini con system prompt restringido a la integración (`bot-trepsi.service.ts`, público con rate limit por IP).
-- **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link `LINK_AUTO_MINUTOS_ANTES` antes de cada cita (Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
+- **WhatsApp automáticos del día**: worker `link-auto.service.ts` con dos tipos — recordatorio a las 07:00 (plantilla `bodytech_recordatorio_v1`, hora + Reprogramar, sin link) y link a la hora de cada cita (`LINK_AUTO_MINUTOS_ANTES=0`, Conectarme + Reprogramar) — lógica compartida con el botón "Contactar" en `link-paciente.service.ts`, bitácora e idempotencia por cita y tipo en `link_auto_envio`, y `link_enviado_por` ('manual'|'auto') para que "No contactó" siga midiendo gestión del coach.
 - **Llamada del coach al paciente, grabada**: botón "Llamar" en el panel (reemplaza al robot de "Rellamar"), softphone en el navegador con Twilio Voice (`llamadas-voz.service.ts`; el paciente ve el número de Bodytech), aviso de grabación al paciente, tabla `llamadas_voz`, audio solo para coordinador/admin en la historia, y evaluable desde Calidad como fuente `voz`.
 - **PDF Puppeteer**: historia clínica exportable como PDF server-side.
 - **WhatsApp Twilio SDK**: migrado de WHAPI a Twilio SDK, sender `+5716284820`, template aprobado.

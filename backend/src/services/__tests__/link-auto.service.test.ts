@@ -148,6 +148,20 @@ describe('link-auto worker', () => {
       expect(params[1]).toBe('2026-09-03T11:15:00.000Z'); // ahora + 15 min
     });
 
+    // "Justo a la hora de la consulta" (22-sep-2026). CERO minutos es un valor
+    // configurado, no un hueco: leerlo con el helper de "número positivo"
+    // caería al default y el link volvería a salir 15 minutos antes.
+    it('con 0 minutos antes, la ventana termina en este instante', async () => {
+      a('2026-09-03T11:00:00Z');
+      process.env.RECORDATORIO_ENABLED = 'false';
+      process.env.LINK_AUTO_MINUTOS_ANTES = '0';
+      query.mockResolvedValueOnce([]);
+      await linkAutoService.maybeDispatch();
+      const params = query.mock.calls[0][1];
+      expect(params[0]).toBe('2026-09-03T10:55:00.000Z'); // sigue la gracia hacia atrás
+      expect(params[1]).toBe('2026-09-03T11:00:00.000Z'); // ahora, ni un minuto antes
+    });
+
     it('a las 07:05 con los dos prendidos, corren los dos (recordatorio primero)', async () => {
       a('2026-09-03T12:05:00Z');
       query.mockResolvedValue([]);

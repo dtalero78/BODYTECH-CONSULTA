@@ -8,9 +8,13 @@
 //     consulta a las 3 p. m." + botón Reprogramar. SIN "Conectarme": a esa hora
 //     no hay coach en la sala, y el paciente que entraba a las 7 de la mañana
 //     no encontraba a nadie.
-//   · LINK — minutos antes de cada cita (LINK_AUTO_MINUTOS_ANTES): la plantilla
-//     de siempre, Conectarme + Reprogramar. Es el mismo mensaje que manda el
-//     botón "Contactar" del coach, solo que ya nadie tiene que acordarse.
+//   · LINK — a la hora de cada cita (LINK_AUTO_MINUTOS_ANTES, hoy 0): la
+//     plantilla de siempre, Conectarme + Reprogramar. Es el mismo mensaje que
+//     manda el botón "Contactar" del coach, solo que ya nadie tiene que
+//     acordarse. Salió 15 minutos antes hasta el 22-sep-2026; se cambió a la
+//     hora en punto para que el paciente abra el link con el coach ya en la
+//     sala. Como el barrido es cada minuto (LINK_AUTO_INTERVALO_MIN), el
+//     mensaje sale entre la hora exacta y un minuto después.
 //
 // Los dos comparten la maquinaria: quién tiene cita hoy, excluir canceladas de
 // Trepsi, no mandar dos veces, la bitácora. La idempotencia es POR CITA Y POR
@@ -78,7 +82,7 @@ export interface ResumenCorrida {
 
 interface Config {
   linkEnabled: boolean;
-  /** Cuánto antes de la cita sale el link. */
+  /** Cuánto antes de la cita sale el link. 0 = a la hora en punto. */
   linkMinutosAntes: number;
   /** Si el worker estuvo caído, igual manda hasta estos minutos DESPUÉS de la hora. */
   linkGraciaMin: number;
@@ -104,11 +108,18 @@ function leerConfig(): Config {
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? n : def;
   };
+  // Para los minutos de la ventana, CERO es un valor legítimo ("a la hora en
+  // punto") y no "no configurado": con `num` un 0 se leía como falta de valor
+  // y caía al default, que es justo lo contrario de lo que se pidió.
+  const minutos = (v: string | undefined, def: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : def;
+  };
 
   return {
     linkEnabled: bool(process.env.LINK_AUTO_ENABLED),
-    linkMinutosAntes: num(process.env.LINK_AUTO_MINUTOS_ANTES, 15),
-    linkGraciaMin: num(process.env.LINK_AUTO_GRACIA_MIN, 5),
+    linkMinutosAntes: minutos(process.env.LINK_AUTO_MINUTOS_ANTES, 0),
+    linkGraciaMin: minutos(process.env.LINK_AUTO_GRACIA_MIN, 5),
     recordatorioEnabled: bool(process.env.RECORDATORIO_ENABLED),
     recordatorioHora: horaAMinutos(process.env.RECORDATORIO_HORA || '07:00', 7 * 60),
     recordatorioHoraFin: horaAMinutos(process.env.RECORDATORIO_HORA_FIN || '19:00', 19 * 60),

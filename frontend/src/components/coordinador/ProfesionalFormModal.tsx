@@ -1,11 +1,52 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Upload, Trash2 } from 'lucide-react';
+// ============================================================================
+// ProfesionalFormModal — dar de alta a una persona.
+//
+// ── Qué cambió y por qué ────────────────────────────────────────────────────
+// La versión anterior mostraba de una vez, y al mismo nivel: foto, rol de la
+// ficha, código, cédula, nombres, alias, especialidad, licencia, firma,
+// correo (dos veces: el de la ficha y el de la cuenta), aplicación, OTRO rol
+// —el de la cuenta—, "todas las sedes", la lista de sedes y cuatro botones
+// sueltos que decían "Trepsi · UMV · Corporativo · Nativa". Nada de eso decía
+// qué iba a poder hacer la persona, y varias de esas casillas no son
+// independientes: un coach de nutrición SIEMPRE es ficha `coach` + cuenta
+// `consulta:coach` + programa `trepsi` + sede `bdt-nutricion`.
+//
+// Ahora el alta empieza por lo único que quien da de alta sí sabe: QUÉ VA A
+// HACER la persona (los oficios del Mapa de Rutas, en `perfilesAlta.ts`). De
+// ahí salen el rol, la aplicación, el programa y la sede. Después se pregunta
+// lo que de verdad cambia entre dos personas del mismo oficio —quién es y su
+// correo—, y antes de crear se muestra en castellano lo que va a poder hacer.
+//
+// Lo opcional (foto, firma, licencia, alias, especialidad, duración) queda
+// plegado y dice que es opcional: antes la foto abría el formulario y parecía
+// obligatoria.
+//
+// «Otro caso» conserva los controles crudos: nada de lo que se podía hacer
+// antes dejó de poderse.
+// ============================================================================
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Upload, Trash2, ChevronDown, ChevronRight, Check, Copy } from 'lucide-react';
 import authService from '../../services/auth.service';
 import profesionalesService, {
   Profesional,
   ProfesionalInput,
   RolDirectorio,
 } from '../../services/profesionales.service';
+import {
+  PERFILES,
+  PROGRAMAS,
+  ROLES_APP,
+  Perfil,
+  PerfilId,
+  Preset,
+  AppDestino,
+  perfilPorId,
+  pideSedes,
+  resumenAlta,
+  tieneAgenda,
+} from './perfilesAlta';
+import { FONT_INTER, FONT_MONO, SECTION_LABEL, TOKENS } from './_tokens';
 
 // Tamaño máximo de la firma en bytes (base64 ya codificado pesa ~33% más
 // que el archivo original, así que limitamos el archivo crudo a ~1.5 MB
@@ -57,7 +98,7 @@ function downscaleToDataUrl(file: File, maxSide: number, quality: number): Promi
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  /** `null` cuando el rol no agenda en Consulta: no hay ficha que devolver. */
+  /** `null` cuando el oficio no agenda en Consulta: no hay ficha que devolver. */
   onSaved: (p: Profesional | null) => void;
   // Si llega `editing`, el modal está en modo edición.
   editing: Profesional | null;
@@ -84,23 +125,25 @@ const EMPTY: ProfesionalInput = {
   celular: null,
 };
 
+const INPUT =
+  'w-full px-3 py-2 border border-zinc-200 rounded-md text-[13px] text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400';
+const LABEL = 'block text-[11.5px] font-medium text-zinc-500 mb-1';
+
 export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onError }: Props) {
+  const [paso, setPaso] = useState<1 | 2>(1);
+  const [perfilId, setPerfilId] = useState<PerfilId | null>(null);
+  // Copia editable del preset: el oficio lo propone, la pantalla lo puede
+  // ajustar (sedes de una coordinadora, o todo a mano en «Otro caso»).
+  const [preset, setPreset] = useState<Preset>(perfilPorId('manual').preset);
   const [form, setForm] = useState<ProfesionalInput>(EMPTY);
-  // La cuenta con la que va a entrar. Se pide en el mismo paso: una persona se
-  // crea una vez, no en dos pantallas.
-  const [cuenta, setCuenta] = useState({
-    email: '',
-    password: '',
-    app: 'consulta' as 'consulta' | 'acc' | 'prepagadas',
-    rol: 'coach',
-    // El alcance se ELIGE. Antes se heredaba de la petición y toda cuenta nueva
-    // nacía atada a 'bsl', que no es una sede: es el valor por defecto que
-    // quedó de cuando la plataforma era de un solo sitio.
-    sedes: [] as string[],
-    esGlobal: false,
-    programas: [] as string[],
-  });
+  const [correo, setCorreo] = useState('');
+  const [password, setPassword] = useState('');
+  const [verExtras, setVerExtras] = useState(false);
+  const [copiado, setCopiado] = useState(false);
   const [sedesDisponibles, setSedesDisponibles] = useState<{ sedeId: string; nombre: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,12 +152,11 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       .then((s) => setSedesDisponibles(s))
       .catch(() => setSedesDisponibles([]));
   }, [isOpen]);
-  const [saving, setSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editing) {
+      setPaso(2);
+      setPerfilId(null);
       setForm({
         rol: editing.rol,
         codigo: editing.codigo,
@@ -134,39 +176,66 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
         email: editing.email,
         celular: editing.celular,
       });
-    } else {
-      setForm(EMPTY);
+      setCorreo(editing.email ?? '');
+      setVerExtras(true);
+      return;
     }
-    // La cuenta arranca en blanco cada vez, con la clave ya generada: si hay que
-    // buscar el botón para que aparezca, la mitad de las veces no se genera.
-    setCuenta({
-      email: '',
-      password: generarClave(),
-      app: 'consulta',
-      rol: EMPTY.rol,
-      sedes: [],
-      esGlobal: false,
-      programas: [],
-    });
+    setPaso(1);
+    setPerfilId(null);
+    setPreset(perfilPorId('manual').preset);
+    setForm(EMPTY);
+    setCorreo('');
+    setVerExtras(false);
+    // La clave se genera al abrir: si hay que buscar el botón para que
+    // aparezca, la mitad de las veces no se genera.
+    setPassword(generarClave());
   }, [editing, isOpen]);
 
-  // El rol de la cuenta sigue al de la ficha mientras no se toque a mano: un
-  // coach de la ficha no debería entrar como médico por descuido.
-  useEffect(() => {
-    setCuenta((c) => {
-      if (c.email) return c;
-      // Quien atiende en Consulta entra a Consulta; el fisio y el evaluador
-      // son de ACC. Es sólo el valor por defecto: se puede cambiar.
-      const esDeAcc = form.rol === 'fisioterapeuta' || form.rol === 'evaluador';
-      return esDeAcc
-        ? { ...c, app: 'acc' as const, rol: 'fisioterapeuta' }
-        : {
-            ...c,
-            app: 'consulta' as const,
-            rol: form.rol === 'medico' || form.rol === 'coach' ? form.rol : 'auxiliar',
-          };
-    });
-  }, [form.rol]);
+  const conAgenda = tieneAgenda(preset.rolFicha);
+  const perfil = perfilId ? perfilPorId(perfilId) : null;
+  const esManual = perfilId === 'manual';
+  const hayQuePreguntarSedes = esManual || pideSedes(preset);
+
+  const nombreSedes = useMemo(
+    () =>
+      preset.sedes.map(
+        (id) => sedesDisponibles.find((s) => s.sedeId === id)?.nombre ?? id,
+      ),
+    [preset.sedes, sedesDisponibles],
+  );
+
+  const resumen = useMemo(
+    () =>
+      resumenAlta(preset, {
+        nombre: [form.primerNombre, form.primerApellido].filter(Boolean).join(' '),
+        correo,
+        sedesElegidas: nombreSedes,
+        codigo: form.codigo,
+      }),
+    [preset, form.primerNombre, form.primerApellido, form.codigo, correo, nombreSedes],
+  );
+
+  if (!isOpen) return null;
+
+  function update<K extends keyof ProfesionalInput>(key: K, value: ProfesionalInput[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function elegirPerfil(p: Perfil) {
+    setPerfilId(p.id);
+    setPreset({ ...p.preset, sedes: [...p.preset.sedes], programas: [...p.preset.programas] });
+    setForm((f) => ({ ...f, rol: p.preset.rolFicha }));
+    setPaso(2);
+  }
+
+  function toggleSede(sedeId: string) {
+    setPreset((p) => ({
+      ...p,
+      sedes: p.sedes.includes(sedeId)
+        ? p.sedes.filter((x) => x !== sedeId)
+        : [...p.sedes, sedeId],
+    }));
+  }
 
   async function handleFirmaUpload(file: File) {
     if (file.size > MAX_FIRMA_BYTES) {
@@ -182,13 +251,9 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result;
-      if (typeof result === 'string') {
-        update('firma', result);
-      }
+      if (typeof result === 'string') update('firma', result);
     };
-    reader.onerror = () => {
-      onError('No se pudo leer el archivo.');
-    };
+    reader.onerror = () => onError('No se pudo leer el archivo.');
     reader.readAsDataURL(file);
   }
 
@@ -198,28 +263,24 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       return;
     }
     if (file.size > MAX_FOTO_SOURCE_BYTES) {
-      onError(
-        `La foto pesa ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo permitido: 15 MB.`
-      );
+      onError(`La foto pesa ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo permitido: 15 MB.`);
       return;
     }
     try {
-      const dataUrl = await downscaleToDataUrl(file, FOTO_MAX_SIDE, FOTO_QUALITY);
-      update('foto', dataUrl);
+      update('foto', await downscaleToDataUrl(file, FOTO_MAX_SIDE, FOTO_QUALITY));
     } catch (err: unknown) {
       onError((err as Error)?.message || 'No se pudo procesar la imagen.');
     }
   }
 
-  // Sólo médicos y coaches tienen agenda en Consulta. A los demás se les crea
-  // la persona en el directorio y su cuenta, y nada más: no hay a quién
-  // atender acá, y la base tampoco los aceptaría en la tabla de agenda.
-  const conAgenda = form.rol === 'medico' || form.rol === 'coach';
-
-  if (!isOpen) return null;
-
-  function update<K extends keyof ProfesionalInput>(key: K, value: ProfesionalInput[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  async function copiarAcceso() {
+    try {
+      await navigator.clipboard.writeText(`Correo: ${correo}\nContraseña: ${password}`);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      onError('No se pudo copiar. Seleccioná el texto a mano.');
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -229,48 +290,57 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       return;
     }
     if (conAgenda && !form.codigo.trim()) {
-      onError('Un médico o coach necesita su código de agenda.');
+      onError('Quien atiende necesita un código de agenda. Podés usar su cédula.');
       return;
     }
     if (!editing && !(form.documento ?? '').trim()) {
       onError('La cédula es obligatoria: es con lo que la persona queda en el directorio.');
       return;
     }
-    if (!editing && cuenta.email.trim() && cuenta.password.length < 8) {
+    if (!editing && correo.trim() && password.length < 8) {
       onError('La contraseña provisional debe tener al menos 8 caracteres.');
       return;
     }
     if (
       !editing &&
-      cuenta.email.trim() &&
-      cuenta.app === 'consulta' &&
-      !cuenta.esGlobal &&
-      cuenta.sedes.length === 0
+      correo.trim() &&
+      preset.app === 'consulta' &&
+      !preset.esGlobal &&
+      preset.sedes.length === 0
     ) {
-      onError('Elegí a qué sedes accede la cuenta, o marcá acceso a todas.');
+      onError('Elegí a qué sedes entra, o marcá todas las sedes.');
       return;
     }
     setSaving(true);
     try {
       if (editing) {
-        onSaved(await profesionalesService.update(editing.id, form));
+        onSaved(await profesionalesService.update(editing.id, { ...form, email: correo || null }));
         onClose();
         return;
       }
-      const alta = await profesionalesService.create({
-        ...form,
-        cuenta: cuenta.email.trim()
-          ? {
-              email: cuenta.email.trim().toLowerCase(),
-              password: cuenta.password,
-              app: cuenta.app,
-              rol: cuenta.rol,
-              sedes: cuenta.esGlobal ? [] : cuenta.sedes,
-              esGlobal: cuenta.esGlobal,
-              programas: cuenta.programas,
-            }
-          : undefined,
-      });
+      const alta = await profesionalesService.create(
+        {
+          ...form,
+          rol: preset.rolFicha,
+          // Sin agenda no hay código: la ficha ni siquiera se crea.
+          codigo: conAgenda ? form.codigo.trim() : '',
+          email: correo.trim() || null,
+          cuenta:
+            correo.trim() && preset.app
+              ? {
+                  email: correo.trim().toLowerCase(),
+                  password,
+                  app: preset.app,
+                  rol: preset.rolApp,
+                  sedes: preset.esGlobal ? [] : preset.sedes,
+                  esGlobal: preset.esGlobal,
+                  programas: preset.programas,
+                }
+              : undefined,
+        },
+        // La ficha vive en la sede del oficio, no en la de quien da el alta.
+        preset.sedeFicha ?? undefined,
+      );
       onSaved(alta.profesional);
       // La ficha quedó; si la cuenta no, se dice — no se finge que todo salió.
       if (alta.errorCuenta) onError(alta.errorCuenta);
@@ -289,530 +359,606 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="text-lg font-semibold text-gray-800">
-            {editing ? 'Editar profesional' : 'Nuevo profesional'}
-          </h2>
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      style={{ fontFamily: FONT_INTER }}
+    >
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-6">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 sticky top-0 bg-white rounded-t-xl z-10">
+          <div>
+            <h2 className="text-[15px] font-semibold text-zinc-800">
+              {editing ? 'Editar profesional' : 'Nueva persona'}
+            </h2>
+            {!editing && (
+              <p className="text-[12px] text-zinc-500 mt-0.5">
+                {paso === 1
+                  ? 'Paso 1 de 2 · ¿Qué va a hacer?'
+                  : `Paso 2 de 2 · ${perfil?.titulo ?? 'Datos'}`}
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+            className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-400"
             aria-label="Cerrar"
           >
-            <X className="w-5 h-5" />
+            <X className="w-[18px] h-[18px]" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Foto de perfil */}
-          <div className="flex items-center gap-4">
-            <div className="relative shrink-0">
-              {form.foto ? (
-                <img
-                  src={form.foto}
-                  alt="Foto de perfil"
-                  className="w-20 h-20 rounded-full object-cover border border-gray-200 bg-gray-100"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-400">
-                  <Upload className="w-5 h-5" />
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-gray-500">
-                Foto de perfil <span className="text-gray-400">(PNG, JPG o WEBP)</span>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fotoInputRef.current?.click()}
-                  className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1.5 border border-blue-200"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  {form.foto ? 'Reemplazar' : 'Subir foto'}
-                </button>
-                {form.foto && (
-                  <button
-                    type="button"
-                    onClick={() => update('foto', null)}
-                    className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 border border-red-200"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Quitar
-                  </button>
-                )}
-              </div>
-            </div>
-            <input
-              ref={fotoInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFotoUpload(file);
-                if (e.target) e.target.value = '';
-              }}
-            />
-          </div>
-
-          {/* Rol + Código */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol *</label>
-              <select
-                value={form.rol}
-                onChange={(e) => update('rol', e.target.value as RolDirectorio)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="medico">Médico</option>
-                <option value="coach">Coach</option>
-                <option value="nutricionista">Nutricionista</option>
-                <option value="fisioterapeuta">Fisioterapeuta</option>
-                <option value="evaluador">Evaluador</option>
-                <option value="administrativo">Administrativo</option>
-              </select>
-              {!conAgenda && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Este rol no agenda en Consulta: queda en el directorio, sin agenda acá.
-                </p>
-              )}
-            </div>
-            <div className={conAgenda ? '' : 'hidden'}>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Código * <span className="text-gray-400">(único por sede)</span>
-              </label>
-              <input
-                type="text"
-                value={form.codigo}
-                onChange={(e) => update('codigo', e.target.value.toUpperCase())}
-                placeholder="MED-MG-001"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={!!editing}
-              />
-              {editing && (
-                <p className="text-xs text-gray-400 mt-1">El código no se puede cambiar.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Cédula: es la llave con la que el directorio compartido de la
-              cadena identifica a una persona (una fila por persona, aunque
-              atienda en varias sedes). El `codigo` de arriba no sirve para eso
-              porque es único POR SEDE. */}
-          <div>
-            <label
-              htmlFor="prof-documento"
-              className="block text-xs font-medium text-gray-500 mb-1.5"
-            >
-              Cédula{' '}
-              <span className="text-gray-400">
-                {editing ? '(para cruzar con el directorio)' : '· obligatoria'}
-              </span>
-            </label>
-            <input
-              id="prof-documento"
-              type="text"
-              inputMode="numeric"
-              value={form.documento ?? ''}
-              onChange={(e) =>
-                update('documento', e.target.value.replace(/\D/g, '') || null)
-              }
-              placeholder="1015420891"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              {editing
-                ? 'Solo dígitos, sin puntos ni guiones.'
-                : 'Con esto la persona queda en el directorio, que es de donde salen la ficha y la cuenta.'}
+        {/* ── PASO 1 · el oficio ───────────────────────────────────────── */}
+        {!editing && paso === 1 && (
+          <div className="p-5">
+            <p className="text-[13px] text-zinc-600 mb-4 leading-relaxed max-w-[62ch]">
+              Elegí qué va a hacer la persona. Con eso quedan puestos su rol, la aplicación a la
+              que entra, su programa y su sede; después solo hay que decir quién es.
             </p>
-          </div>
-
-          {/* Nombres */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Primer nombre *</label>
-              <input
-                type="text"
-                value={form.primerNombre}
-                onChange={(e) => update('primerNombre', e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Segundo nombre</label>
-              <input
-                type="text"
-                value={form.segundoNombre ?? ''}
-                onChange={(e) => update('segundoNombre', e.target.value || null)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Apellidos */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Primer apellido *</label>
-              <input
-                type="text"
-                value={form.primerApellido}
-                onChange={(e) => update('primerApellido', e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Segundo apellido</label>
-              <input
-                type="text"
-                value={form.segundoApellido ?? ''}
-                onChange={(e) => update('segundoApellido', e.target.value || null)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Alias y especialidad */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Alias <span className="text-gray-400">(se muestra a afiliados)</span>
-              </label>
-              <input
-                type="text"
-                value={form.alias ?? ''}
-                onChange={(e) => update('alias', e.target.value || null)}
-                placeholder="Dr. Juan Pérez"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Especialidad</label>
-              <input
-                type="text"
-                value={form.especialidad ?? ''}
-                onChange={(e) => update('especialidad', e.target.value || null)}
-                placeholder="Medicina general"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Licencia */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Número licencia</label>
-              <input
-                type="text"
-                value={form.numeroLicencia ?? ''}
-                onChange={(e) => update('numeroLicencia', e.target.value || null)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Tipo licencia</label>
-              <input
-                type="text"
-                value={form.tipoLicencia ?? ''}
-                onChange={(e) => update('tipoLicencia', e.target.value || null)}
-                placeholder="Profesional"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Vencimiento</label>
-              <input
-                type="date"
-                value={form.fechaVencimientoLicencia ?? ''}
-                onChange={(e) => update('fechaVencimientoLicencia', e.target.value || null)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Tiempo consulta + contacto */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Tiempo consulta (min) *
-              </label>
-              <input
-                type="number"
-                min={5}
-                max={240}
-                value={form.tiempoConsulta ?? 30}
-                onChange={(e) => update('tiempoConsulta', parseInt(e.target.value, 10) || 30)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
-              <input
-                type="email"
-                value={form.email ?? ''}
-                onChange={(e) => update('email', e.target.value || null)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Celular</label>
-              <input
-                type="tel"
-                value={form.celular ?? ''}
-                onChange={(e) => update('celular', e.target.value || null)}
-                placeholder="+573001234567"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Firma */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              Firma <span className="text-gray-400">(PNG, JPG o SVG · máx 1.5 MB)</span>
-            </label>
-            {form.firma ? (
-              <div className="flex items-start gap-3 border border-gray-200 rounded-lg p-3">
-                <img
-                  src={form.firma}
-                  alt="Firma"
-                  className="h-20 w-auto max-w-[200px] object-contain border border-gray-100 rounded bg-white"
-                />
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1.5 border border-blue-200"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    Reemplazar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => update('firma', null)}
-                    className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 border border-red-200"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Quitar firma
-                  </button>
+            {(['atiende', 'gestiona', 'otro'] as const).map((grupo) => (
+              <div key={grupo} className="mb-4">
+                <div className={`${SECTION_LABEL} mb-2`}>
+                  {grupo === 'atiende'
+                    ? 'Atiende pacientes'
+                    : grupo === 'gestiona'
+                      ? 'Gestiona la operación'
+                      : 'Si ninguno encaja'}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {PERFILES.filter((p) => p.grupo === grupo).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => elegirPerfil(p)}
+                      className="text-left border border-zinc-200 rounded-lg p-3 hover:border-blue-400 hover:bg-blue-50/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[13.5px] font-medium text-zinc-800">{p.titulo}</span>
+                        <ChevronRight className="w-4 h-4 text-zinc-300" />
+                      </div>
+                      <p className="text-[12px] text-zinc-500 mt-1 leading-snug">{p.hace}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full px-4 py-6 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:border-blue-300 flex flex-col items-center gap-2 transition-colors"
-              >
-                <Upload className="w-5 h-5 text-gray-400" />
-                <span>Click para subir firma</span>
-              </button>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/svg+xml"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFirmaUpload(file);
-                // Reset input para permitir re-subir el mismo archivo
-                if (e.target) e.target.value = '';
-              }}
-            />
+            ))}
           </div>
+        )}
 
-          {/* ── La cuenta, en el mismo paso ─────────────────────────────────
-              Antes esto vivía en otra pantalla: se creaba la ficha, la persona
-              aparecía en la agenda y no podía entrar, y nadie se enteraba hasta
-              que le tocaba atender. Al editar no se muestra: las cuentas ya
-              creadas se administran desde «Usuarios». */}
-          {!editing && (
-            <div className="pt-4 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">Cuenta para entrar</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Con esto la persona ya puede iniciar sesión. Si todavía no tenés su correo,
-                dejalo en blanco: queda con ficha y sin cuenta, y aparece marcada así en la lista.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Correo</label>
+        {/* ── PASO 2 · quién es ────────────────────────────────────────── */}
+        {(editing || paso === 2) && (
+          <form onSubmit={handleSubmit} className="p-5 space-y-5">
+            {perfil?.nota && (
+              <div className="text-[12.5px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                {perfil.nota}
+              </div>
+            )}
+
+            {/* Quién es */}
+            <div className="space-y-3">
+              <div className={SECTION_LABEL}>Quién es</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={LABEL} htmlFor="pf-nombre1">Primer nombre *</label>
                   <input
-                    type="email"
-                    value={cuenta.email}
-                    onChange={(e) => setCuenta({ ...cuenta, email: e.target.value })}
-                    placeholder="nombre.apellido@bodytechcorp.com"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    type="text"
+                    id="pf-nombre1"
+                    value={form.primerNombre}
+                    onChange={(e) => update('primerNombre', e.target.value)}
+                    className={INPUT}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Entra a</label>
-                  <select
-                    value={cuenta.app}
-                    onChange={(e) => {
-                      const app = e.target.value as 'consulta' | 'acc' | 'prepagadas';
-                      setCuenta({ ...cuenta, app, rol: ROLES_APP[app][0] });
-                    }}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="consulta">Consulta</option>
-                    <option value="acc">ACC</option>
-                    <option value="prepagadas">Prepagadas</option>
-                  </select>
+                  <label className={LABEL} htmlFor="pf-apellido1">Primer apellido *</label>
+                  <input
+                    type="text"
+                    id="pf-apellido1"
+                    value={form.primerApellido}
+                    onChange={(e) => update('primerApellido', e.target.value)}
+                    className={INPUT}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="pf-nombre2">Segundo nombre</label>
+                  <input
+                    type="text"
+                    id="pf-nombre2"
+                    value={form.segundoNombre ?? ''}
+                    onChange={(e) => update('segundoNombre', e.target.value || null)}
+                    className={INPUT}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="pf-apellido2">Segundo apellido</label>
+                  <input
+                    type="text"
+                    id="pf-apellido2"
+                    value={form.segundoApellido ?? ''}
+                    onChange={(e) => update('segundoApellido', e.target.value || null)}
+                    className={INPUT}
+                  />
                 </div>
               </div>
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Rol en esa aplicación</label>
-                <select
-                  value={cuenta.rol}
-                  onChange={(e) => setCuenta({ ...cuenta, rol: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {ROLES_APP[cuenta.app].map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={LABEL} htmlFor="pf-documento">Cédula {editing ? '' : '*'}</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    id="pf-documento"
+                    value={form.documento ?? ''}
+                    onChange={(e) => {
+                      const doc = e.target.value.replace(/\D/g, '');
+                      update('documento', doc || null);
+                      // El código de agenda casi siempre es la cédula. Se
+                      // propone y se puede cambiar; así nadie se inventa uno.
+                      if (!editing && conAgenda && !form.codigo) update('codigo', doc);
+                    }}
+                    placeholder="1015420891"
+                    className={INPUT}
+                  />
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Con esto queda en el directorio de la cadena.
+                  </p>
+                </div>
+                <div>
+                  <label className={LABEL} htmlFor="pf-celular">Celular</label>
+                  <input
+                    type="tel"
+                    id="pf-celular"
+                    value={form.celular ?? ''}
+                    onChange={(e) => update('celular', e.target.value || null)}
+                    placeholder="+573001234567"
+                    className={INPUT}
+                  />
+                </div>
               </div>
-              {cuenta.app === 'consulta' && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <label className="block text-xs font-medium text-gray-500 mb-2">
-                    Qué alcanza a ver
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
-                    <input
-                      type="checkbox"
-                      checked={cuenta.esGlobal}
-                      onChange={(e) => setCuenta({ ...cuenta, esGlobal: e.target.checked })}
-                    />
-                    Todas las sedes
-                  </label>
-                  {!cuenta.esGlobal && (
-                    <div className="border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-y-1.5">
-                      {sedesDisponibles.length === 0 ? (
-                        <p className="text-xs text-gray-400">No hay sedes para asignar.</p>
-                      ) : (
-                        sedesDisponibles.map((s) => (
-                          <label key={s.sedeId} className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={cuenta.sedes.includes(s.sedeId)}
-                              onChange={() =>
-                                setCuenta({
-                                  ...cuenta,
-                                  sedes: cuenta.sedes.includes(s.sedeId)
-                                    ? cuenta.sedes.filter((x) => x !== s.sedeId)
-                                    : [...cuenta.sedes, s.sedeId],
-                                })
-                              }
-                            />
-                            {s.nombre}
-                          </label>
-                        ))
+
+              {conAgenda && (
+                <div>
+                  <label className={LABEL} htmlFor="pf-codigo">Código de agenda *</label>
+                  <input
+                    type="text"
+                    id="pf-codigo"
+                    value={form.codigo}
+                    onChange={(e) => update('codigo', e.target.value.toUpperCase())}
+                    placeholder="1015420891"
+                    className={INPUT}
+                    disabled={!!editing}
+                  />
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    {editing
+                      ? 'El código no se puede cambiar.'
+                      : 'Con el que quedan marcadas sus citas. Se propone su cédula.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Cómo entra */}
+            {!editing && (
+              <div className="space-y-3 pt-4 border-t border-zinc-100">
+                <div className={SECTION_LABEL}>Cómo entra</div>
+                <div>
+                  <label className={LABEL} htmlFor="pf-correo">Correo</label>
+                  <input
+                    type="email"
+                    id="pf-correo"
+                    value={correo}
+                    onChange={(e) => setCorreo(e.target.value)}
+                    placeholder="nombre.apellido@bodytechcorp.com"
+                    className={INPUT}
+                  />
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Es su usuario. Si todavía no lo tenés, dejalo vacío: queda registrada y sin
+                    cuenta, y se le crea después.
+                  </p>
+                </div>
+
+                {correo.trim() !== '' && (
+                  <div>
+                    <label className={LABEL} htmlFor="pf-clave">Contraseña provisional</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        id="pf-clave"
+                    value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="mínimo 8 caracteres"
+                        className={INPUT}
+                        style={{ fontFamily: FONT_MONO }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPassword(generarClave())}
+                        className="px-3 h-[38px] border border-zinc-200 rounded-md text-[12.5px] text-zinc-600 hover:bg-zinc-50 shrink-0"
+                      >
+                        Otra
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copiarAcceso}
+                        className="px-3 h-[38px] border border-zinc-200 rounded-md text-[12.5px] text-zinc-600 hover:bg-zinc-50 shrink-0 inline-flex items-center gap-1.5"
+                      >
+                        {copiado ? (
+                          <Check className="w-3.5 h-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        {copiado ? 'Copiado' : 'Copiar'}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      Se la entregás a la persona. Después no se puede volver a ver.
+                    </p>
+                  </div>
+                )}
+
+                {/* Sedes: sólo cuando el oficio no las fija. */}
+                {hayQuePreguntarSedes && preset.app === 'consulta' && (
+                  <div>
+                    <label className={LABEL}>A qué sedes entra</label>
+                    <label className="flex items-center gap-2 text-[13px] text-zinc-700 mb-1.5">
+                      <input
+                        type="checkbox"
+                        checked={preset.esGlobal}
+                        onChange={(e) => setPreset({ ...preset, esGlobal: e.target.checked })}
+                      />
+                      Todas las sedes
+                    </label>
+                    {!preset.esGlobal && (
+                      <div className="border border-zinc-200 rounded-md p-3 grid grid-cols-2 gap-y-1.5">
+                        {sedesDisponibles.length === 0 ? (
+                          <p className="text-[12px] text-zinc-400">No hay sedes para asignar.</p>
+                        ) : (
+                          sedesDisponibles.map((s) => (
+                            <label key={s.sedeId} className="flex items-center gap-2 text-[13px]">
+                              <input
+                                type="checkbox"
+                                checked={preset.sedes.includes(s.sedeId)}
+                                onChange={() => toggleSede(s.sedeId)}
+                              />
+                              {s.nombre}
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* «Otro caso»: los controles crudos, para lo que no es rutina. */}
+                {esManual && (
+                  <div className="space-y-3 border border-zinc-200 rounded-md p-3 bg-zinc-50/60">
+                    <p className="text-[12px] text-zinc-500">
+                      Configuración a mano. Cada casilla es independiente: revisá el resumen de
+                      abajo antes de crear.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={LABEL}>Rol en el directorio</label>
+                        <select
+                          value={preset.rolFicha}
+                          onChange={(e) =>
+                            setPreset({ ...preset, rolFicha: e.target.value as RolDirectorio })
+                          }
+                          className={INPUT}
+                        >
+                          <option value="medico">Médico</option>
+                          <option value="coach">Coach</option>
+                          <option value="nutricionista">Nutricionista</option>
+                          <option value="fisioterapeuta">Fisioterapeuta</option>
+                          <option value="evaluador">Evaluador</option>
+                          <option value="administrativo">Administrativo</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={LABEL}>Entra a</label>
+                        <select
+                          value={preset.app ?? 'consulta'}
+                          onChange={(e) => {
+                            const app = e.target.value as AppDestino;
+                            setPreset({ ...preset, app, rolApp: ROLES_APP[app][0] });
+                          }}
+                          className={INPUT}
+                        >
+                          <option value="consulta">Consulta</option>
+                          <option value="acc">ACC</option>
+                          <option value="prepagadas">Prepagadas</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={LABEL}>Qué puede hacer ahí</label>
+                      <select
+                        value={preset.rolApp}
+                        onChange={(e) => setPreset({ ...preset, rolApp: e.target.value })}
+                        className={INPUT}
+                      >
+                        {ROLES_APP[preset.app ?? 'consulta'].map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {preset.app === 'consulta' && (
+                      <div>
+                        <label className={LABEL}>
+                          Programa <span className="text-zinc-400">(de dónde le llegan las citas)</span>
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {PROGRAMAS.map((pr) => {
+                            const puesto = preset.programas.includes(pr.v);
+                            return (
+                              <button
+                                key={pr.v}
+                                type="button"
+                                onClick={() =>
+                                  setPreset({
+                                    ...preset,
+                                    programas: puesto
+                                      ? preset.programas.filter((x) => x !== pr.v)
+                                      : [...preset.programas, pr.v],
+                                  })
+                                }
+                                className={`px-2.5 py-1 rounded-md border text-[12px] ${
+                                  puesto
+                                    ? 'bg-blue-50 border-blue-300 text-blue-800'
+                                    : 'bg-white border-zinc-200 text-zinc-500'
+                                }`}
+                              >
+                                {pr.t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Opcionales, plegados: antes la foto abría el formulario y
+                parecía obligatoria. */}
+            <div className="pt-4 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setVerExtras((v) => !v)}
+                className="flex items-center gap-1.5 text-[12.5px] text-zinc-600 hover:text-zinc-900"
+              >
+                {verExtras ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+                Datos opcionales · foto, firma, licencia y duración de la consulta
+              </button>
+              {verExtras && (
+                <div className="mt-4 space-y-4">
+                  <p className="text-[12px] text-zinc-500">
+                    Nada de esto es obligatorio. La firma y la licencia salen en el PDF de la
+                    historia; la foto, en el tablero del día.
+                  </p>
+
+                  {/* Foto */}
+                  <div className="flex items-center gap-4">
+                    {form.foto ? (
+                      <img
+                        src={form.foto}
+                        alt="Foto de perfil"
+                        className="w-16 h-16 rounded-full object-cover border border-zinc-200 bg-zinc-100 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full border-2 border-dashed border-zinc-200 bg-zinc-50 flex items-center justify-center text-zinc-300 shrink-0">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fotoInputRef.current?.click()}
+                        className="px-3 py-1.5 text-[12px] text-blue-700 hover:bg-blue-50 rounded-md border border-blue-200 inline-flex items-center gap-1.5"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {form.foto ? 'Reemplazar foto' : 'Subir foto'}
+                      </button>
+                      {form.foto && (
+                        <button
+                          type="button"
+                          onClick={() => update('foto', null)}
+                          className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded-md border border-red-200 inline-flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Quitar
+                        </button>
                       )}
+                    </div>
+                    <input
+                      ref={fotoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFotoUpload(file);
+                        if (e.target) e.target.value = '';
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={LABEL} htmlFor="pf-alias">
+                        Alias <span className="text-zinc-400">(lo que ve el afiliado)</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="pf-alias"
+                    value={form.alias ?? ''}
+                        onChange={(e) => update('alias', e.target.value || null)}
+                        placeholder="Dr. Juan Pérez"
+                        className={INPUT}
+                      />
+                    </div>
+                    <div>
+                      <label className={LABEL} htmlFor="pf-especialidad">Especialidad</label>
+                      <input
+                        type="text"
+                        id="pf-especialidad"
+                    value={form.especialidad ?? ''}
+                        onChange={(e) => update('especialidad', e.target.value || null)}
+                        placeholder="Medicina general"
+                        className={INPUT}
+                      />
+                    </div>
+                  </div>
+
+                  {conAgenda && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className={LABEL}>Duración de la consulta (min)</label>
+                        <input
+                          type="number"
+                          min={5}
+                          max={240}
+                          value={form.tiempoConsulta ?? 30}
+                          onChange={(e) =>
+                            update('tiempoConsulta', parseInt(e.target.value, 10) || 30)
+                          }
+                          className={INPUT}
+                        />
+                      </div>
+                      <div>
+                        <label className={LABEL}>Número de licencia</label>
+                        <input
+                          type="text"
+                          value={form.numeroLicencia ?? ''}
+                          onChange={(e) => update('numeroLicencia', e.target.value || null)}
+                          className={INPUT}
+                        />
+                      </div>
+                      <div>
+                        <label className={LABEL}>Vence</label>
+                        <input
+                          type="date"
+                          value={form.fechaVencimientoLicencia ?? ''}
+                          onChange={(e) =>
+                            update('fechaVencimientoLicencia', e.target.value || null)
+                          }
+                          className={INPUT}
+                        />
+                      </div>
                     </div>
                   )}
 
-                  <label className="block text-xs font-medium text-gray-500 mt-4 mb-2">
-                    Programa <span className="text-gray-400">(puede ser más de uno)</span>
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PROGRAMAS.map((pr) => {
-                      const puesto = cuenta.programas.includes(pr.v);
-                      return (
+                  {conAgenda && (
+                    <div>
+                      <label className={LABEL}>
+                        Firma <span className="text-zinc-400">(PNG, JPG o SVG · máx 1.5 MB)</span>
+                      </label>
+                      {form.firma ? (
+                        <div className="flex items-start gap-3 border border-zinc-200 rounded-md p-3">
+                          <img
+                            src={form.firma}
+                            alt="Firma"
+                            className="h-16 w-auto max-w-[200px] object-contain border border-zinc-100 rounded bg-white"
+                          />
+                          <div className="flex flex-col gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="px-3 py-1.5 text-[12px] text-blue-700 hover:bg-blue-50 rounded-md border border-blue-200"
+                            >
+                              Reemplazar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => update('firma', null)}
+                              className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded-md border border-red-200"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                         <button
-                          key={pr.v}
                           type="button"
-                          onClick={() =>
-                            setCuenta({
-                              ...cuenta,
-                              programas: puesto
-                                ? cuenta.programas.filter((x) => x !== pr.v)
-                                : [...cuenta.programas, pr.v],
-                            })
-                          }
-                          className={`px-2.5 py-1 rounded-md border text-xs ${
-                            puesto
-                              ? 'bg-blue-50 border-blue-300 text-blue-800'
-                              : 'bg-white border-gray-200 text-gray-500'
-                          }`}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full px-4 py-5 border-2 border-dashed border-zinc-200 rounded-md text-[12.5px] text-zinc-500 hover:bg-zinc-50 hover:border-blue-300 flex flex-col items-center gap-1.5"
                         >
-                          {pr.t}
+                          <Upload className="w-4 h-4 text-zinc-400" />
+                          Subir firma
                         </button>
-                      );
-                    })}
-                  </div>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFirmaUpload(file);
+                          if (e.target) e.target.value = '';
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
 
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                  Contraseña provisional
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={cuenta.password}
-                    onChange={(e) => setCuenta({ ...cuenta, password: e.target.value })}
-                    placeholder="mínimo 8 caracteres"
-                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+            {/* El resumen: lo que va a quedar, en castellano. */}
+            {!editing && (
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-3">
+                <div className={`${SECTION_LABEL} mb-1.5`}>Al crear</div>
+                <ul className="space-y-1">
+                  {resumen.map((linea) => (
+                    <li key={linea} className="flex gap-2 text-[12.5px] text-zinc-700">
+                      <Check className="w-3.5 h-3.5 text-green-600 shrink-0 mt-[3px]" />
+                      <span>{linea}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-between pt-3 border-t border-zinc-100">
+              <div>
+                {!editing && (
                   <button
                     type="button"
-                    onClick={() => setCuenta({ ...cuenta, password: generarClave() })}
-                    className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                    onClick={() => setPaso(1)}
+                    className="px-3 py-2 text-[13px] text-zinc-600 hover:bg-zinc-100 rounded-md"
                   >
-                    Generar
+                    ← Cambiar qué hace
                   </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  Se la entregás a la persona. Queda visible acá porque después no se puede ver.
-                </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-2 text-[13px] text-zinc-600 hover:bg-zinc-100 rounded-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 text-white rounded-md text-[13px] font-medium disabled:opacity-50"
+                  style={{ background: TOKENS.accent }}
+                >
+                  {saving ? 'Guardando…' : editing ? 'Actualizar' : 'Crear'}
+                </button>
               </div>
             </div>
-          )}
-
-          <div className="flex gap-3 justify-end pt-3 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? 'Guardando...' : editing ? 'Actualizar' : 'Crear'}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );
 }
-
-/**
- * Los roles de cada aplicación. No hay un vocabulario común a propósito: un
- * fisioterapeuta no existe en Prepagadas. Espeja `ROLES_POR_APP` del backend.
- */
-/** Las líneas de atención. Mismo vocabulario que el origen de las citas. */
-const PROGRAMAS = [
-  { v: 'trepsi', t: 'Trepsi' },
-  { v: 'umv', t: 'UMV' },
-  { v: 'corporativo', t: 'Corporativo' },
-  { v: 'nativa', t: 'Nativa' },
-];
-
-const ROLES_APP: Record<'consulta' | 'acc' | 'prepagadas', string[]> = {
-  consulta: ['medico', 'coach', 'auxiliar', 'coordinador', 'admin', 'torre'],
-  acc: ['fisioterapeuta', 'admin'],
-  prepagadas: ['profesional', 'asesor', 'admin'],
-};
 
 /** Contraseña provisional legible: sin caracteres que se confundan al dictarla. */
 function generarClave(): string {

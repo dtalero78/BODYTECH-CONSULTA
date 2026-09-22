@@ -151,8 +151,15 @@ class ProfesionalesService {
     return res.data?.data;
   }
 
-  async create(input: ProfesionalInput): Promise<AltaProfesional> {
-    const res = await axios.post(`${API_BASE_URL}/api/profesionales`, input, {
+  /**
+   * `sede` manda la ficha a la sede que le corresponde al oficio (un coach de
+   * nutrición a `bdt-nutricion`, el médico corporativo a `corporativo`). Sin
+   * ella, el backend la crea en la sede de quien está dando el alta, que casi
+   * nunca es la misma; el servidor igual valida que esté en su alcance.
+   */
+  async create(input: ProfesionalInput, sede?: string): Promise<AltaProfesional> {
+    const qs = sede ? `?sede=${encodeURIComponent(sede)}` : '';
+    const res = await axios.post(`${API_BASE_URL}/api/profesionales${qs}`, input, {
       headers: authHeaders(),
     });
     return {

@@ -213,6 +213,7 @@ export function TorniqueteView({ showToast }: Props) {
 
       {/* Resumen */}
       <div
+        data-testid="latidos-resumen"
         className={`grid grid-cols-2 ${
           esHoy ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
         } border border-zinc-200 rounded-xl bg-white overflow-hidden divide-x divide-y sm:divide-y-0 divide-zinc-200 mb-6`}
@@ -226,7 +227,7 @@ export function TorniqueteView({ showToast }: Props) {
       </div>
 
       {/* Tabla */}
-      <div className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
+      <div data-testid="latidos-tabla" className="border border-zinc-200 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]" style={{ fontFamily: FONT_INTER }}>
             <thead>
@@ -356,7 +357,7 @@ function FilaProfesional({
           '—'
         )}
       </td>
-      <td className="px-4 py-2.5 w-[38%] min-w-[220px]">
+      <td data-testid="latidos-linea" className="px-4 py-2.5 w-[38%] min-w-[220px]">
         {hayDetalle ? (
           <button
             type="button"
@@ -377,7 +378,7 @@ function FilaProfesional({
     </tr>
     {abierto && (
       <tr className="border-b border-zinc-100 bg-zinc-50/70">
-        <td colSpan={6} className="px-4 py-3">
+        <td colSpan={6} data-testid="latidos-detalle" className="px-4 py-3">
           {/* La sección se abre desde la barra, pero adentro no había con qué
               cerrarla: quien llegaba scrolleando al detalle no tenía salida a
               la vista. El botón cierra la misma sección que abrió la barra. */}

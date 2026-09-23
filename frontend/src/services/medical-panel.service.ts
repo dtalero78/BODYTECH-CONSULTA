@@ -25,8 +25,13 @@ export interface Patient {
   empresaListado: string;
   pvEstado?: string;
   tipoExamen?: string;
-  /** ¿Ya se apretó "Llamar" para esta cita? Habilita el "No contesta". */
-  llamadaHecha?: boolean;
+  /**
+   * Llamadas del botón "Llamar" de esta cita. Habilitan el "No contesta" y le
+   * muestran al coach a qué hora llamó y cómo terminó.
+   */
+  llamadasN?: number;
+  ultimaLlamadaAt?: string | null;
+  ultimaLlamadaEstado?: string | null;
 }
 
 export interface PaginatedPatients {

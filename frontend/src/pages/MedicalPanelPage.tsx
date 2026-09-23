@@ -108,19 +108,46 @@ function textosInasistencia(): { boton: string; pregunta: string; marcado: strin
     : { boton: 'No contesta', pregunta: '¿No contestó?', marcado: 'No Contesta', tarjeta: 'No contesta' };
 }
 
+/**
+ * "Llamado 9:03 · no contestó" — lo que el coach necesita saber de la llamada
+ * anterior sin abrir la historia. El desenlace sale del estado de la máquina de
+ * `llamadas_voz`; los estados intermedios se resumen como "en curso" porque en
+ * la tarjeta no aporta distinguirlos.
+ */
+function resumenLlamada(l: { at: string | null; estado: string | null }): string {
+  const hora = l.at
+    ? new Date(l.at).toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Bogota',
+      })
+    : '';
+  const desenlace: Record<string, string> = {
+    completada: 'habló',
+    sin_respuesta: 'no contestó',
+    coach_no_contesto: 'sin audio',
+    fallida: 'falló',
+  };
+  const cola = l.estado
+    ? desenlace[l.estado] ?? 'en curso'
+    : '';
+  if (!hora) return cola ? `Llamado · ${cola}` : 'Llamado';
+  return cola ? `Llamado ${hora} · ${cola}` : `Llamado ${hora}`;
+}
+
 function NoContestaAccion({
   patientId,
   nombre,
   fechaAtencion,
-  llamadaHecha,
+  llamada,
   celular,
   onConfirmar,
 }: {
   patientId: string;
   nombre: string;
   fechaAtencion: Date | string;
-  /** ¿Ya se llamó a este afiliado con el botón "Llamar"? */
-  llamadaHecha: boolean;
+  /** La última llamada del botón "Llamar", o null si nunca se llamó. */
+  llamada: { at: string | null; estado: string | null } | null;
   /** Sin celular no hay a quién llamar: la guarda no aplica. */
   celular?: string;
   onConfirmar: (
@@ -219,14 +246,19 @@ function NoContestaAccion({
   // Guarda 2: sin llamada previa el enlace queda inhabilitado, con el motivo al
   // lado (en móvil no hay `title` que valga). Las dos excepciones —examen
   // presencial y cita sin celular— se resuelven arriba, en `exigeLlamada`.
-  if (exigeLlamada && !llamadaHecha) {
+  //
+  // El gris de un control inhabilitado no puede ser tan tenue que el coach no
+  // lo encuentre: el primer intento usaba `text-gray-600` con `opacity-50` y
+  // sobre la tarjeta oscura no se leía nada. Va en `text-gray-400`, que es el
+  // mismo tono de los datos secundarios de la tarjeta, sin opacidad encima.
+  if (exigeLlamada && !llamada) {
     return (
-      <div className="self-end flex items-center gap-1.5">
-        <span className="text-gray-600 text-[11px] md:text-xs">Llame primero</span>
+      <div className="self-end flex items-center gap-2">
+        <span className="text-gray-400 text-[11px] md:text-xs">Llame primero</span>
         <button
           disabled
           title="Primero llame al afiliado con el botón Llamar."
-          className="text-gray-600 text-[11px] md:text-xs underline underline-offset-2 px-1 py-1 opacity-50 cursor-not-allowed"
+          className="text-gray-500 text-[11px] md:text-xs underline underline-offset-2 px-1 py-1 cursor-not-allowed"
         >
           {textos.boton}
         </button>
@@ -234,13 +266,23 @@ function NoContestaAccion({
     );
   }
 
+  // Ya se llamó: la hora y el desenlace, al lado del botón. Es el dato que el
+  // coach necesita para decidir si marca o si vuelve a llamar, y hasta ahora
+  // solo existía en la historia clínica y solo para coordinación.
   return (
-    <button
-      onClick={alTocar}
-      className="self-end text-gray-500 hover:text-gray-300 transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
-    >
-      {textos.boton}
-    </button>
+    <div className="self-end flex items-center gap-2">
+      {llamada && (
+        <span className="text-gray-400 text-[11px] md:text-xs" title="Llamada desde el botón Llamar">
+          {resumenLlamada(llamada)}
+        </span>
+      )}
+      <button
+        onClick={alTocar}
+        className="text-gray-400 hover:text-white transition text-[11px] md:text-xs underline underline-offset-2 px-1 py-1"
+      >
+        {textos.boton}
+      </button>
+    </div>
   );
 }
 
@@ -293,10 +335,12 @@ export function MedicalPanelPage() {
     error: string | null;
   } | null>(null);
   /**
-   * A quiénes se les llamó en esta pestaña. Complementa el `llamadaHecha` que
-   * trae la lista del servidor, que solo se actualiza al refrescar.
+   * A quiénes se les llamó en esta pestaña, y a qué hora. Complementa lo que
+   * trae la lista del servidor, que solo se actualiza al refrescar: entre que
+   * el coach aprieta "Llamar" y que llega el refetch hay unos segundos en los
+   * que la tarjeta se quedaría diciendo "Llame primero".
    */
-  const [llamadosEnSesion, setLlamadosEnSesion] = useState<Set<string>>(new Set());
+  const [llamadosEnSesion, setLlamadosEnSesion] = useState<Map<string, string>>(new Map());
   const [, setTick] = useState(0);
   /**
    * El softphone: un Device de Twilio por pestaña (se crea al primer "Llamar",
@@ -783,7 +827,7 @@ export function MedicalPanelPage() {
       // Sin esto habría que esperar un refetch, y el coach llama y marca en el
       // mismo minuto. Va DESPUÉS de crearla: si el micrófono no dio permiso,
       // no hubo llamada y la guarda debe seguir puesta.
-      setLlamadosEnSesion((prev) => new Set(prev).add(patient._id));
+      setLlamadosEnSesion((prev) => new Map(prev).set(patient._id, creada!.iniciadaAt ?? new Date().toISOString()));
 
       const device = await obtenerDevice();
       const call = await device.connect({ params: { llamadaId: String(creada.id) } });
@@ -813,12 +857,22 @@ export function MedicalPanelPage() {
   };
 
   /**
-   * ¿A este afiliado ya se le llamó? Es lo que habilita el "No contesta".
-   * El servidor lo dice por cita (hay fila en `llamadas_voz`); el Set cubre la
-   * llamada que se acaba de hacer, antes de que la lista se vuelva a pedir.
+   * La última llamada a este afiliado, o null si nunca se le llamó. Es lo que
+   * habilita el "No contesta" y lo que se muestra al lado. El servidor la trae
+   * por cita (de `llamadas_voz`); el Map cubre la que se acaba de hacer, antes
+   * de que la lista se vuelva a pedir. Si la llamada viva es de este afiliado,
+   * su estado manda: es el más fresco de los dos.
    */
-  const yaSeLlamo = (p: { _id: string; llamadaHecha?: boolean }): boolean =>
-    p.llamadaHecha === true || llamadosEnSesion.has(p._id);
+  const infoLlamada = (
+    p: { _id: string; llamadasN?: number; ultimaLlamadaAt?: string | null; ultimaLlamadaEstado?: string | null }
+  ): { at: string | null; estado: string | null } | null => {
+    const enVivo = llamada?.patientId === p._id ? llamada.data : null;
+    const enSesion = llamadosEnSesion.get(p._id) ?? null;
+    if (enVivo) return { at: enVivo.iniciadaAt ?? enSesion, estado: enVivo.estado };
+    if (enSesion) return { at: enSesion, estado: p.ultimaLlamadaEstado ?? null };
+    if ((p.llamadasN ?? 0) > 0) return { at: p.ultimaLlamadaAt ?? null, estado: p.ultimaLlamadaEstado ?? null };
+    return null;
+  };
 
   /** Colgar desde el panel: corta el tramo del navegador; Twilio cierra el del paciente. */
   const colgar = () => {
@@ -855,9 +909,15 @@ export function MedicalPanelPage() {
   // Cuando termina, el resultado se queda unos segundos y el botón vuelve.
   useEffect(() => {
     if (!llamada || (!llamada.error && !llamadaTerminal)) return;
+    // Terminó: pedir la lista otra vez para que la tarjeta muestre el desenlace
+    // que quedó en `llamadas_voz` ("Llamado 9:03 · no contestó") y no lo que
+    // alcanzó a ver esta pestaña.
+    if (llamadaTerminal) {
+      queryClient.invalidateQueries({ queryKey: ['pending-patients', medicoCode] });
+    }
     const t = setTimeout(() => setLlamada(null), 8000);
     return () => clearTimeout(t);
-  }, [llamada, llamadaTerminal]);
+  }, [llamada, llamadaTerminal, queryClient, medicoCode]);
 
   /** Texto del botón según por dónde va la llamada. */
   const etiquetaLlamada = (p: Patient): string => {
@@ -1444,7 +1504,7 @@ export function MedicalPanelPage() {
                         patientId={searchResult._id}
                         nombre={searchResult.primerNombre}
                         fechaAtencion={searchResult.fechaAtencion}
-                        llamadaHecha={yaSeLlamo(searchResult)}
+                        llamada={infoLlamada(searchResult)}
                         celular={searchResult.celular}
                         onConfirmar={handleNoAnswer}
                       />
@@ -1639,7 +1699,7 @@ export function MedicalPanelPage() {
                             patientId={patient._id}
                             nombre={patient.primerNombre}
                             fechaAtencion={patient.fechaAtencion}
-                            llamadaHecha={yaSeLlamo(patient)}
+                            llamada={infoLlamada(patient)}
                             celular={patient.celular}
                             onConfirmar={handleNoAnswer}
                           />

@@ -41,12 +41,15 @@ interface Patient {
   motivoConsulta?: string;
   tipoExamen?: string;
   /**
-   * ¿Ya se marcó el botón "Llamar" para esta cita? Es lo que habilita el
-   * "No contesta" en el panel: marcar la inasistencia de alguien a quien nunca
-   * se llamó era el hallazgo de la Auditoría No contesta (209 de 234 casos
-   * entre el 5 y el 18-sep-2026 no tenían ni una llamada).
+   * Las llamadas del botón "Llamar" de ESTA cita (`llamadas_voz`). Dos cosas a
+   * la vez: habilitan el "No contesta" —marcar la inasistencia de alguien a
+   * quien nunca se llamó era el hallazgo de la Auditoría No contesta, 209 de
+   * 234 casos entre el 5 y el 18-sep-2026— y le dicen al coach en la misma
+   * tarjeta a qué hora llamó y cómo terminó, sin abrir la historia.
    */
-  llamadaHecha?: boolean;
+  llamadasN?: number;
+  ultimaLlamadaAt?: string | null;
+  ultimaLlamadaEstado?: string | null;
 }
 
 interface PaginatedPatients {
@@ -320,9 +323,14 @@ class MedicalPanelService {
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "atendido", "pvEstado", "codEmpresa", "empresa",
                 "medico", "motivoConsulta", "tipoExamen",
-                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
-                  AS llamada_hecha
+                llam.n AS llamadas_n, llam.ultima_at AS llamada_at, llam.estado AS llamada_estado
          FROM "HistoriaClinica"
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS n, MAX(lv.iniciada_at) AS ultima_at,
+                  (ARRAY_AGG(lv.estado ORDER BY lv.iniciada_at DESC))[1] AS estado
+             FROM llamadas_voz lv
+            WHERE lv.historia_id = "HistoriaClinica"."_id"
+         ) llam ON TRUE
          WHERE "medico" = $1
          AND "fechaAtencion" >= $2
          AND "fechaAtencion" <= $3
@@ -369,7 +377,9 @@ class MedicalPanelService {
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
         tipoExamen: row.tipoExamen || '',
-        llamadaHecha: row.llamada_hecha === true
+        llamadasN: Number(row.llamadas_n ?? 0),
+        ultimaLlamadaAt: row.llamada_at ? new Date(row.llamada_at).toISOString() : null,
+        ultimaLlamadaEstado: row.llamada_estado ?? null
       }));
 
       return {
@@ -402,9 +412,14 @@ class MedicalPanelService {
         `SELECT "_id", "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
                 "celular", "fechaAtencion", "fechaConsulta", "atendido", "pvEstado", "codEmpresa",
                 "empresa", "medico", "motivoConsulta", "tipoExamen",
-                EXISTS (SELECT 1 FROM llamadas_voz lv WHERE lv.historia_id = "HistoriaClinica"."_id")
-                  AS llamada_hecha
+                llam.n AS llamadas_n, llam.ultima_at AS llamada_at, llam.estado AS llamada_estado
          FROM "HistoriaClinica"
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS n, MAX(lv.iniciada_at) AS ultima_at,
+                  (ARRAY_AGG(lv.estado ORDER BY lv.iniciada_at DESC))[1] AS estado
+             FROM llamadas_voz lv
+            WHERE lv.historia_id = "HistoriaClinica"."_id"
+         ) llam ON TRUE
          WHERE ("numeroId" = $1 OR "celular" = $1)${sf}
          ORDER BY "fechaAtencion" DESC
          LIMIT 1`,
@@ -433,7 +448,9 @@ class MedicalPanelService {
         medico: row.medico,
         motivoConsulta: row.motivoConsulta || '',
         tipoExamen: row.tipoExamen || '',
-        llamadaHecha: row.llamada_hecha === true
+        llamadasN: Number(row.llamadas_n ?? 0),
+        ultimaLlamadaAt: row.llamada_at ? new Date(row.llamada_at).toISOString() : null,
+        ultimaLlamadaEstado: row.llamada_estado ?? null
       };
     } catch (error) {
       console.error('❌ Error buscando paciente en PostgreSQL:', error);

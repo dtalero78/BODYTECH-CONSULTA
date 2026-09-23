@@ -65,6 +65,46 @@ export interface BoardResult {
   profesionales: BoardProfesional[];
 }
 
+/**
+ * Fusiona los tramos que se solapan. Hace falta porque la jornada se abre por
+ * (código, sede) y la consulta de tramos busca SOLO por código: un profesional
+ * cuya sesión cambia de sede queda con dos jornadas en paralelo y la pantalla
+ * mostraba el mismo rato dos veces ("08:59 – 09:07" repetido) y lo sumaba dos
+ * veces en "Conectado hoy". Es la misma persona conectada una sola vez.
+ *
+ * Solo se fusiona lo que se SOLAPA. Dos tramos separados por un hueco, por
+ * chico que sea, se dejan como están: ese hueco es justamente lo que la
+ * pantalla existe para mostrar.
+ */
+export function fusionarTramos(
+  tramos: Array<{ desde: string; hasta: string }>
+): Array<{ desde: string; hasta: string }> {
+  const ms = (v: string) => Date.parse(v);
+  const orden = [...tramos]
+    .filter((t) => Number.isFinite(ms(t.desde)) && Number.isFinite(ms(t.hasta)))
+    .sort((a, b) => ms(a.desde) - ms(b.desde));
+
+  const out: Array<{ desde: string; hasta: string }> = [];
+  for (const t of orden) {
+    const ultimo = out[out.length - 1];
+    if (ultimo && ms(t.desde) <= ms(ultimo.hasta)) {
+      if (ms(t.hasta) > ms(ultimo.hasta)) ultimo.hasta = t.hasta;
+    } else {
+      out.push({ ...t });
+    }
+  }
+  return out;
+}
+
+/** Minutos que suman los tramos ya fusionados. */
+export function minutosDeTramos(tramos: Array<{ desde: string; hasta: string }>): number {
+  const total = tramos.reduce(
+    (acc, t) => acc + Math.max(0, Date.parse(t.hasta) - Date.parse(t.desde)),
+    0
+  );
+  return Math.round(total / 60000);
+}
+
 class TorniqueteService {
   /**
    * Registra un latido de presencia. Si hay una jornada abierta y reciente para
@@ -238,6 +278,16 @@ class TorniqueteService {
       for (const t of tramos ?? []) {
         const prof = porCodigo.get(String(t.codigo));
         if (prof) prof.tramos.push({ desde: this.tsToIso(t.entrada_at), hasta: this.tsToIso(t.hasta) });
+      }
+
+      // El total y el número de tramos se recalculan sobre lo fusionado: si no,
+      // la pantalla se contradice (la lista muestra 13 tramos y el encabezado
+      // dice 16, y "Conectado hoy" cuenta dos veces el rato que se solapaba).
+      for (const prof of profesionales) {
+        if (prof.tramos.length === 0) continue;
+        prof.tramos = fusionarTramos(prof.tramos);
+        prof.jornadas = prof.tramos.length;
+        prof.minutosConectado = minutosDeTramos(prof.tramos);
       }
 
       // Guarda regex antes del ::timestamptz: `fechaAtencion` es TEXT y una fila

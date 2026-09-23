@@ -501,8 +501,8 @@ class ApiService {
   }
 
   /** La llamada nunca llegó a marcar: liberarla para poder reintentar ya. */
-  async cancelarLlamada(id: number): Promise<void> {
-    await this.client.post(`/api/twilio/llamadas/${id}/cancelar`);
+  async cancelarLlamada(id: number, error?: string): Promise<void> {
+    await this.client.post(`/api/twilio/llamadas/${id}/cancelar`, error ? { error } : {});
   }
 
   /** Estado en vivo, para seguirla desde el panel. */

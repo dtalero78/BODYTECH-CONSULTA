@@ -109,7 +109,9 @@ class LlamadasVozController {
         res.status(400).json({ success: false, error: 'ID_INVALIDO' });
         return;
       }
-      const cancelada = await llamadasVozService.cancelarSiNoArranco(id, session);
+      const detalle =
+        typeof req.body?.error === 'string' ? req.body.error.slice(0, 300) : undefined;
+      const cancelada = await llamadasVozService.cancelarSiNoArranco(id, session, detalle);
       res.json({ success: true, cancelada });
     } catch (e) {
       next(e);

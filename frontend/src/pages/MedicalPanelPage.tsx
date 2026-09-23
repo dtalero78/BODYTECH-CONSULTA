@@ -835,18 +835,27 @@ export function MedicalPanelPage() {
       call.on('disconnect', () => {
         if (softphoneRef.current) softphoneRef.current.call = null;
       });
-      call.on('error', (e: { message?: string }) => {
+      call.on('error', (e: { message?: string; code?: number }) => {
+        const detalle = [e?.code ? `${e.code}` : '', e?.message || ''].filter(Boolean).join(' · ');
         setLlamada((prev) =>
           prev && prev.patientId === patient._id ? { ...prev, error: `Problema de audio: ${e?.message || ''}` } : prev
         );
+        // Este error llega DESPUÉS de que `connect()` resolvió, o sea fuera del
+        // try/catch de abajo: por eso una llamada que moría acá no se cancelaba
+        // (la coach quedaba bloqueada con la fila en "iniciando") ni dejaba
+        // rastro de la causa. Se reporta siempre; el servidor guarda el detalle
+        // y solo la da por fallida si nunca llegó a marcar.
+        if (creada) {
+          apiService.cancelarLlamada(creada.id, detalle).catch(() => undefined);
+        }
       });
     } catch (err) {
       // Si la llamada alcanzó a crearse pero el navegador no pudo marcar, se
       // cancela: sin esto el coach queda bloqueado hasta que la fila venza sola.
-      if (creada) {
-        apiService.cancelarLlamada(creada.id).catch(() => undefined);
-      }
       const e = err as { response?: { data?: { error?: string } }; message?: string };
+      if (creada) {
+        apiService.cancelarLlamada(creada.id, e?.message).catch(() => undefined);
+      }
       const code = e?.response?.data?.error;
       setLlamada({
         patientId: patient._id,

@@ -527,7 +527,24 @@ class LlamadasVozService {
    * Solo toca filas suyas y solo si NO llegó a marcar (sin `call_sid`): una
    * llamada real ya en curso no se cancela por acá.
    */
-  async cancelarSiNoArranco(id: number, session: SessionPayload): Promise<boolean> {
+  async cancelarSiNoArranco(
+    id: number,
+    session: SessionPayload,
+    detalle?: string
+  ): Promise<boolean> {
+    // El detalle es lo que dijo el NAVEGADOR (p. ej. "ConnectionError (31005):
+    // Error sent from gateway in HANGUP"). Sin él, una llamada que muere antes
+    // de marcar deja la fila muda y no hay cómo separar red, micrófono o token:
+    // el 23-sep una coach vio ese 31005 en pantalla y en la base no quedó nada.
+    // Se guarda SIEMPRE que la fila sea suya, aunque ya no se pueda cancelar —
+    // el error es información aunque la llamada sí haya arrancado.
+    if (detalle) {
+      await postgresService.query(
+        `UPDATE llamadas_voz SET error = $3, updated_at = NOW()
+          WHERE id = $1 AND coach_usuario_id = $2`,
+        [id, session.userId, detalle.slice(0, 300)]
+      );
+    }
     const r = await postgresService.query(
       `UPDATE llamadas_voz
           SET estado = 'fallida', motivo_fin = COALESCE(motivo_fin, 'cancelada_por_el_panel'),

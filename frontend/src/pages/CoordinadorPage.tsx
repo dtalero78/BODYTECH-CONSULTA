@@ -292,7 +292,7 @@ export function CoordinadorPage() {
             )}
             <NavItem
               icon={<Fingerprint className="w-[15px] h-[15px]" />}
-              label="Torniquete"
+              label="Latidos"
               active={view === 'torniquete'}
               onClick={() => setView('torniquete')}
               badge={badges.torniquete}

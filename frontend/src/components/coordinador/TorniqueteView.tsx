@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, Fingerprint, RefreshCw } from 'lucide-react';
+import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
 import torniqueteService, { BoardProfesional, BoardResult } from '../../services/torniquete.service';
 import profesionalesService, { Profesional } from '../../services/profesionales.service';
 import authService, { Sede } from '../../services/auth.service';
@@ -170,8 +170,8 @@ export function TorniqueteView({ showToast }: Props) {
       {/* Encabezado */}
       <div className="flex items-start justify-between gap-4 mb-1">
         <h1 className="text-[22px] font-semibold tracking-tight text-zinc-900 flex items-center gap-2">
-          <Fingerprint className="w-5 h-5 text-[#1f3a8a]" />
-          Torniquete
+          <Activity className="w-5 h-5 text-[#1f3a8a]" />
+          Latidos de Asistencia
         </h1>
         <button
           type="button"

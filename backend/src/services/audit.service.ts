@@ -38,6 +38,12 @@ export interface AuditQueryFilters {
   to?: string;
   limit?: number;
   offset?: number;
+  /**
+   * Sedes que puede ver quien consulta (`effectiveSedes`). `undefined` = todas,
+   * que es lo que corresponde a un admin. Sin esto, una coordinación de una
+   * sede leía la bitácora de todas.
+   */
+  sedes?: string[];
 }
 
 class AuditService {
@@ -100,6 +106,11 @@ class AuditService {
     if (f.to) {
       where.push(`created_at <= $${i++}`);
       params.push(f.to);
+    }
+    if (f.sedes !== undefined) {
+      // COALESCE a 'bsl' como en `sedeFilter`: las filas viejas no traen sede.
+      where.push(`COALESCE(actor_sede, 'bsl') = ANY($${i++}::text[])`);
+      params.push(f.sedes);
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const limit = Math.min(Math.max(f.limit ?? 100, 1), 500);

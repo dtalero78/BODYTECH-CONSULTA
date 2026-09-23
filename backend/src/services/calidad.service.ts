@@ -14,6 +14,7 @@
 
 import { toFile } from 'openai/uploads';
 import postgresService from './postgres.service';
+import { sedeFilter } from '../helpers/sede-scope';
 import llamadasVozService from './llamadas-voz.service';
 import twilioService from './twilio.service';
 import { evaluarConsulta, EvaluacionResult } from './managed-agents-calidad.service';
@@ -549,15 +550,23 @@ class CalidadService {
    * Obtiene los datos de sesión de una historia clínica:
    * información del paciente + compositionSid (si existe grabación).
    */
-  async getSession(historiaId: string): Promise<SessionInfo> {
+  /**
+   * `sedes` acota la consulta al alcance de quien pregunta (lo que devuelve
+   * `effectiveSedes`); `undefined` = sin filtro, que es lo que corresponde a un
+   * admin y a los flujos internos del servidor. Sin esto, cualquiera con el id
+   * de una historia leía el nombre del paciente y la transcripción completa de
+   * una consulta de otra sede.
+   */
+  async getSession(historiaId: string, sedes?: string[]): Promise<SessionInfo> {
+    const params: unknown[] = [historiaId];
     const rows = await postgresService.query(
       `SELECT "_id", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
               "numeroId", "empresa", "fechaConsulta", "fechaAtencion",
               "medico", composition_sid, "transcription_text", "transcription_hablantes"
        FROM "HistoriaClinica"
-       WHERE "_id" = $1
+       WHERE "_id" = $1${sedeFilter(sedes, '"sede_id"', params)}
        LIMIT 1`,
-      [historiaId]
+      params
     );
 
     if (!rows || rows.length === 0) {
@@ -761,8 +770,11 @@ class CalidadService {
    * Crea una fila de evaluación en estado 'procesando' y dispara el
    * pipeline en background. Retorna el id de la evaluación creada.
    */
-  async dispararEvaluacion(historiaId: string, opts: { llamadaId?: number } = {}): Promise<number> {
-    const session = await this.getSession(historiaId);
+  async dispararEvaluacion(
+    historiaId: string,
+    opts: { llamadaId?: number; sedes?: string[] } = {}
+  ): Promise<number> {
+    const session = await this.getSession(historiaId, opts.sedes);
 
     if (!session.found) {
       throw Object.assign(new Error('Historia clínica no encontrada'), { statusCode: 404 });
@@ -838,14 +850,21 @@ class CalidadService {
     return rows[0] as EvaluacionRow;
   }
 
-  /** Lista el historial de evaluaciones de una historia clínica, más recientes primero. */
-  async getHistorial(historiaId: string): Promise<HistorialRow[]> {
+  /**
+   * Lista el historial de evaluaciones de una historia clínica, más recientes
+   * primero. `sedes` acota al alcance de quien pregunta: la evaluación cuenta
+   * qué tan bien se atendió a un paciente concreto, así que se lee con el mismo
+   * candado que su historia.
+   */
+  async getHistorial(historiaId: string, sedes?: string[]): Promise<HistorialRow[]> {
+    const params: unknown[] = [historiaId];
     const rows = await postgresService.query(
-      `SELECT id, puntaje_total, estado, created_at, error_msg, fuente, llamada_id
-       FROM consulta_evaluaciones
-       WHERE historia_id = $1
-       ORDER BY created_at DESC`,
-      [historiaId]
+      `SELECT e.id, e.puntaje_total, e.estado, e.created_at, e.error_msg, e.fuente, e.llamada_id
+       FROM consulta_evaluaciones e
+       JOIN "HistoriaClinica" h ON h."_id" = e.historia_id
+       WHERE e.historia_id = $1${sedeFilter(sedes, 'h."sede_id"', params)}
+       ORDER BY e.created_at DESC`,
+      params
     );
     return (rows || []) as HistorialRow[];
   }

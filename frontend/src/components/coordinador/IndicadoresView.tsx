@@ -297,7 +297,10 @@ export function IndicadoresView({ showToast }: Props) {
   async function exportTiempos() {
     setExportandoTiempos(true);
     try {
-      const filas = await calendarioService.getTiemposAtencion(from, to);
+      // Con las sedes de la pantalla: sin ellas el Excel salía con TODO el
+      // alcance del usuario y no con lo que tenía enfrente — dos cifras
+      // distintas para la misma consulta.
+      const filas = await calendarioService.getTiemposAtencion(from, to, sedesSel);
       if (!filas.length) {
         showToast({ type: 'error', message: 'No hay citas con link enviado en el rango.' });
         return;

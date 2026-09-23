@@ -1,4 +1,4 @@
-import express, { Router } from 'express';
+import express, { Router, Request, Response, NextFunction } from 'express';
 import videoController from '../controllers/video.controller';
 import { requireRole } from '../middleware/rbac.middleware';
 
@@ -9,21 +9,37 @@ const router = Router();
 // pacientes acceden por link SOLO al video (token + eventos), nunca a estas.
 const clinico = requireRole('medico', 'coordinador', 'admin', 'coach');
 
-// Generar token de acceso
-router.post('/token', videoController.generateToken);
+// El paciente es el único que cruza sin cuenta: su link de WhatsApp no trae
+// sesión, así que pedir el token para ENTRAR a su sala tiene que seguir siendo
+// público. Entrar como MÉDICO no: sin esto, cualquiera que supiera el nombre de
+// una sala pedía un token de médico y se sentaba en el consultorio.
+const soloElPacienteEntraSinCuenta = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.body?.role !== 'doctor') return next();
+  return clinico(req, res, next);
+};
 
-// Sala guardada de una historia (para que "Atender" entre a la misma del paciente)
-router.get('/room/:historiaId', videoController.getStoredRoom);
+// Generar token de acceso (público para el paciente; con sesión para el médico)
+router.post('/token', soloElPacienteEntraSinCuenta, videoController.generateToken);
 
-// Gestión de salas
-router.post('/rooms', videoController.createRoom);
-router.get('/rooms/:roomName', videoController.getRoom);
-router.post('/rooms/:roomName/end', videoController.endRoom);
+// Sala guardada de una historia (para que "Atender" entre a la misma del
+// paciente). Protegida: con el id de una historia devolvía el nombre de la sala,
+// que es lo único que hace falta para entrar a la videollamada. La llama el
+// panel del profesional, que ya tiene sesión.
+router.get('/room/:historiaId', clinico, videoController.getStoredRoom);
 
-// Gestión de participantes
-router.get('/rooms/:roomName/participants', videoController.listParticipants);
+// Gestión de salas — cosas del profesional, no del paciente: crear la sala,
+// consultarla, cerrarla. El paciente solo se desconecta (el room lo cierra el
+// médico, ver VideoRoom.handleLeave).
+router.post('/rooms', clinico, videoController.createRoom);
+router.get('/rooms/:roomName', clinico, videoController.getRoom);
+router.post('/rooms/:roomName/end', clinico, videoController.endRoom);
+
+// Gestión de participantes: quién está en la sala y sacar a alguien. Nunca lo
+// llama el paciente.
+router.get('/rooms/:roomName/participants', clinico, videoController.listParticipants);
 router.post(
   '/rooms/:roomName/participants/:participantSid/disconnect',
+  clinico,
   videoController.disconnectParticipant
 );
 
@@ -51,8 +67,10 @@ router.post('/realtime-token', clinico, videoController.createRealtimeToken);
 // Extracción de campos desde el transcript acumulado en vivo (IA al finalizar).
 router.post('/extract-fields/:historiaId', clinico, videoController.extractFields);
 
-// Phase 3 — Transcripción post-llamada
-router.post('/events/session-start', videoController.sessionStart);
+// Phase 3 — Transcripción post-llamada. La dispara el navegador del médico al
+// conectarse (ata la sala a la historia), así que exige sesión: escribirla desde
+// afuera mandaría la grabación de una consulta a la historia de otra persona.
+router.post('/events/session-start', clinico, videoController.sessionStart);
 router.post('/webhooks/recording-ready', videoController.recordingReadyWebhook);
 
 // Transcripción client-side (entrada principal): el navegador sube el audio

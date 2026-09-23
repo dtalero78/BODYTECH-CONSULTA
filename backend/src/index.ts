@@ -237,9 +237,15 @@ app.use('/api/accesos', requireRole('admin'), accesosRoutes);
 app.use('/api/usuarios-global', requireRole('admin', 'coordinador'), usuariosGlobalRoutes);
 // El informe mensual que se le entrega a la empresa cliente. Sale de las
 // historias, no de un registro aparte.
+//
+// Sin `medico`: el informe es el agregado clínico de TODAS las valoraciones de
+// una empresa, y la ruta no filtra por sede ni por quién atendió — cualquier
+// médico podía bajar el de cualquier empresa con solo saber su nombre. Lo pide
+// la pantalla de Empresas, que es de coordinación; ningún panel de atención lo
+// llama.
 app.use(
   '/api/informe-corporativo',
-  requireRole('admin', 'coordinador', 'medico'),
+  requireRole('admin', 'coordinador'),
   informeCorporativoRoutes,
 );
 // LA historia clínica de la persona, la del armario. La lee quien atiende.

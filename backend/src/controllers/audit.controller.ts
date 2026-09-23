@@ -6,6 +6,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import auditService from '../services/audit.service';
+import { effectiveSedes } from '../middleware/rbac.middleware';
 
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim() : undefined;
@@ -27,6 +28,7 @@ class AuditController {
         to: str(q.to),
         limit: num(q.limit),
         offset: num(q.offset),
+        sedes: effectiveSedes(req),
       });
       res.json(result);
     } catch (error) {

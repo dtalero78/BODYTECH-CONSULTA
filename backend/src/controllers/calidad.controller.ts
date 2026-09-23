@@ -7,6 +7,7 @@
 
 import { Request, Response } from 'express';
 import calidadService from '../services/calidad.service';
+import { effectiveSedes } from '../middleware/rbac.middleware';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/calidad/session/:historiaId
@@ -20,7 +21,7 @@ export const getSession = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const data = await calidadService.getSession(historiaId);
+    const data = await calidadService.getSession(historiaId, effectiveSedes(req));
 
     if (!data.found) {
       res.status(404).json({ success: false, message: 'Historia clínica no encontrada' });
@@ -103,7 +104,10 @@ export const dispararEvaluacion = async (req: Request, res: Response): Promise<v
     const llamadaRaw = Number(req.body?.llamadaId);
     const llamadaId = Number.isInteger(llamadaRaw) && llamadaRaw > 0 ? llamadaRaw : undefined;
 
-    const evaluacionId = await calidadService.dispararEvaluacion(historiaId, { llamadaId });
+    const evaluacionId = await calidadService.dispararEvaluacion(historiaId, {
+      llamadaId,
+      sedes: effectiveSedes(req),
+    });
 
     // Respuesta inmediata — el procesamiento continúa en background
     res.status(201).json({ success: true, evaluacionId });
@@ -156,7 +160,7 @@ export const getHistorial = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const data = await calidadService.getHistorial(historiaId);
+    const data = await calidadService.getHistorial(historiaId, effectiveSedes(req));
     res.json({ success: true, data });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error desconocido';

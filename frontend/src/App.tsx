@@ -174,10 +174,35 @@ function App() {
             <Route path="/coordinador-login" element={<Navigate to="/login" replace />} />
             <Route path="/ordenes-login" element={<Navigate to="/login" replace />} />
             <Route path="/sin-acceso" element={<SinAcceso />} />
-            {/* Públicas: paciente / video / reprogramar / bot. */}
-            <Route path="/doctor" element={<DoctorPage />} />
-            <Route path="/doctor/:roomName" element={<DoctorRoomPage />} />
-            <Route path="/nutricion/:roomName" element={<NutricionRoomPage />} />
+            {/* Públicas: paciente / reprogramar / bot. Las pantallas del
+                PROFESIONAL piden sesión: la sala de video y la historia clínica
+                son su puesto de trabajo, no un link para repartir. Antes abrían
+                sin cuenta y quien tuviera el nombre de la sala entraba como
+                médico; el paciente sigue entrando por /patient sin cuenta. */}
+            <Route
+              path="/doctor"
+              element={
+                <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                  <DoctorPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/doctor/:roomName"
+              element={
+                <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                  <DoctorRoomPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/nutricion/:roomName"
+              element={
+                <RequireRole roles={['medico', 'coach', 'coordinador', 'admin']}>
+                  <NutricionRoomPage />
+                </RequireRole>
+              }
+            />
             {IsakDemo && (
               <Route
                 path="/demo-isak"

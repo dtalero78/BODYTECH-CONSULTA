@@ -387,6 +387,23 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
 
+### Las puertas de la videollamada: el paciente entra sin cuenta, nadie más
+
+Al inventariar los permisos (23-sep-2026) la sala de video era la puerta más abierta de la plataforma: **el token de video, el nombre de la sala de una historia, crear/cerrar la sala, ver quién está adentro y atar la sala a la historia no pedían nada**, y la página `/doctor/:sala` abría sin sesión. Con el id de una historia —que la propia ruta devolvía a cualquiera— se obtenía el nombre de la sala, y con el nombre se entraba como médico.
+
+La regla ahora: **lo único público es lo que necesita un paciente sin cuenta**, porque su link de WhatsApp no trae sesión.
+
+- **Público**: `POST /api/video/token` cuando NO pide `role: 'doctor'`, los avisos de entrada/salida (`/events/participant-*`, los manda su navegador) y `client-diag`.
+- **Con sesión clínica**: el token con `role: 'doctor'` (`soloElPacienteEntraSinCuenta` en [video.routes.ts](backend/src/routes/video.routes.ts)), `GET /room/:historiaId`, `POST /rooms`, `GET /rooms/:roomName`, `/rooms/:roomName/end`, los participantes y `POST /events/session-start`.
+- **`/doctor`, `/doctor/:roomName` y `/nutricion/:roomName` exigen sesión** ([App.tsx](frontend/src/App.tsx)): son el puesto de trabajo del profesional, no un link para repartir. `/patient/:roomName` sigue abierta.
+- **`/api/telemedicine/sessions*` pasó a coordinador/admin**: listaba todas las salas abiertas, que es la llave de todas las videollamadas a la vez. Ninguna pantalla la llamaba (el análisis postural va por Socket.io, otro camino).
+- El login viejo (código+sede) no crea `req.session`, así que estas rutas lo rechazan — igual que ya hacían las de historia clínica. Quien atiende hoy entra con correo y contraseña.
+- Fijado en [video-salas.routes.test.ts](backend/src/routes/__tests__/video-salas.routes.test.ts), que incluye el caso del link viejo del paciente (sin `role`).
+
+Lo mismo de fondo, en otras tres rutas: **Calidad** lee la consulta con el alcance de quien pregunta (`effectiveSedes` → `sedeFilter` en `getSession`, `getHistorial` y `dispararEvaluacion`; antes, con el id se leía la transcripción de otra sede), la **bitácora** (`/api/admin/audit`) se acota por `actor_sede`, y el **informe corporativo** dejó de aceptar `medico`: es el agregado clínico de una empresa entera, no filtra por sede ni por quién atendió, y solo lo llama la pantalla de Empresas.
+
+**Sigue abierto a propósito, y hay que decidirlo aparte**: `/reprogramar/:id` (el paciente la abre desde WhatsApp sin cuenta — cerrarla pide un link firmado y rompe los ya enviados), `/api/monitor-integracion/*` (un token en la URL, sin sesión, y llega a leer una historia) y `/api/bodyvibe/*` (cualquier sesión, sin importar el rol).
+
 ### Alta de una persona: se elige el oficio, no el rol
 
 Dar de alta pedía cinco decisiones acopladas en una sola pantalla —rol de la ficha, aplicación, rol DE LA CUENTA, sedes/«todas las sedes», y unos botones sueltos «Trepsi · UMV · Corporativo · Nativa»— más el correo dos veces (el de la ficha y el del login). Ninguna decía qué iba a poder hacer la persona, y varias no son independientes: un coach de nutrición SIEMPRE es ficha `coach` + cuenta `consulta:coach` + programa `trepsi` + sede `bdt-nutricion`.

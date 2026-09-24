@@ -3,9 +3,15 @@
 // dashboard de monitoreo en vivo (/monitor-integracion).
 //
 // Protegido por un token simple `MONITOR_TOKEN` (env var). El usuario abre el
-// dashboard con `?token=...` y el frontend lo pasa en cada request. Es un
-// mecanismo muy ligero — pensado para que el usuario lo use durante las
-// pruebas con Trepsi sin pelearse con el sistema RBAC nuevo.
+// dashboard con `?token=...`, la página lo guarda y **lo manda en la cabecera
+// `x-monitor-token`**, no en la dirección.
+//
+// El token viajaba en la query de cada petición, y una dirección con secreto
+// adentro se filtra sola: queda en el historial del navegador, en el Referer al
+// abrir cualquier enlace, y en los registros del proxy y del servidor. Por eso
+// la query ya NO se acepta: el que llega por ahí recibe 401 igual que quien no
+// manda nada. La página sí puede seguir arrancando con `?token=` —es como se
+// comparte el enlace— y lo primero que hace es sacarlo de la barra.
 // ============================================================================
 
 import { Request, Response, NextFunction } from 'express';
@@ -32,9 +38,7 @@ function checkToken(req: Request, res: Response): boolean {
     return false;
   }
   const provided =
-    (typeof req.query.token === 'string' && req.query.token) ||
-    (typeof req.headers['x-monitor-token'] === 'string' && req.headers['x-monitor-token']) ||
-    '';
+    (typeof req.headers['x-monitor-token'] === 'string' && req.headers['x-monitor-token']) || '';
   if (!provided || !constantTimeEquals(provided, expected)) {
     res.status(401).json({ ok: false, error: { code: 'INVALID_TOKEN', message: 'Token inválido.' } });
     return false;

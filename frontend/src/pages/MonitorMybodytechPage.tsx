@@ -220,8 +220,20 @@ function suggestionFor(ev: IntegrationEvent): { titulo: string; pasos: string[] 
 // -----------------------------------------------------------------------
 
 export function MonitorMybodytechPage() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token') ?? '';
+  const [searchParams, setSearchParams] = useSearchParams();
+  // El token llega en la dirección la primera vez (así se comparte el enlace),
+  // se guarda en memoria y se saca de la barra: una URL con el secreto adentro
+  // queda en el historial del navegador, viaja en el Referer y se escribe en los
+  // registros del proxy. De acá en adelante va en la cabecera `x-monitor-token`.
+  const [token] = useState(() => searchParams.get('token') ?? '');
+  useEffect(() => {
+    if (!searchParams.get('token')) return;
+    const limpio = new URLSearchParams(searchParams);
+    limpio.delete('token');
+    setSearchParams(limpio, { replace: true });
+    // Solo al abrir: después el token ya vive en el estado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [events, setEvents] = useState<IntegrationEvent[]>([]);
   const [paused, setPaused] = useState(false);
@@ -238,11 +250,13 @@ export function MonitorMybodytechPage() {
       return;
     }
     try {
-      const params = new URLSearchParams({ token, integracion: 'mybodytech' });
+      const params = new URLSearchParams({ integracion: 'mybodytech' });
       if (lastIdRef.current !== null) {
         params.set('sinceId', String(lastIdRef.current));
       }
-      const res = await fetch(`${API_BASE}/api/monitor-integracion/events?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/api/monitor-integracion/events?${params.toString()}`, {
+        headers: { 'x-monitor-token': token },
+      });
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         throw new Error(j?.error?.message ?? `HTTP ${res.status}`);

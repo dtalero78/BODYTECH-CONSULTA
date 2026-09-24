@@ -23,6 +23,7 @@
 // ============================================================================
 
 import whatsappService from './whatsapp.service';
+import { firmarId } from '../helpers/reprogramar-firma.helper';
 import postgresService from './postgres.service';
 import trepsiWebhookService from './trepsi-webhook.service';
 import { plataformaDe } from './bsl-plataforma-chat.service';
@@ -314,7 +315,7 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
     '1': patientName,
     '2': appointmentTime,
     '3': roomNameWithParams,
-    '4': historiaId,
+    '4': firmarId(historiaId, process.env.JWT_SECRET), // botón Reprogramar → /reprogramar/{{4}}
   };
   const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;
 
@@ -380,7 +381,8 @@ export async function enviarRecordatorioPaciente(i: {
   const variables: Record<string, string> = {
     '1': i.patientName,
     '2': i.appointmentTime,
-    '3': i.historiaId, // botón Reprogramar → /reprogramar/{{3}}
+    // Firmado: ata el link a SU cita (ver reprogramar-firma.helper).
+    '3': firmarId(i.historiaId, process.env.JWT_SECRET), // botón Reprogramar → /reprogramar/{{3}}
   };
   const phoneWithPlus = i.phone.startsWith('+') ? i.phone : `+${i.phone}`;
   const marca = await marcaDeEnvioParaHistoria(i.historiaId);

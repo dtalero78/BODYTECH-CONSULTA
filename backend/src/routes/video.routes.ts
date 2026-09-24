@@ -1,6 +1,8 @@
 import express, { Router, Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import videoController from '../controllers/video.controller';
 import { requireRole } from '../middleware/rbac.middleware';
+import { leerIdDeLink, exigeFirma } from '../helpers/reprogramar-firma.helper';
 
 const router = Router();
 
@@ -101,9 +103,47 @@ router.post('/webhooks/composition-status', videoController.compositionStatusWeb
 router.post('/whatsapp/send', clinico, videoController.sendWhatsApp);
 
 // Reprogramación de cita (público — abierto desde el botón de WhatsApp)
-router.get('/reprogramar/:id', videoController.getReprogramarInfo);
-router.get('/reprogramar/:id/horarios', videoController.getReprogramarHorarios);
-router.post('/reprogramar/:id', videoController.reprogramarCita);
+// ── Reprogramar: público a la fuerza, pero no para cualquier id ─────────────
+//
+// El afiliado abre esta página desde el botón de WhatsApp y no tiene cuenta, así
+// que no puede haber sesión. Lo que sí puede haber es una firma en el link
+// (`trepsi_123~9f2a1c7b55`): ata el link a SU cita. Sin ella, probando ids se
+// veía el nombre y la hora de otra persona, y se le movía la cita.
+//
+// `resolverIdFirmado` deja en `req.params.id` el id pelado, para que los
+// controladores sigan recibiendo lo de siempre. Mientras
+// `REPROGRAMAR_EXIGIR_FIRMA` esté apagada (como nace), un id sin firma pasa
+// igual: los mensajes ya enviados tienen que seguir funcionando. Cuando todos
+// los que circulan lleven firma, se prende y el id pelado deja de valer.
+function resolverIdFirmado(req: Request, res: Response, next: NextFunction): void {
+  const { id, firmado } = leerIdDeLink(req.params.id, process.env.JWT_SECRET);
+  if (!firmado && exigeFirma(process.env)) {
+    // 404 y no 403: a quien prueba ids no se le confirma cuáles existen.
+    res.status(404).json({ success: false, error: 'Cita no encontrada' });
+    return;
+  }
+  req.params.id = id;
+  next();
+}
+
+// Tope por IP: sin él, probar ids sale gratis. 40 en 15 minutos le sobra a
+// cualquier afiliado (mira su cita, ve los horarios, elige uno).
+const reprogramarLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'RATE_LIMIT' },
+});
+
+router.get('/reprogramar/:id', reprogramarLimiter, resolverIdFirmado, videoController.getReprogramarInfo);
+router.get(
+  '/reprogramar/:id/horarios',
+  reprogramarLimiter,
+  resolverIdFirmado,
+  videoController.getReprogramarHorarios
+);
+router.post('/reprogramar/:id', reprogramarLimiter, resolverIdFirmado, videoController.reprogramarCita);
 
 // Medical History — TODAS las rutas exigen JWT: contienen PHI (lectura y
 // escritura de historias clínicas). Los pacientes acceden por link de WhatsApp

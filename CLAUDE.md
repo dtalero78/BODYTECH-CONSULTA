@@ -387,6 +387,17 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
 
+### «Sede» es un lugar; lo que esta app acota son UNIDADES DE SERVICIO
+
+Organigrama, en palabras de Daniel (24-sep-2026): **sede = un punto físico** —las 94 del armario compartido— y **unidad de servicio = lo que está en el Mapa de Rutas** (Coach Nutrición Trepsi, Nutrición Presencial, ACC, Unidad Médica Virtual, Médico Corporativo). **Las consultas que dicen `mybodytech` son de la UMV.**
+
+La tabla `sedes` de esta app nunca guardó lugares: guarda las tres unidades con las que se acota quién ve qué (`bdt-nutricion`, `bsl`, `corporativo`), y las citas de integración traen `sede_id` = `trepsi` / `mybodytech`, que tampoco son lugares. Llamarlo «sede» era el enredo: un selector con 3 opciones al lado de una cadena de 94 gimnasios.
+
+- **Los rótulos ahora dicen «unidad»** en el alta de personas, Team, calendario, indicadores, Latidos, el panel del médico y BodyVibe. `sede_id`, `usuario_sedes` y `sedeFilter` **no se renombraron**: apuntan en miles de filas y en todo el RBAC; el cambio es de vocabulario hacia afuera, no de esquema.
+- **Los nombres de las tres unidades son los del mapa** (migración idempotente en `runMigrations`): `bsl` → «Unidad Médica Virtual», `bdt-nutricion` → «Coach Nutrición Trepsi», `corporativo` se queda. Solo renombra si todavía tiene el nombre viejo, para no pisar una corrección a mano.
+- **Sigue diciendo «sede» donde sí es un lugar**: la sede del afiliado en la historia clínica (`sede_slug`, una de las 94), el Directorio de la cadena y la sede de MyBodytech en Digitalizar.
+- **Pedirle la sede a Trepsi no tiene sentido** y se descartó: manda `"App Trepsi"` en las 4.709 citas porque es una unidad virtual. De las 2.918 citas de septiembre, 2.851 son virtuales (Trepsi + UMV): la sede física sólo aplica a lo presencial, que hoy vive en ACC y en el examen del médico corporativo —que además se hace en la empresa cliente, no en un gimnasio—.
+
 ### El programa (Trepsi / UMV / Corporativo) por fin acota lo que se ve
 
 La marca de `usuarios.programas` existía desde que cada cita lleva su `origen`, la pantalla de Team dejaba ponerla… y **no acotaba nada**: lo único que hacía era abrirle Digitalizar a un médico de la UMV. Por eso una coordinación externa de Trepsi veía también la agenda de la Unidad Médica Virtual y las valoraciones del médico corporativo (23-sep-2026).

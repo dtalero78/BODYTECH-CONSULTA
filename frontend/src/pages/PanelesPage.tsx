@@ -82,7 +82,7 @@ const GRUPOS: Grupo[] = [
     destinos: [
       {
         label: 'Coordinación',
-        detalle: 'Team, calendario, afiliados, indicadores y empresas, de todas las sedes',
+        detalle: 'Team, calendario, afiliados, indicadores y empresas, de todas las unidades',
         icono: <Users className={ICONO} />,
         ruta: '/coordinador',
       },

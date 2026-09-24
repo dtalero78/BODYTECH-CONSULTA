@@ -308,7 +308,7 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
       !preset.esGlobal &&
       preset.sedes.length === 0
     ) {
-      onError('Elegí a qué sedes entra, o marcá todas las sedes.');
+      onError('Elegí a qué unidades atiende, o marcá todas.');
       return;
     }
     setSaving(true);
@@ -596,19 +596,19 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                 {/* Sedes: sólo cuando el oficio no las fija. */}
                 {hayQuePreguntarSedes && preset.app === 'consulta' && (
                   <div>
-                    <label className={LABEL}>A qué sedes entra</label>
+                    <label className={LABEL}>A qué unidades de servicio atiende</label>
                     <label className="flex items-center gap-2 text-[13px] text-zinc-700 mb-1.5">
                       <input
                         type="checkbox"
                         checked={preset.esGlobal}
                         onChange={(e) => setPreset({ ...preset, esGlobal: e.target.checked })}
                       />
-                      Todas las sedes
+                      Todas las unidades
                     </label>
                     {!preset.esGlobal && (
                       <div className="border border-zinc-200 rounded-md p-3 grid grid-cols-2 gap-y-1.5">
                         {sedesDisponibles.length === 0 ? (
-                          <p className="text-[12px] text-zinc-400">No hay sedes para asignar.</p>
+                          <p className="text-[12px] text-zinc-400">No hay unidades para asignar.</p>
                         ) : (
                           sedesDisponibles.map((s) => (
                             <label key={s.sedeId} className="flex items-center gap-2 text-[13px]">

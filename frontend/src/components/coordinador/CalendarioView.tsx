@@ -627,7 +627,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
                 type="button"
                 onClick={limpiarFiltros}
                 className="inline-flex items-center gap-1 h-[30px] px-2.5 rounded-md border border-zinc-200 bg-white text-[12.5px] font-medium text-zinc-600 hover:text-zinc-900 hover:border-zinc-300"
-                title="Volver al total del mes (todas las sedes, profesionales y días)"
+                title="Volver al total del mes (todas las unidades, profesionales y días)"
               >
                 <X className="w-3 h-3" />
                 Limpiar filtros
@@ -643,7 +643,7 @@ export function CalendarioView({ showToast, reportCount }: Props) {
           </div>
         ) : (
           <div className="px-8 py-3 border-b border-zinc-200 bg-zinc-50 flex items-center gap-3 flex-wrap">
-            <span className={SECTION_LABEL}>Sedes</span>
+            <span className={SECTION_LABEL}>Unidades</span>
             <SedeMultiSelect
               sedes={sedes}
               value={sedesSel}
@@ -1150,7 +1150,7 @@ function FilterSelect({
 
 // ---------------------------------------------------------------------------
 // SedeMultiSelect — filtro de sedes (una, varias agrupadas, o todas).
-// Dropdown con checkboxes + opción "Todas las sedes". El botón resume la
+// Dropdown con checkboxes + opción "Todas las unidades". El botón resume la
 // selección. Cierra al hacer clic fuera (backdrop transparente).
 // ---------------------------------------------------------------------------
 
@@ -1168,8 +1168,8 @@ function SedeMultiSelect({
   const allSelected = sedes.length > 0 && allIds.every((id) => value.includes(id));
 
   const resumen = (() => {
-    if (sedes.length > 0 && allSelected) return 'Todas las sedes';
-    if (value.length === 0) return 'Sin sede';
+    if (sedes.length > 0 && allSelected) return 'Todas las unidades';
+    if (value.length === 0) return 'Sin unidad';
     if (value.length === 1) {
       const s = sedes.find((x) => x.sedeId === value[0]);
       return s ? s.nombre : value[0];
@@ -1202,7 +1202,7 @@ function SedeMultiSelect({
         className={`inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium pl-[11px] pr-2 ${stateCls}`}
         style={{ borderColor }}
       >
-        <span className={`pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}>Sede:</span>
+        <span className={`pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}>Unidad:</span>
         {resumen}
         <ChevronDown className="w-3 h-3 text-zinc-400 ml-1.5" />
       </button>
@@ -1221,7 +1221,7 @@ function SedeMultiSelect({
                 onChange={toggleTodas}
                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span className="font-medium">Todas las sedes</span>
+              <span className="font-medium">Todas las unidades</span>
             </label>
             {sedes.map((s) => (
               <label
@@ -1883,7 +1883,7 @@ function DiaFullModal({ fecha, medico, profesionales, sedesSel, sedesList, onClo
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Hora</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Afiliado</th>
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Médico</th>
-                  {multiSede && <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Sede</th>}
+                  {multiSede && <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Unidad</th>}
                   <th className={`text-left px-2 py-2 ${SECTION_LABEL}`}>Estado</th>
                 </tr>
               </thead>

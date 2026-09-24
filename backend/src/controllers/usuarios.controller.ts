@@ -143,7 +143,7 @@ class UsuariosController {
       const sedes = input.esGlobal ? [] : input.sedes;
       if (!input.esGlobal) {
         if (sedes.length === 0) {
-          res.status(400).json({ success: false, error: 'SEDES_REQUERIDAS', message: 'Asigna al menos una sede.' });
+          res.status(400).json({ success: false, error: 'SEDES_REQUERIDAS', message: 'Asigná al menos una unidad de servicio.' });
           return;
         }
         if (!puedeUsarSedes(actor, sedes)) {

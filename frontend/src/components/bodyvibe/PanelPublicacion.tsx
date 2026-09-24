@@ -119,7 +119,7 @@ export function Publicar({ app, onCambio, anclajeInicial = null }: PropsPublicar
                 : 'border-zinc-200 dark:border-zinc-700'
             }`}
           >
-            Mi sede
+            Mi unidad
           </button>
           <button
             onClick={() => setAlcance('global')}
@@ -129,12 +129,12 @@ export function Publicar({ app, onCambio, anclajeInicial = null }: PropsPublicar
                 : 'border-zinc-200 dark:border-zinc-700'
             }`}
           >
-            Todas las sedes
+            Todas las unidades
           </button>
         </div>
         {alcance === 'global' && (
           <p className="mt-1.5 text-[11.5px] text-amber-700 dark:text-amber-400">
-            Publicar a todas las sedes es un permiso aparte. Si no lo tiene, el sistema se lo dirá.
+            Publicar a todas las unidades es un permiso aparte. Si no lo tiene, el sistema se lo dirá.
           </p>
         )}
       </div>
@@ -251,7 +251,7 @@ export function Bandeja({ onCambio }: { onCambio: () => void }) {
                 <dt className="inline text-zinc-400">Quién lo va a ver: </dt>
                 <dd className="inline">
                   {s.roles.join(', ')} ·{' '}
-                  {s.alcance === 'global' ? 'todas las sedes' : s.sedes.join(', ') || 'su sede'}
+                  {s.alcance === 'global' ? 'todas las unidades' : s.sedes.join(', ') || 'su unidad'}
                 </dd>
               </div>
               <div>

@@ -293,7 +293,7 @@ class ProfesionalesController {
             success: false,
             error: {
               code: 'ALCANCE_REQUERIDO',
-              message: 'Elegí a qué sedes accede, o marcá acceso a todas.',
+              message: 'Elegí a qué unidades atiende, o marcá acceso a todas.',
             },
           });
           return;

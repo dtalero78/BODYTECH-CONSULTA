@@ -183,7 +183,7 @@ async function resolveMiProfesional(
   if (!prof.ok || !prof.data) {
     res.status(404).json({
       success: false,
-      error: { code: 'PROFESIONAL_NOT_FOUND', message: 'No existe tu ficha de profesional en esta sede.' },
+      error: { code: 'PROFESIONAL_NOT_FOUND', message: 'No existe tu ficha de profesional en esta unidad.' },
     });
     return null;
   }

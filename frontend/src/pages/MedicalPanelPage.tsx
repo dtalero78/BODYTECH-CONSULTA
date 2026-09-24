@@ -460,7 +460,7 @@ export function MedicalPanelPage() {
       return;
     }
     if (!sedeId) {
-      setError('Por favor seleccione una sede');
+      setError('Por favor seleccione una unidad');
       return;
     }
     setIsValidating(true);
@@ -1157,7 +1157,7 @@ export function MedicalPanelPage() {
                 required
                 className="w-full px-4 py-3 bg-[#2a3942] border border-gray-600 rounded-xl text-white focus:outline-none focus:border-[#00a884] transition"
               >
-                <option value="">-- Seleccionar sede --</option>
+                <option value="">-- Seleccionar unidad --</option>
                 {sedes.map((s) => (
                   <option key={s.sedeId} value={s.sedeId}>
                     {s.nombre} ({s.ciudad})
@@ -1214,7 +1214,7 @@ export function MedicalPanelPage() {
                   {sedeId && (
                     <>
                       <span className="mx-2 text-gray-600">·</span>
-                      Sede: {sedeId}
+                      Unidad: {sedeId}
                     </>
                   )}
                 </p>
@@ -1411,7 +1411,7 @@ export function MedicalPanelPage() {
                       )}
                     </div>
                     <div className="hidden md:block">
-                      <span className="text-gray-400">Sede:</span>
+                      <span className="text-gray-400">Unidad:</span>
                       <span className="text-white ml-2">
                         {searchResult.empresaListado === 'SANITHELP-JJ' ? 'PARTICULAR' : searchResult.empresaListado}
                       </span>
@@ -1598,7 +1598,7 @@ export function MedicalPanelPage() {
                             )}
                           </div>
                           <div className="hidden md:block">
-                            <span className="text-gray-400">Sede:</span>
+                            <span className="text-gray-400">Unidad:</span>
                             <span className="text-white ml-2">
                               {patient.empresaListado === 'SANITHELP-JJ'
                                 ? 'PARTICULAR'

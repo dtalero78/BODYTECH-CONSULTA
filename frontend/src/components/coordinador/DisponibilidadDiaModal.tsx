@@ -530,7 +530,7 @@ export function DisponibilidadDiaModal({ fecha, onClose, onSaved, showToast }: P
           {/* Sede + modalidad */}
           <div className="flex gap-3 flex-wrap">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Sede</label>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Unidad</label>
               <div className="relative">
                 <select
                   value={sede}

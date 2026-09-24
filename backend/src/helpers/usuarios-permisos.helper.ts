@@ -82,7 +82,7 @@ export function revisarAlta(actor: Actor | null | undefined, d: Alta): Rechazo |
         'Un médico o coach debe quedar vinculado a su ficha de profesional.',
       );
     if (!d.esGlobal && (d.sedes ?? []).length === 0)
-      return no('SEDES_REQUERIDAS', 'Asigna al menos una sede.');
+      return no('SEDES_REQUERIDAS', 'Asigná al menos una unidad de servicio.');
   }
   return null;
 }

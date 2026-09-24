@@ -290,7 +290,7 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
       return 'La contraseña debe tener al menos 8 caracteres.';
     }
     // Sin sedes, un usuario de Consulta no ve nada: es un error silencioso.
-    if (tieneConsulta && !h.esGlobal && h.sedes.length === 0) return 'Asigna al menos una sede.';
+    if (tieneConsulta && !h.esGlobal && h.sedes.length === 0) return 'Asigná al menos una unidad de servicio.';
     // El servidor lo rechaza igual; decirlo acá evita el viaje y explica por qué.
     if (pideProfesional && h.profesionalId == null)
       return 'Un médico o coach debe quedar vinculado a su ficha de profesional, o su agenda sale vacía.';
@@ -655,9 +655,9 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                     {consulta && (
                       <div className="text-[10.5px] text-zinc-400 mt-1">
                         {alc.esGlobal
-                          ? 'Todas las sedes'
+                          ? 'Todas las unidades'
                           : (alc.sedes ?? []).map(nombreSede).join(', ') || (
-                              <span className="text-amber-700">sin sedes</span>
+                              <span className="text-amber-700">sin unidades</span>
                             )}
                       </div>
                     )}
@@ -984,11 +984,11 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                       checked={hoja.esGlobal}
                       onChange={(e) => setHoja({ ...hoja, esGlobal: e.target.checked })}
                     />
-                    Acceso a todas las sedes
+                    Acceso a todas las unidades
                   </label>
                 )}
                 {!hoja.esGlobal && (
-                  <Campo etiqueta="Sedes">
+                  <Campo etiqueta="Unidades de servicio">
                     <div className="max-h-36 overflow-y-auto border border-zinc-200 rounded-md p-2 grid grid-cols-2 gap-y-1">
                       {sedesAsignables.length === 0 ? (
                         <p className="text-[12px] text-zinc-400 px-1">No tienes sedes asignables.</p>

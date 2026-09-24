@@ -679,8 +679,8 @@ function SedeMultiSelect({
   const allSelected = sedes.length > 0 && allIds.every((id) => value.includes(id));
 
   const resumen = (() => {
-    if (sedes.length > 0 && allSelected) return 'Todas las sedes';
-    if (value.length === 0) return 'Sin sede';
+    if (sedes.length > 0 && allSelected) return 'Todas las unidades';
+    if (value.length === 0) return 'Sin unidad';
     if (value.length === 1) {
       const s = sedes.find((x) => x.sedeId === value[0]);
       return s ? s.nombre : value[0];
@@ -713,7 +713,7 @@ function SedeMultiSelect({
         className={`inline-flex items-center h-[30px] rounded-md border text-[12.5px] font-medium pl-[11px] pr-2 ${stateCls}`}
         style={{ borderColor }}
       >
-        <span className={`pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}>Sede:</span>
+        <span className={`pr-1 font-normal ${active ? 'text-[#1e3a8a]/70' : 'text-zinc-500'}`}>Unidad:</span>
         {resumen}
         <ChevronDown className="w-3 h-3 text-zinc-400 ml-1.5" />
       </button>
@@ -728,7 +728,7 @@ function SedeMultiSelect({
                 onChange={toggleTodas}
                 className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span className="font-medium">Todas las sedes</span>
+              <span className="font-medium">Todas las unidades</span>
             </label>
             {sedes.map((s) => (
               <label

@@ -55,7 +55,7 @@ describe('ProfesionalFormModal', () => {
     expect(screen.getByText('Paso 2 de 2 · Coach de nutrición')).toBeTruthy();
     // Nada de la jerga que confundía: esas casillas ya quedaron resueltas.
     expect(screen.queryByText('Entra a')).toBeNull();
-    expect(screen.queryByText('Todas las sedes')).toBeNull();
+    expect(screen.queryByText('Todas las unidades')).toBeNull();
     expect(screen.queryByText('Trepsi')).toBeNull();
     // Y sí aparece lo que cambia entre dos coaches.
     expect(screen.getByText('Código de agenda *')).toBeTruthy();
@@ -92,7 +92,7 @@ describe('ProfesionalFormModal', () => {
     fireEvent.change(screen.getByLabelText('Correo'), {
       target: { value: 'karen@bodytechcorp.com' },
     });
-    await waitFor(() => expect(screen.getByText('Todas las sedes')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Todas las unidades')).toBeTruthy());
     expect(screen.queryByText('Código de agenda *')).toBeNull();
   });
 });

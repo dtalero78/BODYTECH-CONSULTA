@@ -738,6 +738,24 @@ class PostgresService {
         ON CONFLICT (sede_id) DO NOTHING
       `);
 
+      // Los nombres que se muestran son los de la UNIDAD DE SERVICIO, no los de
+      // un lugar. Daniel lo fijó el 24-sep-2026: «sede» es un punto físico —las
+      // 94 del armario— y Trepsi o la UMV, que son virtuales, no tienen ninguno.
+      // Esta tabla nunca guardó lugares: guarda las unidades con las que se
+      // acota quién ve qué, así que se llaman como en el Mapa de Rutas.
+      //
+      // Solo renombra el rótulo (`sede_id` no se toca, que es lo que apunta en
+      // miles de filas) y solo si todavía tiene el nombre viejo, para no pisar
+      // una corrección hecha a mano.
+      await this.query(`
+        UPDATE sedes SET nombre = 'Unidad Médica Virtual'
+         WHERE sede_id = 'bsl' AND nombre = 'Bodytech Sede Principal'
+      `);
+      await this.query(`
+        UPDATE sedes SET nombre = 'Coach Nutrición Trepsi'
+         WHERE sede_id = 'bdt-nutricion' AND nombre = 'Bodytech Nutrición'
+      `);
+
       // Mapping room ↔ historia para resolver el historiaId desde el webhook de Twilio
       await this.query(`
         CREATE TABLE IF NOT EXISTS room_historia_map (

@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { Request, Response, NextFunction } from 'express';
+import { programasDeSesion } from '../services/programas-acceso.service';
 import { z, ZodError } from 'zod';
 import calendarioService from '../services/calendario.service';
 import noContestaAuditoriaService from '../services/no-contesta-auditoria.service';
@@ -105,7 +106,9 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getMes(year, month, sedes, medico);
+      // Además de la sede, el programa: quien tiene marcado uno solo ve el suyo.
+      const programas = await programasDeSesion(req);
+      const result = await calendarioService.getMes(year, month, sedes, medico, programas);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
@@ -130,7 +133,8 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getDia(fecha, sedes, medico);
+      const programas = await programasDeSesion(req);
+      const result = await calendarioService.getDia(fecha, sedes, medico, programas);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
@@ -157,7 +161,8 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getIndicadores(from, to, sedes, medico);
+      const programas = await programasDeSesion(req);
+      const result = await calendarioService.getIndicadores(from, to, sedes, medico, programas);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;
@@ -205,7 +210,8 @@ class CalendarioController {
         });
         return;
       }
-      const filas = await calendarioService.getTiemposAtencion(from, to, sedes);
+      const programas = await programasDeSesion(req);
+      const filas = await calendarioService.getTiemposAtencion(from, to, sedes, programas);
       res.status(200).json({ success: true, data: { desde: from, hasta: to, filas } });
     } catch (err) {
       next(err);
@@ -254,7 +260,8 @@ class CalendarioController {
         return;
       }
 
-      const result = await calendarioService.getNoContactoDetalle(from, to, sedes, medico);
+      const programas = await programasDeSesion(req);
+      const result = await calendarioService.getNoContactoDetalle(from, to, sedes, medico, programas);
       if (!result.ok) {
         res.status(result.status).json({ success: false, error: result.error });
         return;

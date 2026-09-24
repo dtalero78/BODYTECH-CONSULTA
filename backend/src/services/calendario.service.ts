@@ -13,6 +13,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
+import { programaFilter } from '../helpers/programa-scope';
 import disponibilidadFechaService from './disponibilidad-fecha.service';
 
 const TZ = 'America/Bogota';
@@ -355,11 +356,18 @@ class CalendarioService {
    * Devuelve un mapa `{ "YYYY-MM-DD": DiaResumen }` para que el frontend
    * pueda pintar el grid del mes.
    */
+  /**
+   * `programas` acota por el departamento de la cita (`origen`): quien tiene
+   * marcado un programa solo ve el suyo — una coordinación de Trepsi no ve la
+   * agenda de la UMV ni la del médico corporativo. `undefined` = sin límite,
+   * que es lo que corresponde a casi todo el mundo (ver `programa-scope`).
+   */
   async getMes(
     year: number,
     month: number,
     sedeIds: string[],
-    medicoCodigo?: string
+    medicoCodigo?: string,
+    programas?: string[]
   ): Promise<ServiceResult<MesResumen>> {
     if (!Number.isInteger(year) || year < 2020 || year > 2100) {
       return { ok: false, status: 400, error: { code: 'INVALID_YEAR', message: 'Año inválido.' } };
@@ -376,6 +384,7 @@ class CalendarioService {
       params.push(medicoCodigo);
       medicoFilter = `AND "medico" = $${params.length}`;
     }
+    medicoFilter += programaFilter(programas, '"origen"', params);
 
     // Agregado por (día Colombia, medico, clase). Misma clasificación que
     // /indicadores para que las tarjetas del calendario cuadren con ese tablero.
@@ -476,7 +485,8 @@ class CalendarioService {
   async getDia(
     fecha: string,
     sedeIds: string[],
-    medicoCodigo?: string
+    medicoCodigo?: string,
+    programas?: string[]
   ): Promise<ServiceResult<DiaDetalle>> {
     let range;
     try {
@@ -492,6 +502,7 @@ class CalendarioService {
       params.push(medicoCodigo);
       medicoFilter = `AND "medico" = $${params.length}`;
     }
+    medicoFilter += programaFilter(programas, '"origen"', params);
 
     const sql = `
       SELECT
@@ -628,7 +639,8 @@ class CalendarioService {
     from: string,
     to: string,
     sedeIds: string[],
-    medicoCodigo?: string
+    medicoCodigo?: string,
+    programas?: string[]
   ): Promise<ServiceResult<IndicadoresResumen>> {
     let range;
     try {
@@ -652,6 +664,7 @@ class CalendarioService {
       params.push(medicoCodigo);
       medicoFilter = `AND "medico" = $${params.length}`;
     }
+    medicoFilter += programaFilter(programas, '"origen"', params);
 
     // Agregado por (medico, clase) en todo el rango, con la clasificación de 4
     // vías compartida con el calendario (ver CLASE_CITA_SQL). `fechaAtencion` ya
@@ -789,7 +802,8 @@ class CalendarioService {
   async getTiemposAtencion(
     from: string,
     to: string,
-    sedes: string[]
+    sedes: string[],
+    programas?: string[]
   ): Promise<
     Array<{
       cedula: string;
@@ -803,6 +817,8 @@ class CalendarioService {
       hora_atendida: string | null;
     }>
   > {
+    const params: unknown[] = [from, to, sedes];
+    const progSql = programaFilter(programas, 'h."origen"', params);
     const rows = await postgresService.query(
       `SELECT h."numeroId" AS cedula,
               trim(COALESCE(h."primerNombre", '') || ' ' || COALESCE(h."primerApellido", '')) AS paciente,
@@ -818,9 +834,9 @@ class CalendarioService {
         WHERE h."fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
           AND (h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota')::date >= $1::date
           AND (h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota')::date <= $2::date
-          AND h."link_enviado_at" IS NOT NULL
+          AND h."link_enviado_at" IS NOT NULL${progSql}
         ORDER BY h."fechaAtencion"::timestamptz`,
-      [from, to, sedes]
+      params
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (rows ?? []) as any;
@@ -836,7 +852,8 @@ class CalendarioService {
     from: string,
     to: string,
     sedeIds: string[],
-    medicoCodigo: string
+    medicoCodigo: string,
+    programas?: string[]
   ): Promise<ServiceResult<{ items: NoContactoItem[] }>> {
     let range;
     try {
@@ -854,6 +871,7 @@ class CalendarioService {
       params.push(medicoCodigo);
       medicoCond = `AND "medico" = $${params.length}`;
     }
+    medicoCond += programaFilter(programas, '"origen"', params);
 
     const sql = `
       SELECT

@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { programaFilter } from '../helpers/programa-scope';
 import postgresService from './postgres.service';
 import { sedeFilter } from '../helpers/sede-scope';
 
@@ -128,6 +129,11 @@ export interface OrdenFilters {
    *   - 'fecha_asc': cronológico por fecha/hora de atención ascendente (vista Agenda).
    */
   sort?: 'created_desc' | 'fecha_asc';
+  /**
+   * Programas a los que está limitada la persona que pregunta (su `origen`).
+   * `undefined` = sin límite, que es el caso de casi todo el mundo.
+   */
+  programas?: string[];
 }
 
 /**
@@ -611,6 +617,16 @@ class MedicalPanelService {
       const conditions: string[] = ['1=1'];
       const params: unknown[] = [];
       let paramIndex = 1;
+
+      // Por programa: una coordinación marcada "Trepsi" no ve en Afiliados las
+      // consultas de la UMV ni las valoraciones del médico corporativo.
+      // `programaFilter` devuelve la cláusula con su ` AND ` adelante, que acá
+      // sobra porque `conditions` se une con AND.
+      const progSql = programaFilter(filters.programas, '"origen"', params);
+      if (progSql) {
+        conditions.push(progSql.replace(/^ AND /, ''));
+        paramIndex = params.length + 1;
+      }
 
       if (filters.status && filters.status !== 'all') {
         conditions.push(`"atendido" = $${paramIndex++}`);

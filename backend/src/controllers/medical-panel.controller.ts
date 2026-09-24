@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { programasDeSesion } from '../services/programas-acceso.service';
 import { z, ZodError } from 'zod';
 import medicalPanelService, {
   OrdenCreateInput,
@@ -443,6 +444,7 @@ class MedicalPanelController {
 
     try {
       const result = await medicalPanelService.listOrdenes({
+        programas: await programasDeSesion(req),
         page: page ?? 0,
         limit: limit ?? 20,
         from,

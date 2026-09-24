@@ -387,6 +387,19 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
 
+### El programa (Trepsi / UMV / Corporativo) por fin acota lo que se ve
+
+La marca de `usuarios.programas` existía desde que cada cita lleva su `origen`, la pantalla de Team dejaba ponerla… y **no acotaba nada**: lo único que hacía era abrirle Digitalizar a un médico de la UMV. Por eso una coordinación externa de Trepsi veía también la agenda de la Unidad Médica Virtual y las valoraciones del médico corporativo (23-sep-2026).
+
+Ahora es un filtro de verdad, con la misma forma que el de sede: [programa-scope.ts](backend/src/helpers/programa-scope.ts) (`programaFilter`, puro) + [programas-acceso.service.ts](backend/src/services/programas-acceso.service.ts) (de dónde salen los programas de quien pregunta). Se aplica en el calendario (mes, día, indicadores, tiempos de atención, "no contactó") y en la lista de Afiliados.
+
+- **Lista vacía = sin límite, nunca "sin acceso"**. Casi todas las cuentas la tienen vacía; confundir las dos cosas dejaría al equipo entero con la pantalla en blanco.
+- **La sesión no trae los programas** (el JWT lleva rol y sedes), así que se leen de `usuarios` en cada petición con una caché de 60 s — mismo criterio que `digitalizar-acceso`: sacar a alguien de un programa le quita lo que ve sin esperar a que vuelva a entrar.
+- **Si la base no responde, no se filtra.** Al revés que Digitalizar, y a propósito: allá el programa CONCEDE un permiso y fallar cerrado es lo correcto; acá solo RECORTA, y un bache dejaría a la coordinación sin pantalla y sin explicación.
+- **`umv` alcanza también `mybodytech`**: la UMV no tiene citas con `origen='umv'` (hay UNA en toda la base), le llegan por la integración de MyBodytech. Sin esa equivalencia, marcar "UMV" es no ver nada.
+- **Nace apagado (`PROGRAMAS_FILTRAN=false`)** porque las marcas todavía no son confiables: de las 7 cuentas con programa, la de coordinación de Karen Ariza dice `corporativo` aunque ella coordina la UMV — prenderlo hoy le mostraría 4 citas del mes en vez de 1.211. Se corrigen las marcas y se prende la variable, sin desplegar.
+- Fijado en [programa-scope.test.ts](backend/src/services/__tests__/programa-scope.test.ts).
+
 ### Parrilla de permisos: las 79 cosas que se pueden hacer
 
 El inventario de permisos del 23-sep-2026 vive en [docs/parrilla-permisos.html](docs/parrilla-permisos.html): una fila por funcionalidad (agrupadas por panel), con **quién puede hacerla hoy**, qué exige de verdad el servidor, su sensibilidad (datos de pacientes / cambia la operación / administra gente / solo mirar) y una columna por perfil (coach, UMV, corporativo, auxiliar, coordinación, externo de Trepsi, admin) para marcar a quién le toca.

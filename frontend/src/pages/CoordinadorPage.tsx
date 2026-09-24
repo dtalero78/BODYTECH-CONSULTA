@@ -16,9 +16,7 @@ import {
   Map,
   Fingerprint,
   Database,
-  Users,
   Building,
-  FileSpreadsheet,
   ScanText,
   LayoutDashboard,
   PhoneOff,
@@ -39,7 +37,6 @@ import { EmpresasView } from '../components/coordinador/EmpresasView';
 import { DigitalizarView } from '../components/coordinador/DigitalizarView';
 import { FONT_INTER, FONT_MONO, SECTION_LABEL, initialsOf } from '../components/coordinador/_tokens';
 import { useClarity } from '../hooks/useClarity';
-import { EXCEL_VALORACIONES_URL } from '../config/enlaces';
 
 type Toast = { type: 'success' | 'error'; message: string } | null;
 type View =
@@ -316,18 +313,6 @@ export function CoordinadorPage() {
               active={view === 'noContesta'}
               onClick={() => setView('noContesta')}
             />
-            {/* Sin lista de permitidos: la hoja está compartida como "cualquiera
-                con el enlace" (decisión de Daniel, 9-sep-2026), así que todo el
-                que llega al panel puede abrirla. Si algún día se vuelve a
-                restringir en Drive, hay que volver a poner el gate — un ítem que
-                lleva a "Solicitar acceso" es peor que no tenerlo. */}
-            <NavItem
-              icon={<FileSpreadsheet className="w-[15px] h-[15px]" />}
-              label="Excel Informes"
-              onClick={() =>
-                window.open(EXCEL_VALORACIONES_URL, '_blank', 'noopener,noreferrer')
-              }
-            />
             <NavItem
               icon={<ShieldCheck className="w-[15px] h-[15px]" />}
               label="Calidad"
@@ -377,12 +362,6 @@ export function CoordinadorPage() {
                 onClick={() => setView('directorio')}
               />
             )}
-            <NavItem
-              icon={<Users className="w-[15px] h-[15px]" />}
-              label="Identidades"
-              active={view === 'identidades'}
-              onClick={() => setView('identidades')}
-            />
             <NavItem
               icon={<Building className="w-[15px] h-[15px]" />}
               label="Empresas"

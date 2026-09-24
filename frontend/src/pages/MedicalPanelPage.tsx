@@ -1214,7 +1214,7 @@ export function MedicalPanelPage() {
                   {sedeId && (
                     <>
                       <span className="mx-2 text-gray-600">·</span>
-                      Unidad: {sedeId}
+                      Unidad: {sedes.find((s) => s.sedeId === sedeId)?.nombre ?? sedeId}
                     </>
                   )}
                 </p>
@@ -1411,7 +1411,7 @@ export function MedicalPanelPage() {
                       )}
                     </div>
                     <div className="hidden md:block">
-                      <span className="text-gray-400">Unidad:</span>
+                      <span className="text-gray-400">Empresa:</span>
                       <span className="text-white ml-2">
                         {searchResult.empresaListado === 'SANITHELP-JJ' ? 'PARTICULAR' : searchResult.empresaListado}
                       </span>
@@ -1598,7 +1598,7 @@ export function MedicalPanelPage() {
                             )}
                           </div>
                           <div className="hidden md:block">
-                            <span className="text-gray-400">Unidad:</span>
+                            <span className="text-gray-400">Empresa:</span>
                             <span className="text-white ml-2">
                               {patient.empresaListado === 'SANITHELP-JJ'
                                 ? 'PARTICULAR'

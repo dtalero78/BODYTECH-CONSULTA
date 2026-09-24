@@ -348,6 +348,17 @@ export function MedicalPanelPage() {
    * activa, para poder colgar desde el botón.
    */
   const softphoneRef = useRef<{ device: TwilioDevice; call: TwilioCall | null } | null>(null);
+  /**
+   * El SDK de voz se precarga al abrir el panel, no al primer "Llamar".
+   * Cargarlo bajo demanda lo ataba a un archivo del build que ya no existe si
+   * la plataforma se actualizó con la pestaña abierta: el 24-sep-2026 dos
+   * coaches no pudieron llamar en toda la mañana ("Failed to fetch dynamically
+   * imported module"), y como un import que falla queda marcado como fallido
+   * para el resto de la vida de la página, cada clic siguiente fallaba solo,
+   * sin volver a pedir nada. Precargado, el archivo ya está en memoria antes
+   * de cualquier despliegue, y además la primera llamada arranca más rápido.
+   */
+  const sdkVozRef = useRef<Promise<typeof import('@twilio/voice-sdk')> | null>(null);
   // "No Contesta" pedía confirmación a nadie y era irreversible: estaba pegado a
   // "Atender" (misma grilla, 8px) y un toque de más borraba al afiliado de la
   // lista sin vuelta atrás. Estos dos estados sostienen el paso de confirmación
@@ -771,7 +782,8 @@ export function MedicalPanelPage() {
   /** Crea el Device de Twilio una sola vez; renueva el token solo cuando avisa. */
   const obtenerDevice = async (): Promise<TwilioDevice> => {
     if (softphoneRef.current?.device) return softphoneRef.current.device;
-    const { Device } = await import('@twilio/voice-sdk');
+    if (!sdkVozRef.current) sdkVozRef.current = import('@twilio/voice-sdk');
+    const { Device } = await sdkVozRef.current;
     const { token } = await apiService.getVozToken();
     const device = new Device(token, { logLevel: 'error' });
     device.on('tokenWillExpire', async () => {
@@ -857,6 +869,18 @@ export function MedicalPanelPage() {
         apiService.cancelarLlamada(creada.id, e?.message).catch(() => undefined);
       }
       const code = e?.response?.data?.error;
+      // Pestaña abierta desde antes de una actualización: el archivo del SDK de
+      // voz que conoce esta página ya no está. No hay nada que reintentar —el
+      // import queda fallido para siempre— así que se recarga sola.
+      if (/dynamically imported module|Importing a module script failed/i.test(e?.message || '')) {
+        setLlamada({
+          patientId: patient._id,
+          data: null,
+          error: 'Se actualizó la plataforma. Recargando la página…',
+        });
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      }
       setLlamada({
         patientId: patient._id,
         data: null,
@@ -887,6 +911,17 @@ export function MedicalPanelPage() {
   const colgar = () => {
     softphoneRef.current?.call?.disconnect();
   };
+
+  // Precargar el SDK de voz al abrir el panel (ver sdkVozRef). Si falla, no
+  // pasa nada acá: el primer "Llamar" lo vuelve a intentar.
+  useEffect(() => {
+    if (!sdkVozRef.current) {
+      sdkVozRef.current = import('@twilio/voice-sdk');
+      sdkVozRef.current.catch(() => {
+        sdkVozRef.current = null;
+      });
+    }
+  }, []);
 
   // Al salir del panel, soltar el micrófono y la conexión con Twilio.
   useEffect(() => {

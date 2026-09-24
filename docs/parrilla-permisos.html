@@ -1,0 +1,584 @@
+<title>Parrilla de permisos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#f5f6f8; --surface:#ffffff; --surface-2:#fbfbfc;
+    --line:#e2e6eb; --line-strong:#cfd5dd;
+    --ink:#14161a; --ink-2:#3d444e; --muted:#69727e;
+    --accent:#1f3a8a; --accent-soft:#eaeefb; --accent-ink:#1f3a8a;
+    --phi:#b3261e; --phi-bg:#fdecea;
+    --op:#8a5300; --op-bg:#fdf1de;
+    --adm:#6b3fa0; --adm-bg:#f2ecfb;
+    --lec:#5b6572; --lec-bg:#eef1f4;
+    --warn:#a8300d; --warn-bg:#fdeee8; --on-accent:#ffffff;
+    --sans:'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0f1115; --surface:#161a20; --surface-2:#1b2027;
+      --line:#262c35; --line-strong:#343c47;
+      --ink:#e9ecf0; --ink-2:#c3cad3; --muted:#949daa;
+      --accent:#9db4ff; --accent-soft:#1c2540; --accent-ink:#b9c8ff;
+      --phi:#ff9b90; --phi-bg:#3a1a17;
+      --op:#e8b35f; --op-bg:#33250d;
+      --adm:#c7a6f5; --adm-bg:#281c3a;
+      --lec:#a9b2bd; --lec-bg:#222831;
+      --warn:#ff9f7d; --warn-bg:#3a1d12; --on-accent:#0f1115;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0f1115; --surface:#161a20; --surface-2:#1b2027;
+    --line:#262c35; --line-strong:#343c47;
+    --ink:#e9ecf0; --ink-2:#c3cad3; --muted:#949daa;
+    --accent:#9db4ff; --accent-soft:#1c2540; --accent-ink:#b9c8ff;
+    --phi:#ff9b90; --phi-bg:#3a1a17;
+    --op:#e8b35f; --op-bg:#33250d;
+    --adm:#c7a6f5; --adm-bg:#281c3a;
+    --lec:#a9b2bd; --lec-bg:#222831;
+    --warn:#ff9f7d; --warn-bg:#3a1d12; --on-accent:#0f1115;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;margin:0}
+  .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 64px}
+
+  header.page h1{font-size:clamp(24px,4vw,34px);letter-spacing:-.02em;margin:0 0 6px;text-wrap:balance}
+  header.page p.lead{color:var(--muted);margin:0;max-width:66ch}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:10px}
+
+  .cifras{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 4px}
+  .cifra{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:132px}
+  .cifra b{display:block;font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .cifra span{font-size:11.5px;color:var(--muted)}
+
+  .toolbar{position:sticky;top:env(safe-area-inset-top, 0px);z-index:20;background:var(--ground);
+    padding:12px 0 10px;margin-top:18px;border-bottom:1px solid var(--line)}
+  .toolbar .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  input[type="search"]{flex:1 1 220px;min-width:0;padding:8px 11px;border:1px solid var(--line-strong);border-radius:8px;
+    background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
+  input[type="search"]:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .chip{border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);border-radius:999px;
+    padding:6px 11px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+
+  .tablewrap{overflow-x:auto;margin-top:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+  table{border-collapse:separate;border-spacing:0;width:100%;min-width:860px}
+  th,td{text-align:left;vertical-align:top}
+  thead th{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 58px);z-index:10;background:var(--surface-2);
+    border-bottom:1px solid var(--line-strong);padding:10px 8px;font-size:11.5px;font-weight:600;color:var(--ink-2)}
+  thead th.func{left:0;z-index:12;min-width:300px;width:44%}
+  th.perfil{text-align:center;width:86px;line-height:1.25}
+  th.perfil small{display:block;font-weight:400;color:var(--muted);font-size:10.5px;margin-top:2px}
+  td.func{position:sticky;left:0;background:var(--surface);z-index:5;padding:10px 12px;border-bottom:1px solid var(--line)}
+  td.mark{text-align:center;border-bottom:1px solid var(--line);padding:10px 4px}
+  tr.grupo td{background:var(--surface-2);border-bottom:1px solid var(--line-strong);border-top:1px solid var(--line-strong);
+    padding:9px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    position:sticky;left:0}
+  tr.detalle td{background:var(--surface-2);border-bottom:1px solid var(--line);padding:2px 12px 14px}
+
+  .nombre{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--ink);text-align:left;cursor:pointer;
+    display:flex;gap:7px;align-items:baseline}
+  .nombre:hover{color:var(--accent-ink)}
+  .caret{color:var(--muted);font-size:10px;transform:translateY(-1px)}
+  .hoy{display:block;color:var(--muted);font-size:11.5px;margin-top:3px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .tag{font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:5px;border:1px solid transparent}
+  .t-phi{color:var(--phi);background:var(--phi-bg);border-color:var(--phi)}
+  .t-op{color:var(--op);background:var(--op-bg);border-color:var(--op)}
+  .t-adm{color:var(--adm);background:var(--adm-bg);border-color:var(--adm)}
+  .t-lec{color:var(--lec);background:var(--lec-bg);border-color:var(--line-strong)}
+  .t-warn{color:var(--warn);background:var(--warn-bg);border-color:var(--warn)}
+
+  .box{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:10px 12px;max-width:80ch}
+  .box dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:12.5px}
+  .box dt{color:var(--muted);white-space:nowrap}
+  .box dd{margin:0;color:var(--ink-2)}
+  .box code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 5px;border-radius:4px;
+    border:1px solid var(--line);white-space:nowrap}
+
+  .tick{width:24px;height:24px;border-radius:6px;border:1.5px solid var(--line-strong);background:var(--surface);
+    cursor:pointer;display:inline-grid;place-items:center;padding:0;color:transparent;transition:background .12s,border-color .12s}
+  .tick:hover{border-color:var(--accent)}
+  .tick[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .tick svg{width:13px;height:13px;display:block}
+
+  .aviso{margin-top:14px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:12px 14px;
+    font-size:12.5px;color:var(--ink-2);max-width:80ch}
+  .aviso b{color:var(--ink)}
+  footer.page{margin-top:28px;color:var(--muted);font-size:12px;max-width:74ch}
+  @media (max-width:620px){
+    thead th.func,td.func{position:static}
+    thead th{top:calc(env(safe-area-inset-top, 0px) + 96px)}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <div class="eyebrow">Bodytech · Consulta</div>
+    <h1>Parrilla de permisos</h1>
+    <p class="lead">Cada fila es algo que una persona puede hacer en la plataforma. Marcá qué le toca a cada perfil.
+      Debajo del nombre dice quién puede hacerlo <em>hoy</em>, que casi siempre es más gente de la que debería.</p>
+    <div class="cifras" id="cifras"></div>
+  </header>
+
+  <div class="toolbar">
+    <div class="row">
+      <input type="search" id="q" placeholder="Buscar una funcionalidad…" aria-label="Buscar una funcionalidad">
+      <button class="chip" id="f-phi" aria-pressed="false">Datos de pacientes</button>
+      <button class="chip" id="f-abierto" aria-pressed="false">Hoy sin candado</button>
+      <button class="chip" id="f-libres" aria-pressed="false">Sin asignar</button>
+    </div>
+  </div>
+
+  <div class="tablewrap">
+    <table id="tabla">
+      <thead><tr id="cabecera"></tr></thead>
+      <tbody id="cuerpo"></tbody>
+    </table>
+  </div>
+
+  <div class="aviso" id="estado-guardado"></div>
+
+  <footer class="page">
+    <p>«Hoy» sale de leer el código: el rol que exige cada ruta del servidor, más la lista de correos o el programa
+      cuando los hay. Los avisos en rojo son diferencias reales entre lo que esconde la pantalla y lo que acepta el
+      servidor — ahí el botón escondido no protege nada.</p>
+  </footer>
+</div>
+
+<script>
+const PERFILES = [
+  {id:'coach',  n:'Coach',        s:'nutrición Trepsi'},
+  {id:'umv',    n:'UMV',          s:'unidad médica virtual'},
+  {id:'corp',   n:'Corporativo',  s:'médico de empresa'},
+  {id:'aux',    n:'Auxiliar',     s:'órdenes'},
+  {id:'coord',  n:'Coordinación', s:'Bodytech'},
+  {id:'ext',    n:'Externo',      s:'Trepsi'},
+  {id:'admin',  n:'Admin',        s:'todo'}
+];
+
+// sens: phi | op | adm | lec  ·  alerta: texto rojo (hueco real de hoy)
+// rec: perfiles que YO propongo. El usuario manda: al tocar una casilla se guarda su decisión.
+const ROWS = [
+ {g:'Atender pacientes', id:'lista-dia', n:'Ver su lista de pacientes del día',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'Hoy / ↻ Actualizar', end:'GET /api/medical-panel/patients/pending + /stats', candado:'rol clínico + su sede; a médico y coach el servidor les fuerza su propio código'},
+ {g:'Atender pacientes', id:'buscar-afiliado', n:'Buscar un afiliado por cédula o celular',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'🔎 Buscar', end:'GET /api/medical-panel/patients/search/:documento', candado:'rol clínico + su sede'},
+ {g:'Atender pacientes', id:'link-wa', n:'Mandarle al paciente el link de su videollamada',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coach','umv','coord','admin'],
+  boton:'Contactar', end:'POST /api/video/whatsapp/send', candado:'rol clínico; se esconde para el médico corporativo, pero la ruta lo acepta'},
+ {g:'Atender pacientes', id:'llamar', n:'Llamar al paciente desde el navegador (queda grabada)',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coach','umv','coord','admin'],
+  boton:'Llamar', end:'POST /api/twilio/llamadas', candado:'rol clínico; el celular lo pone el servidor, nunca la pantalla'},
+ {g:'Atender pacientes', id:'chat-wa', n:'Leer y responder el chat de WhatsApp del paciente',
+  hoy:'Médico, coach, coordinación, admin y auxiliar', sens:'op', rec:['coach','umv','coord','admin'],
+  boton:'Chat', end:'GET/POST /api/whatsapp-chat/mensajes', candado:'cinco roles; el auxiliar también'},
+ {g:'Atender pacientes', id:'atender', n:'Entrar a la videollamada con el paciente',
+  hoy:'Cualquiera con el nombre de la sala', sens:'op', rec:['coach','umv','admin'],
+  boton:'Atender', end:'POST /api/video/token', candado:'ninguno: la ruta del médico y el token de video son públicos',
+  alerta:'La página /doctor/:sala abre sin sesión'},
+ {g:'Atender pacientes', id:'no-contesta', n:'Marcar que el paciente no contestó o no asistió',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coach','umv','corp','coord','admin'],
+  boton:'No contesta / No asistió', end:'PATCH /api/medical-panel/patients/:id/no-answer',
+  candado:'rol clínico; exigir la llamada previa es solo de pantalla, el servidor acepta la marca igual'},
+ {g:'Atender pacientes', id:'deshacer-nc', n:'Deshacer un "no contesta"',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'Deshacer', end:'DELETE /api/medical-panel/patients/:id/no-answer', candado:'rol clínico'},
+ {g:'Atender pacientes', id:'agenda-propia', n:'Ver su propia agenda',
+  hoy:'Médico, coach, coordinación, admin y auxiliar', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'Agenda', end:'GET /api/medical-panel/ordenes', candado:'cinco roles; al médico y al coach el servidor les devuelve solo lo suyo'},
+ {g:'Atender pacientes', id:'crear-cita-panel', n:'Agendar una cita desde su panel',
+  hoy:'Médico, coach, coordinación, admin y auxiliar', sens:'op', rec:['coord','admin'],
+  boton:'Agendar cita', end:'POST /api/medical-panel/ordenes', candado:'cinco roles'},
+ {g:'Atender pacientes', id:'editar-cita-panel', n:'Corregir una cita de su agenda',
+  hoy:'Médico, coach, coordinación, admin y auxiliar', sens:'op', rec:['coord','admin'],
+  boton:'Editar', end:'PATCH /api/medical-panel/ordenes/:id', candado:'cinco roles'},
+ {g:'Atender pacientes', id:'borrar-cita-panel', n:'Borrar una cita',
+  hoy:'Coordinación, admin y auxiliar', sens:'op', rec:['coord','admin'],
+  boton:'Eliminar', end:'DELETE /api/medical-panel/ordenes/:id',
+  candado:'el botón se le dibuja al médico y al coach, pero el servidor les responde 403',
+  alerta:'Botón visible que no funciona para quien lo ve'},
+ {g:'Atender pacientes', id:'horario-propio', n:'Fijar su propio horario de atención',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'(pantalla montada, hoy inalcanzable)', end:'GET/POST /api/medical-panel/mi-disponibilidad',
+  candado:'rol clínico, y cada quien solo el suyo'},
+
+ {g:'Historia clínica', id:'ver-hc', n:'Ver la historia clínica de un paciente',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'(se abre al atender)', end:'GET /api/video/medical-history/:id', candado:'rol clínico + sede'},
+ {g:'Historia clínica', id:'escribir-hc', n:'Escribir en la historia clínica',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','admin'],
+  boton:'(se guarda solo al escribir)', end:'PATCH /api/video/medical-history/:id/field',
+  candado:'rol clínico; un coach puede escribir en una historia corporativa y al revés',
+  alerta:'No distingue coach de médico ni programa'},
+ {g:'Historia clínica', id:'pdf-hc', n:'Descargar la historia en PDF',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'PDF', end:'GET /api/video/medical-history/:id/pdf', candado:'rol clínico'},
+ {g:'Historia clínica', id:'historico-paciente', n:'Ver todas las consultas anteriores del paciente',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'Historial', end:'GET /api/video/medical-history/patient/:numeroId', candado:'rol clínico'},
+ {g:'Historia clínica', id:'carpeta', n:'Ver la carpeta del afiliado (lo de todos los programas)',
+  hoy:'Médico, coach, coordinación y admin, de cualquier sede', sens:'phi', rec:['coach','umv','corp','coord','admin'],
+  boton:'(dentro del panel)', end:'GET /api/carpeta/:documento', candado:'rol clínico, sin filtro de sede ni de programa',
+  alerta:'Un coach ve la carpeta de un paciente que no atiende'},
+ {g:'Historia clínica', id:'carpeta-escribir', n:'Agregar o corregir antecedentes en la carpeta',
+  hoy:'Médico, coach, coordinación y admin, de cualquier sede', sens:'phi', rec:['umv','corp','admin'],
+  boton:'(dentro del panel)', end:'POST /api/carpeta/:documento/problemas', candado:'rol clínico, sin filtro de sede ni de programa',
+  alerta:'Sin filtro: cualquiera escribe en la carpeta de cualquiera'},
+ {g:'Historia clínica', id:'ia-sugerencias', n:'Redactar con la plataforma (análisis y recomendaciones)',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','corp','admin'],
+  boton:'Generar análisis', end:'POST /api/video/ai-suggestions', candado:'rol clínico; manda datos del paciente a OpenAI'},
+ {g:'Historia clínica', id:'consulta-guiada', n:'Consulta guiada con transcripción en vivo',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','admin'],
+  boton:'Consulta guiada', end:'POST /api/video/realtime-token', candado:'rol clínico; escucha el audio de la consulta'},
+ {g:'Historia clínica', id:'finalizar', n:'Finalizar la consulta (la cierra y la manda al Excel y a la carpeta)',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['coach','umv','corp','admin'],
+  boton:'Finalizar consulta', end:'POST /api/video/medical-history/:id/finalizar', candado:'rol clínico'},
+ {g:'Historia clínica', id:'reenviar-excel', n:'Reenviar la valoración corregida al Excel',
+  hoy:'Médico, coach, coordinación y admin', sens:'op', rec:['corp','coord','admin'],
+  boton:'Reenviar', end:'POST /api/video/medical-history/:id/finalizar', candado:'rol clínico'},
+ {g:'Historia clínica', id:'excel-valoraciones', n:'Abrir la hoja de Google con todas las valoraciones',
+  hoy:'Cualquiera que tenga el enlace', sens:'phi', rec:['corp','coord','admin'],
+  boton:'Excel de valoraciones', end:'—', candado:'ninguno: la hoja está compartida por enlace y la dirección viaja en la página',
+  alerta:'Datos clínicos accesibles sin cuenta'},
+ {g:'Historia clínica', id:'postural', n:'Análisis postural: medir, capturar y armar el PDF',
+  hoy:'Quien entre a la sala como médico', sens:'phi', rec:['coach','umv','admin'],
+  boton:'Iniciar análisis', end:'(Socket.io, sin REST)', candado:'solo depende de entrar a la sala como médico'},
+ {g:'Historia clínica', id:'grabacion-consulta', n:'Grabar y transcribir la consulta',
+  hoy:'Médico, coach, coordinación y admin', sens:'phi', rec:['coach','umv','admin'],
+  boton:'(arranca solo en la videollamada)', end:'POST /api/video/transcribe-consulta/:id', candado:'rol clínico'},
+
+ {g:'Coordinación · agenda', id:'ver-calendario', n:'Ver el calendario de sus sedes',
+  hoy:'Coordinación y admin en la pantalla; el servidor también acepta auxiliar', sens:'phi', rec:['coord','ext','admin'],
+  boton:'(calendario)', end:'GET /api/calendario/mes y /dia', candado:'rol operativo + recorte por sede'},
+ {g:'Coordinación · agenda', id:'agendar-coord', n:'Agendar una cita nueva',
+  hoy:'Coordinación y admin (la pantalla); cinco roles en el servidor', sens:'op', rec:['coord','ext','admin'],
+  boton:'Nueva cita', end:'POST /api/medical-panel/ordenes', candado:'la pantalla es de coordinación; la ruta la abre a médico, coach y auxiliar'},
+ {g:'Coordinación · agenda', id:'reasignar', n:'Reasignar citas de un profesional a otro',
+  hoy:'Coordinación, admin y auxiliar', sens:'op', rec:['coord','admin'],
+  boton:'Arrastrar la hora / Reasignar (N)', end:'POST /api/calendario/reasignar-bulk',
+  candado:'rol operativo; ninguna condición en la pantalla',
+  alerta:'El auxiliar no ve el panel pero la ruta lo acepta'},
+ {g:'Coordinación · agenda', id:'horario-semanal', n:'Fijar el horario semanal de un profesional',
+  hoy:'Coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'Disponibilidad → Guardar', end:'POST /api/profesionales/:id/disponibilidad', candado:'coordinación o admin'},
+ {g:'Coordinación · agenda', id:'disponibilidad-dia', n:'Cambiar o bloquear la disponibilidad de un día',
+  hoy:'Coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'No disponible todo el día / Bloquear franja', end:'PUT /api/profesionales/:id/disponibilidad-fecha', candado:'coordinación o admin'},
+ {g:'Coordinación · agenda', id:'equipo-dia', n:'Ver el equipo del día con las horas de cada uno',
+  hoy:'Coordinación y admin', sens:'phi', rec:['coord','ext','admin'],
+  boton:'Team', end:'(usa lo ya cargado)', candado:'ninguna condición extra dentro del panel'},
+ {g:'Coordinación · agenda', id:'latidos', n:'Ver el registro de jornada de los coaches (Latidos)',
+  hoy:'Coordinación, admin y auxiliar', sens:'phi', rec:['coord','admin'],
+  boton:'Latidos', end:'GET /api/torniquete/board', candado:'rol operativo + sede; los tooltips muestran el nombre del paciente'},
+ {g:'Coordinación · agenda', id:'afiliados-lista', n:'Ver la lista de consultas de todos (Afiliados)',
+  hoy:'Coordinación, admin y auxiliar; médico y coach solo lo suyo', sens:'phi', rec:['coord','ext','admin'],
+  boton:'Afiliados', end:'GET /api/medical-panel/ordenes', candado:'cinco roles, con recorte por sede y por código propio'},
+ {g:'Coordinación · agenda', id:'crear-consulta-coord', n:'Crear una consulta desde Afiliados',
+  hoy:'Coordinación y admin (la pantalla); cinco roles en el servidor', sens:'op', rec:['coord','ext','admin'],
+  boton:'Crear consulta', end:'POST /api/medical-panel/ordenes', candado:'ninguna condición en la pantalla'},
+ {g:'Coordinación · agenda', id:'editar-consulta-coord', n:'Corregir una consulta y cambiarle el estado',
+  hoy:'Coordinación y admin (la pantalla)', sens:'op', rec:['coord','admin'],
+  boton:'Editar → Estado', end:'PATCH /api/medical-panel/ordenes/:id', candado:'ninguna condición en la pantalla'},
+ {g:'Coordinación · agenda', id:'borrar-consulta-coord', n:'Borrar una consulta del sistema',
+  hoy:'Coordinación, admin y auxiliar', sens:'op', rec:['coord','admin'],
+  boton:'Eliminar', end:'DELETE /api/medical-panel/ordenes/:id', candado:'rol operativo; solo un modal de confirmación'},
+ {g:'Coordinación · agenda', id:'export-afiliados', n:'Bajar a Excel la lista de afiliados (con cédulas)',
+  hoy:'Cualquiera que vea la pantalla', sens:'phi', rec:['coord','admin'],
+  boton:'Exportar', end:'— (se arma en el navegador)', candado:'ninguno',
+  alerta:'Se lleva cédulas y nombres sin pedir nada'},
+
+ {g:'Análisis', id:'indicadores', n:'Ver los indicadores del equipo',
+  hoy:'Coordinación, admin y auxiliar', sens:'lec', rec:['coord','ext','admin'],
+  boton:'Indicadores', end:'GET /api/calendario/indicadores', candado:'rol operativo + sede'},
+ {g:'Análisis', id:'no-contacto-detalle', n:'Ver el detalle de "no contactó", con el celular del paciente',
+  hoy:'Coordinación, admin y auxiliar', sens:'phi', rec:['coord','admin'],
+  boton:'(clic en la fila del coach)', end:'GET /api/calendario/no-contacto', candado:'rol operativo'},
+ {g:'Análisis', id:'export-tiempos', n:'Bajar a Excel los tiempos de atención, cita por cita',
+  hoy:'Coordinación, admin y auxiliar', sens:'phi', rec:['coord','admin'],
+  boton:'Tiempos de atención', end:'GET /api/calendario/tiempos-atencion',
+  candado:'ninguno en la pantalla; además se pide sin la sede elegida, así que trae todo su alcance',
+  alerta:'Ignora el filtro de sede de la pantalla'},
+ {g:'Análisis', id:'auditoria-nc', n:'Ver la auditoría del "no contesta"',
+  hoy:'Coordinación, admin y auxiliar', sens:'phi', rec:['coord','admin'],
+  boton:'Auditoría No contesta', end:'GET /api/calendario/no-contesta-auditoria', candado:'rol operativo + sede'},
+ {g:'Análisis', id:'export-auditoria', n:'Bajar a Excel los casos de la auditoría',
+  hoy:'Cualquiera que vea la pantalla', sens:'phi', rec:['coord','admin'],
+  boton:'Descargar Excel', end:'— (se arma en el navegador)', candado:'ninguno; lleva el nombre del paciente'},
+ {g:'Análisis', id:'informe-empresa', n:'Generar el informe mensual de una empresa cliente',
+  hoy:'Médico, coordinación y admin, de cualquier sede', sens:'phi', rec:['corp','coord','admin'],
+  boton:'Generar PDF', end:'GET /api/informe-corporativo/pdf',
+  candado:'sin filtro de sede ni de empresa',
+  alerta:'Cualquier médico baja el informe de cualquier empresa'},
+ {g:'Análisis', id:'calidad-ver', n:'Ver la evaluación de calidad y su transcripción',
+  hoy:'Coordinación y admin', sens:'phi', rec:['coord','admin'],
+  boton:'(pill de Calidad)', end:'GET /api/calidad/session/:id', candado:'coordinación o admin; la lectura no filtra por sede',
+  alerta:'Con el id se lee una consulta de otra sede'},
+ {g:'Análisis', id:'calidad-evaluar', n:'Lanzar o repetir la evaluación de una consulta',
+  hoy:'Coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'Evaluar ahora / Re-evaluar', end:'POST /api/calidad/evaluar/:id', candado:'coordinación o admin; cada corrida cuesta'},
+ {g:'Análisis', id:'escuchar-llamadas', n:'Escuchar la grabación de una llamada al paciente',
+  hoy:'Coordinación y admin', sens:'phi', rec:['coord','admin'],
+  boton:'Escuchar', end:'GET /api/twilio/llamadas/:id/audio', candado:'coordinación o admin; el coach no escucha ni las suyas'},
+
+ {g:'Gente', id:'ver-personas', n:'Ver la lista de personas con sus accesos',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Team', end:'GET /api/usuarios-global', candado:'la coordinación solo ve médico, coach y auxiliar de sus sedes; las fichas sin cuenta, solo admin'},
+ {g:'Gente', id:'crear-persona', n:'Crear una persona con su cuenta',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Nuevo usuario / Nuevo profesional', end:'POST /api/usuarios-global · POST /api/profesionales',
+  candado:'la coordinación solo en Consulta, con roles médico, coach o auxiliar y sus propias sedes'},
+ {g:'Gente', id:'cambiar-rol', n:'Cambiarle el rol o la aplicación a alguien',
+  hoy:'Coordinación y admin', sens:'adm', rec:['admin'],
+  boton:'(hoja de la persona) → Guardar', end:'PATCH /api/usuarios-global/:id', candado:'mismos límites que al crear'},
+ {g:'Gente', id:'cambiar-clave', n:'Cambiarle la contraseña a alguien',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Cambiar contraseña', end:'PATCH /api/usuarios-global/:id', candado:'la coordinación solo sobre médico, coach y auxiliar de sus sedes'},
+ {g:'Gente', id:'todas-las-sedes', n:'Darle a alguien acceso a todas las sedes',
+  hoy:'Solo admin', sens:'adm', rec:['admin'],
+  boton:'Acceso a todas las sedes', end:'PATCH /api/usuarios-global/:id',
+  candado:'solo admin; en el alta de profesional la casilla se le muestra igual a la coordinación y el servidor la rechaza al guardar',
+  alerta:'Dos puertas al mismo dato con reglas distintas'},
+ {g:'Gente', id:'cambiar-sedes', n:'Cambiar a qué sedes entra alguien',
+  hoy:'Coordinación y admin', sens:'adm', rec:['admin'],
+  boton:'Sedes', end:'PATCH /api/usuarios-global/:id', candado:'la coordinación solo reparte sedes suyas'},
+ {g:'Gente', id:'programas', n:'Marcar a qué programa pertenece (Trepsi, UMV, corporativo…)',
+  hoy:'Coordinación y admin', sens:'adm', rec:['admin'],
+  boton:'Trepsi / UMV / Corporativo', end:'PATCH /api/usuarios-global/:id',
+  candado:'hoy esta marca casi no filtra nada: solo le abre Digitalizar a un médico de UMV',
+  alerta:'Marca decorativa: no acota lo que la persona ve'},
+ {g:'Gente', id:'vincular-ficha', n:'Vincular la cuenta con su ficha de agenda',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Vincular a su ficha', end:'PATCH /api/usuarios-global/:id', candado:'sin esto, la agenda del médico o coach sale vacía'},
+ {g:'Gente', id:'inhabilitar', n:'Inhabilitar o habilitar una cuenta',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Inhabilitar / Habilitar', end:'PATCH /api/usuarios-global/:id', candado:'nadie puede inhabilitarse a sí mismo'},
+ {g:'Gente', id:'dar-de-baja', n:'Dar de baja de la organización (las tres aplicaciones)',
+  hoy:'Solo admin', sens:'adm', rec:['admin'],
+  boton:'Dar de baja', end:'POST /api/usuarios-global/:id/baja', candado:'solo admin, en la pantalla y en el servidor'},
+ {g:'Gente', id:'ficha-agenda', n:'Editar la ficha de agenda (código, foto, firma, licencia)',
+  hoy:'Coordinación y admin', sens:'adm', rec:['coord','admin'],
+  boton:'Ficha de agenda', end:'PUT /api/profesionales/:id', candado:'coordinación o admin'},
+ {g:'Gente', id:'directorio', n:'Ver el directorio completo de la cadena, con cédulas',
+  hoy:'Un solo correo, escrito en el código', sens:'phi', rec:['admin'],
+  boton:'Base Profesionales', end:'GET /api/directorio/profesionales',
+  candado:'lista de correos fija en el código, no variable de entorno',
+  alerta:'Si ese correo se pierde, se pierde toda la planta'},
+ {g:'Gente', id:'identidades', n:'Ver las identidades de afiliados que no cuadran',
+  hoy:'Coordinación y admin', sens:'phi', rec:['coord','admin'],
+  boton:'Identidades', end:'GET /api/padron/cotejo', candado:'coordinación o admin + sede'},
+
+ {g:'Sistema', id:'digitalizar-usar', n:'Digitalizar pantallazos de MyBodytech y corregir cédulas',
+  hoy:'Correos de una lista, o un médico del programa UMV', sens:'phi', rec:['umv','coord','admin'],
+  boton:'Subir pantallazo', end:'POST /api/digitalizar/leer · PATCH /api/digitalizar/:id',
+  candado:'lista de correos (variable de entorno) o programa UMV leído de la base en cada petición'},
+ {g:'Sistema', id:'digitalizar-quitar', n:'Quitar filas de la lista de digitalizar',
+  hoy:'Los mismos de arriba', sens:'op', rec:['umv','coord','admin'],
+  boton:'Quitar de la lista', end:'DELETE /api/digitalizar/:id', candado:'igual que arriba'},
+ {g:'Sistema', id:'empresas', n:'Dar de alta o quitar empresas cliente',
+  hoy:'Coordinación y admin', sens:'op', rec:['coord','admin'],
+  boton:'Nueva empresa', end:'POST /api/empresas · DELETE /api/empresas/:id', candado:'coordinación o admin; la lista la puede leer también un médico'},
+ {g:'Sistema', id:'paneles-hermanos', n:'Entrar a ACC y Prepagadas con su propia clave',
+  hoy:'Admin que además esté en la lista de superusuarios', sens:'adm', rec:['admin'],
+  boton:'Paneles', end:'POST /api/paneles/entrar', candado:'rol admin + correo en la lista; cada app vuelve a validar el acceso'},
+ {g:'Sistema', id:'bodyvibe-construir', n:'Construir y publicar mini-aplicaciones internas',
+  hoy:'Admin que esté en la lista de constructores', sens:'adm', rec:['admin'],
+  boton:'BodyVibeTech', end:'POST /api/bodyvibe/apps', candado:'rol admin + lista de correos'},
+ {g:'Sistema', id:'bodyvibe-ver', n:'Ver y usar las mini-aplicaciones publicadas',
+  hoy:'Cualquiera con sesión, sin importar el rol', sens:'lec', rec:['coach','umv','corp','aux','coord','admin'],
+  boton:'Aplicaciones', end:'GET /api/bodyvibe/publicados · POST /api/bodyvibe/query',
+  candado:'solo tener sesión; la consulta a la base la define quien armó la mini-app',
+  alerta:'Sin rol: entra todo el que tenga cuenta'},
+ {g:'Sistema', id:'mapa-rutas', n:'Ver el Mapa de Rutas de la plataforma',
+  hoy:'Cualquiera con la dirección', sens:'lec', rec:['admin'],
+  boton:'Mapa de Rutas', end:'/mapa-rutas.html',
+  candado:'el botón se esconde salvo a dos correos, pero el archivo se sirve sin candado',
+  alerta:'El botón escondido no protege el archivo'},
+ {g:'Sistema', id:'bitacora', n:'Ver la bitácora de lo que hizo cada persona',
+  hoy:'Coordinación y admin, de todas las sedes', sens:'adm', rec:['admin'],
+  boton:'(sin pantalla propia)', end:'GET /api/admin/audit', candado:'no filtra por sede',
+  alerta:'Una coordinación de una sede lee la bitácora de todas'},
+ {g:'Sistema', id:'cola-trepsi', n:'Revisar y reintentar los envíos a Trepsi',
+  hoy:'Coordinación y admin', sens:'adm', rec:['admin'],
+  boton:'(operación por API)', end:'GET/POST /api/admin/trepsi-webhook/*', candado:'coordinación o admin; incluye el contenido de la historia'},
+ {g:'Sistema', id:'workers', n:'Forzar los envíos automáticos (link, recordatorio, alarma, Excel)',
+  hoy:'Solo admin', sens:'adm', rec:['admin'],
+  boton:'(operación por API)', end:'POST /api/admin/link-auto/dispatch · /alarma-cita/dispatch · /corporativo-sheet/dispatch',
+  candado:'solo admin; le escribe por WhatsApp a pacientes reales'},
+ {g:'Sistema', id:'monitor-integracion', n:'Monitor de la integración (ver, revivir citas, descartar envíos)',
+  hoy:'Cualquiera con el token, sin cuenta', sens:'phi', rec:['admin'],
+  boton:'Monitor', end:'/api/monitor-integracion/*',
+  candado:'un token simple en la dirección, no la sesión; incluye leer una historia clínica',
+  alerta:'Sin cuenta: basta el token'},
+ {g:'Sistema', id:'reprogramar-publica', n:'Reprogramar la cita desde el link del paciente',
+  hoy:'Cualquiera con el número de la cita', sens:'op', rec:[],
+  boton:'(página pública del paciente)', end:'POST /api/video/reprogramar/:id',
+  candado:'ninguno; solo el tope de reprogramaciones',
+  alerta:'Página pública: muestra el nombre y mueve la agenda'}
+];
+
+const SENS = {phi:{t:'Datos de pacientes',c:'t-phi'}, op:{t:'Cambia la operación',c:'t-op'},
+              adm:{t:'Administra gente',c:'t-adm'}, lec:{t:'Solo mirar',c:'t-lec'}};
+
+// ---------- estado ----------
+const estado = {};            // id -> {perfilId: true}
+ROWS.forEach(r => { estado[r.id] = {}; (r.rec||[]).forEach(p => estado[r.id][p] = true); });
+let db = null, guardadoOk = false;
+const filtros = {q:'', phi:false, abierto:false, libres:false};
+const abiertas = new Set();
+
+// ---------- render ----------
+const cabecera = document.getElementById('cabecera');
+const cuerpo = document.getElementById('cuerpo');
+
+function pintarCabecera(){
+  cabecera.innerHTML = '<th class="func">Funcionalidad</th>' + PERFILES.map(p =>
+    `<th class="perfil" scope="col">${p.n}<small>${p.s}</small></th>`).join('');
+}
+
+function visibles(){
+  const q = filtros.q.trim().toLowerCase();
+  return ROWS.filter(r => {
+    if (q && !(r.n.toLowerCase().includes(q) || r.g.toLowerCase().includes(q) ||
+               (r.hoy||'').toLowerCase().includes(q))) return false;
+    if (filtros.phi && r.sens !== 'phi') return false;
+    if (filtros.abierto && !r.alerta) return false;
+    if (filtros.libres && Object.values(estado[r.id]).some(Boolean)) return false;
+    return true;
+  });
+}
+
+const check = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function pintar(){
+  const lista = visibles();
+  let html = '', grupo = null;
+  if (!lista.length){
+    html = `<tr><td class="func" colspan="${PERFILES.length+1}" style="padding:22px 12px;color:var(--muted)">Nada coincide con ese filtro.</td></tr>`;
+  }
+  for (const r of lista){
+    if (r.g !== grupo){
+      grupo = r.g;
+      html += `<tr class="grupo"><td colspan="${PERFILES.length+1}">${grupo}</td></tr>`;
+    }
+    const s = SENS[r.sens];
+    html += `<tr data-row="${r.id}">
+      <td class="func">
+        <button class="nombre" data-abrir="${r.id}" aria-expanded="${abiertas.has(r.id)}">
+          <span class="caret">${abiertas.has(r.id) ? '▼' : '▶'}</span><span>${r.n}</span>
+        </button>
+        <span class="hoy">Hoy: ${r.hoy}</span>
+        <span class="tags"><span class="tag ${s.c}">${s.t}</span>${
+          r.alerta ? `<span class="tag t-warn">⚠ ${r.alerta}</span>` : ''}</span>
+      </td>` +
+      PERFILES.map(p => {
+        const on = !!estado[r.id][p.id];
+        return `<td class="mark"><button class="tick" role="switch" aria-pressed="${on}"
+          aria-label="${r.n} — ${p.n}" data-r="${r.id}" data-p="${p.id}">${check}</button></td>`;
+      }).join('') + '</tr>';
+    if (abiertas.has(r.id)){
+      html += `<tr class="detalle"><td colspan="${PERFILES.length+1}">
+        <div class="box"><dl>
+          <dt>Dónde se hace</dt><dd>${r.boton}</dd>
+          <dt>Qué pide hoy</dt><dd>${r.candado}</dd>
+          <dt>Por dentro</dt><dd><code>${r.end}</code></dd>
+        </dl></div></td></tr>`;
+    }
+  }
+  cuerpo.innerHTML = html;
+  pintarCifras();
+}
+
+function pintarCifras(){
+  const porPerfil = PERFILES.map(p => ROWS.filter(r => estado[r.id][p.id]).length);
+  const abiertos = ROWS.filter(r => r.alerta).length;
+  const phi = ROWS.filter(r => r.sens === 'phi').length;
+  document.getElementById('cifras').innerHTML =
+    `<div class="cifra"><b>${ROWS.length}</b><span>funcionalidades</span></div>` +
+    `<div class="cifra"><b>${phi}</b><span>tocan datos de pacientes</span></div>` +
+    `<div class="cifra"><b>${abiertos}</b><span>con un hueco hoy</span></div>` +
+    PERFILES.map((p,i) => `<div class="cifra"><b>${porPerfil[i]}</b><span>${p.n}</span></div>`).join('');
+}
+
+// ---------- interacción ----------
+cuerpo.addEventListener('click', (e) => {
+  const tick = e.target.closest('[data-r]');
+  if (tick){
+    const {r, p} = tick.dataset;
+    const on = !estado[r][p];
+    estado[r][p] = on;
+    tick.setAttribute('aria-pressed', String(on));
+    pintarCifras();
+    guardar(r);
+    if (filtros.libres) pintar();
+    return;
+  }
+  const abrir = e.target.closest('[data-abrir]');
+  if (abrir){
+    const id = abrir.dataset.abrir;
+    abiertas.has(id) ? abiertas.delete(id) : abiertas.add(id);
+    pintar();
+  }
+});
+
+document.getElementById('q').addEventListener('input', (e) => { filtros.q = e.target.value; pintar(); });
+[['f-phi','phi'],['f-abierto','abierto'],['f-libres','libres']].forEach(([el,key]) => {
+  const b = document.getElementById(el);
+  b.addEventListener('click', () => {
+    filtros[key] = !filtros[key];
+    b.setAttribute('aria-pressed', String(filtros[key]));
+    pintar();
+  });
+});
+
+// ---------- guardado ----------
+const pendientes = new Map();
+function guardar(id){
+  if (!db) return;
+  clearTimeout(pendientes.get(id));
+  pendientes.set(id, setTimeout(async () => {
+    try{
+      await db.doc('asignaciones/' + id).set({perfiles: estado[id], cambiado: new Date().toISOString()});
+      aviso('Se guarda solo. Lo último que marcaste ya quedó.');
+    }catch(err){
+      aviso('No se pudo guardar el último cambio. Lo que ves sigue en pantalla, pero no quedó registrado.');
+    }
+  }, 350));
+}
+
+function aviso(txt){ document.getElementById('estado-guardado').innerHTML = txt; }
+aviso('Leyendo lo que ya estaba marcado…');
+
+(async () => {
+  try{
+    db = await window.claude?.use?.('db');
+  }catch(err){ db = null; }
+  if (!db){
+    aviso('<b>Esta copia no guarda.</b> Podés marcar y mirar, pero al recargar vuelve a la propuesta inicial.');
+    return;
+  }
+  try{
+    db.collection('asignaciones').onSnapshot(
+      (snap) => {
+        for (const d of snap.docs){
+          const cuerpoDoc = d.data();
+          if (estado[d.id] && cuerpoDoc && cuerpoDoc.perfiles) estado[d.id] = {...cuerpoDoc.perfiles};
+        }
+        pintar();
+      },
+      () => aviso('Se perdió la conexión con lo guardado. Volvé a abrir la página para seguir marcando.')
+    );
+    aviso('Se guarda solo: lo que marques queda para la próxima vez que abras esta página.');
+  }catch(err){
+    aviso('<b>Esta copia no guarda.</b> Podés marcar y mirar, pero al recargar vuelve a la propuesta inicial.');
+  }
+})();
+
+pintarCabecera();
+pintar();
+</script>

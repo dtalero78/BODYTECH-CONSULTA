@@ -387,6 +387,14 @@ The old `MedicalHistoryPanel.tsx` is orphaned on disk (kept for reference). The 
 
 **AI suggestions:** `POST /api/video/ai-suggestions` calls [backend/src/services/openai.service.ts](backend/src/services/openai.service.ts) with patient context to draft fields like `mdConceptoFinal`, `mdRecomendacionesMedicasAdicionales`, etc. PDF preview is generated server-side in [backend/src/helpers/historia-clinica-html.ts](backend/src/helpers/historia-clinica-html.ts) and rendered by Puppeteer.
 
+### Parrilla de permisos: las 79 cosas que se pueden hacer
+
+El inventario de permisos del 23-sep-2026 vive en [docs/parrilla-permisos.html](docs/parrilla-permisos.html): una fila por funcionalidad (agrupadas por panel), con **quién puede hacerla hoy**, qué exige de verdad el servidor, su sensibilidad (datos de pacientes / cambia la operación / administra gente / solo mirar) y una columna por perfil (coach, UMV, corporativo, auxiliar, coordinación, externo de Trepsi, admin) para marcar a quién le toca.
+
+- **Está en `docs/`, no en `frontend/public/`, a propósito**: todo lo que cae en `public/` lo sirve `express.static` SIN candado —que es justo lo que pasa con `mapa-rutas.html`— y esta página nombra cada hueco de seguridad que queda abierto. Se abre con el navegador desde el repo, o en su copia publicada como Artifact, que guarda las marcas.
+- Las filas marcadas en rojo son diferencias reales entre lo que esconde la pantalla y lo que acepta el servidor: ahí esconder el botón no protege nada.
+- Salió de tres revisiones del código (panel del coordinador, paneles de atención, y el mapa de rutas del backend con `requireRole` ruta por ruta), no de la memoria de nadie.
+
 ### Las puertas de la videollamada: el paciente entra sin cuenta, nadie más
 
 Al inventariar los permisos (23-sep-2026) la sala de video era la puerta más abierta de la plataforma: **el token de video, el nombre de la sala de una historia, crear/cerrar la sala, ver quién está adentro y atar la sala a la historia no pedían nada**, y la página `/doctor/:sala` abría sin sesión. Con el id de una historia —que la propia ruta devolvía a cualquiera— se obtenía el nombre de la sala, y con el nombre se entraba como médico.

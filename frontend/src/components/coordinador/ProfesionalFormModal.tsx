@@ -593,10 +593,19 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
                   </div>
                 )}
 
-                {/* Sedes: sólo cuando el oficio no las fija. */}
+                {/* Unidades: sólo cuando el oficio no las fija. */}
                 {hayQuePreguntarSedes && preset.app === 'consulta' && (
                   <div>
                     <label className={LABEL}>A qué unidades de servicio atiende</label>
+                    {/* Son tres y no las cinco del Mapa de Rutas: Nutrición
+                        Presencial y ACC no se atienden desde esta aplicación,
+                        así que marcarlas acá no daría acceso a nada. A esas se
+                        entra eligiendo ese oficio en el paso anterior, que crea
+                        la cuenta en la aplicación de ACC. */}
+                    <p className="text-[11px] text-zinc-400 mb-1.5">
+                      Son las de esta aplicación. Nutrición Presencial y ACC se atienden desde la
+                      aplicación de ACC: para eso se elige ese oficio en el paso anterior.
+                    </p>
                     <label className="flex items-center gap-2 text-[13px] text-zinc-700 mb-1.5">
                       <input
                         type="checkbox"

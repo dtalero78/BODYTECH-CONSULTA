@@ -11,10 +11,15 @@
 //   - HistoriaClinica: fila del paciente + la cita (fechaAtencion/horaAtencion,
 //     medico = nombre del profesional, tipo_consulta='nutricion', sede_id='mybodytech').
 //   - mybodytech_afiliados: ciclo de vida keyed por evento_id (idempotencia).
+//
+// Con UMV_AGENDA_ENABLED (25-sep-2026) nada de lo anterior aplica al alta: la
+// orden entra "por agendar" y el afiliado elige su cupo (agenda-umv.service).
+// Apagado, todo sigue como arriba.
 // ============================================================================
 
-import crypto from 'crypto';
 import postgresService from './postgres.service';
+import { insertarHistoriaMybodytech, generateHistoriaId } from './mybodytech-historia.service';
+import { agendaUmvActiva, celularHabilitadoUmv } from '../helpers/agenda-umv.helper';
 
 export interface AfiliadoInput {
   numeroId: string;
@@ -53,10 +58,6 @@ export interface ServiceResult<T> {
   status: number;
   data?: T;
   error?: { code: string; message: string };
-}
-
-function generateHistoriaId(): string {
-  return `mbt_${crypto.randomBytes(12).toString('hex')}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,6 +146,20 @@ class MybodytechService {
       return { ok: true, status: 200, data: rowToRecord(existing[0]) };
     }
 
+    // 1.b) Flujo nuevo de la UMV (25-sep-2026): la cita que manda MyBodytech
+    //      se IGNORA. La orden queda "por agendar", el afiliado recibe un
+    //      WhatsApp con un botón y elige su cupo en el calendario del equipo
+    //      UMV (ver agenda-umv.service). La HistoriaClinica nace cuando agenda.
+    //      En pruebas (UMV_SOLO_CELULARES) solo entran los celulares de la lista:
+    //      el resto de las órdenes sigue el alta de siempre, y a esos pacientes
+    //      no les llega nada nuevo.
+    if (agendaUmvActiva() && celularHabilitadoUmv(input.afiliado.celular)) {
+      // Import perezoso: el servicio arrastra el cliente de Twilio, y con el
+      // flujo apagado no hace falta cargarlo.
+      const { default: agendaUmvService } = await import('./agenda-umv.service');
+      return agendaUmvService.registrarPorAgendar(input);
+    }
+
     // 2) fecha (YYYY-MM-DD) + hora (HH:MM) → fechaAtencion ISO con offset Colombia (-05:00).
     const fechaAtencion = `${input.fecha}T${input.hora}:00-05:00`;
     const a = input.afiliado;
@@ -174,49 +189,15 @@ class MybodytechService {
       console.warn('[mybodytech] Fallo la verificación de profesional (no bloquea):', e);
     }
 
-    // 3) Crear la HistoriaClinica (paciente + cita). Se espeja el MISMO set de
-    //    columnas que usa el alta de Trepsi (probado en prod) para evitar
-    //    sorpresas por columnas NOT NULL; los campos que mybodytech no envía van
-    //    en null (o '' en los narrativos).
-    const hc = await postgresService.query(
-      `INSERT INTO "HistoriaClinica" (
-         "_id", "_createdDate", "_updatedDate",
-         "numeroId", "primerNombre", "segundoNombre", "primerApellido", "segundoApellido",
-         "celular", "email", "medico", "ciudad", "eps", "fechaAtencion", "fecha_nacimiento",
-         "tipo_documento", "genero_biologico", "motivoConsulta", "motivo_consulta_texto",
-         "tipo_consulta", "ant_familiares_obs", "peso", "talla", "horaAtencion", "codEmpresa",
-         "atendido", "sede_id", "origen"
-       ) VALUES (
-         $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'nutricion',
-         $18, $19, $20, $21, $22, 'PENDIENTE', 'mybodytech', 'mybodytech'
-       ) RETURNING "_id"`,
-      [
-        historiaId,
-        a.numeroId,
-        a.primerNombre,
-        a.segundoNombre ?? null,
-        a.primerApellido,
-        a.segundoApellido ?? null,
-        a.celular,
-        a.email ?? null,
-        input.professionalName, // medico = NOMBRE tal cual (agenda no sincronizada)
-        null, // ciudad
-        null, // eps
-        fechaAtencion,
-        a.fechaNacimiento,
-        a.tipoDocumento,
-        a.sexo ?? null,
-        '', // motivoConsulta
-        '', // motivo_consulta_texto
-        null, // ant_familiares_obs
-        null, // peso
-        null, // talla
-        input.hora, // horaAtencion
-        null, // codEmpresa
-      ]
-    );
-    if (hc === null) {
+    // 3) Crear la HistoriaClinica (paciente + cita).
+    const hcOk = await insertarHistoriaMybodytech({
+      historiaId,
+      afiliado: a,
+      medico: input.professionalName, // medico = NOMBRE tal cual (agenda no sincronizada)
+      fechaAtencion,
+      hora: input.hora,
+    });
+    if (!hcOk) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error creando la historia clínica.' } };
     }
 

@@ -74,6 +74,9 @@ const MonitorMybodytechPage = lazy(() =>
 const ReprogramarPage = lazy(() =>
   import('./pages/ReprogramarPage').then((m) => ({ default: m.ReprogramarPage }))
 );
+const AgendarPage = lazy(() =>
+  import('./pages/AgendarPage').then((m) => ({ default: m.AgendarPage }))
+);
 const TerminosPage = lazy(() =>
   import('./pages/TerminosPage').then((m) => ({ default: m.TerminosPage }))
 );
@@ -219,6 +222,8 @@ function App() {
             <Route path="/monitor-integracion" element={<MonitorIntegracionPage />} />
             <Route path="/monitor-mybodytech" element={<MonitorMybodytechPage />} />
             <Route path="/reprogramar/:id" element={<ReprogramarPage />} />
+            {/* Afiliado nuevo de MyBodytech: agenda su consulta de la UMV desde el WhatsApp. */}
+            <Route path="/agendar/:token" element={<AgendarPage />} />
             <Route path="/terminos" element={<TerminosPage />} />
             <Route path="/terminos-y-condiciones" element={<Navigate to="/terminos" replace />} />
             {/* Panel clínico — sesión RBAC (médico/coach/coordinador/admin). */}

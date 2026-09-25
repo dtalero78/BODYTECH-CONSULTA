@@ -38,6 +38,10 @@ jest.mock('../marca.service', () => ({
   __esModule: true,
   marcaDeEnvioParaHistoria: jest.fn(),
 }));
+jest.mock('../unidad-envio.service', () => ({
+  __esModule: true,
+  envioUmvParaHistoria: jest.fn(),
+}));
 
 import {
   formatHoraCita,
@@ -54,11 +58,14 @@ import postgresService from '../postgres.service';
 import trepsiWebhookService from '../trepsi-webhook.service';
 import bslPlataformaChatService, { athleticPlataformaChatService } from '../bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from '../marca.service';
+import { envioUmvParaHistoria } from '../unidad-envio.service';
 
 // Salvo que un test diga otra cosa, el paciente es de Bodytech — que es también
 // lo que pasa con TODOS mientras Athletic esté apagado.
+// Y no es de la UMV: sale la plantilla de siempre.
 beforeEach(() => {
   (marcaDeEnvioParaHistoria as jest.Mock).mockResolvedValue('bodytech');
+  (envioUmvParaHistoria as jest.Mock).mockResolvedValue(null);
 });
 
 describe('formatHoraCita', () => {
@@ -547,5 +554,80 @@ describe('la marca del paciente elige por qué número sale', () => {
     expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'athletic' });
     expect(athleticPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
     expect(sendContent.mock.calls[0][3]).toBe('whatsapp:+15055871860');
+  });
+});
+
+// ===========================================================================
+// UMV: el paciente de fisioterapia recibe su plantilla, no la de nutrición.
+// Lo que se protege es el ORDEN de las variables — la plantilla nueva tiene
+// una más (la fecha) y corre la sala a {{4}} y la firma a {{5}}. Un corrimiento
+// mandaría al paciente a una sala que no existe.
+// ===========================================================================
+
+describe('enviarLinkPaciente — Unidad Médica Virtual', () => {
+  const enviarPlantilla = bslPlataformaChatService.enviarPlantilla as jest.Mock;
+  const sendTemplate = whatsappService.sendTemplateMessage as jest.Mock;
+  const sendContent = whatsappService.sendContentTemplate as jest.Mock;
+  const registrarMensaje = postgresService.registrarMensajeSaliente as jest.Mock;
+  const umv = envioUmvParaHistoria as jest.Mock;
+
+  const input = {
+    historiaId: 'hc-umv',
+    phone: '573001234567',
+    patientName: 'Ana',
+    appointmentTime: '09:00 a. m.',
+    roomNameWithParams: 'consulta-u?nombre=Ana',
+    origen: 'auto' as const,
+    esperarEfectos: true,
+  };
+
+  beforeEach(() => {
+    umv.mockResolvedValue({ templateSid: 'HXumv', fecha: 'jueves 25 de septiembre' });
+    (postgresService.query as jest.Mock).mockResolvedValue([]);
+    registrarMensaje.mockResolvedValue(undefined);
+    (trepsiWebhookService.enqueueLink as jest.Mock).mockResolvedValue({ enqueued: false, reason: 'NOT_TREPSI' });
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('usa la plantilla de la UMV con la fecha en {{2}}, la sala en {{4}} y la firma en {{5}}', async () => {
+    enviarPlantilla.mockResolvedValue(true);
+
+    await enviarLinkPaciente(input);
+
+    expect(enviarPlantilla.mock.calls[0][1]).toBe('HXumv');
+    expect(enviarPlantilla.mock.calls[0][2]).toEqual({
+      '1': 'Ana',
+      '2': 'jueves 25 de septiembre',
+      '3': '09:00 a. m.',
+      '4': 'consulta-u?nombre=Ana',
+      '5': 'hc-umv',
+    });
+  });
+
+  // El respaldo por Twilio es el que no puede caer a la plantilla de nutrición.
+  it('si la plataforma falla, Twilio manda LA MISMA plantilla de la UMV', async () => {
+    enviarPlantilla.mockResolvedValue(false);
+    sendContent.mockResolvedValue({ success: true, messageSid: 'SMu' });
+
+    const r = await enviarLinkPaciente(input);
+
+    expect(r).toMatchObject({ success: true, via: 'twilio' });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(sendContent.mock.calls[0][1]).toBe('HXumv');
+    expect(sendContent.mock.calls[0][2]['4']).toBe('consulta-u?nombre=Ana');
+  });
+
+  it('el hilo del chat guarda el texto de la UMV, no el de nutrición', async () => {
+    enviarPlantilla.mockResolvedValue(true);
+
+    await enviarLinkPaciente(input);
+
+    const cuerpo = registrarMensaje.mock.calls[0][1] as string;
+    expect(cuerpo).toContain('profesional de fisioterapia');
+    expect(cuerpo).toContain('📅 Fecha: jueves 25 de septiembre');
+    expect(cuerpo).toContain('Unidad Médica Virtual');
+    expect(cuerpo).not.toContain('nutrición');
   });
 });

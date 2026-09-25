@@ -384,6 +384,34 @@ class ApiService {
     return res.data;
   }
 
+  // Agendamiento del afiliado nuevo de MyBodytech (UMV). Público: la llave es
+  // el token del link del WhatsApp.
+  async getAgendaInfo(token: string): Promise<{
+    success: boolean;
+    primerNombre: string;
+    estado: 'por_agendar' | 'agendada';
+    cita: { fecha: string; hora: string; reprogramarId: string } | null;
+  }> {
+    const res = await this.client.get(`/api/agendar/${token}`);
+    return res.data;
+  }
+
+  async getAgendaHorarios(
+    token: string
+  ): Promise<{ success: boolean; dias: Array<{ fecha: string; horarios: string[] }> }> {
+    const res = await this.client.get(`/api/agendar/${token}/horarios`);
+    return res.data;
+  }
+
+  async agendarConsulta(
+    token: string,
+    fecha: string,
+    hora: string
+  ): Promise<{ success: boolean; fecha: string; hora: string; reprogramarId: string }> {
+    const res = await this.client.post(`/api/agendar/${token}`, { fecha, hora });
+    return res.data;
+  }
+
   // ----- Chat de WhatsApp (panel médico) -----
   async getWhatsappMensajes(
     celular: string

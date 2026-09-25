@@ -14,6 +14,8 @@ import twilioVoiceRoutes from './routes/twilio-voice.routes';
 import calidadRoutes from './routes/calidad.routes';
 import trepsiRoutes from './routes/trepsi.routes';
 import mybodytechRoutes from './routes/mybodytech.routes';
+import agendarUmvRoutes from './routes/agendar-umv.routes';
+import agendaUmvService from './services/agenda-umv.service';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
 import torniqueteRoutes from './routes/torniquete.routes';
@@ -196,6 +198,9 @@ app.use('/api/auth', authRoutes);
 // de WhatsApp sin cuenta y NO tienen JWT.
 app.use('/api/video', videoRoutes);
 app.use('/api/telemedicine', telemedicineRoutes);
+// `/api/agendar` — público: el afiliado nuevo de MyBodytech elige su cupo de
+// la UMV desde el botón del WhatsApp. La llave es el token del link.
+app.use('/api/agendar', agendarUmvRoutes);
 // `/api/medical-panel` — RBAC por ruta (pacientes: clínico; órdenes: operativo).
 // El gating vive en medical-panel.routes.ts (roles distintos por sub-ruta).
 app.use('/api/medical-panel', medicalPanelRoutes);
@@ -524,6 +529,18 @@ if (process.env.NODE_ENV !== 'test') {
     `link ${on(process.env.LINK_AUTO_ENABLED) ? `ACTIVO ${Number(process.env.LINK_AUTO_MINUTOS_ANTES ?? 0) || 0} min antes de la cita` : 'apagado'}`,
   ].join(' · ');
   console.log(`🔗 [Link-Auto] Worker iniciado cada ${LINK_AUTO_INTERVALO_MS / 60000}min — ${estado}`);
+}
+
+// Invitación a agendar de la UMV: manda el WhatsApp de las órdenes de
+// MyBodytech que entraron fuera de horario y reintenta las que fallaron. El
+// alta ya intenta el envío al instante; esto es la red. Apagado por defecto:
+// sin UMV_AGENDA_ENABLED + la plantilla, no-op.
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    agendaUmvService.maybeDispatch().catch((e) => {
+      console.error('[agenda-umv] worker error:', e?.message ?? e);
+    });
+  }, 5 * 60_000);
 }
 
 // Alarma "cita sin profesional conectado". El tablero de jornada ya pinta en

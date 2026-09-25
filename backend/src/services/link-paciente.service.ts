@@ -29,6 +29,8 @@ import trepsiWebhookService from './trepsi-webhook.service';
 import { plataformaDe } from './bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from './marca.service';
 import { Marca, whatsappFromDeMarca } from '../helpers/marca.helper';
+import { envioUmvParaHistoria } from './unidad-envio.service';
+import { textoLinkUmv } from '../helpers/unidad-envio.helper';
 
 /** SID por defecto de la plantilla de cita (bodytech_cita_v2, 2 botones). */
 const TEMPLATE_CITA_FALLBACK = 'HX83c2dd7da8954757ee34a310d4f17e62';
@@ -309,14 +311,30 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   // en el hilo del chat. Si la plataforma falla, cae al envío directo por
   // Twilio DESDE EL MISMO NÚMERO: el paciente igual recibe, aunque no quede
   // registrado en el chat. La plantilla es la misma para las dos marcas.
+  //
+  // Lo que SÍ cambia la plantilla es la unidad: el paciente de la UMV recibe la
+  // suya (fisioterapia, con la fecha, firmada por la UMV) en vez de la de
+  // nutrición. Mismos botones, así que la sala y los rastros no cambian.
   const marca = await marcaDeEnvioParaHistoria(historiaId);
-  const templateSid = process.env.TWILIO_WHATSAPP_TEMPLATE_SID || TEMPLATE_CITA_FALLBACK;
-  const variables: Record<string, string> = {
-    '1': patientName,
-    '2': appointmentTime,
-    '3': roomNameWithParams,
-    '4': firmarId(historiaId, process.env.JWT_SECRET), // botón Reprogramar → /reprogramar/{{4}}
-  };
+  const umv = await envioUmvParaHistoria(historiaId);
+  const firma = firmarId(historiaId, process.env.JWT_SECRET);
+  const templateSid = umv
+    ? umv.templateSid
+    : process.env.TWILIO_WHATSAPP_TEMPLATE_SID || TEMPLATE_CITA_FALLBACK;
+  const variables: Record<string, string> = umv
+    ? {
+        '1': patientName,
+        '2': umv.fecha,
+        '3': appointmentTime,
+        '4': roomNameWithParams, // botón Contáctame → /panel-medico/patient/{{4}}
+        '5': firma, // botón Reprogramar → /reprogramar/{{5}}
+      }
+    : {
+        '1': patientName,
+        '2': appointmentTime,
+        '3': roomNameWithParams,
+        '4': firma, // botón Reprogramar → /reprogramar/{{4}}
+      };
   const phoneWithPlus = phone.startsWith('+') ? phone : `+${phone}`;
 
   let result: EnviarLinkResult;
@@ -327,14 +345,17 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   if (viaPlataforma) {
     result = { success: true, via: 'plataforma', marca };
   } else {
-    const r = await whatsappService.sendTemplateMessage(
-      phone,
-      roomNameWithParams,
-      patientName,
-      appointmentTime,
-      historiaId,
-      whatsappFromDeMarca(marca)
-    );
+    const from = whatsappFromDeMarca(marca);
+    const r = umv
+      ? await whatsappService.sendContentTemplate(phone, templateSid, variables, from)
+      : await whatsappService.sendTemplateMessage(
+          phone,
+          roomNameWithParams,
+          patientName,
+          appointmentTime,
+          historiaId,
+          from
+        );
     result = { ...r, via: r.success ? 'twilio' : 'ninguno', marca };
   }
 
@@ -348,6 +369,7 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
     roomNameWithParams,
     messageSid: result.messageSid,
     origen,
+    fechaUmv: umv?.fecha,
   });
 
   if (esperarEfectos) await efectos;
@@ -422,6 +444,8 @@ async function registrarEnvio(p: {
   roomNameWithParams: string;
   messageSid?: string;
   origen: OrigenEnvio;
+  /** Solo en citas de la UMV: el hilo del chat guarda SU texto, no el de nutrición. */
+  fechaUmv?: string;
 }): Promise<void> {
   const { historiaId, phoneWithPlus, patientName, appointmentTime, roomNameWithParams } = p;
 
@@ -450,11 +474,13 @@ async function registrarEnvio(p: {
   }
 
   // 3. El mensaje en el hilo del chat: el texto de la plantilla que recibió el
-  //    paciente (bodytech_nutricion_v1). El link va al final porque en
-  //    WhatsApp es el botón "Conectarme", no parte del texto.
+  //    paciente (bodytech_nutricion_v1, o la de la UMV). El link va al final
+  //    porque en WhatsApp es el botón "Conectarme", no parte del texto.
   const videoCallUrl = buildLinkPaciente(roomNameWithParams);
   try {
-    const messageBody = `Hola ${patientName},\n\nTienes tu valoración de nutrición virtual a la hora ${appointmentTime}\n\nPara ingresar a tu videollamada toca "Conectarme".\nSi necesitas otro horario, toca "Reprogramar".\n\nConectarme: ${videoCallUrl}`;
+    const messageBody = p.fechaUmv
+      ? textoLinkUmv({ nombre: patientName, fecha: p.fechaUmv, hora: appointmentTime, link: videoCallUrl })
+      : `Hola ${patientName},\n\nTienes tu valoración de nutrición virtual a la hora ${appointmentTime}\n\nPara ingresar a tu videollamada toca "Conectarme".\nSi necesitas otro horario, toca "Reprogramar".\n\nConectarme: ${videoCallUrl}`;
     await postgresService.registrarMensajeSaliente(
       phoneWithPlus,
       messageBody,

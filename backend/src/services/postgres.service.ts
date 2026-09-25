@@ -1272,6 +1272,24 @@ class PostgresService {
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS user_document_type   VARCHAR(10)`);
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS user_document_number VARCHAR(40)`);
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS rips_estado          VARCHAR(20)`);
+      // Agendamiento del afiliado (UMV, 25-sep-2026): `agenda_estado`
+      // ('por_agendar' → 'agendando' → 'agendada') y un token para el link del
+      // WhatsApp; la invitación se envía (y reintenta) desde agenda-umv.service.
+      // Va en columnas PROPIAS a propósito: `estado`, `fecha_atencion`,
+      // `professional_name` y `user_document_*` son lo que MyBodytech lee por la
+      // API y el RIPS, ya aprobado, y no se tocan. El token es la única llave
+      // del link público, por eso es aleatorio y único.
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS agenda_estado         VARCHAR(20)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS agenda_token          VARCHAR(64)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_estado     VARCHAR(20)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_intentos   INT NOT NULL DEFAULT 0`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_enviada_at TIMESTAMPTZ`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_error      TEXT`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS agendada_at           TIMESTAMPTZ`);
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mybodytech_afiliados_token
+          ON mybodytech_afiliados (agenda_token) WHERE agenda_token IS NOT NULL
+      `);
       await this.query(`
         CREATE INDEX IF NOT EXISTS idx_mybodytech_afiliados_numero
           ON mybodytech_afiliados (numero_id)

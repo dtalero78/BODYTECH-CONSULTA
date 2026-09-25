@@ -51,6 +51,12 @@ export interface Preset {
    * en la sede de quien estuviera creando, que casi nunca es la correcta.
    */
   sedeFicha: string | null;
+  /**
+   * Minutos por cita que se proponen para la ficha. Sin él, el formulario
+   * propone 30. La UMV atiende en turnos de 15 (Daniel, 25-sep-2026): con 30
+   * la mitad de sus cupos no aparecería en el calendario del afiliado.
+   */
+  tiempoConsulta?: number;
 }
 
 export interface Perfil {
@@ -101,6 +107,7 @@ export const PERFILES: Perfil[] = [
       sedes: ['bsl'],
       esGlobal: false,
       sedeFicha: 'bsl',
+      tiempoConsulta: 15,
     },
   },
   {

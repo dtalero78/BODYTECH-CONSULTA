@@ -224,7 +224,11 @@ export function ProfesionalFormModal({ isOpen, onClose, onSaved, editing, onErro
   function elegirPerfil(p: Perfil) {
     setPerfilId(p.id);
     setPreset({ ...p.preset, sedes: [...p.preset.sedes], programas: [...p.preset.programas] });
-    setForm((f) => ({ ...f, rol: p.preset.rolFicha }));
+    setForm((f) => ({
+      ...f,
+      rol: p.preset.rolFicha,
+      ...(p.preset.tiempoConsulta ? { tiempoConsulta: p.preset.tiempoConsulta } : {}),
+    }));
     setPaso(2);
   }
 

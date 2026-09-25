@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import { programaFilter } from '../helpers/programa-scope';
 import postgresService from './postgres.service';
 import { sedeFilter } from '../helpers/sede-scope';
+import { EFFECTIVE_SEDE_SQL } from './calendario.service';
 
 interface PatientStats {
   programadosHoy: number;
@@ -129,6 +130,12 @@ export interface OrdenFilters {
    *   - 'fecha_asc': cronológico por fecha/hora de atención ascendente (vista Agenda).
    */
   sort?: 'created_desc' | 'fecha_asc';
+  /**
+   * Unidades de quien pregunta (`effectiveSedes`). `undefined` = sin límite.
+   * Una cita de Trepsi o MyBodytech cuenta en la unidad de su profesional, con
+   * la misma regla que el calendario (EFFECTIVE_SEDE_SQL).
+   */
+  sedes?: string[];
   /**
    * Programas a los que está limitada la persona que pregunta (su `origen`).
    * `undefined` = sin límite, que es el caso de casi todo el mundo.
@@ -628,6 +635,16 @@ class MedicalPanelService {
         paramIndex = params.length + 1;
       }
 
+      // Por unidad: sin esto, la coordinación de la UMV veía en Afiliados las
+      // citas de Trepsi (25-sep-2026). La tabla va con alias `h` en las dos
+      // consultas, así que la regla del calendario se reescribe sobre `h`.
+      if (filters.sedes !== undefined) {
+        conditions.push(
+          `(${EFFECTIVE_SEDE_SQL.split('"HistoriaClinica".').join('h.')}) = ANY($${paramIndex++}::text[])`
+        );
+        params.push(filters.sedes);
+      }
+
       if (filters.status && filters.status !== 'all') {
         conditions.push(`"atendido" = $${paramIndex++}`);
         params.push(filters.status);
@@ -679,7 +696,7 @@ class MedicalPanelService {
       const whereClause = conditions.join(' AND ');
 
       const countResult = await postgresService.query(
-        `SELECT COUNT(*) AS count FROM "HistoriaClinica" WHERE ${whereClause}`,
+        `SELECT COUNT(*) AS count FROM "HistoriaClinica" h WHERE ${whereClause}`,
         params
       );
       const total = parseInt(countResult?.[0]?.count ?? '0', 10);

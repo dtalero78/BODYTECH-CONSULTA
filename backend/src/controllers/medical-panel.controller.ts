@@ -9,7 +9,7 @@ import medicalPanelService, {
 import calendarioService from '../services/calendario.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import profesionalesService from '../services/profesionales.service';
-import { getSession, canActOnSede } from '../middleware/rbac.middleware';
+import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
 
 // Para médico/coach, su AGENDA del día solo debe mostrar SUS pacientes:
 // forzamos el medicoCode al código del profesional de la sesión (ignora el de
@@ -24,6 +24,11 @@ import { getSession, canActOnSede } from '../middleware/rbac.middleware';
 // mostraba las citas de TODOS los coaches (fuga de datos de pacientes); además
 // podía pedir `?medico=<otro>` y ver la agenda ajena (IDOR).
 export const SIN_PROFESIONAL = '__SIN_PROFESIONAL__';
+
+function esClinicoPropio(req: Request): boolean {
+  const s = getSession(req);
+  return !!s && (s.role === 'medico' || s.role === 'coach');
+}
 
 function ownCodeOrParam(req: Request, paramCode: string): string {
   const s = getSession(req);
@@ -445,6 +450,10 @@ class MedicalPanelController {
     try {
       const result = await medicalPanelService.listOrdenes({
         programas: await programasDeSesion(req),
+        // Médico/coach ya quedan acotados a su propio código: acotarlos además por
+        // unidad solo podría vaciarles la agenda si su sesión y su ficha no
+        // coinciden. La unidad es para quien ve a todo un equipo.
+        sedes: esClinicoPropio(req) ? undefined : effectiveSedes(req),
         page: page ?? 0,
         limit: limit ?? 20,
         from,

@@ -48,6 +48,23 @@ export function formatFechaCita(yyyymmdd: string | null | undefined): string | n
  * hilo del chat del panel, así que tiene que decir lo mismo que recibió el
  * paciente. El link va al final porque en WhatsApp es un botón.
  */
+/**
+ * El texto del recordatorio de la mañana de la UMV (`bodytech_umv_recordatorio_v1`,
+ * pedido el 25-sep-2026): el genérico habla de "valoración de nutrición". Debe
+ * coincidir con scripts/twilio-create-template-umv-recordatorio.cjs.
+ */
+export function textoRecordatorioUmv(p: { nombre: string; hora: string; linkReprogramar: string }): string {
+  return (
+    `Hola, ${p.nombre} 👋\n\n` +
+    'Te recordamos que hoy tienes tu consulta virtual con un profesional de fisioterapia. 🧑‍⚕️\n\n' +
+    `🕐 Hora: ${p.hora}\n\n` +
+    'A la hora de tu consulta te enviaremos el enlace para ingresar a la videollamada.\n\n' +
+    'Si necesitas cambiar el horario, selecciona “Reprogramar”.\n\n' +
+    'Unidad Médica Virtual\n\n' +
+    `Reprogramar: ${p.linkReprogramar}`
+  );
+}
+
 export function textoLinkUmv(p: { nombre: string; fecha: string; hora: string; link: string }): string {
   return (
     `Hola, ${p.nombre} 👋\n\n` +

@@ -19,8 +19,12 @@ export interface EnvioUmv {
  * antes de que Meta la apruebe) y cuando la base no responde: recibir el link
  * con el texto genérico es mejor que no recibirlo.
  */
-export async function envioUmvParaHistoria(historiaId: string): Promise<EnvioUmv | null> {
-  const templateSid = (process.env.TWILIO_WHATSAPP_UMV_TEMPLATE_SID || '').trim();
+export async function envioUmvParaHistoria(
+  historiaId: string,
+  /** Qué plantilla UMV: la del link (default) o la del recordatorio de la mañana. */
+  variableSid: 'TWILIO_WHATSAPP_UMV_TEMPLATE_SID' | 'TWILIO_WHATSAPP_UMV_RECORDATORIO_TEMPLATE_SID' = 'TWILIO_WHATSAPP_UMV_TEMPLATE_SID'
+): Promise<EnvioUmv | null> {
+  const templateSid = (process.env[variableSid] || '').trim();
   if (!templateSid) return null;
   try {
     const rows = await postgresService.query(

@@ -30,7 +30,7 @@ import { plataformaDe } from './bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from './marca.service';
 import { Marca, whatsappFromDeMarca } from '../helpers/marca.helper';
 import { envioUmvParaHistoria } from './unidad-envio.service';
-import { textoLinkUmv } from '../helpers/unidad-envio.helper';
+import { textoLinkUmv, textoRecordatorioUmv } from '../helpers/unidad-envio.helper';
 
 /** SID por defecto de la plantilla de cita (bodytech_cita_v2, 2 botones). */
 const TEMPLATE_CITA_FALLBACK = 'HX83c2dd7da8954757ee34a310d4f17e62';
@@ -396,15 +396,20 @@ export async function enviarRecordatorioPaciente(i: {
   appointmentTime: string;
   usarPlataforma?: boolean;
 }): Promise<EnviarLinkResult> {
-  const templateSid = process.env.TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID || '';
+  // La UMV tiene su propio recordatorio (el genérico dice "nutrición"). Mismas
+  // variables y mismo botón, así que solo cambia la plantilla. Mismas llaves
+  // que el link: cita de la UMV, plantilla configurada y celular habilitado.
+  const umv = await envioUmvParaHistoria(i.historiaId, 'TWILIO_WHATSAPP_UMV_RECORDATORIO_TEMPLATE_SID');
+  const templateSid = umv ? umv.templateSid : process.env.TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID || '';
   if (!templateSid) {
     return { success: false, error: 'RECORDATORIO_TEMPLATE_NO_CONFIGURADO', via: 'ninguno' };
   }
+  const firma = firmarId(i.historiaId, process.env.JWT_SECRET);
   const variables: Record<string, string> = {
     '1': i.patientName,
     '2': i.appointmentTime,
     // Firmado: ata el link a SU cita (ver reprogramar-firma.helper).
-    '3': firmarId(i.historiaId, process.env.JWT_SECRET), // botón Reprogramar → /reprogramar/{{3}}
+    '3': firma, // botón Reprogramar → /reprogramar/{{3}}
   };
   const phoneWithPlus = i.phone.startsWith('+') ? i.phone : `+${i.phone}`;
   const marca = await marcaDeEnvioParaHistoria(i.historiaId);
@@ -423,7 +428,13 @@ export async function enviarRecordatorioPaciente(i: {
   if (!result.success) return result;
 
   try {
-    const cuerpo = `Hola ${i.patientName},\n\nTe recordamos que hoy tienes tu consulta virtual a las ${i.appointmentTime}.\n\nUnos minutos antes de la hora te enviaremos el enlace para conectarte.`;
+    const cuerpo = umv
+      ? textoRecordatorioUmv({
+          nombre: i.patientName,
+          hora: i.appointmentTime,
+          linkReprogramar: `${process.env.BASE_URL || 'https://bodytech.app'}/reprogramar/${firma}`,
+        })
+      : `Hola ${i.patientName},\n\nTe recordamos que hoy tienes tu consulta virtual a las ${i.appointmentTime}.\n\nUnos minutos antes de la hora te enviaremos el enlace para conectarte.`;
     await postgresService.registrarMensajeSaliente(phoneWithPlus, cuerpo, result.messageSid || '', i.patientName);
   } catch (e) {
     console.error('⚠️ Error registrando recordatorio en el chat:', e);

@@ -631,3 +631,40 @@ describe('enviarLinkPaciente — Unidad Médica Virtual', () => {
     expect(cuerpo).not.toContain('nutrición');
   });
 });
+
+describe('enviarRecordatorioPaciente — Unidad Médica Virtual', () => {
+  const enviarPlantilla = bslPlataformaChatService.enviarPlantilla as jest.Mock;
+  const registrarMensaje = postgresService.registrarMensajeSaliente as jest.Mock;
+  const umv = envioUmvParaHistoria as jest.Mock;
+  const input = { historiaId: 'hc-umv', phone: '573192389988', patientName: 'Ana', appointmentTime: '09:00 a. m.' };
+  const envOriginal = process.env;
+
+  beforeEach(() => {
+    process.env = { ...envOriginal, TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID: 'HXrecordatorio' };
+    registrarMensaje.mockResolvedValue(undefined);
+    enviarPlantilla.mockResolvedValue(true);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    process.env = envOriginal;
+    umv.mockResolvedValue(null);
+    jest.restoreAllMocks();
+  });
+
+  it('pide la plantilla del RECORDATORIO de la UMV, no la del link', async () => {
+    umv.mockResolvedValue({ templateSid: 'HXumvRec', fecha: 'lunes 29 de septiembre' });
+    await enviarRecordatorioPaciente(input);
+    expect(umv).toHaveBeenCalledWith('hc-umv', 'TWILIO_WHATSAPP_UMV_RECORDATORIO_TEMPLATE_SID');
+    expect(enviarPlantilla.mock.calls[0][1]).toBe('HXumvRec');
+    expect(enviarPlantilla.mock.calls[0][2]).toEqual({ '1': 'Ana', '2': '09:00 a. m.', '3': 'hc-umv' });
+    const cuerpo = registrarMensaje.mock.calls[0][1] as string;
+    expect(cuerpo).toContain('fisioterapia');
+    expect(cuerpo).not.toContain('nutrición');
+  });
+
+  it('fuera de la UMV (o de la lista de prueba) sale el recordatorio de siempre', async () => {
+    umv.mockResolvedValue(null);
+    await enviarRecordatorioPaciente(input);
+    expect(enviarPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
+  });
+});

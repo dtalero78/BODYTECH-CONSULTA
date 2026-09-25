@@ -200,23 +200,25 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         return { ...p, ficha };
       });
 
-    // Las fichas sin cuenta, como filas propias. Sólo las ve quien puede verlo
-    // todo: acotarlas por sede exigiría un alcance que no tienen.
-    const sueltas =
-      actor.role === 'admin'
-        ? fichas
-            .filter((f) => !usadas.has(f.id))
-            .map((f) => ({
-              id: -f.id, // negativo: no es una persona de la tabla de cuentas
-              email: '',
-              nombre: f.nombre,
-              documento: f.documento,
-              activo: f.activo,
-              apps: [],
-              baja: null,
-              ficha: f,
-            }))
-        : [];
+    // Las fichas sin cuenta, como filas propias, con la misma regla que las
+    // cuentas: la ficha trae su unidad y su rol. Antes sólo las veía el admin,
+    // y la coordinación de la UMV no encontraba a sus evaluadoras en Team —
+    // atienden con ficha y sin cuenta (25-sep-2026).
+    const sueltas = fichas
+      .filter((f) => !usadas.has(f.id))
+      .filter((f) =>
+        visibleEnListado(actor, { email: '', rolConsulta: f.rol, sedes: [f.sedeId] }),
+      )
+      .map((f) => ({
+        id: -f.id, // negativo: no es una persona de la tabla de cuentas
+        email: '',
+        nombre: f.nombre,
+        documento: f.documento,
+        activo: f.activo,
+        apps: [],
+        baja: null,
+        ficha: f,
+      }));
 
     res.json({ success: true, data: [...personas, ...sueltas] });
   } catch (e) {

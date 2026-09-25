@@ -24,7 +24,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   UserPlus, RefreshCw, Search, Power, UserMinus, Pencil, X, AlertTriangle, Dices,
-  ClipboardList, CalendarClock,
+  ClipboardList, CalendarClock, KeyRound,
 } from 'lucide-react';
 import usuariosGlobalService, {
   Persona, AppDestino, EditarPersona,
@@ -251,7 +251,31 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
     });
   }
 
+  /**
+   * Cuenta para alguien que ya atiende con ficha y sin cuenta (las evaluadoras
+   * de la UMV, por ejemplo): la hoja sale con su nombre, su cédula, su unidad y
+   * su ficha ya vinculada; sólo falta el correo.
+   */
+  function abrirCuentaDeFicha(p: Persona) {
+    const f = p.ficha!;
+    const rol = rolesDe('consulta').includes(f.rol) ? f.rol : (rolesDe('consulta')[0] ?? 'coach');
+    setHoja({
+      id: null,
+      email: '',
+      nombre: p.nombre,
+      documento: p.documento ?? '',
+      celular: '',
+      password: generarClave(),
+      accesos: [{ app: 'consulta', rol, activo: true, nuevo: true }],
+      esGlobal: false,
+      sedes: [f.sedeId],
+      profesionalId: f.id,
+      programas: [],
+    });
+  }
+
   function abrirPersona(p: Persona) {
+    if (p.id < 0 && p.ficha) return abrirCuentaDeFicha(p);
     const consulta = p.apps.find((a) => a.app === 'consulta');
     const alc = (consulta?.alcance ?? {}) as {
       sedes?: string[];
@@ -694,6 +718,11 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                       {p.id > 0 && (
                         <IconoAccion titulo="Editar" onClick={() => abrirPersona(p)}>
                           <Pencil className="w-[14px] h-[14px]" />
+                        </IconoAccion>
+                      )}
+                      {p.id < 0 && p.ficha && (
+                        <IconoAccion titulo="Crear cuenta" onClick={() => abrirCuentaDeFicha(p)}>
+                          <KeyRound className="w-[14px] h-[14px]" />
                         </IconoAccion>
                       )}
                       {p.ficha && (

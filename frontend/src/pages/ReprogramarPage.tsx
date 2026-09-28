@@ -4,11 +4,19 @@ import { Loader2 } from 'lucide-react';
 import apiService from '../services/api.service';
 import { SelectorCupos, fechaLarga, type DiaCupos } from '../components/agenda/SelectorCupos';
 
-const ACCENT = '#1f3a8a';
+// La marca depende de la cita: Trepsi (azul, su logo) o la Unidad Médica
+// Virtual (logo negro de Bodytech, el mismo de /agendar). El 28-sep-2026 un
+// paciente de la UMV reprogramó y vio el logo de Trepsi.
+const MARCA = {
+  trepsi: { accent: '#1f3a8a', logo: '/trepsiLogo.png', alt: 'Trepsi', clase: 'max-w-full w-auto h-auto mx-auto mb-4' },
+  umv: { accent: '#18181b', logo: '/logoNegro.png', alt: 'Bodytech', clase: 'h-16 mx-auto mb-4 object-contain' },
+} as const;
 
 export function ReprogramarPage() {
   const { id } = useParams<{ id: string }>();
   const [nombre, setNombre] = useState<string | null>(null);
+  const [esUmv, setEsUmv] = useState(false);
+  const marca = esUmv ? MARCA.umv : MARCA.trepsi;
   const [dias, setDias] = useState<DiaCupos[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null); // hora en curso
@@ -34,6 +42,7 @@ export function ReprogramarPage() {
         }
         if (info) {
           setNombre(info.primerNombre);
+          setEsUmv(info.esUmv === true);
           if (info.puedeReprogramar === false) setSinCupo(true);
         }
         const ds = horarios?.dias ?? [];
@@ -74,13 +83,17 @@ export function ReprogramarPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-figtree">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <img src="/trepsiLogo.png" alt="Trepsi" className="max-w-full w-auto h-auto mx-auto mb-4" />
+          {/* Sin logo mientras carga: si no, el de la UMV veía el de Trepsi un instante. */}
+          {!loading && <img src={marca.logo} alt={marca.alt} className={marca.clase} />}
           <h1 className="text-xl font-bold text-gray-800">Reprogramar cita</h1>
+          {!loading && esUmv && (
+            <p className="text-sm text-gray-500 mt-1">Fisioterapia · Unidad Médica Virtual</p>
+          )}
         </div>
 
         {loading ? (
           <div className="flex justify-center py-10">
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: ACCENT }} />
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: marca.accent }} />
           </div>
         ) : done ? (
           <div className="text-center space-y-3">
@@ -147,7 +160,7 @@ export function ReprogramarPage() {
               </div>
             )}
 
-            <SelectorCupos dias={dias} accent={ACCENT} submitting={submitting} onElegir={reprogramar} />
+            <SelectorCupos dias={dias} accent={marca.accent} submitting={submitting} onElegir={reprogramar} />
 
             <p className="text-xs text-gray-400 text-center mt-6">
               Los horarios mostrados son los cupos libres de tu mismo profesional.

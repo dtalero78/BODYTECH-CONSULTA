@@ -19,6 +19,7 @@ import corporativoSheetService from '../services/corporativo-sheet.service';
 import { plataformaDe } from '../services/bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from '../services/marca.service';
 import { whatsappFromDeMarca } from '../helpers/marca.helper';
+import { esCitaUmv } from '../helpers/unidad-envio.helper';
 import { enviarLinkPaciente } from '../services/link-paciente.service';
 
 // ============================================================================
@@ -634,6 +635,9 @@ class VideoController {
         reprogramaciones: cita.reprogramaciones,
         topeReprogramaciones: TOPE_REPROGRAMACIONES,
         puedeReprogramar: !cita.yaAtendida && cita.reprogramaciones < TOPE_REPROGRAMACIONES,
+        // La página es la misma para todos pero la marca no: el paciente de la
+        // UMV (origen mybodytech/umv) ve el logo de Bodytech, no el de Trepsi.
+        esUmv: esCitaUmv(cita.origen),
       });
     } catch (error) {
       next(error);

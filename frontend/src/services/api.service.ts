@@ -362,6 +362,8 @@ class ApiService {
     reprogramaciones?: number;
     topeReprogramaciones?: number;
     puedeReprogramar?: boolean;
+    /** Cita de la Unidad Médica Virtual: la página va con la marca Bodytech, no Trepsi. */
+    esUmv?: boolean;
   }> {
     const res = await this.client.get(`/api/video/reprogramar/${id}`);
     return res.data;

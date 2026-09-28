@@ -935,11 +935,13 @@ class MedicalPanelService {
     yaAtendida: boolean;
     /** Veces que el AFILIADO ya movió esta cita desde el link (ver TOPE_REPROGRAMACIONES). */
     reprogramaciones: number;
+    /** Departamento de la cita: la página pública elige su marca con esto. */
+    origen: string | null;
   } | null> {
     const rows = await postgresService.query(
       `SELECT "medico", COALESCE("sede_id", 'bsl') AS sede_id, "primerNombre",
               "celular", "fechaAtencion", "horaAtencion", "fechaConsulta",
-              COALESCE("reprogramaciones", 0) AS reprogramaciones
+              COALESCE("reprogramaciones", 0) AS reprogramaciones, "origen"
          FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
       [id]
     );
@@ -954,6 +956,7 @@ class MedicalPanelService {
       fechaAtencion: r.fechaAtencion ? String(r.fechaAtencion) : null,
       horaAtencion: r.horaAtencion ? String(r.horaAtencion) : null,
       yaAtendida: r.fechaConsulta != null,
+      origen: r.origen ? String(r.origen) : null,
     };
   }
 

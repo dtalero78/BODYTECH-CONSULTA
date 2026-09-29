@@ -428,10 +428,12 @@ class LinkAutoService {
     //    videollamada que no existe manda al paciente al lugar equivocado. Es
     //    el criterio de `corporativo-sheet.esCorporativa`: manda el `origen`,
     //    y solo si viene vacío se mira la especialidad del profesional.
-    //  · El RECORDATORIO no sale para la cita de la UMV que el afiliado agendó
-    //    ese MISMO día desde /agendar: la confirmación ya le llegó un minuto
-    //    antes y decía lo mismo (Daniel, 25-sep-2026). Agendada otro día, a las
-    //    07:00 de su día sí le llega.
+    //  · El RECORDATORIO no sale para la cita de la UMV creada ese MISMO día,
+    //    venga de donde venga: desde /agendar la confirmación ya le llegó un
+    //    minuto antes y decía lo mismo (25-sep-2026), y la que crea la
+    //    evaluadora con "Agendar Cita" le llegaba al minuto de crearla, porque
+    //    el barrido del recordatorio corre hasta las 19:00 (29-sep-2026). La
+    //    creada otro día sí lo recibe, a las 07:00 del día de la cita.
     const sql = `
       SELECT h."_id" AS historia_id, h."primerNombre" AS primer_nombre,
              h."primerApellido" AS primer_apellido, h."numeroId" AS numero_id,
@@ -470,10 +472,9 @@ class LinkAutoService {
                        OR e.intentos >= $4
                        OR (e.estado = 'claimed' AND e.claimed_at > NOW() - INTERVAL '15 minutes')
                        OR (e.estado IN ('error','omitido') AND e.next_try_at > NOW()) ))
-         AND NOT ($6 = 'recordatorio' AND EXISTS (
-               SELECT 1 FROM mybodytech_afiliados a
-                WHERE a.historia_id = h."_id" AND a.agenda_estado = 'agendada'
-                  AND (a.agendada_at AT TIME ZONE 'America/Bogota')::date = $3::date))${extra}
+         AND NOT ($6 = 'recordatorio'
+                  AND LOWER(COALESCE(h."origen", '')) IN ('umv', 'mybodytech')
+                  AND (h."_createdDate" AT TIME ZONE 'America/Bogota')::date = $3::date)${extra}
        ORDER BY h."fechaAtencion"::timestamptz ASC
        LIMIT $5`;
 

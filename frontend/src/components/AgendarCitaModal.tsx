@@ -3,25 +3,9 @@ import { X, Search, Loader2 } from 'lucide-react';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService, { Modalidad, SlotHora } from '../services/calendario.service';
 import profesionalesService, { Profesional } from '../services/profesionales.service';
-import { ORIGENES_AGENDABLES } from './coordinador/origen';
+import { ORIGENES_AGENDABLES, origenSugerido } from './coordinador/origen';
 
 type OrigenAgendable = (typeof ORIGENES_AGENDABLES)[number]['value'];
-
-/**
- * Departamento que le corresponde por defecto a un profesional, según su
- * especialidad. Sólo es la SUGERENCIA inicial del selector: quien agenda puede
- * cambiarla, y es esa elección la que se guarda. Antes esta deducción vivía en
- * el backend y era la única fuente del `origen`, con lo cual reasignar la cita
- * a otro médico la cambiaba de departamento en silencio.
- */
-function origenSugerido(especialidad: string | null | undefined): OrigenAgendable {
-  const esp = (especialidad ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-  return esp === 'medico corporativo' ? 'corporativo' : 'nativa';
-}
 
 interface AgendarCitaModalProps {
   open: boolean;
@@ -163,7 +147,7 @@ export function AgendarCitaModal({
   // así que esto también cubre el caso del panel con `medicoCode` fijo.
   useEffect(() => {
     if (!open || origenTocado || !profesional) return;
-    setOrigen(origenSugerido(profesional.especialidad));
+    setOrigen(origenSugerido(profesional));
   }, [open, origenTocado, profesional]);
 
   // Cargar horarios disponibles cuando hay fecha + profesional + modalidad.

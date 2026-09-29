@@ -60,3 +60,29 @@ export const ORIGENES_AGENDABLES: ReadonlyArray<{ value: Exclude<Origen, 'trepsi
   { value: 'umv', label: 'UMV · Unidad Médica Virtual' },
   { value: 'corporativo', label: 'Médico Corporativo' },
 ];
+
+/**
+ * Departamento que le corresponde por defecto a un profesional. Sólo es la
+ * SUGERENCIA inicial del selector de "Agendar Cita": quien agenda puede
+ * cambiarla, y es esa elección la que se guarda.
+ *
+ * La evaluadora de la UMV no tiene especialidad cargada, así que se reconoce
+ * como la reconoce el agendamiento de la UMV (agenda-umv.service): ficha de la
+ * unidad `bsl` con rol `medico`. Antes caía en 'nativa', y una cita que ella
+ * creaba para su paciente salía con las plantillas de nutrición (29-sep-2026).
+ * Un coach de nutrición que viva en `bsl` tiene rol `coach`: sigue en 'nativa'.
+ */
+export function origenSugerido(p: {
+  especialidad?: string | null;
+  sedeId?: string | null;
+  rol?: string | null;
+}): (typeof ORIGENES_AGENDABLES)[number]['value'] {
+  const esp = (p.especialidad ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+  if (esp === 'medico corporativo') return 'corporativo';
+  if (p.sedeId === 'bsl' && p.rol === 'medico') return 'umv';
+  return 'nativa';
+}

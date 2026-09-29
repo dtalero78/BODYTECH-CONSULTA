@@ -5,6 +5,7 @@
 import {
   agendaUmvActiva,
   celularHabilitadoUmv,
+  celularesUmvParaSql,
   codigosEquipoUmv,
   dentroDeHorarioEnvio,
   elegirProfesional,
@@ -110,5 +111,20 @@ describe('celularHabilitadoUmv (modo pruebas)', () => {
   });
   it('"*" lo abre a todos, y solo a propósito', () => {
     expect(celularHabilitadoUmv('3005550000', { UMV_SOLO_CELULARES: '*' } as any)).toBe(true);
+  });
+});
+
+describe('celularesUmvParaSql (filtro del envío automático)', () => {
+  it('vacía = nadie, igual que celularHabilitadoUmv', () => {
+    expect(celularesUmvParaSql({} as any)).toEqual([]);
+  });
+  it('últimos 10 dígitos, en cualquier formato', () => {
+    expect(celularesUmvParaSql({ UMV_SOLO_CELULARES: '319 238 9988, +57 317 668 4088' } as any)).toEqual([
+      '3192389988',
+      '3176684088',
+    ]);
+  });
+  it('"*" = todas', () => {
+    expect(celularesUmvParaSql({ UMV_SOLO_CELULARES: '*' } as any)).toBe('*');
   });
 });

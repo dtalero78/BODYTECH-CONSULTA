@@ -141,3 +141,14 @@ export function celularHabilitadoUmv(celular: string | null | undefined, env: No
   if (!n) return false;
   return lista.some((c) => normalizarCelular(c) === n);
 }
+
+/**
+ * La misma lista de `UMV_SOLO_CELULARES`, lista para compararla en SQL: los
+ * últimos 10 dígitos de cada celular, o `'*'` si está abierta a todos. Vacía =
+ * `[]` = nadie, igual que `celularHabilitadoUmv`.
+ */
+export function celularesUmvParaSql(env: NodeJS.ProcessEnv = process.env): string[] | '*' {
+  const lista = (env.UMV_SOLO_CELULARES || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (lista.includes('*')) return '*';
+  return lista.map((c) => normalizarCelular(c).slice(-10)).filter((c) => c.length === 10);
+}

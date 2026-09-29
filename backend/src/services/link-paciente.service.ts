@@ -29,7 +29,7 @@ import trepsiWebhookService from './trepsi-webhook.service';
 import { plataformaDe } from './bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from './marca.service';
 import { Marca, whatsappFromDeMarca } from '../helpers/marca.helper';
-import { envioUmvParaHistoria } from './unidad-envio.service';
+import { envioUmvParaHistoria, bloqueadoPorPruebasUmv } from './unidad-envio.service';
 import { textoLinkUmv, textoRecordatorioUmv } from '../helpers/unidad-envio.helper';
 
 /** SID por defecto de la plantilla de cita (bodytech_cita_v2, 2 botones). */
@@ -315,6 +315,11 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   // Lo que SÍ cambia la plantilla es la unidad: el paciente de la UMV recibe la
   // suya (fisioterapia, con la fecha, firmada por la UMV) en vez de la de
   // nutrición. Mismos botones, así que la sala y los rastros no cambian.
+  // Modo pruebas de la UMV: al paciente real de la UMV no se le escribe todavía.
+  if (await bloqueadoPorPruebasUmv(historiaId)) {
+    console.log(`🧪 [umv] Link NO enviado a ${historiaId}: modo pruebas (celular fuera de UMV_SOLO_CELULARES)`);
+    return { success: false, error: 'UMV_MODO_PRUEBAS', via: 'ninguno' };
+  }
   const marca = await marcaDeEnvioParaHistoria(historiaId);
   const umv = await envioUmvParaHistoria(historiaId);
   const firma = firmarId(historiaId, process.env.JWT_SECRET);
@@ -399,6 +404,10 @@ export async function enviarRecordatorioPaciente(i: {
   // La UMV tiene su propio recordatorio (el genérico dice "nutrición"). Mismas
   // variables y mismo botón, así que solo cambia la plantilla. Mismas llaves
   // que el link: cita de la UMV, plantilla configurada y celular habilitado.
+  if (await bloqueadoPorPruebasUmv(i.historiaId)) {
+    console.log(`🧪 [umv] Recordatorio NO enviado a ${i.historiaId}: modo pruebas`);
+    return { success: false, error: 'UMV_MODO_PRUEBAS', via: 'ninguno' };
+  }
   const umv = await envioUmvParaHistoria(i.historiaId, 'TWILIO_WHATSAPP_UMV_RECORDATORIO_TEMPLATE_SID');
   const templateSid = umv ? umv.templateSid : process.env.TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID || '';
   if (!templateSid) {

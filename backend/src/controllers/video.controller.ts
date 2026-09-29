@@ -20,6 +20,7 @@ import { plataformaDe } from '../services/bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from '../services/marca.service';
 import { whatsappFromDeMarca } from '../helpers/marca.helper';
 import { esCitaUmv } from '../helpers/unidad-envio.helper';
+import { bloqueadoPorPruebasUmv } from '../services/unidad-envio.service';
 import { enviarLinkPaciente } from '../services/link-paciente.service';
 
 // ============================================================================
@@ -570,6 +571,15 @@ class VideoController {
           message: 'WhatsApp template sent successfully',
           messageSid: result.messageSid,
         });
+      } else if (result.error === 'UMV_MODO_PRUEBAS') {
+        // No es una falla: la UMV está en pruebas y a este paciente real no se
+        // le escribe todavía. 409 para que el panel lo diga tal cual.
+        res.status(409).json({
+          success: false,
+          error: 'UMV_MODO_PRUEBAS',
+          message:
+            'La Unidad Médica Virtual está en pruebas: a este celular todavía no se le envían mensajes.',
+        });
       } else {
         res.status(500).json({
           success: false,
@@ -750,7 +760,8 @@ class VideoController {
       // El texto libre falla con 63016 fuera de la ventana de 24h (el paciente
       // nunca abre esa ventana: los botones de URL no cuentan como respuesta).
       // Variables: {{1}} nombre · {{2}} fecha · {{3}} hora.
-      if (cita.celular) {
+      // Modo pruebas de la UMV: al paciente real de la UMV no se le escribe.
+      if (cita.celular && !(await bloqueadoPorPruebasUmv(id))) {
         const celular = cita.celular;
         const [y, m, d] = fecha.split('-');
         const fechaLegible = `${d}/${m}/${y}`;

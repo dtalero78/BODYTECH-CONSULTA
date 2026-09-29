@@ -766,9 +766,14 @@ export function MedicalPanelPage() {
       });
 
       alert(`✅ Mensaje de WhatsApp enviado a ${patient.primerNombre}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al contactar paciente:', error);
-      alert('Error al contactar afiliado. Inténtalo nuevamente.');
+      // La UMV en modo pruebas no es un error de red: reintentar no cambia nada.
+      if (error?.response?.data?.error === 'UMV_MODO_PRUEBAS') {
+        alert(`🧪 ${error.response.data.message}`);
+      } else {
+        alert('Error al contactar afiliado. Inténtalo nuevamente.');
+      }
     } finally {
       setContactingPatient(null);
     }

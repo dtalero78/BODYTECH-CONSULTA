@@ -49,3 +49,33 @@ export async function envioUmvParaHistoria(
     return null;
   }
 }
+
+/**
+ * MODO PRUEBAS DE LA UMV (Daniel, 29-sep-2026: "todo lo que se está haciendo
+ * ahorita son pruebas. No debe haber envío de mensajes todavía real").
+ *
+ * `true` = a esta cita NO se le escribe: es de la UMV (origen umv/mybodytech) y
+ * su celular no está en `UMV_SOLO_CELULARES`. Lo consultan el link (automático
+ * y "Contactar"), el recordatorio y la confirmación de reprogramada. Las citas
+ * que no son de la UMV (Trepsi, corporativo, nativa) no se tocan.
+ *
+ * Si la base no responde se deja pasar: no se puede saber si la cita es de la
+ * UMV, y bloquear a ciegas cortaría también los mensajes de Trepsi. El envío
+ * automático tiene además su propio filtro en el SQL (link-auto.service).
+ */
+export async function bloqueadoPorPruebasUmv(historiaId: string | null | undefined): Promise<boolean> {
+  if (!historiaId) return false;
+  try {
+    const rows = await postgresService.query(
+      `SELECT "origen", "celular" FROM "HistoriaClinica" WHERE "_id" = $1`,
+      [historiaId]
+    );
+    if (rows === null) throw new Error('la base no respondió');
+    const fila = rows[0];
+    if (!fila || !esCitaUmv(fila.origen)) return false;
+    return !celularHabilitadoUmv(fila.celular);
+  } catch (e: any) {
+    console.warn(`⚠️ [umv] No se pudo verificar el modo pruebas de ${historiaId} (${e?.message ?? e})`);
+    return false;
+  }
+}

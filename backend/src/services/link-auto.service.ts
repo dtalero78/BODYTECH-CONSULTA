@@ -37,6 +37,7 @@ import {
   MotivoOmision,
 } from './link-paciente.service';
 import { nowColombia, rangoDiaColombia, horaAMinutos } from '../helpers/colombia-time.helper';
+import { celularesUmvParaSql } from '../helpers/agenda-umv.helper';
 
 /**
  * Si una pasada encuentra más candidatas que esto, algo está mal (ventana de
@@ -404,6 +405,19 @@ class LinkAutoService {
     if (opts.historiaId) {
       params.push(opts.historiaId);
       extra += `\n  AND h."_id" = $${params.length}`;
+    }
+    // MODO PRUEBAS DE LA UMV (29-sep-2026: "no debe haber envío de mensajes
+    // todavía real"): la cita de la UMV (origen umv/mybodytech) solo entra si su
+    // celular está en UMV_SOLO_CELULARES. Hasta hoy los afiliados reales de
+    // MyBodytech recibían el recordatorio y el link genéricos (de nutrición) para
+    // citas que nadie atiende por la plataforma. Lista vacía = ninguna; '*' =
+    // todas. `enviarLinkPaciente`/`enviarRecordatorioPaciente` repiten el
+    // chequeo, pero filtrar acá evita reclamar filas que nunca van a salir.
+    const umvCelulares = celularesUmvParaSql();
+    if (umvCelulares !== '*') {
+      params.push(umvCelulares);
+      extra += `\n  AND NOT (LOWER(COALESCE(h."origen", '')) IN ('umv', 'mybodytech')
+               AND NOT (right(regexp_replace(COALESCE(h."celular", ''), '[^0-9]', '', 'g'), 10) = ANY($${params.length}::text[])))`;
     }
 
     // Notas sobre filtros que no son obvios:

@@ -41,6 +41,7 @@ jest.mock('../marca.service', () => ({
 jest.mock('../unidad-envio.service', () => ({
   __esModule: true,
   envioUmvParaHistoria: jest.fn(),
+  bloqueadoPorPruebasUmv: jest.fn(),
 }));
 
 import {
@@ -58,7 +59,7 @@ import postgresService from '../postgres.service';
 import trepsiWebhookService from '../trepsi-webhook.service';
 import bslPlataformaChatService, { athleticPlataformaChatService } from '../bsl-plataforma-chat.service';
 import { marcaDeEnvioParaHistoria } from '../marca.service';
-import { envioUmvParaHistoria } from '../unidad-envio.service';
+import { envioUmvParaHistoria, bloqueadoPorPruebasUmv } from '../unidad-envio.service';
 
 // Salvo que un test diga otra cosa, el paciente es de Bodytech — que es también
 // lo que pasa con TODOS mientras Athletic esté apagado.
@@ -66,6 +67,7 @@ import { envioUmvParaHistoria } from '../unidad-envio.service';
 beforeEach(() => {
   (marcaDeEnvioParaHistoria as jest.Mock).mockResolvedValue('bodytech');
   (envioUmvParaHistoria as jest.Mock).mockResolvedValue(null);
+  (bloqueadoPorPruebasUmv as jest.Mock).mockResolvedValue(false);
 });
 
 describe('formatHoraCita', () => {
@@ -666,5 +668,44 @@ describe('enviarRecordatorioPaciente — Unidad Médica Virtual', () => {
     umv.mockResolvedValue(null);
     await enviarRecordatorioPaciente(input);
     expect(enviarPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
+  });
+});
+
+// Modo pruebas de la UMV (29-sep-2026): al paciente real de la UMV no se le
+// escribe. Ni el link (automático o "Contactar") ni el recordatorio salen.
+describe('modo pruebas de la UMV', () => {
+  const enviarPlantilla = bslPlataformaChatService.enviarPlantilla as jest.Mock;
+  const sendContent = whatsappService.sendContentTemplate as jest.Mock;
+  const sendTemplate = whatsappService.sendTemplateMessage as jest.Mock;
+  const envOriginal = process.env;
+
+  beforeEach(() => {
+    (bloqueadoPorPruebasUmv as jest.Mock).mockResolvedValue(true);
+    process.env = { ...envOriginal, TWILIO_WHATSAPP_RECORDATORIO_TEMPLATE_SID: 'HXrecordatorio' };
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    process.env = envOriginal;
+    jest.restoreAllMocks();
+  });
+
+  it('el link no sale y lo dice', async () => {
+    const r = await enviarLinkPaciente({
+      historiaId: 'hc-real', phone: '573005550000', patientName: 'Luz', appointmentTime: '09:00 a. m.',
+      roomNameWithParams: 'consulta-x?nombre=Luz', origen: 'manual',
+    });
+    expect(r).toMatchObject({ success: false, error: 'UMV_MODO_PRUEBAS' });
+    expect(enviarPlantilla).not.toHaveBeenCalled();
+    expect(sendContent).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('el recordatorio tampoco', async () => {
+    const r = await enviarRecordatorioPaciente({
+      historiaId: 'hc-real', phone: '573005550000', patientName: 'Luz', appointmentTime: '09:00 a. m.',
+    });
+    expect(r).toMatchObject({ success: false, error: 'UMV_MODO_PRUEBAS' });
+    expect(enviarPlantilla).not.toHaveBeenCalled();
+    expect(sendContent).not.toHaveBeenCalled();
   });
 });

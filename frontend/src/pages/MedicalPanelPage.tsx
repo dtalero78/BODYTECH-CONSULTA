@@ -784,8 +784,25 @@ export function MedicalPanelPage() {
    * celular del coach y, cuando contesta, al paciente. Reemplaza al robot de
    * "Rellamar" (audio pregrabado, sin coach). Ver llamadas-voz.service.
    */
-  /** Crea el Device de Twilio una sola vez; renueva el token solo cuando avisa. */
-  const obtenerDevice = async (): Promise<TwilioDevice> => {
+  /**
+   * El Device de Twilio, reusado entre llamadas. Con `fresco` se tira el
+   * anterior y se arma uno nuevo con un token nuevo: un Device que lleva rato
+   * abierto puede haber perdido su conexión de señalización (el equipo se
+   * suspendió, el wifi parpadeó) sin avisar, y la llamada siguiente muere con
+   * un 31005 del gateway. Se ve en los datos: la PRIMERA llamada de cada coach
+   * no falló nunca (11 de 11), las siguientes fallan ~20%, y si llama otra vez
+   * dentro del minuto, 44%.
+   */
+  const obtenerDevice = async (fresco = false): Promise<TwilioDevice> => {
+    if (fresco && softphoneRef.current) {
+      try {
+        softphoneRef.current.call?.disconnect();
+        softphoneRef.current.device.destroy();
+      } catch {
+        /* ya estaba muerto */
+      }
+      softphoneRef.current = null;
+    }
     if (softphoneRef.current?.device) return softphoneRef.current.device;
     if (!sdkVozRef.current) sdkVozRef.current = import('@twilio/voice-sdk');
     const { Device } = await sdkVozRef.current;
@@ -809,7 +826,7 @@ export function MedicalPanelPage() {
    * Twilio marca al paciente desde el número de Bodytech. Reemplaza al robot
    * de "Rellamar" (audio pregrabado, sin coach). Ver llamadas-voz.service.
    */
-  const handleLlamar = async (patient: Patient) => {
+  const handleLlamar = async (patient: Patient, reintento = false) => {
     setLlamada({ patientId: patient._id, data: null, error: null });
     const mensajes: Record<string, string> = {
       SIN_CELULAR_PACIENTE: 'El paciente no tiene un celular válido en la historia.',
@@ -846,7 +863,19 @@ export function MedicalPanelPage() {
       // no hubo llamada y la guarda debe seguir puesta.
       setLlamadosEnSesion((prev) => new Map(prev).set(patient._id, creada!.iniciadaAt ?? new Date().toISOString()));
 
-      const device = await obtenerDevice();
+      // Un Device sostiene UNA llamada. El coach llama a varios afiliados
+      // seguidos y la anterior podía seguir colgada del Device al conectar la
+      // siguiente; por eso el 44% de fallas cuando vuelve a llamar dentro del
+      // minuto. Se suelta antes de marcar.
+      if (softphoneRef.current?.call) {
+        try {
+          softphoneRef.current.call.disconnect();
+        } catch {
+          /* ya estaba cerrada */
+        }
+        softphoneRef.current.call = null;
+      }
+      const device = await obtenerDevice(reintento);
       const call = await device.connect({ params: { llamadaId: String(creada.id) } });
       softphoneRef.current = { device, call };
       call.on('disconnect', () => {
@@ -864,6 +893,21 @@ export function MedicalPanelPage() {
         // y solo la da por fallida si nunca llegó a marcar.
         if (creada) {
           apiService.cancelarLlamada(creada.id, detalle).catch(() => undefined);
+        }
+        // 31005 = el gateway de Twilio colgó antes de que la llamada existiera
+        // (no queda ni registro en Twilio). Casi siempre es este Device, no la
+        // red: se rehace y se marca otra vez, UNA sola vez. Sin esto el coach
+        // veía "Problema de audio" y tenía que volver a apretar Llamar — y
+        // cuando lo hacía, solía entrar.
+        if (e?.code === 31005 && !reintento) {
+          setLlamada((prev) =>
+            prev && prev.patientId === patient._id
+              ? { ...prev, error: 'Reconectando con la central telefónica…' }
+              : prev
+          );
+          window.setTimeout(() => {
+            handleLlamar(patient, true).catch(() => undefined);
+          }, 800);
         }
       });
     } catch (err) {

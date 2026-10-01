@@ -93,6 +93,14 @@ interface MedicalHistoryPanelProps {
   room?: VideoEngine | null;
 }
 
+/** Huella de lo que el coach escribió, para comparar contra lo último guardado. */
+function huellaDe(x: { talla: string; peso: string; datos: any; dx1: string; dx2: string }): string {
+  const limpio = Object.fromEntries(
+    Object.entries(x.datos || {}).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+  );
+  return JSON.stringify([x.talla.trim(), x.peso.trim(), x.dx1.trim(), x.dx2.trim(), limpio]);
+}
+
 const LABS = [
   { key: 'glucosa', label: 'Glucosa' },
   { key: 'hba1c', label: 'HbA1c' },
@@ -134,6 +142,15 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
   const updateNutri = (field: string, value: string) => {
     setDatosNutricionales((prev: any) => ({ ...prev, [field]: value }));
   };
+
+  /**
+   * Huella de lo guardado, para saber si queda trabajo sin guardar. El coach
+   * atiende y cierra la pestaña sin apretar "Finalizar y guardar", y la cita
+   * se queda en PENDIENTE aunque la consulta haya ocurrido: entre 1 y 5 por
+   * día (5 de 49 el 1-oct-2026). Guardar es lo ÚNICO que la marca atendida —
+   * la transcripción automática llena los datos pero no la cierra.
+   */
+  const [firmaGuardada, setFirmaGuardada] = useState<string | null>(null);
 
   // ----- Consulta guiada (modo entrevista) -----
   const [guideOpen, setGuideOpen] = useState(false);
@@ -534,6 +551,18 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
       setTalla(history.talla || '');
       setPeso(history.peso || '');
       setDatosNutricionales(history.datosNutricionales || {});
+      // Lo que ya venía en la historia (Trepsi manda peso, talla y antecedentes)
+      // NO es trabajo sin guardar: sin esta línea el aviso de cerrar la pestaña
+      // saltaría con solo abrir el panel.
+      setFirmaGuardada(
+        huellaDe({
+          talla: history.talla || '',
+          peso: history.peso || '',
+          datos: history.datosNutricionales || {},
+          dx1: history.mdDx1 || '',
+          dx2: history.mdDx2 || '',
+        })
+      );
     } catch (err: any) {
       setError(err.message || 'Error al cargar historia clínica');
       console.error('Error loading medical history:', err);
@@ -650,6 +679,28 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
     }
   };
 
+  /**
+   * Si el coach cierra la pestaña con la consulta sin guardar, el navegador le
+   * pregunta si de verdad quiere salir. El texto del diálogo lo pone el
+   * navegador y no se puede cambiar, pero alcanza para frenar el cierre: lo que
+   * se pierde del otro lado es que la cita quede marcada como atendida.
+   * Sólo molesta si hay algo escrito y distinto de lo último guardado — abrir
+   * el panel y cerrarlo sin tocar nada no avisa.
+   */
+  const huellaActual = huellaDe({ talla, peso, datos: datosNutricionales, dx1: mdDx1, dx2: mdDx2 });
+  const vacia = huellaDe({ talla: '', peso: '', datos: {}, dx1: '', dx2: '' });
+  const haySinGuardar = huellaActual !== vacia && huellaActual !== firmaGuardada;
+
+  useEffect(() => {
+    if (!haySinGuardar) return;
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', avisar);
+    return () => window.removeEventListener('beforeunload', avisar);
+  }, [haySinGuardar]);
+
   const handleSave = async (overrides?: {
     datosNutricionales?: any;
     peso?: string;
@@ -700,6 +751,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
         datosNutricionales: datosToSave,
       });
 
+      setFirmaGuardada(huellaDe({ talla: tallaToSave, peso: pesoToSave, datos: datosToSave, dx1: mdDx1, dx2: mdDx2 }));
       alert('Historia clínica guardada exitosamente');
     } catch (err: any) {
       setError(err.message || 'Error al guardar historia clínica');

@@ -8,7 +8,8 @@
 // red vive en red.cpp y el servidor en servidor.cpp. Por serie (115200) hay pruebas de una
 // letra: ? diagnóstico, m medidor del micrófono, g graba 5 s y los manda al Mac
 // (tools/placa.py), + / - ganancia del micrófono, t tono por el parlante, l LED,
-// r coordenadas crudas del táctil, f captura de la pantalla.
+// r coordenadas crudas del táctil, f captura de la pantalla, k<cédula> la
+// escribe y oprime OK, T<x>,<y> un toque en ese punto (para probar sin tocar la pantalla).
 #include <Arduino.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
@@ -274,8 +275,7 @@ void drawEmparejar() {
     return;
   }
   lienzo::textoCentrado(F_TITULO, "Vincule este dispositivo", LCD_W / 2, 104, C_TEXT);
-  textoEnVarias(F_ETIQUETA, "En bodytech.app toque «Dispositivo» y escriba este código:", 14, 126, LCD_W - 28, 17,
-                C_MUTED);
+  textoEnVarias(F_ETIQUETA, "En bodytech.app toque «Dispositivo» y escriba:", 14, 126, LCD_W - 28, 17, C_MUTED);
   const Rect &c = CAJA_CODIGO;
   lienzo::fillRoundRect(c.x, c.y, c.w, c.h, RADIO_CAMPO, C_KEY);
   String cod = servidor::codigoParaMostrar();
@@ -417,7 +417,7 @@ void respuestaConsulta(const servidor::Respuesta &r) {
 
 void drawPaciente() {
   lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
-  lienzo::texto(F_ETIQUETA, "Consulta de hoy · CC " + cedula, 14, 22, C_MUTED);
+  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, "Consulta de hoy · CC " + cedula, LCD_W - 28), 14, 22, C_MUTED);
   int base = textoEnVarias(F_TITULO, pacienteNombre, 14, 50, LCD_W - 28, 23, C_TEXT);
   if (pacienteDatos.length()) lienzo::texto(F_ETIQUETA, pacienteDatos, 14, base, C_MUTED);
   int y = base + 14;
@@ -976,9 +976,18 @@ void goTo(Screen s) {
   }
 }
 
+int toqueSimX = -1, toqueSimY = -1;  // un toque pedido por serie (T x,y)
+uint8_t toqueSimFase = 0;             // 1 = poner el dedo, 2 = levantarlo
+
 void tickTactil() {
   int x, y;
   bool abajo = tactil::leer(x, y);
+  if (toqueSimFase) {
+    abajo = toqueSimFase == 1;
+    x = toqueSimX;
+    y = toqueSimY;
+    toqueSimFase = toqueSimFase == 1 ? 2 : 0;
+  }
   if (abajo && logTactil) Serial.printf("[tactil] crudo=%d,%d pantalla=%d,%d\n", tactil::rawX, tactil::rawY, x, y);
   if (abajo && !dedo.abajo) {
     dedo = {true, x, y, x, y, 0, false};
@@ -1091,6 +1100,26 @@ void tickSerie() {
       Serial.printf("[mic] ganancia %d dB\n", audio::micGain());
     } else if (c == 't') tono(1000, 400);
     else if (c == 'f') enviarCaptura();
+    else if (c == 'T') {
+      String xy = Serial.readStringUntil('\n');
+      int coma = xy.indexOf(',');
+      if (coma > 0) {
+        toqueSimX = constrain((int)xy.substring(0, coma).toInt(), 0, LCD_W - 1);
+        toqueSimY = constrain((int)xy.substring(coma + 1).toInt(), 0, LCD_H - 1);
+        toqueSimFase = 1;
+        Serial.printf("[T] toque en %d,%d\n", toqueSimX, toqueSimY);
+      }
+    } else if (c == 'k') {
+      // k<cédula>\n: como si el médico la escribiera y oprimiera OK.
+      String doc = Serial.readStringUntil('\n');
+      doc.trim();
+      if (screen != SCR_CEDULA) {
+        Serial.println("[k] solo desde la pantalla de la cédula");
+      } else {
+        cedula = doc.substring(0, MAX_DIGITOS);
+        pulsarTecla(11);
+      }
+    }
     else if (c == 'r') {
       logTactil = !logTactil;
       Serial.printf("[tactil] registro %s\n", logTactil ? "encendido" : "apagado");

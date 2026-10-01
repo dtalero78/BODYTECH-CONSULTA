@@ -8,6 +8,7 @@ SKETCH=asistente
 
 # El core: la misma version que Pixel (probada con el ESP32-S3).
 CORE_VERSION=3.3.11
+ARDUINOJSON_VERSION=7.4.3
 GFX_URL=https://github.com/moononournation/Arduino_GFX
 GFX_SHA=2685a776495be1f9eaf8c572cf876469bcc56585  # v1.6.8 (la 1.6.4 no compila con el core 3.3)
 BOARDS_URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -20,6 +21,11 @@ if ! arduino-cli core list 2>/dev/null | grep -qE "^esp32:esp32 +$CORE_VERSION "
   echo "Instalando el core esp32 $CORE_VERSION..."
   arduino-cli core update-index --additional-urls "$BOARDS_URL"
   arduino-cli core install "esp32:esp32@$CORE_VERSION" --additional-urls "$BOARDS_URL"
+fi
+
+if ! arduino-cli lib list 2>/dev/null | grep -qE "^ArduinoJson +$ARDUINOJSON_VERSION "; then
+  echo "Instalando ArduinoJson $ARDUINOJSON_VERSION..."
+  arduino-cli lib install "ArduinoJson@$ARDUINOJSON_VERSION"
 fi
 
 # La libreria de pantalla va en vendor/, fijada, y no en las librerias del

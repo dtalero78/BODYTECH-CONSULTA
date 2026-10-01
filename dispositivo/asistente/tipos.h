@@ -3,7 +3,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum Screen { SCR_CEDULA, SCR_CONFIRMA, SCR_REDES, SCR_CLAVE, SCR_CONECTANDO };
+enum Screen { SCR_EMPAREJAR, SCR_CEDULA, SCR_BUSCANDO, SCR_PACIENTE, SCR_GUIA, SCR_REDES, SCR_CLAVE, SCR_CONECTANDO };
 
 struct Rect {
   int x, y, w, h;

@@ -1,14 +1,18 @@
 // Asistente médico de Bodytech para la consulta presencial (UMV presencial y
 // médico corporativo), en la LCDWIKI ES3C28P.
 //
-// Pantallas: la cédula del paciente (logo + teclado + el ícono del WiFi), y la
+// Pantallas: vincular la placa con un médico (un código que él escribe en su
+// panel), la cédula del paciente (logo + teclado + el ícono del WiFi), el
+// paciente con el resumen de su historia, la guía de la consulta, y la
 // configuración del WiFi (lista de redes, teclado de la clave, conectando). La
-// lógica de la red vive en red.cpp. Por serie (115200) hay pruebas de una
+// red vive en red.cpp y el servidor en servidor.cpp. Por serie (115200) hay pruebas de una
 // letra: ? diagnóstico, m medidor del micrófono, g graba 5 s y los manda al Mac
 // (tools/placa.py), + / - ganancia del micrófono, t tono por el parlante, l LED,
 // r coordenadas crudas del táctil, f captura de la pantalla.
 #include <Arduino.h>
 #include <Wire.h>
+#include <ArduinoJson.h>
+#include <vector>
 #include "Arduino_GFX_Library.h"
 #include "pines.h"
 #include "ili9341v.h"
@@ -18,6 +22,7 @@
 #include "tactil.h"
 #include "audio.h"
 #include "red.h"
+#include "servidor.h"
 #include "logo.h"
 
 // ---------- Pantalla ----------
@@ -107,6 +112,8 @@ void barrasSenal(int x, int abajo, int n, uint16_t lleno, uint16_t vacio) {
 
 Screen screen = SCR_CEDULA;
 bool repintar = false;
+uint8_t puntos = 0;  // los puntitos de "Buscando…"
+uint32_t puntosEn = 0;
 Dedo dedo = {};
 void goTo(Screen s);
 
@@ -184,9 +191,11 @@ void pulsarTecla(int i) {
   } else if (esOk(i)) {
     if ((int)cedula.length() < MIN_DIGITOS) aviso = "Faltan dígitos";
     else if (!red::conectada()) aviso = "Sin internet: toque el WiFi arriba";
+    else if (servidor::ocupado()) aviso = "Un momento…";
     else {
       Serial.printf("[cedula] %s\n", cedula.c_str());
-      goTo(SCR_CONFIRMA);
+      servidor::consulta(cedula);
+      goTo(SCR_BUSCANDO);
       return;
     }
   } else if ((int)cedula.length() < MAX_DIGITOS) {
@@ -240,25 +249,265 @@ void tickCedula(uint32_t now) {
   }
 }
 
-// ---------- Pantalla de confirmación (mientras no hay servidor) ----------
+// ---------- Vincular la placa con un médico ----------
 
-const Rect BOTON_VOLVER = {MARGEN, 262, LCD_W - 2 * MARGEN, 44};
+const Rect CAJA_CODIGO = {12, 160, 216, 56};
+const Rect BTN_EMP_WIFI = {12, 270, 216, 40};
+const uint32_t SONDEO_MS = 4000;  // cada cuánto pregunta si ya la vincularon
+uint32_t ultimoSondeo = 0, reintentarCodigoEn = 0, vinculadaEn = 0;
+String estadoVinculo;  // la línea de abajo: "Esperando…", un error
+bool vinculoListo = false;
 
-void drawConfirma() {
-  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
-  drawLogo(LOGO_Y);
-  lienzo::textoCentrado(F_ETIQUETA, "Cédula", LCD_W / 2, 120, C_MUTED);
-  lienzo::textoCentrado(F_CIFRAS, cedula, LCD_W / 2, 158, C_TEXT);
-  lienzo::textoCentrado(F_TEXTO, "Lista para buscar al paciente.", LCD_W / 2, 198, C_TEXT);
-  lienzo::textoCentrado(F_ETIQUETA, "(Todavía sin servidor)", LCD_W / 2, 220, C_MUTED);
-  boton(BOTON_VOLVER, "Nueva cédula", true);
-  flushAll();
+void entrarEmparejar() {
+  vinculoListo = false;
+  estadoVinculo = "";
+  reintentarCodigoEn = 0;
+  goTo(SCR_EMPAREJAR);
 }
 
-void confirmaArriba() {
-  if (dedo.movido > TOQUE_HOLGURA || !BOTON_VOLVER.contiene(dedo.x0, dedo.y0)) return;
-  cedula = "";
+void drawEmparejar() {
+  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
+  drawLogo(LOGO_Y);
+  if (vinculoListo) {
+    lienzo::textoCentrado(F_TITULO, "¡Vinculado!", LCD_W / 2, 140, C_OK);
+    lienzo::textoCentrado(F_TEXTO, lienzo::recortar(F_TEXTO, servidor::medico(), LCD_W - 24), LCD_W / 2, 168, C_TEXT);
+    return;
+  }
+  lienzo::textoCentrado(F_TITULO, "Vincule este dispositivo", LCD_W / 2, 104, C_TEXT);
+  textoEnVarias(F_ETIQUETA, "En bodytech.app toque «Dispositivo» y escriba este código:", 14, 126, LCD_W - 28, 17,
+                C_MUTED);
+  const Rect &c = CAJA_CODIGO;
+  lienzo::fillRoundRect(c.x, c.y, c.w, c.h, RADIO_CAMPO, C_KEY);
+  String cod = servidor::codigoParaMostrar();
+  if (cod.length()) lienzo::textoEnRect(F_CODIGO, cod, c.x, c.y, c.w, c.h, C_TEXT);
+  else lienzo::textoEnRect(F_TEXTO, red::conectada() ? "Pidiendo código…" : "Sin internet", c.x, c.y, c.w, c.h, C_MUTED);
+  String linea = estadoVinculo;
+  bool esError = linea.length() > 0;
+  if (!esError && cod.length()) {
+    int min = max(1, (int)((int32_t)(servidor::codigoVenceEn() - millis()) / 60000) + 1);
+    linea = String("Esperando") + String("...").substring(0, puntos + 1) + " · vence en " + min + " min";
+  }
+  lienzo::textoCentrado(F_ETIQUETA, linea, LCD_W / 2, 242, esError ? C_ERROR : C_MUTED);
+  boton(BTN_EMP_WIFI, "Cambiar de red WiFi", false);
+}
+
+void tickEmparejar(uint32_t now) {
+  if (vinculoListo) {
+    if (pasaron(vinculadaEn, 2500, now)) goTo(SCR_CEDULA);
+    return;
+  }
+  bool hayCodigo = servidor::codigoParaMostrar().length() && !pasaron(servidor::codigoVenceEn(), 0, now);
+  if (red::conectada() && !servidor::ocupado()) {
+    if (!hayCodigo && pasaron(reintentarCodigoEn, 0, now)) {
+      servidor::emparejar();
+      repintar = true;
+    } else if (hayCodigo && pasaron(ultimoSondeo, SONDEO_MS, now)) {
+      ultimoSondeo = now;
+      servidor::reclamar();
+    }
+  }
+  if (pasaron(puntosEn, 600, now)) {
+    puntosEn = now;
+    puntos = (puntos + 1) % 3;
+    repintar = true;
+  }
+  if (repintar) {
+    repintar = false;
+    drawEmparejar();
+    flushAll();
+  }
+}
+
+void emparejarArriba() {
+  if (dedo.movido <= TOQUE_HOLGURA && BTN_EMP_WIFI.contiene(dedo.x0, dedo.y0)) abrirRedes();
+}
+
+void respuestaEmparejamiento(const servidor::Respuesta &r) {
+  if (r.tipo == servidor::P_EMPAREJAR) {
+    estadoVinculo = r.http == 200 ? "" : "No pude pedir el código. Reintento…";
+    if (r.http != 200) reintentarCodigoEn = millis() + 10000;
+  } else if (r.http == 200) {
+    JsonDocument d;
+    deserializeJson(d, r.datos);
+    String estado = d["estado"] | "";
+    if (estado == "listo") {
+      vinculoListo = true;
+      vinculadaEn = millis();
+    } else if (estado == "invalido") {
+      reintentarCodigoEn = 0;  // venció o ya se usó: se pide otro
+      servidor::emparejar();
+    }
+    estadoVinculo = "";
+  } else {
+    estadoVinculo = "Sin respuesta del servidor. Reintento…";
+  }
+  repintar = true;
+}
+
+// ---------- Buscando la cita ----------
+
+void drawBuscando() {
+  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
+  drawLogo(LOGO_Y);
+  lienzo::textoCentrado(F_TEXTO, "Buscando la cita de hoy", LCD_W / 2, 140, C_MUTED);
+  lienzo::textoCentrado(F_CIFRAS, cedula, LCD_W / 2, 182, C_TEXT);
+  for (int i = 0; i < 3; i++) lienzo::fillCircle(LCD_W / 2 - 16 + i * 16, 214, 4, i == puntos ? C_TEXT : C_BORDER);
+}
+
+void tickBuscando(uint32_t now) {
+  if (pasaron(puntosEn, 300, now)) {
+    puntosEn = now;
+    puntos = (puntos + 1) % 3;
+    repintar = true;
+  }
+  if (repintar) {
+    repintar = false;
+    drawBuscando();
+    flushAll();
+  }
+}
+
+// ---------- El paciente ----------
+
+struct Paso {
+  String id, tema, pregunta, pista, nota;
+};
+
+String historiaId, pacienteNombre, pacienteDatos;
+std::vector<String> resumen;
+std::vector<Paso> pasos;
+
+const Rect BTN_INICIAR = {12, 228, 216, 42};
+const Rect BTN_OTRA = {12, 276, 216, 38};
+
+void respuestaConsulta(const servidor::Respuesta &r) {
+  if (r.http == 200) {
+    JsonDocument d;
+    if (deserializeJson(d, r.datos)) {
+      aviso = "Respuesta inesperada del servidor";
+      goTo(SCR_CEDULA);
+      return;
+    }
+    historiaId = d["historiaId"] | "";
+    pacienteNombre = d["paciente"]["nombre"] | "";
+    String partes;
+    if (!d["paciente"]["edad"].isNull()) partes = String(d["paciente"]["edad"].as<int>()) + " años";
+    String genero = d["paciente"]["genero"] | "";
+    if (genero.length()) partes += (partes.length() ? " · " : "") + genero;
+    String hora = d["hora"] | "";
+    if (hora.length()) partes += (partes.length() ? " · " : "") + hora;
+    pacienteDatos = partes;
+    resumen.clear();
+    for (JsonVariant l : d["resumen"]["lineas"].as<JsonArray>()) resumen.push_back(l.as<String>());
+    pasos.clear();
+    for (JsonObject o : d["pasos"].as<JsonArray>())
+      pasos.push_back({o["id"] | "", o["tema"] | "", o["pregunta"] | "", o["pista"] | "", o["nota"] | ""});
+    Serial.printf("[consulta] %s: %s, %d pasos\n", historiaId.c_str(), pacienteNombre.c_str(), (int)pasos.size());
+    goTo(SCR_PACIENTE);
+    return;
+  }
+  // El servidor explica el porqué ("No tiene cita hoy con usted"); si no hubo respuesta, la placa.
+  aviso = r.mensaje.length() ? r.mensaje : String("No pude conectar con el servidor");
+  if (r.http == 401) {
+    entrarEmparejar();  // la desvincularon desde el panel
+    return;
+  }
   goTo(SCR_CEDULA);
+}
+
+void drawPaciente() {
+  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
+  lienzo::texto(F_ETIQUETA, "Consulta de hoy · CC " + cedula, 14, 22, C_MUTED);
+  int base = textoEnVarias(F_TITULO, pacienteNombre, 14, 50, LCD_W - 28, 23, C_TEXT);
+  if (pacienteDatos.length()) lienzo::texto(F_ETIQUETA, pacienteDatos, 14, base, C_MUTED);
+  int y = base + 14;
+  lienzo::fillRect(14, y, LCD_W - 28, 1, C_KEY);
+  y += 22;
+  lienzo::texto(F_ETIQUETA, "Historia", 14, y, C_MUTED);
+  for (size_t i = 0; i < resumen.size() && y + 24 < BTN_INICIAR.y; i++) {
+    y += 22;
+    lienzo::texto(F_TEXTO, lienzo::recortar(F_TEXTO, resumen[i], LCD_W - 28), 14, y, C_TEXT);
+  }
+  boton(BTN_INICIAR, "Iniciar consulta", true);
+  boton(BTN_OTRA, "Otra cédula", false);
+}
+
+void tickPaciente(uint32_t) {
+  if (repintar) {
+    repintar = false;
+    drawPaciente();
+    flushAll();
+  }
+}
+
+int pasoActual = 0;
+
+void pacienteArriba() {
+  if (dedo.movido > TOQUE_HOLGURA) return;
+  if (BTN_INICIAR.contiene(dedo.x0, dedo.y0) && !pasos.empty()) {
+    pasoActual = 0;
+    goTo(SCR_GUIA);
+  } else if (BTN_OTRA.contiene(dedo.x0, dedo.y0)) {
+    cedula = "";
+    aviso = "";
+    goTo(SCR_CEDULA);
+  }
+}
+
+// ---------- La guía de la consulta ----------
+
+const Rect BTN_ANTERIOR = {12, 272, 104, 40};
+const Rect BTN_SIGUIENTE = {124, 272, 104, 40};
+
+void drawGuia() {
+  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
+  const Paso &p = pasos[pasoActual];
+  // Cabecera: paciente y avance.
+  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, pacienteNombre, 170), 14, 20, C_MUTED);
+  String avance = String(pasoActual + 1) + "/" + pasos.size();
+  lienzo::texto(F_ETIQUETA, avance, LCD_W - 14 - lienzo::anchoTexto(F_ETIQUETA, avance), 20, C_MUTED);
+  int lleno = (LCD_W - 28) * (pasoActual + 1) / pasos.size();
+  lienzo::fillRoundRect(14, 28, LCD_W - 28, 4, 2, C_KEY);
+  lienzo::fillRoundRect(14, 28, lleno, 4, 2, C_TEXT);
+  // El tema y la pregunta.
+  lienzo::texto(F_ETIQUETA, p.tema, 14, 56, C_MUTED);
+  int base = textoEnVarias(F_TITULO, p.pregunta, 14, 82, LCD_W - 28, 23, C_TEXT);
+  if (p.pista.length()) base = textoEnVarias(F_ETIQUETA, p.pista, 14, base + 2, LCD_W - 28, 17, C_MUTED);
+  // Lo que ya se sabe del paciente, en una caja aparte.
+  if (p.nota.length() && base + 30 < BTN_ANTERIOR.y) {
+    int y = base + 6;
+    int alto = min(BTN_ANTERIOR.y - 10 - y, 82);
+    lienzo::fillRoundRect(14, y, LCD_W - 28, alto, 8, C_KEY);
+    textoEnVarias(F_ETIQUETA, p.nota, 22, y + 19, LCD_W - 44, 17, C_TEXT);
+  }
+  if (pasoActual > 0) boton(BTN_ANTERIOR, "‹ Anterior", false);
+  boton(BTN_SIGUIENTE, pasoActual + 1 < (int)pasos.size() ? "Siguiente ›" : "Terminar", true);
+}
+
+void tickGuia(uint32_t) {
+  if (repintar) {
+    repintar = false;
+    drawGuia();
+    flushAll();
+  }
+}
+
+void guiaArriba() {
+  if (dedo.movido > TOQUE_HOLGURA) return;
+  if (BTN_ANTERIOR.contiene(dedo.x0, dedo.y0) && pasoActual > 0) {
+    pasoActual--;
+    repintar = true;
+  } else if (BTN_SIGUIENTE.contiene(dedo.x0, dedo.y0)) {
+    if (pasoActual + 1 < (int)pasos.size()) {
+      pasoActual++;
+      repintar = true;
+    } else {
+      // Todavía sin transcripción ni cierre: vuelve a la cédula.
+      cedula = "";
+      aviso = "";
+      goTo(SCR_CEDULA);
+    }
+  }
 }
 
 // ---------- Lista de redes ----------
@@ -273,8 +522,6 @@ const char *AYUDA =
 
 int scrollLista = 0, scrollAlTocar = 0;
 bool arrastrando = false;
-uint8_t puntos = 0;
-uint32_t puntosEn = 0;
 String redElegida;
 bool redAbierta = false;
 
@@ -288,7 +535,8 @@ void abrirRedes() {
 
 void salirDeRedes() {
   red::salirDeConfiguracion();
-  goTo(SCR_CEDULA);
+  if (servidor::vinculado()) goTo(SCR_CEDULA);
+  else entrarEmparejar();
 }
 
 void drawAyuda(int y) {
@@ -725,9 +973,6 @@ void goTo(Screen s) {
   if (s == SCR_CEDULA) {
     repintar = false;
     drawCedula();
-  } else if (s == SCR_CONFIRMA) {
-    repintar = false;
-    drawConfirma();
   }
 }
 
@@ -753,7 +998,10 @@ void tickTactil() {
     dedo.abajo = false;
     switch (screen) {
       case SCR_CEDULA: cedulaArriba(); break;
-      case SCR_CONFIRMA: confirmaArriba(); break;
+      case SCR_EMPAREJAR: emparejarArriba(); break;
+      case SCR_PACIENTE: pacienteArriba(); break;
+      case SCR_GUIA: guiaArriba(); break;
+      case SCR_BUSCANDO: break;
       case SCR_REDES: redesArriba(); break;
       case SCR_CLAVE: claveArriba(); break;
       case SCR_CONECTANDO: conectandoArriba(); break;
@@ -784,6 +1032,8 @@ void diagnostico() {
     Serial.printf("[diag] red=%s ip=%s senal=%d dBm\n", red::ssid().c_str(), red::ip().c_str(), red::rssi());
   else
     Serial.printf("[diag] red=sin conexion guardadas=%d\n", red::hayGuardadas());
+  Serial.printf("[diag] servidor=%s %s\n", servidor::url().c_str(),
+                servidor::vinculado() ? ("vinculado a " + servidor::medico()).c_str() : "sin vincular");
   uint32_t t0 = millis();
   flushAll();
   Serial.printf("[diag] refresco completo: %lu ms\n", millis() - t0);
@@ -873,11 +1123,23 @@ void setup() {
   hayTactil = tactil::begin();
   hayAudio = audio::begin();
   red::begin();
+  servidor::begin();
   Serial.printf("[arranque] tactil=%d audio=%d\n", hayTactil, hayAudio);
 
   // Sin ninguna red guardada no hay nada que hacer: directo a elegir el WiFi.
-  if (red::hayGuardadas()) goTo(SCR_CEDULA);
-  else abrirRedes();
+  // Con red pero sin vincular: el código para el médico.
+  if (!red::hayGuardadas()) abrirRedes();
+  else if (!servidor::vinculado()) entrarEmparejar();
+  else goTo(SCR_CEDULA);
+}
+
+// Las respuestas del servidor llegan acá, sea cual sea la pantalla.
+void alResponder(const servidor::Respuesta &r) {
+  if (r.tipo == servidor::P_CONSULTA) {
+    if (screen == SCR_BUSCANDO) respuestaConsulta(r);
+  } else if (screen == SCR_EMPAREJAR) {
+    respuestaEmparejamiento(r);
+  }
 }
 
 void loop() {
@@ -885,8 +1147,14 @@ void loop() {
   tickSerie();
   red::tick(now);
   tickTactil();
+  servidor::Respuesta r;
+  if (servidor::listo(r)) alResponder(r);
   switch (screen) {
+    case SCR_EMPAREJAR: tickEmparejar(now); break;
     case SCR_CEDULA: tickCedula(now); break;
+    case SCR_BUSCANDO: tickBuscando(now); break;
+    case SCR_PACIENTE: tickPaciente(now); break;
+    case SCR_GUIA: tickGuia(now); break;
     case SCR_REDES: tickRedes(now); break;
     case SCR_CLAVE: tickClave(now); break;
     case SCR_CONECTANDO: tickConectando(now); break;

@@ -15,8 +15,9 @@ MONO = AQUI / "fuentes" / "JetBrainsMono.ttf"
 DESTINO = AQUI.parent / "asistente" / "fuentes.h"
 
 ASCII = "".join(chr(c) for c in range(32, 127))
-LATINO = ASCII + "ÁÉÍÓÚÜÑáéíóúüñ¿¡°·–—“”‘’…‹›"
+LATINO = ASCII + "ÁÉÍÓÚÜÑáéíóúüñ¿¡°·–—“”‘’…‹›«»"
 CIFRAS = "0123456789 ."
+CODIGO = "0123456789ABCDEFGHJKMNPQRSTVWXYZ-"  # el del emparejamiento
 
 # nombre, tipografía, peso, tamaño en px, caracteres
 FUENTES = [
@@ -28,6 +29,7 @@ FUENTES = [
     ("F_CIFRAS", FIGTREE, 600, 32, CIFRAS),
     ("F_CLAVE", MONO, 500, 18, ASCII),
     ("F_LUPA", FIGTREE, 600, 30, ASCII),
+    ("F_CODIGO", MONO, 700, 30, CODIGO),
 ]
 
 

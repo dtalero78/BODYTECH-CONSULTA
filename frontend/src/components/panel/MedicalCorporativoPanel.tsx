@@ -5,6 +5,7 @@ import { EXCEL_VALORACIONES_URL } from '../../config/enlaces';
 import { PatientStrip } from './PatientStrip';
 import { PanelSideNav, type TabDef } from './PanelSideNav';
 import { SaveProvider, useSaveCtx } from './SaveContext';
+import { useAvisoAlCerrar } from '../../hooks/useAvisoAlCerrar';
 import { useMedicalHistory } from './hooks/useMedicalHistory';
 import { useContainerWidth } from './hooks/useContainerWidth';
 import type { MedicalHistoryFull, SaveStatus } from './types';
@@ -145,6 +146,15 @@ function PanelInner({ historiaId }: MedicalCorporativoPanelProps) {
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const yaFinalizada = finalizadaLocal || tieneValor(data?.fechaConsulta);
+  /**
+   * Los campos se guardan solos, pero la cita sólo queda atendida al apretar
+   * "Finalizar consulta" (y es lo que además manda la valoración al Excel y a
+   * la carpeta del afiliado). Cerrar la pestaña se lo salta. Se avisa sólo si
+   * el médico alcanzó a diligenciar algo en esta sesión — `lastSavedAt` del
+   * auto-guardado — para no molestar a quien abre la historia y la cierra.
+   */
+  useAvisoAlCerrar(!yaFinalizada && aggregate.lastSavedAt != null);
+
   const pendientes = tabs.flatMap((t) => t.faltantes ?? []);
   const seccionesIncompletas = tabs.filter((t) => t.detalle.length > 0);
 

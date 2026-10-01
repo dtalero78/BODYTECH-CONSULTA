@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAvisoAlCerrar } from '../hooks/useAvisoAlCerrar';
 import type { VideoEngine } from '../video/video-engine';
 import apiService from '../services/api.service';
 import { PatientHistoryModal } from './PatientHistoryModal';
@@ -691,15 +692,7 @@ export const MedicalHistoryPanel = ({ historiaId, onAppendToObservaciones, room 
   const vacia = huellaDe({ talla: '', peso: '', datos: {}, dx1: '', dx2: '' });
   const haySinGuardar = huellaActual !== vacia && huellaActual !== firmaGuardada;
 
-  useEffect(() => {
-    if (!haySinGuardar) return;
-    const avisar = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', avisar);
-    return () => window.removeEventListener('beforeunload', avisar);
-  }, [haySinGuardar]);
+  useAvisoAlCerrar(haySinGuardar);
 
   const handleSave = async (overrides?: {
     datosNutricionales?: any;

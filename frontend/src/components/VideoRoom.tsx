@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { marcarLlamadaActiva } from '../state/llamadaActiva';
 import { useVideoRoom } from '../hooks/useVideoRoom';
+import { useAvisoAlCerrar } from '../hooks/useAvisoAlCerrar';
 import { useBackgroundEffects } from '../hooks/useBackgroundEffects';
 import { useConsultationRecorder } from '../hooks/useConsultationRecorder';
 import { esNavegadorEmbebido } from '../video/chime-engine';
@@ -156,12 +157,17 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     return () => clearTimeout(t);
   }, [role, isConnected, room]);
 
+  // El médico apretó "Salir": a partir de acá la consulta se está cerrando bien
+  // y el aviso de cerrar la pestaña sobra.
+  const [saliendo, setSaliendo] = useState(false);
+
   const handleLeave = async () => {
     // El médico graba el audio de la consulta en el navegador. Subimos ANTES de
     // desconectar (al desconectar Twilio detiene los tracks que alimentan el
     // grabador). El backend procesa async, así que esto dura básicamente la
     // transferencia. Si falla o el médico cierra la pestaña de golpe, el
     // fallback por composición de Twilio transcribe igual.
+    setSaliendo(true);
     if (role === 'doctor') {
       setIsFinishing(true);
       try {
@@ -193,6 +199,13 @@ export const VideoRoom = ({ identity, roomName, role, historiaId, documento, med
     }
     onLeave?.();
   };
+
+  /**
+   * El "Salir" del médico es lo que cierra la consulta (`finalizarConsulta`) y
+   * sube el audio. Cerrar la pestaña se lo salta: la cita queda en PENDIENTE
+   * aunque el afiliado haya sido atendido. Ver useAvisoAlCerrar.
+   */
+  useAvisoAlCerrar(role === 'doctor' && !!historiaId && !saliendo);
 
   const handleApplyBlur = () => {
     if (localVideoTrack) {

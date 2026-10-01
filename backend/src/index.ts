@@ -25,6 +25,7 @@ import directorioRoutes from './routes/directorio.routes';
 import padronRoutes from './routes/padron.routes';
 import empresasRoutes from './routes/empresas.routes';
 import digitalizarRoutes from './routes/digitalizar.routes';
+import dispositivoRoutes from './routes/dispositivo.routes';
 import panelesRoutes from './routes/paneles.routes';
 import empresasService from './services/empresas.service';
 import padronSyncService from './services/padron-sync.service';
@@ -229,6 +230,9 @@ app.use('/api/empresas', requireRole('admin', 'coordinador', 'medico'), empresas
 // Pantallazos de "Citas asignadas" de MyBodytech → lista de afiliados que el
 // coordinador revisa en MyBodytech. Devuelve nombres, cédulas y teléfonos.
 app.use('/api/digitalizar', requireRole('admin', 'coordinador', 'medico'), digitalizarRoutes);
+// Asistente de escritorio de la consulta presencial: cada sub-ruta trae su
+// candado (placa sin vincular / panel del médico / placa vinculada).
+app.use('/api/dispositivo', dispositivoRoutes);
 // Paneles: la puerta del creador de la plataforma a Consulta, ACC y
 // Prepagadas. Admin, y además solo los correos de SUPERUSUARIOS (dentro del
 // router): desde ahí se piden tokens de las otras apps.

@@ -12,6 +12,7 @@ import apiService from '../services/api.service';
 import authService, { Sede, loginErrorMessage } from '../services/auth.service';
 import { AgendarCitaModal } from '../components/AgendarCitaModal';
 import { CoachHorarioModal } from '../components/CoachHorarioModal';
+import { VincularDispositivoModal } from '../components/VincularDispositivoModal';
 import { AgendaView } from '../components/AgendaView';
 import { WhatsappChatDrawer } from '../components/WhatsappChatDrawer';
 
@@ -369,6 +370,7 @@ export function MedicalPanelPage() {
   const [contactedPatients, setContactedPatients] = useState<Set<string>>(new Set()); // Pacientes que ya fueron contactados
   const [showAgendarModal, setShowAgendarModal] = useState(false);
   const [showHorarioModal, setShowHorarioModal] = useState(false);
+  const [showDispositivoModal, setShowDispositivoModal] = useState(false);
   const [panelView, setPanelView] = useState<'hoy' | 'agenda'>('hoy');
   // Chat de WhatsApp abierto (por celular del paciente).
   const [chatPatient, setChatPatient] = useState<{ celular: string; nombre: string } | null>(null);
@@ -1347,6 +1349,17 @@ export function MedicalPanelPage() {
               )}
               {/* En otra pestaña: el médico sigue atendiendo desde esta lista
                   mientras revisa los afiliados de MyBodytech. */}
+              {/* El asistente de escritorio de la consulta presencial abre
+                  consultas a nombre de un médico: solo el rol médico lo vincula. */}
+              {authService.getUser()?.role === 'medico' && (
+                <button
+                  onClick={() => setShowDispositivoModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                  title="Vincule el asistente de escritorio de la consulta presencial"
+                >
+                  Dispositivo
+                </button>
+              )}
               {puedeDigitalizar && (
                 <button
                   onClick={() => window.open('/digitalizar', 'digitalizar')}
@@ -1846,6 +1859,7 @@ export function MedicalPanelPage() {
         }}
       />
 
+      <VincularDispositivoModal isOpen={showDispositivoModal} onClose={() => setShowDispositivoModal(false)} />
       <CoachHorarioModal
         isOpen={showHorarioModal}
         onClose={() => setShowHorarioModal(false)}

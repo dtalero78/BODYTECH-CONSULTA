@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import axios from 'axios';
 import twilio from 'twilio';
 import { z, ZodError } from 'zod';
 import twilioService from '../services/twilio.service';
@@ -9,7 +8,7 @@ import whatsappService from '../services/whatsapp.service';
 import medicalHistoryService from '../services/medical-history.service';
 import openaiService from '../services/openai.service';
 import postgresService from '../services/postgres.service';
-import transcriptionService from '../services/transcription.service';
+import transcriptionService, { crearTokenRealtime } from '../services/transcription.service';
 import pdfService from '../services/pdf.service';
 import medicalPanelService from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
@@ -1285,39 +1284,7 @@ class VideoController {
    */
   async createRealtimeToken(_req: Request, res: Response): Promise<void> {
     try {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: 'OPENAI_API_KEY no configurada' });
-        return;
-      }
-      const model = 'gpt-4o-mini-transcribe';
-      // API Realtime GA: el token efímero se emite en /v1/realtime/client_secrets
-      // con la sesión de transcripción ya configurada (modelo, idioma, VAD).
-      const resp = await axios.post(
-        'https://api.openai.com/v1/realtime/client_secrets',
-        {
-          session: {
-            type: 'transcription',
-            audio: {
-              input: {
-                transcription: { model, language: 'es' },
-                turn_detection: { type: 'server_vad', silence_duration_ms: 600 },
-              },
-            },
-          },
-        },
-        {
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          timeout: 10_000,
-        }
-      );
-      const data = resp.data as { value?: string; expires_at?: number };
-      const token = data?.value;
-      if (!token) {
-        res.status(502).json({ error: 'OpenAI no devolvió token de sesión' });
-        return;
-      }
-      res.status(200).json({ token, expiresAt: data?.expires_at, model });
+      res.status(200).json(await crearTokenRealtime());
     } catch (error: any) {
       console.error(
         '[Realtime] No se pudo crear la sesión de transcripción:',

@@ -1,0 +1,11 @@
+# Libreria de pantalla: ./subir.sh la descarga fijada
+vendor/
+
+# Copia del firmware de fabrica de la placa: vive solo en este computador
+respaldo/
+
+# Grabaciones de prueba del microfono (pueden tener voces de pacientes)
+grabaciones/
+
+# Clave del WiFi y token del dispositivo
+asistente/secretos.h

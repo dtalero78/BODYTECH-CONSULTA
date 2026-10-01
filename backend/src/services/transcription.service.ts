@@ -255,6 +255,47 @@ function audioFormatFromContentType(contentType: string): { ext: string; mime: s
   return { ext: 'webm', mime: 'audio/webm' };
 }
 
+export interface TokenRealtime {
+  token: string;
+  expiresAt?: number;
+  model: string;
+}
+
+/**
+ * Token efímero de OpenAI para una sesión de transcripción en vivo (español,
+ * con detector de voz del servidor). El cliente —el navegador del panel o el
+ * dispositivo de escritorio— abre el WebSocket directo a OpenAI con él, sin ver
+ * la API key. Vive ~1 min: hay que conectar enseguida. Lanza si OpenAI falla.
+ */
+export async function crearTokenRealtime(): Promise<TokenRealtime> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('OPENAI_API_KEY no configurada');
+  const model = 'gpt-4o-mini-transcribe';
+  // API Realtime GA: el token efímero se emite en /v1/realtime/client_secrets
+  // con la sesión de transcripción ya configurada (modelo, idioma, VAD).
+  const resp = await axios.post(
+    'https://api.openai.com/v1/realtime/client_secrets',
+    {
+      session: {
+        type: 'transcription',
+        audio: {
+          input: {
+            transcription: { model, language: 'es' },
+            turn_detection: { type: 'server_vad', silence_duration_ms: 600 },
+          },
+        },
+      },
+    },
+    {
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      timeout: 10_000,
+    }
+  );
+  const data = resp.data as { value?: string; expires_at?: number };
+  if (!data?.value) throw new Error('OpenAI no devolvió token de sesión');
+  return { token: data.value, expiresAt: data.expires_at, model };
+}
+
 class TranscriptionService {
   /**
    * Vincula un roomName con la historia clínica activa. Idempotente.

@@ -109,6 +109,60 @@ class PostgresService {
   /**
    * Ejecuta migraciones automáticas para crear tablas necesarias
    */
+  /**
+   * Tablas del dispositivo de consulta presencial. Aparte de runMigrations para
+   * que el servidor de pruebas (scripts/dispositivo-local.ts) cree solo esto.
+   */
+  async migrarDispositivo(): Promise<void> {
+    // ----------------------------------------------------------------------
+    // Dispositivo de consulta presencial (dispositivo.service.ts).
+    //
+    // Se empareja como un televisor: la placa pide un código, lo muestra, el
+    // médico lo escribe en su panel y la placa recibe SU token. De los
+    // secretos solo se guarda el hash. Un dispositivo revocado deja de
+    // servir en la siguiente petición.
+    // ----------------------------------------------------------------------
+    await this.query(`
+      CREATE TABLE IF NOT EXISTS dispositivo_emparejamientos (
+        codigo          TEXT PRIMARY KEY,
+        secreto_hash    TEXT NOT NULL,
+        creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        vence_en        TIMESTAMPTZ NOT NULL,
+        usuario_id      INTEGER,
+        confirmado_en   TIMESTAMPTZ,
+        dispositivo_id  BIGINT
+      )
+    `);
+    await this.query(`
+      CREATE TABLE IF NOT EXISTS dispositivos (
+        id              BIGSERIAL PRIMARY KEY,
+        usuario_id      INTEGER NOT NULL,
+        nombre          TEXT NOT NULL DEFAULT 'Asistente de consulta',
+        token_hash      TEXT NOT NULL UNIQUE,
+        creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ultimo_uso_en   TIMESTAMPTZ,
+        revocado_en     TIMESTAMPTZ
+      )
+    `);
+    await this.query(
+      `CREATE INDEX IF NOT EXISTS idx_dispositivos_usuario ON dispositivos (usuario_id)`
+    );
+    // Lo que la placa transcribe, frase por frase y con el paso de la guía en
+    // que se dijo. `seq` lo numera la placa: un reintento no duplica.
+    await this.query(`
+      CREATE TABLE IF NOT EXISTS consulta_segmentos (
+        id              BIGSERIAL PRIMARY KEY,
+        historia_id     TEXT NOT NULL,
+        dispositivo_id  BIGINT NOT NULL,
+        seq             INTEGER NOT NULL,
+        paso            TEXT,
+        texto           TEXT NOT NULL,
+        creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT consulta_segmentos_uq UNIQUE (historia_id, dispositivo_id, seq)
+      )
+    `);
+  }
+
   async runMigrations(): Promise<void> {
     try {
       await this.query(`
@@ -1984,6 +2038,8 @@ class PostgresService {
         `CREATE INDEX IF NOT EXISTS idx_citas_digitalizadas_doc
            ON citas_digitalizadas (numero_id, fecha)`
       );
+
+      await this.migrarDispositivo();
 
       console.log('✅ [PostgreSQL] Migraciones ejecutadas correctamente');
     } catch (error) {

@@ -49,20 +49,24 @@ def guardar_wav(pcm, hz):
     print(f"-> {ruta} ({len(pcm) / 2 / hz:.1f} s)")
 
 
-def guardar_png(rgb565, w, h):
-    """PNG sin dependencias: RGB565 little endian -> RGB de 8 bits."""
+def guardar_png(rgb565, w, h, horizontal=False):
+    """PNG sin dependencias: RGB565 little endian -> RGB de 8 bits. El framebuffer
+    siempre es vertical; si la pantalla estaba en horizontal se gira como se ve
+    (el punto (x, y) horizontal es el píxel (w-1-y, x) del framebuffer)."""
+    ancho, alto = (h, w) if horizontal else (w, h)
     filas = bytearray()
-    for y in range(h):
+    for y in range(alto):
         filas.append(0)  # sin filtro
-        for x in range(w):
-            v = rgb565[2 * (y * w + x)] | (rgb565[2 * (y * w + x) + 1] << 8)
+        for x in range(ancho):
+            i = x * w + (w - 1 - y) if horizontal else y * w + x
+            v = rgb565[2 * i] | (rgb565[2 * i + 1] << 8)
             r, g, b = (v >> 11) & 31, (v >> 5) & 63, v & 31
             filas += bytes(((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)))
 
     def bloque(tipo, datos):
         return struct.pack(">I", len(datos)) + tipo + datos + struct.pack(">I", zlib.crc32(tipo + datos))
 
-    png = b"\x89PNG\r\n\x1a\n" + bloque(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    png = b"\x89PNG\r\n\x1a\n" + bloque(b"IHDR", struct.pack(">IIBBBBB", ancho, alto, 8, 2, 0, 0, 0))
     png += bloque(b"IDAT", zlib.compress(bytes(filas), 9)) + bloque(b"IEND", b"")
     GRABACIONES.mkdir(exist_ok=True)
     n = len(list(GRABACIONES.glob("pantalla_*.png"))) + 1
@@ -87,11 +91,12 @@ def escuchar(s, segundos):
                 buf = buf[nbytes:]
                 fin = time.time() + 1
             elif linea.startswith(b"#FB "):
-                _, w, h = linea.split()
-                w, h = int(w), int(h)
+                partes = linea.split()
+                w, h = int(partes[1]), int(partes[2])
+                horizontal = len(partes) > 3 and partes[3] == b"1"
                 while len(buf) < w * h * 2:
                     buf += s.read(w * h * 2 - len(buf))
-                guardar_png(buf[: w * h * 2], w, h)
+                guardar_png(buf[: w * h * 2], w, h, horizontal)
                 buf = buf[w * h * 2:]
                 fin = time.time() + 1
             elif linea.strip() and linea.strip() != b"#FIN":

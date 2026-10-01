@@ -65,8 +65,11 @@ const uint16_t C_OK = rgb(22, 128, 61);        // #16803d
 const int RADIO_TECLA = 9, RADIO_CAMPO = 11;
 const int TOQUE_HOLGURA = 10;  // px que puede moverse el dedo y seguir siendo un toque
 
-// La librería pide un puntero no constante, pero solo lee la imagen (que vive en la flash).
-void drawLogo(int y) { cv->draw16bitRGBBitmap((LCD_W - LOGO_W) / 2, y, (uint16_t *)LOGO, LOGO_W, LOGO_H); }
+void drawLogo(int y) { lienzo::imagen((lienzo::ancho() - LOGO_W) / 2, y, LOGO_W, LOGO_H, LOGO); }
+
+// Las pantallas de la consulta (paciente y guía) van en horizontal: caben más
+// palabras por línea. La cédula, vincular y el WiFi siguen en vertical.
+const int ANCHO_H = LCD_H, ALTO_H = LCD_W;  // 320 x 240
 
 void boton(const Rect &r, const String &rotulo, bool principal) {
   if (principal) {
@@ -377,8 +380,8 @@ String historiaId, pacienteNombre, pacienteDatos;
 std::vector<String> resumen;
 std::vector<Paso> pasos;
 
-const Rect BTN_INICIAR = {12, 228, 216, 42};
-const Rect BTN_OTRA = {12, 276, 216, 38};
+const Rect BTN_OTRA = {12, 190, 132, 40};
+const Rect BTN_INICIAR = {152, 190, 156, 40};
 
 void respuestaConsulta(const servidor::Respuesta &r) {
   if (r.http == 200) {
@@ -416,20 +419,20 @@ void respuestaConsulta(const servidor::Respuesta &r) {
 }
 
 void drawPaciente() {
-  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
-  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, "Consulta de hoy · CC " + cedula, LCD_W - 28), 14, 22, C_MUTED);
-  int base = textoEnVarias(F_TITULO, pacienteNombre, 14, 50, LCD_W - 28, 23, C_TEXT);
+  lienzo::fillRect(0, 0, ANCHO_H, ALTO_H, C_BG);
+  lienzo::texto(F_ETIQUETA, "Consulta de hoy · CC " + cedula, 14, 22, C_MUTED);
+  int base = textoEnVarias(F_TITULO, pacienteNombre, 14, 48, ANCHO_H - 28, 23, C_TEXT);
   if (pacienteDatos.length()) lienzo::texto(F_ETIQUETA, pacienteDatos, 14, base, C_MUTED);
-  int y = base + 14;
-  lienzo::fillRect(14, y, LCD_W - 28, 1, C_KEY);
-  y += 22;
+  int y = base + 12;
+  lienzo::fillRect(14, y, ANCHO_H - 28, 1, C_KEY);
+  y += 20;
   lienzo::texto(F_ETIQUETA, "Historia", 14, y, C_MUTED);
-  for (size_t i = 0; i < resumen.size() && y + 24 < BTN_INICIAR.y; i++) {
-    y += 22;
-    lienzo::texto(F_TEXTO, lienzo::recortar(F_TEXTO, resumen[i], LCD_W - 28), 14, y, C_TEXT);
+  for (size_t i = 0; i < resumen.size() && y + 26 < BTN_INICIAR.y; i++) {
+    y += 21;
+    lienzo::texto(F_TEXTO, lienzo::recortar(F_TEXTO, resumen[i], ANCHO_H - 28), 14, y, C_TEXT);
   }
-  boton(BTN_INICIAR, "Iniciar consulta", true);
   boton(BTN_OTRA, "Otra cédula", false);
+  boton(BTN_INICIAR, "Iniciar consulta", true);
 }
 
 void tickPaciente(uint32_t) {
@@ -456,29 +459,30 @@ void pacienteArriba() {
 
 // ---------- La guía de la consulta ----------
 
-const Rect BTN_ANTERIOR = {12, 272, 104, 40};
-const Rect BTN_SIGUIENTE = {124, 272, 104, 40};
+const Rect BTN_ANTERIOR = {12, 192, 132, 40};
+const Rect BTN_SIGUIENTE = {176, 192, 132, 40};
 
 void drawGuia() {
-  lienzo::fillRect(0, 0, LCD_W, LCD_H, C_BG);
+  lienzo::fillRect(0, 0, ANCHO_H, ALTO_H, C_BG);
   const Paso &p = pasos[pasoActual];
   // Cabecera: paciente y avance.
-  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, pacienteNombre, 170), 14, 20, C_MUTED);
   String avance = String(pasoActual + 1) + "/" + pasos.size();
-  lienzo::texto(F_ETIQUETA, avance, LCD_W - 14 - lienzo::anchoTexto(F_ETIQUETA, avance), 20, C_MUTED);
-  int lleno = (LCD_W - 28) * (pasoActual + 1) / pasos.size();
-  lienzo::fillRoundRect(14, 28, LCD_W - 28, 4, 2, C_KEY);
+  int anchoAvance = lienzo::anchoTexto(F_ETIQUETA, avance);
+  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, pacienteNombre, ANCHO_H - 40 - anchoAvance), 14, 20, C_MUTED);
+  lienzo::texto(F_ETIQUETA, avance, ANCHO_H - 14 - anchoAvance, 20, C_MUTED);
+  int lleno = (ANCHO_H - 28) * (pasoActual + 1) / pasos.size();
+  lienzo::fillRoundRect(14, 28, ANCHO_H - 28, 4, 2, C_KEY);
   lienzo::fillRoundRect(14, 28, lleno, 4, 2, C_TEXT);
   // El tema y la pregunta.
-  lienzo::texto(F_ETIQUETA, p.tema, 14, 56, C_MUTED);
-  int base = textoEnVarias(F_TITULO, p.pregunta, 14, 82, LCD_W - 28, 23, C_TEXT);
-  if (p.pista.length()) base = textoEnVarias(F_ETIQUETA, p.pista, 14, base + 2, LCD_W - 28, 17, C_MUTED);
+  lienzo::texto(F_ETIQUETA, p.tema, 14, 52, C_MUTED);
+  int base = textoEnVarias(F_TITULO, p.pregunta, 14, 76, ANCHO_H - 28, 23, C_TEXT);
+  if (p.pista.length()) base = textoEnVarias(F_ETIQUETA, p.pista, 14, base + 2, ANCHO_H - 28, 17, C_MUTED);
   // Lo que ya se sabe del paciente, en una caja aparte.
-  if (p.nota.length() && base + 30 < BTN_ANTERIOR.y) {
-    int y = base + 6;
-    int alto = min(BTN_ANTERIOR.y - 10 - y, 82);
-    lienzo::fillRoundRect(14, y, LCD_W - 28, alto, 8, C_KEY);
-    textoEnVarias(F_ETIQUETA, p.nota, 22, y + 19, LCD_W - 44, 17, C_TEXT);
+  if (p.nota.length() && base + 26 < BTN_ANTERIOR.y) {
+    int y = base + 4;
+    int alto = min(BTN_ANTERIOR.y - 8 - y, 64);
+    lienzo::fillRoundRect(14, y, ANCHO_H - 28, alto, 8, C_KEY);
+    textoEnVarias(F_ETIQUETA, p.nota, 22, y + 19, ANCHO_H - 44, 17, C_TEXT);
   }
   if (pasoActual > 0) boton(BTN_ANTERIOR, "‹ Anterior", false);
   boton(BTN_SIGUIENTE, pasoActual + 1 < (int)pasos.size() ? "Siguiente ›" : "Terminar", true);
@@ -970,6 +974,7 @@ bool logTactil = false;
 void goTo(Screen s) {
   screen = s;
   repintar = true;
+  lienzo::orientacion(s == SCR_PACIENTE || s == SCR_GUIA);
   if (s == SCR_CEDULA) {
     repintar = false;
     drawCedula();
@@ -982,7 +987,8 @@ uint8_t toqueSimFase = 0;             // 1 = poner el dedo, 2 = levantarlo
 void tickTactil() {
   int x, y;
   bool abajo = tactil::leer(x, y);
-  if (toqueSimFase) {
+  if (abajo) lienzo::fisicoALogico(x, y);
+  if (toqueSimFase) {  // ya viene en coordenadas de la pantalla actual
     abajo = toqueSimFase == 1;
     x = toqueSimX;
     y = toqueSimY;
@@ -1072,9 +1078,10 @@ void grabarYEnviar(int segundos) {
   free(pcm);
 }
 
-// Manda el lienzo tal cual: "#FB <ancho> <alto>\n" + RGB565 (little endian) + "\n#FIN\n".
+// Manda el framebuffer tal cual: "#FB <ancho> <alto> <horizontal>\n" + RGB565
+// (little endian) + "\n#FIN\n". Con horizontal = 1, el Mac lo gira como se ve.
 void enviarCaptura() {
-  Serial.printf("#FB %d %d\n", LCD_W, LCD_H);
+  Serial.printf("#FB %d %d %d\n", LCD_W, LCD_H, lienzo::horizontal() ? 1 : 0);
   Serial.write((const uint8_t *)cv->getFramebuffer(), LCD_W * LCD_H * 2);
   Serial.print("\n#FIN\n");
 }
@@ -1104,8 +1111,8 @@ void tickSerie() {
       String xy = Serial.readStringUntil('\n');
       int coma = xy.indexOf(',');
       if (coma > 0) {
-        toqueSimX = constrain((int)xy.substring(0, coma).toInt(), 0, LCD_W - 1);
-        toqueSimY = constrain((int)xy.substring(coma + 1).toInt(), 0, LCD_H - 1);
+        toqueSimX = constrain((int)xy.substring(0, coma).toInt(), 0, lienzo::ancho() - 1);
+        toqueSimY = constrain((int)xy.substring(coma + 1).toInt(), 0, lienzo::alto() - 1);
         toqueSimFase = 1;
         Serial.printf("[T] toque en %d,%d\n", toqueSimX, toqueSimY);
       }

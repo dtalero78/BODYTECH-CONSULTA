@@ -3,18 +3,43 @@
 namespace lienzo {
 
 static uint16_t *fb = nullptr;
-static int W = 0, H = 0;
+static int FW = 0, FH = 0;  // el framebuffer, siempre vertical (como lo recorre el panel)
+static int W = 0, H = 0;    // lo que ven las pantallas: vertical u horizontal
+static bool horiz = false;
 
 void begin(uint16_t *framebuffer, int w, int h) {
   fb = framebuffer;
-  W = w;
-  H = h;
+  FW = W = w;
+  FH = H = h;
+  horiz = false;
 }
+
+// Horizontal = la placa girada 90° a la izquierda: el borde derecho de la
+// vertical queda arriba. El punto (x, y) de la pantalla horizontal es el
+// píxel (FW-1-y, x) del framebuffer.
+void orientacion(bool horizontal) {
+  horiz = horizontal;
+  W = horiz ? FH : FW;
+  H = horiz ? FW : FH;
+}
+
+bool horizontal() { return horiz; }
+int ancho() { return W; }
+int alto() { return H; }
+
+void fisicoALogico(int &x, int &y) {
+  if (!horiz) return;
+  int px = x, py = y;
+  x = py;
+  y = FW - 1 - px;
+}
+
+static inline uint16_t &pixel(int x, int y) { return horiz ? fb[x * FW + (FW - 1 - y)] : fb[y * FW + x]; }
 
 // a: 0 (todo fondo) .. 255 (todo color)
 static inline void mezclar(int x, int y, uint16_t c, int a) {
   if (a <= 0 || x < 0 || y < 0 || x >= W || y >= H) return;
-  uint16_t &p = fb[y * W + x];
+  uint16_t &p = pixel(x, y);
   if (a >= 255) {
     p = c;
     return;
@@ -28,7 +53,18 @@ static inline void mezclar(int x, int y, uint16_t c, int a) {
 void fillRect(int x, int y, int w, int h, uint16_t c) {
   int x0 = max(0, x), y0 = max(0, y), x1 = min(W, x + w), y1 = min(H, y + h);
   for (int yy = y0; yy < y1; yy++)
-    for (int xx = x0; xx < x1; xx++) fb[yy * W + xx] = c;
+    for (int xx = x0; xx < x1; xx++) pixel(xx, yy) = c;
+}
+
+void imagen(int x, int y, int w, int h, const uint16_t *datos) {
+  for (int yy = 0; yy < h; yy++) {
+    int py = y + yy;
+    if (py < 0 || py >= H) continue;
+    for (int xx = 0; xx < w; xx++) {
+      int px = x + xx;
+      if (px >= 0 && px < W) pixel(px, py) = datos[yy * w + xx];
+    }
+  }
 }
 
 // Cuánto del píxel (px, py) cae dentro del rectángulo redondeado (0..1).

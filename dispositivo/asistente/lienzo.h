@@ -22,6 +22,16 @@ struct Fuente {
 namespace lienzo {
 
 void begin(uint16_t *fb, int w, int h);
+// Las pantallas de la consulta van en horizontal (320x240) sobre el mismo
+// framebuffer vertical: el lienzo traduce cada punto. El panel no se toca.
+void orientacion(bool horizontal);
+bool horizontal();
+int ancho();
+int alto();
+// Un toque del táctil (siempre vertical) a coordenadas de la pantalla actual.
+void fisicoALogico(int &x, int &y);
+// Copia una imagen RGB565 (el logo) en (x, y).
+void imagen(int x, int y, int w, int h, const uint16_t *datos);
 void fillRect(int x, int y, int w, int h, uint16_t c);
 void fillRoundRect(int x, int y, int w, int h, float r, uint16_t c);
 void strokeRoundRect(int x, int y, int w, int h, float r, int grosor, uint16_t c);

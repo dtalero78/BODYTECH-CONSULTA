@@ -3,7 +3,7 @@
 // mal armada le dice al paciente que su consulta es otro día.
 // ============================================================================
 
-import { esCitaUmv, formatFechaCita, textoLinkUmv } from '../unidad-envio.helper';
+import { esCitaUmv, formatFechaCita, textoLinkUmv, requiereListaDePrueba } from '../unidad-envio.helper';
 
 describe('esCitaUmv', () => {
   it('la UMV son las citas de MyBodytech y las pocas marcadas umv', () => {
@@ -41,5 +41,20 @@ describe('textoLinkUmv', () => {
     expect(t).toContain('📅 Fecha: viernes 25 de septiembre\n🕐 Hora: 09:00 a. m.');
     expect(t).toContain('¡Te esperamos!\nUnidad Médica Virtual');
     expect(t.endsWith('Contáctame: https://x/y')).toBe(true);
+  });
+});
+
+describe('requiereListaDePrueba (modo pruebas de la UMV)', () => {
+  it('la orden de MyBodytech (afiliado real) exige estar en la lista', () => {
+    expect(requiereListaDePrueba('mybodytech')).toBe(true);
+    expect(requiereListaDePrueba(' MyBodytech ')).toBe(true);
+  });
+  it('la cita creada en el panel de la evaluadora (umv) entra con cualquier celular', () => {
+    expect(requiereListaDePrueba('umv')).toBe(false);
+  });
+  it('Trepsi, nativa y corporativo no tienen nada que ver', () => {
+    expect(requiereListaDePrueba('trepsi')).toBe(false);
+    expect(requiereListaDePrueba('nativa')).toBe(false);
+    expect(requiereListaDePrueba(null)).toBe(false);
   });
 });

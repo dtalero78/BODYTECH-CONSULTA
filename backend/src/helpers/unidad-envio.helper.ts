@@ -21,6 +21,19 @@ export function esCitaUmv(origen: string | null | undefined): boolean {
   return o === 'umv' || o === 'mybodytech';
 }
 
+/**
+ * ¿Esta cita está sujeta a la lista de prueba (`UMV_SOLO_CELULARES`)?
+ *
+ * Solo las que llegan de MyBodytech (`origen = 'mybodytech'`): son afiliados
+ * reales, y mientras la UMV esté en pruebas no se les escribe. La cita que crea
+ * la evaluadora desde su panel ("Agendar Cita", `origen = 'umv'`) entra al flujo
+ * normal con cualquier celular, para que el equipo pueda probar con distintas
+ * personas (Daniel, 1-oct-2026).
+ */
+export function requiereListaDePrueba(origen: string | null | undefined): boolean {
+  return (origen || '').trim().toLowerCase() === 'mybodytech';
+}
+
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',

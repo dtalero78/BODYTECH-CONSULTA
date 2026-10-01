@@ -407,16 +407,18 @@ class LinkAutoService {
       extra += `\n  AND h."_id" = $${params.length}`;
     }
     // MODO PRUEBAS DE LA UMV (29-sep-2026: "no debe haber envío de mensajes
-    // todavía real"): la cita de la UMV (origen umv/mybodytech) solo entra si su
-    // celular está en UMV_SOLO_CELULARES. Hasta hoy los afiliados reales de
-    // MyBodytech recibían el recordatorio y el link genéricos (de nutrición) para
-    // citas que nadie atiende por la plataforma. Lista vacía = ninguna; '*' =
-    // todas. `enviarLinkPaciente`/`enviarRecordatorioPaciente` repiten el
+    // todavía real"): la cita que llega de MyBodytech (origen mybodytech) solo
+    // entra si su celular está en UMV_SOLO_CELULARES. La que crea la evaluadora
+    // en su panel (origen umv) entra siempre, para probar con distintas
+    // personas (1-oct-2026); ver requiereListaDePrueba. Hasta el 29-sep los
+    // afiliados reales de MyBodytech recibían el recordatorio y el link genéricos
+    // (de nutrición) para citas que nadie atiende por la plataforma. Lista
+    // vacía = ninguna; '*' = todas. `enviarLinkPaciente`/`enviarRecordatorioPaciente` repiten el
     // chequeo, pero filtrar acá evita reclamar filas que nunca van a salir.
     const umvCelulares = celularesUmvParaSql();
     if (umvCelulares !== '*') {
       params.push(umvCelulares);
-      extra += `\n  AND NOT (LOWER(COALESCE(h."origen", '')) IN ('umv', 'mybodytech')
+      extra += `\n  AND NOT (LOWER(COALESCE(h."origen", '')) = 'mybodytech'
                AND NOT (right(regexp_replace(COALESCE(h."celular", ''), '[^0-9]', '', 'g'), 10) = ANY($${params.length}::text[])))`;
     }
 

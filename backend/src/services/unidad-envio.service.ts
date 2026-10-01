@@ -4,7 +4,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
-import { esCitaUmv, formatFechaCita } from '../helpers/unidad-envio.helper';
+import { esCitaUmv, formatFechaCita, requiereListaDePrueba } from '../helpers/unidad-envio.helper';
 import { celularHabilitadoUmv } from '../helpers/agenda-umv.helper';
 
 export interface EnvioUmv {
@@ -38,9 +38,10 @@ export async function envioUmvParaHistoria(
     if (rows === null) throw new Error('la base no respondió');
     const fila = rows[0];
     if (!fila || !esCitaUmv(fila.origen)) return null;
-    // Modo pruebas: la plantilla nueva solo a los celulares de la lista; el
-    // resto de la UMV recibe la de siempre, como hasta hoy.
-    if (!celularHabilitadoUmv(fila.celular)) return null;
+    // Modo pruebas: a la cita de MyBodytech solo con celular de la lista (las
+    // demás ni reciben mensaje: bloqueadoPorPruebasUmv). La creada en el panel
+    // de la evaluadora (origen umv) recibe la de la UMV con cualquier celular.
+    if (requiereListaDePrueba(fila.origen) && !celularHabilitadoUmv(fila.celular)) return null;
     const fecha = formatFechaCita(fila.fecha_bogota);
     if (!fecha) return null;
     return { templateSid, fecha };
@@ -54,8 +55,10 @@ export async function envioUmvParaHistoria(
  * MODO PRUEBAS DE LA UMV (Daniel, 29-sep-2026: "todo lo que se está haciendo
  * ahorita son pruebas. No debe haber envío de mensajes todavía real").
  *
- * `true` = a esta cita NO se le escribe: es de la UMV (origen umv/mybodytech) y
- * su celular no está en `UMV_SOLO_CELULARES`. Lo consultan el link (automático
+ * `true` = a esta cita NO se le escribe: llegó de MyBodytech (afiliado real) y
+ * su celular no está en `UMV_SOLO_CELULARES`. La que crea la evaluadora en su
+ * panel (origen umv) pasa con cualquier celular: es como el equipo prueba con
+ * distintas personas (1-oct-2026). Lo consultan el link (automático
  * y "Contactar"), el recordatorio y la confirmación de reprogramada. Las citas
  * que no son de la UMV (Trepsi, corporativo, nativa) no se tocan.
  *
@@ -73,7 +76,8 @@ export async function bloqueadoPorPruebasUmv(historiaId: string | null | undefin
     if (rows === null) throw new Error('la base no respondió');
     const fila = rows[0];
     if (!fila || !esCitaUmv(fila.origen)) return false;
-    return !celularHabilitadoUmv(fila.celular);
+    // Solo los afiliados de MyBodytech: la cita creada en el panel pasa.
+    return requiereListaDePrueba(fila.origen) && !celularHabilitadoUmv(fila.celular);
   } catch (e: any) {
     console.warn(`⚠️ [umv] No se pudo verificar el modo pruebas de ${historiaId} (${e?.message ?? e})`);
     return false;

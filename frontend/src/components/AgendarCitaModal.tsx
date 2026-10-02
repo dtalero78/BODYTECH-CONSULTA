@@ -102,6 +102,12 @@ export function AgendarCitaModal({
   const [origen, setOrigen] = useState<OrigenAgendable>('nativa');
   const [origenTocado, setOrigenTocado] = useState(false);
 
+  // UMV: por defecto la persona elige su hora por WhatsApp, igual que una
+  // orden de MyBodytech (bienvenida → /agendar → confirmación). Apagado, se
+  // agenda con fecha y hora como siempre.
+  const [eligePorWhatsapp, setEligePorWhatsapp] = useState(true);
+  const porWhatsapp = origen === 'umv' && eligePorWhatsapp;
+
   // Reset al abrir (false → true).
   useEffect(() => {
     if (open) {
@@ -116,6 +122,7 @@ export function AgendarCitaModal({
       setSlotsLoaded(false);
       setOrigen('nativa');
       setOrigenTocado(false);
+      setEligePorWhatsapp(true);
     }
   }, [open, medicoCode]);
 
@@ -235,17 +242,43 @@ export function AgendarCitaModal({
       return;
     }
 
-    const required: Array<keyof FormState> = [
-      'primerNombre',
-      'primerApellido',
-      'numeroId',
-      'celular',
-      'fechaAtencion',
-      'horaAtencion',
-    ];
+    const required: Array<keyof FormState> = porWhatsapp
+      ? ['primerNombre', 'primerApellido', 'numeroId', 'celular']
+      : ['primerNombre', 'primerApellido', 'numeroId', 'celular', 'fechaAtencion', 'horaAtencion'];
     const missing = required.some((k) => !String(form[k] ?? '').trim());
     if (missing) {
-      setError('Completa los campos obligatorios (incluida la hora)');
+      setError(porWhatsapp ? 'Completa los campos obligatorios' : 'Completa los campos obligatorios (incluida la hora)');
+      return;
+    }
+
+    if (porWhatsapp) {
+      setSubmitting(true);
+      try {
+        const r = await medicalPanelService.crearOrdenPorAgendar({
+          numeroId: form.numeroId.trim(),
+          primerNombre: form.primerNombre.trim(),
+          segundoNombre: form.segundoNombre.trim() || undefined,
+          primerApellido: form.primerApellido.trim(),
+          segundoApellido: form.segundoApellido.trim() || undefined,
+          celular: form.celular.trim(),
+          medico: selectedMedico,
+        });
+        const nombre = form.primerNombre.trim();
+        const aviso =
+          r.invitacion === 'enviada'
+            ? `✅ Le enviamos a ${nombre} el WhatsApp para que agende su consulta. La cita aparecerá en la lista cuando elija su hora.`
+            : r.invitacion === 'programada'
+              ? `🕖 Orden creada. El WhatsApp para agendar le llega a ${nombre} a las 7:00 a. m.`
+              : `⚠️ La orden quedó creada, pero el WhatsApp no salió todavía; se reintenta en unos minutos.`;
+        onSuccess();
+        onClose();
+        window.alert(aviso);
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err?.response?.data?.error || 'No se pudo crear la orden';
+        setError(typeof msg === 'string' ? msg : 'No se pudo crear la orden');
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
 
@@ -481,6 +514,26 @@ export function AgendarCitaModal({
               </select>
             </div>
 
+            {/* UMV: que la persona elija su hora por WhatsApp (flujo de MyBodytech). */}
+            {origen === 'umv' && (
+              <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-[#00a884]/40 bg-[#00a884]/10 px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={eligePorWhatsapp}
+                  onChange={(e) => setEligePorWhatsapp(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#00a884]"
+                />
+                <span className="text-sm text-gray-200">
+                  <span className="font-medium">La persona elige su hora por WhatsApp</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">
+                    Le llega la bienvenida de la Unidad Médica Virtual con el botón "Agendar mi
+                    consulta", elige su hora y recibe la confirmación. Desmárcalo para agendar tú
+                    la fecha y la hora.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {/* Tipo de examen */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -516,6 +569,8 @@ export function AgendarCitaModal({
               />
             </div>
 
+            {!porWhatsapp && (
+              <>
             {/* Modalidad */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -620,6 +675,8 @@ export function AgendarCitaModal({
                 </>
               ) : null}
             </div>
+              </>
+            )}
           </div>
 
           {/* Error banner */}
@@ -646,8 +703,10 @@ export function AgendarCitaModal({
               {submitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Agendando...
+                  {porWhatsapp ? 'Enviando...' : 'Agendando...'}
                 </>
+              ) : porWhatsapp ? (
+                'Enviar WhatsApp para agendar'
               ) : (
                 'Agendar Cita'
               )}

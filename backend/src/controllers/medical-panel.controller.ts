@@ -7,6 +7,8 @@ import medicalPanelService, {
   ORIGENES_AGENDABLES,
 } from '../services/medical-panel.service';
 import calendarioService from '../services/calendario.service';
+import { agendaUmvActiva } from '../helpers/agenda-umv.helper';
+import { formatCelularE164 } from '../services/link-paciente.service';
 import disponibilidadService from '../services/disponibilidad.service';
 import profesionalesService from '../services/profesionales.service';
 import { getSession, canActOnSede, effectiveSedes } from '../middleware/rbac.middleware';
@@ -81,6 +83,18 @@ const ordenIdParamsSchema = z.object({
 
 const fechaAtencionRegex = /^\d{4}-\d{2}-\d{2}$/;
 const horaAtencionRegex = /^\d{2}:\d{2}$/;
+
+// Orden UMV "que el afiliado agende" desde el formulario de Agendar Cita: sin
+// fecha ni hora — las elige la persona en /agendar, como con MyBodytech.
+const ordenPorAgendarSchema = z.object({
+  numeroId: z.string().trim().min(3),
+  primerNombre: z.string().trim().min(1),
+  segundoNombre: z.string().trim().optional(),
+  primerApellido: z.string().trim().min(1),
+  segundoApellido: z.string().trim().optional(),
+  celular: z.string().trim().min(7),
+  medico: z.string().trim().min(1),
+});
 
 const createOrdenSchema = z.object({
   primerNombre: z.string().min(1),
@@ -474,6 +488,61 @@ class MedicalPanelController {
   /**
    * POST /ordenes — crea una nueva orden
    */
+  /**
+   * POST /api/medical-panel/ordenes/por-agendar — la evaluadora (o la
+   * coordinación) crea una orden de la UMV y la persona recibe la MISMA
+   * bienvenida de una orden de MyBodytech: elige su hora y le llega la
+   * confirmación (pedido de Daniel, 2-oct-2026). Ver agenda-umv.service.
+   */
+  async crearOrdenPorAgendar(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const parsed = ordenPorAgendarSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return validationResponse(res, parsed.error);
+    }
+    const data = parsed.data;
+    // Mismo candado que "Agendar Cita": el clínico solo crea a su nombre.
+    const medico = ownCodeOrParam(req, data.medico);
+    if (medico === SIN_PROFESIONAL) {
+      res.status(400).json({
+        success: false,
+        error: 'SIN_PROFESIONAL',
+        message: 'Tu usuario no tiene un profesional vinculado; pide que lo asocien para poder agendar.',
+      });
+      return;
+    }
+    if (!agendaUmvActiva()) {
+      res.status(503).json({
+        success: false,
+        error: 'AGENDA_UMV_APAGADA',
+        message: 'El agendamiento por WhatsApp de la UMV no está activo en este ambiente.',
+      });
+      return;
+    }
+    if (!formatCelularE164(data.celular)) {
+      res.status(400).json({ success: false, error: 'CELULAR_INVALIDO', message: 'El celular no tiene un formato válido.' });
+      return;
+    }
+    try {
+      // Import perezoso: el servicio arrastra el cliente de Twilio.
+      const { default: agendaUmvService } = await import('../services/agenda-umv.service');
+      const r = await agendaUmvService.registrarDesdePanel({
+        afiliado: {
+          numeroId: data.numeroId,
+          primerNombre: data.primerNombre,
+          segundoNombre: data.segundoNombre || undefined,
+          primerApellido: data.primerApellido,
+          segundoApellido: data.segundoApellido || undefined,
+          celular: data.celular,
+        },
+        medico,
+        creadoPor: getSession(req)?.email ?? null,
+      });
+      res.status(201).json({ success: true, invitacion: r.invitacion });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async createOrden(req: Request, res: Response, next: NextFunction): Promise<void> {
     const parsed = createOrdenSchema.safeParse(req.body);
     if (!parsed.success) {

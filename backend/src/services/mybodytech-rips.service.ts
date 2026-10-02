@@ -106,7 +106,11 @@ class MybodytechRipsService {
 
     const rows = await postgresService.query(
       `SELECT evento_id, user_document_type, user_document_number
-         FROM mybodytech_afiliados WHERE historia_id = $1`,
+         FROM mybodytech_afiliados
+        WHERE historia_id = $1
+          -- La orden creada en el panel (fuente='panel') no es de MyBodytech:
+          -- su RIPS no existe allá y mandarlo sería ruido en su sistema.
+          AND COALESCE(fuente, 'mybodytech') = 'mybodytech'`,
       [historiaId]
     );
     if (!rows || rows.length === 0) return { sent: false, reason: 'NOT_MYBODYTECH' };

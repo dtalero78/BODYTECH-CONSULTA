@@ -88,6 +88,16 @@ function addDias(fecha: string, n: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/**
+ * ¿La orden la creó la evaluadora en su panel ("Agendar Cita", 2-oct-2026)?
+ * Esas no son de MyBodytech: el modo pruebas no las bloquea (el equipo las usa
+ * para probar con cualquier persona) y la cita nace con origen 'umv'.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function esPanel(row: any): boolean {
+  return row?.fuente === 'panel';
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function payloadDe(row: any): CreateAfiliadoInput | null {
   const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
@@ -95,7 +105,8 @@ function payloadDe(row: any): CreateAfiliadoInput | null {
 }
 
 class AgendaUmvService {
-  private cacheCupos: { at: number; dias: DiaCupos[] } | null = null;
+  /** Por profesional preferido ('' = solo el equipo): una orden del panel suma a quien la creó. */
+  private cacheCupos = new Map<string, { at: number; dias: DiaCupos[] }>();
 
   // --------------------------------------------------------------------------
   // 1) La orden entra
@@ -163,6 +174,53 @@ class AgendaUmvService {
     };
   }
 
+  /**
+   * La orden que crea la evaluadora (o la coordinación) en "Agendar Cita" con
+   * departamento UMV: el mismo flujo que una de MyBodytech — bienvenida con el
+   * botón, el afiliado elige su hora, confirmación — para poder probarlo con
+   * cualquier persona (Daniel, 2-oct-2026). No pasa por MyBodytech ni por su
+   * RIPS (`fuente='panel'`), y la cita nace con origen 'umv'.
+   *
+   * Devuelve qué pasó con la bienvenida, para que el formulario lo diga.
+   */
+  async registrarDesdePanel(p: {
+    afiliado: {
+      numeroId: string;
+      primerNombre: string;
+      segundoNombre?: string;
+      primerApellido: string;
+      segundoApellido?: string;
+      celular: string;
+    };
+    /** Código del profesional elegido en el formulario: si tiene el cupo libre, la cita es suya. */
+    medico: string;
+    creadoPor?: string | null;
+  }): Promise<{ eventoId: string; invitacion: 'enviada' | 'programada' | 'error' | 'sin_celular' | 'omitida' }> {
+    const eventoId = `panel_${crypto.randomUUID()}`;
+    const historiaId = `umv_${crypto.randomBytes(12).toString('hex')}`;
+    const token = crypto.randomBytes(18).toString('base64url');
+    const payload = {
+      eventoId,
+      creadoPor: p.creadoPor ?? null,
+      afiliado: { ...p.afiliado, tipoDocumento: 'CC', fechaNacimiento: null },
+    };
+
+    const rows = await postgresService.query(
+      `INSERT INTO mybodytech_afiliados (
+         evento_id, historia_id, numero_id, estado, payload,
+         agenda_estado, agenda_token, invitacion_estado, fuente, medico_preferido
+       ) VALUES ($1, $2, $3, 'panel', $4, 'por_agendar', $5, 'pendiente', 'panel', $6)
+       RETURNING evento_id`,
+      [eventoId, historiaId, p.afiliado.numeroId, JSON.stringify(payload), token, p.medico]
+    );
+    if (!rows || rows.length === 0) throw new Error('no se pudo registrar la orden');
+
+    // Fuera de horario la manda el worker al abrir la franja (07:00), igual que
+    // una orden de MyBodytech que entra de noche.
+    if (!dentroDeHorarioEnvio(nowColombia().minutos)) return { eventoId, invitacion: 'programada' };
+    return { eventoId, invitacion: await this.enviarInvitacion(eventoId) };
+  }
+
   // --------------------------------------------------------------------------
   // 2) La invitación por WhatsApp
   // --------------------------------------------------------------------------
@@ -195,8 +253,9 @@ class AgendaUmvService {
     const payload = payloadDe(fila);
     const telefono = payload ? formatCelularE164(payload.afiliado.celular) : null;
     // Segunda llave del modo pruebas: aunque la orden haya entrado al flujo
-    // nuevo, si el celular salió de la lista no se le escribe.
-    if (payload && telefono && !celularHabilitadoUmv(telefono)) {
+    // nuevo, si el celular salió de la lista no se le escribe. No aplica a la
+    // orden creada en el panel, que es justamente con la que se prueba.
+    if (payload && telefono && !esPanel(fila) && !celularHabilitadoUmv(telefono)) {
       await postgresService.query(
         `UPDATE mybodytech_afiliados
             SET invitacion_estado = 'bloqueada', invitacion_error = 'Modo pruebas: celular fuera de UMV_SOLO_CELULARES', updated_at = NOW()
@@ -284,11 +343,13 @@ class AgendaUmvService {
     payload: CreateAfiliadoInput,
     fecha: string,
     hora: string,
-    reprogramarId: string
+    reprogramarId: string,
+    /** Orden creada en el panel: no le aplica la lista de prueba. */
+    panel = false
   ): Promise<void> {
     const templateSid = (process.env.TWILIO_WHATSAPP_UMV_CONFIRMACION_TEMPLATE_SID || '').trim();
     const telefono = formatCelularE164(payload.afiliado.celular);
-    if (!templateSid || !telefono || !celularHabilitadoUmv(telefono)) return;
+    if (!templateSid || !telefono || (!panel && !celularHabilitadoUmv(telefono))) return;
 
     const nombre = payload.afiliado.primerNombre.trim();
     const fechaTxt = formatFechaCita(fecha) ?? fecha;
@@ -324,8 +385,11 @@ class AgendaUmvService {
    * El equipo UMV: los códigos de `UMV_AGENDA_PROFESIONALES` si está puesta;
    * si no, las fichas activas de la unidad `bsl` con rol medico que no sean de
    * prueba. Por eso queda afuera un coach de nutrición que vive en `bsl`.
+   *
+   * `preferido` (quien creó la orden en el panel) se suma aunque no sea del
+   * equipo: si tiene el cupo libre, la cita es suya.
    */
-  async equipo(): Promise<Profesional[]> {
+  async equipo(preferido?: string | null): Promise<Profesional[]> {
     const codigos = codigosEquipoUmv();
     const rows = await postgresService.query(
       `SELECT id, codigo, sede_id,
@@ -338,9 +402,10 @@ class AgendaUmvService {
                 AND sede_id = 'bsl' AND rol = 'medico'
                 AND codigo !~* 'prueba'
                 AND concat_ws(' ', primer_nombre, primer_apellido) !~* 'prueba')
+            OR codigo = $2
           )
         ORDER BY codigo`,
-      [codigos]
+      [codigos, preferido || '']
     );
     if (rows === null) throw new Error('la base no respondió al leer el equipo UMV');
     return rows.map((r) => ({
@@ -363,10 +428,12 @@ class AgendaUmvService {
   }
 
   /** Los próximos días con cupo, con las horas del equipo unidas. */
-  async horarios(): Promise<DiaCupos[]> {
-    if (this.cacheCupos && Date.now() - this.cacheCupos.at < CACHE_CUPOS_MS) return this.cacheCupos.dias;
+  async horarios(preferido?: string | null): Promise<DiaCupos[]> {
+    const clave = preferido || '';
+    const cache = this.cacheCupos.get(clave);
+    if (cache && Date.now() - cache.at < CACHE_CUPOS_MS) return cache.dias;
 
-    const equipo = await this.equipo();
+    const equipo = await this.equipo(preferido);
     const hoy = nowColombia().fecha;
     const dias: DiaCupos[] = [];
     for (let i = 0; i < MAX_DIAS_BUSQUEDA && dias.length < DIAS_A_MOSTRAR; i++) {
@@ -374,8 +441,21 @@ class AgendaUmvService {
       const horarios = unirCupos(await this.cuposDelDia(fecha, equipo));
       if (horarios.length > 0) dias.push({ fecha, horarios });
     }
-    this.cacheCupos = { at: Date.now(), dias };
+    this.cacheCupos.set(clave, { at: Date.now(), dias });
     return dias;
+  }
+
+  /** Los cupos que ve el afiliado de ESTA orden (la del panel suma a quien la creó). */
+  async horariosDeOrden(token: string): Promise<DiaCupos[] | null> {
+    const rows = await postgresService.query(
+      `SELECT agenda_estado, medico_preferido FROM mybodytech_afiliados WHERE agenda_token = $1`,
+      [token]
+    );
+    if (rows === null) throw new Error('la base no respondió');
+    const fila = rows[0];
+    if (!fila) return null;
+    if (fila.agenda_estado === 'agendada') return [];
+    return this.horarios(fila.medico_preferido);
   }
 
   // --------------------------------------------------------------------------
@@ -458,12 +538,13 @@ class AgendaUmvService {
 
       // ¿Quién tiene libre esa hora? (recalculado: la lista que vio el afiliado
       // pudo cambiar mientras elegía).
-      const equipo = await this.equipo();
+      const preferido: string | null = fila.medico_preferido || null;
+      const equipo = await this.equipo(preferido);
       const cupos = await this.cuposDelDia(fecha, equipo);
       const libres = cupos.filter((c) => c.libres.includes(hora));
       if (libres.length === 0) {
         await soltar();
-        this.cacheCupos = null;
+        this.cacheCupos.clear();
         return {
           ok: false,
           status: 409,
@@ -483,13 +564,17 @@ class AgendaUmvService {
         [libres.map((l) => l.codigo), inicioUtc, finUtc]
       );
       const porCodigo = new Map((carga ?? []).map((r) => [String(r.medico), Number(r.n)]));
-      const codigo = elegirProfesional(libres.map((l) => ({ codigo: l.codigo, citasDelDia: porCodigo.get(l.codigo) ?? 0 })));
+      // Quien creó la orden en el panel se queda con la cita si tiene ese cupo.
+      const codigo =
+        preferido && libres.some((l) => l.codigo === preferido)
+          ? preferido
+          : elegirProfesional(libres.map((l) => ({ codigo: l.codigo, citasDelDia: porCodigo.get(l.codigo) ?? 0 })));
       const prof = libres.find((l) => l.codigo === codigo)!.prof;
 
       const val = await calendarioService.validarSlotDisponible(prof.sedeId, prof.codigo, fecha, hora, 'virtual');
       if (!val.ok) {
         await soltar();
-        this.cacheCupos = null;
+        this.cacheCupos.clear();
         return {
           ok: false,
           status: val.status,
@@ -515,6 +600,9 @@ class AgendaUmvService {
               medico: prof.codigo,
               fechaAtencion,
               hora,
+              // La del panel es una cita UMV de la unidad del profesional; la
+              // de MyBodytech conserva su origen (el modo pruebas la reconoce así).
+              ...(esPanel(fila) ? { origen: 'umv' as const, sedeId: prof.sedeId } : {}),
             });
       if (!hcOk) throw new Error('no se pudo crear la historia clínica');
 
@@ -526,13 +614,13 @@ class AgendaUmvService {
           WHERE agenda_token = $1`,
         [token]
       );
-      this.cacheCupos = null;
+      this.cacheCupos.clear();
       console.log(`📅 [agenda-umv] ${fila.evento_id} agendada ${fecha} ${hora} con ${prof.codigo}`);
 
       const reprogramarId = firmarId(historiaId, process.env.JWT_SECRET);
       // Confirmación por WhatsApp. Fire-and-forget: la cita ya quedó, y la
       // pantalla se la muestra al afiliado aunque el mensaje falle.
-      this.enviarConfirmacion(payload, fecha, hora, reprogramarId).catch((e) =>
+      this.enviarConfirmacion(payload, fecha, hora, reprogramarId, esPanel(fila)).catch((e) =>
         console.warn(`[agenda-umv] confirmación ${fila.evento_id}:`, e?.message ?? e)
       );
 

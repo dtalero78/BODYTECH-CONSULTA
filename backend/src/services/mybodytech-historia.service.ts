@@ -22,7 +22,8 @@ export interface AfiliadoHistoria {
   segundoNombre?: string;
   primerApellido: string;
   segundoApellido?: string;
-  fechaNacimiento: string;
+  /** YYYY-MM-DD. La orden del panel no la pide: va NULL. */
+  fechaNacimiento?: string | null;
   sexo?: string;
   celular: string;
   email?: string;
@@ -44,6 +45,10 @@ export async function insertarHistoriaMybodytech(p: {
   /** ISO con offset Colombia, ej. 2026-09-25T09:00:00-05:00 */
   fechaAtencion: string;
   hora: string;
+  /** 'mybodytech' (default) o 'umv' para la orden creada en el panel. */
+  origen?: 'mybodytech' | 'umv';
+  /** Default 'mybodytech'; la del panel va a la unidad del profesional. */
+  sedeId?: string;
 }): Promise<boolean> {
   const a = p.afiliado;
   const hc = await postgresService.query(
@@ -57,7 +62,7 @@ export async function insertarHistoriaMybodytech(p: {
      ) VALUES (
        $1, NOW(), NOW(),
        $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'nutricion',
-       $18, $19, $20, $21, $22, 'PENDIENTE', 'mybodytech', 'mybodytech'
+       $18, $19, $20, $21, $22, 'PENDIENTE', $23, $24
      ) RETURNING "_id"`,
     [
       p.historiaId,
@@ -72,7 +77,7 @@ export async function insertarHistoriaMybodytech(p: {
       null, // ciudad
       null, // eps
       p.fechaAtencion,
-      a.fechaNacimiento,
+      a.fechaNacimiento || null,
       a.tipoDocumento,
       a.sexo ?? null,
       '', // motivoConsulta
@@ -82,6 +87,8 @@ export async function insertarHistoriaMybodytech(p: {
       null, // talla
       p.hora, // horaAtencion
       null, // codEmpresa
+      p.sedeId ?? 'mybodytech',
+      p.origen ?? 'mybodytech',
     ]
   );
   return hc !== null;

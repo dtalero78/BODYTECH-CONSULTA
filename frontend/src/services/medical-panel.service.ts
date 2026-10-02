@@ -293,6 +293,25 @@ class MedicalPanelService {
   }
 
   /**
+   * Orden de la UMV sin fecha: la persona recibe por WhatsApp la bienvenida de
+   * MyBodytech, elige su hora en /agendar y le llega la confirmación.
+   * `invitacion`: 'enviada' ya salió · 'programada' sale a las 07:00 (se creó
+   * de noche) · 'error' / 'sin_celular' no salió.
+   */
+  async crearOrdenPorAgendar(data: {
+    numeroId: string;
+    primerNombre: string;
+    segundoNombre?: string;
+    primerApellido: string;
+    segundoApellido?: string;
+    celular: string;
+    medico: string;
+  }): Promise<{ success: boolean; invitacion: 'enviada' | 'programada' | 'error' | 'sin_celular' | 'omitida' }> {
+    const res = await this.client.post('/api/medical-panel/ordenes/por-agendar', data);
+    return res.data;
+  }
+
+  /**
    * Busca un paciente por documento para pre-llenar el formulario de
    * "Agendar Cita". Devuelve un shape reducido (no es `Patient` completo)
    * o `null` si no se encuentra. Nunca lanza — el modal usa el resultado

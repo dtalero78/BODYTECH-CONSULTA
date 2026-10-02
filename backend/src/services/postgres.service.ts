@@ -1334,6 +1334,12 @@ class PostgresService {
       // API y el RIPS, ya aprobado, y no se tocan. El token es la única llave
       // del link público, por eso es aleatorio y único.
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS agenda_estado         VARCHAR(20)`);
+      // Órdenes creadas desde "Agendar Cita" del panel (2-oct-2026): mismo flujo
+      // que las de MyBodytech, pero `fuente='panel'` (NULL = MyBodytech) para que
+      // el RIPS no las mande a MyBodytech y el modo pruebas no las bloquee, y
+      // `medico_preferido` = quien la creó (si tiene el cupo libre, es suya).
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS fuente                VARCHAR(20)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS medico_preferido      VARCHAR(64)`);
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS agenda_token          VARCHAR(64)`);
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_estado     VARCHAR(20)`);
       await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS invitacion_intentos   INT NOT NULL DEFAULT 0`);

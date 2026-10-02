@@ -44,12 +44,11 @@ router.get('/:token', limiter, async (req: Request, res: Response, next: NextFun
 
 router.get('/:token/horarios', limiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const info = tokenOk(req.params.token) ? await agendaUmvService.getInfo(req.params.token) : null;
-    if (!info) {
+    const dias = tokenOk(req.params.token) ? await agendaUmvService.horariosDeOrden(req.params.token) : null;
+    if (!dias) {
       res.status(404).json({ success: false, error: 'No encontramos tu orden.' });
       return;
     }
-    const dias = info.estado === 'por_agendar' ? await agendaUmvService.horarios() : [];
     res.json({ success: true, dias });
   } catch (e) {
     next(e);

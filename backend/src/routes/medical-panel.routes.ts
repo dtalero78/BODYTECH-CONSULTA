@@ -51,6 +51,8 @@ router.post('/mi-disponibilidad', clinico, medicalPanelController.replaceMiDispo
 // (el controller restringe por su código → no tocan las de otros ni reasignan).
 // BORRAR sigue siendo `operativo` (coordinador/admin/auxiliar).
 router.get('/ordenes', agendaLista, medicalPanelController.listOrdenes);
+// Orden UMV sin fecha: la persona elige su hora por WhatsApp (2-oct-2026).
+router.post('/ordenes/por-agendar', crearOrden, medicalPanelController.crearOrdenPorAgendar);
 router.post('/ordenes', crearOrden, medicalPanelController.createOrden);
 router.patch('/ordenes/:id', crearOrden, medicalPanelController.updateOrden);
 router.delete('/ordenes/:id', operativo, medicalPanelController.deleteOrden);

@@ -10,6 +10,7 @@ import { programaFilter } from '../helpers/programa-scope';
 import postgresService from './postgres.service';
 import { sedeFilter } from '../helpers/sede-scope';
 import { EFFECTIVE_SEDE_SQL } from './calendario.service';
+import { formatCelularE164 } from '../helpers/celular.helper';
 
 interface PatientStats {
   programadosHoy: number;
@@ -52,6 +53,15 @@ interface Patient {
   llamadasN?: number;
   ultimaLlamadaAt?: string | null;
   ultimaLlamadaEstado?: string | null;
+  /**
+   * Si el celular sirve para llamar, con la MISMA regla que usa el softphone
+   * (`formatCelularE164`). Tener celular y poder llamarlo no son lo mismo: una
+   * historia con "+572272823" (9 dígitos) traía número, así que el panel exigía
+   * llamar antes de marcar "No contesta", pero el servidor rechazaba la llamada
+   * por inválido — la cita quedaba sin forma de cerrarse (2-oct-2026). Se
+   * calcula acá y no en el navegador para que la regla viva en un solo lado.
+   */
+  celularValido?: boolean;
 }
 
 interface PaginatedPatients {
@@ -392,7 +402,8 @@ class MedicalPanelService {
         tipoExamen: row.tipoExamen || '',
         llamadasN: Number(row.llamadas_n ?? 0),
         ultimaLlamadaAt: row.llamada_at ? new Date(row.llamada_at).toISOString() : null,
-        ultimaLlamadaEstado: row.llamada_estado ?? null
+        ultimaLlamadaEstado: row.llamada_estado ?? null,
+        celularValido: formatCelularE164(String(row.celular || '')) !== null
       }));
 
       return {
@@ -463,7 +474,8 @@ class MedicalPanelService {
         tipoExamen: row.tipoExamen || '',
         llamadasN: Number(row.llamadas_n ?? 0),
         ultimaLlamadaAt: row.llamada_at ? new Date(row.llamada_at).toISOString() : null,
-        ultimaLlamadaEstado: row.llamada_estado ?? null
+        ultimaLlamadaEstado: row.llamada_estado ?? null,
+        celularValido: formatCelularE164(String(row.celular || '')) !== null
       };
     } catch (error) {
       console.error('❌ Error buscando paciente en PostgreSQL:', error);

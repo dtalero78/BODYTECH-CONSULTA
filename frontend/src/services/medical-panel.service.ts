@@ -32,6 +32,8 @@ export interface Patient {
   llamadasN?: number;
   ultimaLlamadaAt?: string | null;
   ultimaLlamadaEstado?: string | null;
+  /** Si el celular sirve para llamar (regla única del servidor). */
+  celularValido?: boolean;
 }
 
 export interface PaginatedPatients {

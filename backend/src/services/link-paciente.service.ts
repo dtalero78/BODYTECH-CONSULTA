@@ -35,14 +35,11 @@ import { textoLinkUmv, textoRecordatorioUmv } from '../helpers/unidad-envio.help
 /** SID por defecto de la plantilla de cita (bodytech_cita_v2, 2 botones). */
 const TEMPLATE_CITA_FALLBACK = 'HX83c2dd7da8954757ee34a310d4f17e62';
 
-/**
- * Indicativos internacionales que reconocemos en un celular ya escrito con
- * código de país. Los de 3 dígitos van PRIMERO para que el regex no los corte
- * con un prefijo de 2. `\d{8,}` tolera longitudes nacionales variables
- * (Chile 9, Colombia 10). Réplica de MedicalPanelPage.formatPhoneNumber.
- */
-const INDICATIVOS =
-  /^(502|503|504|505|506|507|591|593|595|598|1|33|34|44|49|51|52|53|54|55|56|57|58)\d{8,}/;
+// "¿Este celular se puede marcar?" vive en helpers/celular.helper: el panel
+// necesita la MISMA regla y importarla desde acá le arrastraba Twilio encima.
+// Se re-exporta para no romper a quien ya la importaba de este servicio.
+export { formatCelularE164 } from '../helpers/celular.helper';
+import { formatCelularE164 } from '../helpers/celular.helper';
 
 // ---------------------------------------------------------------------------
 // 1. Helpers puros
@@ -83,20 +80,6 @@ export function formatHoraCita(hhmm: string): string {
  * humano, y mandarle a Twilio algo no reconocido produce errores 21211 en masa.
  * Acá preferimos omitir la cita y dejarla registrada en la bitácora.
  */
-export function formatCelularE164(celular: string): string | null {
-  const cleaned = (celular || '').replace(/[\s()-]/g, '');
-  if (!cleaned) return null;
-
-  if (cleaned.startsWith('+')) {
-    return /^\+\d{10,15}$/.test(cleaned) ? cleaned : null;
-  }
-  // Ya trae indicativo de país: solo le falta el '+'.
-  if (INDICATIVOS.test(cleaned)) return `+${cleaned}`;
-  // Celular local colombiano (10 dígitos que empiezan con 3).
-  if (/^3\d{9}$/.test(cleaned)) return `+57${cleaned}`;
-
-  return null;
-}
 
 /**
  * La variable {{3}} de la plantilla: la sala más los datos que el paciente

@@ -142,6 +142,7 @@ function NoContestaAccion({
   fechaAtencion,
   llamada,
   celular,
+  celularValido,
   onConfirmar,
 }: {
   patientId: string;
@@ -151,6 +152,11 @@ function NoContestaAccion({
   llamada: { at: string | null; estado: string | null } | null;
   /** Sin celular no hay a quién llamar: la guarda no aplica. */
   celular?: string;
+  /**
+   * Si ese celular se puede marcar. Lo decide el servidor con la misma regla
+   * del softphone: tener número y poder llamarlo no son lo mismo.
+   */
+  celularValido?: boolean;
   onConfirmar: (
     patientId: string,
     nombre: string,
@@ -168,7 +174,8 @@ function NoContestaAccion({
   // El médico corporativo ve al paciente en persona y una cita sin celular no
   // se puede llamar: en esos dos casos exigir la llamada sería dejar la cita
   // sin forma de cerrarse.
-  const exigeLlamada = !authService.isMedicoCorporativo() && !!(celular || '').trim();
+  const hayComoLlamar = !!(celular || '').trim() && celularValido !== false;
+  const exigeLlamada = !authService.isMedicoCorporativo() && hayComoLlamar;
 
   const alTocar = () => {
     const t = new Date(fechaAtencion).getTime();
@@ -1051,13 +1058,24 @@ export function MedicalPanelPage() {
   const botonLlamar = (p: Patient) => {
     const esEsta = llamada?.patientId === p._id;
     const ocupado = !!llamada && !llamada.error && !llamadaTerminal; // hay una viva
-    const deshabilitado = ocupado || !p.celular;
+    // Un número que existe pero no se puede marcar —"+572272823", 9 dígitos—
+    // dejaba el botón habilitado: el coach llamaba, el servidor respondía
+    // "no tiene un celular válido", no quedaba fila en `llamadas_voz`, y el
+    // "No contesta" seguía pidiendo llamar. La cita no se podía cerrar.
+    const sinNumeroUtil = !p.celular || p.celularValido === false;
+    const deshabilitado = ocupado || sinNumeroUtil;
     return (
       <div className="flex flex-col items-stretch gap-1">
         <button
           onClick={() => handleLlamar(p)}
           disabled={deshabilitado}
-          title={!p.celular ? 'El paciente no tiene celular' : undefined}
+          title={
+            !p.celular
+              ? 'El paciente no tiene celular'
+              : p.celularValido === false
+                ? `El celular de la historia (${p.celular}) no es un número al que se pueda llamar`
+                : undefined
+          }
           className={`${esEsta && llamada?.data?.estado === 'en_llamada' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'} text-white px-2 md:px-4 py-2 rounded-lg transition text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 md:gap-2`}
         >
           {esEsta && ocupado ? (
@@ -1612,6 +1630,7 @@ export function MedicalPanelPage() {
                         fechaAtencion={searchResult.fechaAtencion}
                         llamada={infoLlamada(searchResult)}
                         celular={searchResult.celular}
+                        celularValido={searchResult.celularValido}
                         onConfirmar={handleNoAnswer}
                       />
                     </div>
@@ -1807,6 +1826,7 @@ export function MedicalPanelPage() {
                             fechaAtencion={patient.fechaAtencion}
                             llamada={infoLlamada(patient)}
                             celular={patient.celular}
+                            celularValido={patient.celularValido}
                             onConfirmar={handleNoAnswer}
                           />
                         </div>

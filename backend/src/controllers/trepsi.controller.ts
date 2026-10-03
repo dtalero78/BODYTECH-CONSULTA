@@ -11,7 +11,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import trepsiService from '../services/trepsi.service';
 import profesionalesService from '../services/profesionales.service';
-import calendarioService from '../services/calendario.service';
+import calendarioService, { nowColombia } from '../services/calendario.service';
 import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
 
 // ---------------------------------------------------------------------------
@@ -480,10 +480,14 @@ class TrepsiController {
         return;
       }
 
-      // Domingos y festivos de Colombia: la agenda para Trepsi está cerrada.
-      // Devolvemos el mismo shape pero con `horariosDisponibles: []` para que
-      // la app Trepsi muestre el día como no disponible sin agendar encima.
-      const motivoBloqueo = diaNoLaborable(fecha);
+      // Domingos, festivos de Colombia, y el día de hoy: la agenda para Trepsi
+      // no ofrece esas fechas. El mismo día casi no deja margen al coach y es
+      // el escenario que dispara la alarma de "profesional no conectado"
+      // (caso Olga Solano, 3-oct-2026) — mejor no ofrecerlo que ofrecerlo y
+      // que nadie llegue a tiempo a atenderlo. Devolvemos el mismo shape pero
+      // con `horariosDisponibles: []` para que la app Trepsi muestre el día
+      // como no disponible sin agendar encima.
+      const motivoBloqueo = diaNoLaborable(fecha) ?? (fecha === nowColombia().fecha ? 'mismo_dia' : null);
       if (motivoBloqueo) {
         res.status(200).json({
           ok: true,
@@ -498,7 +502,7 @@ class TrepsiController {
           modalidad,
           tiempoConsultaMinutos: prof.tiempoConsulta ?? null,
           horariosDisponibles: [],
-          motivoBloqueo, // 'domingo' | 'festivo'
+          motivoBloqueo, // 'domingo' | 'festivo' | 'mismo_dia'
         });
         return;
       }

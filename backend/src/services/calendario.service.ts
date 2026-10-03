@@ -154,7 +154,7 @@ function getDayRange(fechaIso: string): { startUtc: string; endUtc: string } {
  * Momento actual en Colombia (UTC-5): fecha YYYY-MM-DD y minutos desde
  * medianoche. Se usa para descartar franjas que ya pasaron en el día de hoy.
  */
-function nowColombia(): { fecha: string; minutos: number } {
+export function nowColombia(): { fecha: string; minutos: number } {
   const c = new Date(Date.now() - 5 * 60 * 60 * 1000);
   const y = c.getUTCFullYear();
   const m = String(c.getUTCMonth() + 1).padStart(2, '0');

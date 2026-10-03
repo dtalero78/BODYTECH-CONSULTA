@@ -427,7 +427,14 @@ class AgendaUmvService {
     );
   }
 
-  /** Los próximos días con cupo, con las horas del equipo unidas. */
+  /**
+   * Los próximos días con cupo, con las horas del equipo unidas.
+   *
+   * Arranca en i=1 (mañana), nunca hoy: una cita del mismo día le deja a la
+   * evaluadora casi nada de margen, y es justo el escenario que dispara la
+   * alarma de "profesional no conectado" (caso Olga Solano, 3-oct-2026) —
+   * mejor no ofrecerlo que ofrecerlo y que nadie llegue a tiempo a atenderlo.
+   */
   async horarios(preferido?: string | null): Promise<DiaCupos[]> {
     const clave = preferido || '';
     const cache = this.cacheCupos.get(clave);
@@ -436,7 +443,7 @@ class AgendaUmvService {
     const equipo = await this.equipo(preferido);
     const hoy = nowColombia().fecha;
     const dias: DiaCupos[] = [];
-    for (let i = 0; i < MAX_DIAS_BUSQUEDA && dias.length < DIAS_A_MOSTRAR; i++) {
+    for (let i = 1; i <= MAX_DIAS_BUSQUEDA && dias.length < DIAS_A_MOSTRAR; i++) {
       const fecha = addDias(hoy, i);
       const horarios = unirCupos(await this.cuposDelDia(fecha, equipo));
       if (horarios.length > 0) dias.push({ fecha, horarios });

@@ -21,7 +21,7 @@ import { esSuperusuario } from '../services/paneles-acceso';
 const router = Router();
 
 const entrarSchema = z.object({
-  programa: z.enum(['acc', 'prepagadas']),
+  programa: z.enum(['acc', 'prepagadas', 'rrhh']),
   password: z.string().min(1),
 });
 

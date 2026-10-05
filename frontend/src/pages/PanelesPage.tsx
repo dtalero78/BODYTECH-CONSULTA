@@ -70,7 +70,7 @@ interface Grupo {
   destinos: Destino[];
 }
 
-const NOMBRE_APP: Record<ProgramaPanel, string> = { acc: 'ACC', prepagadas: 'Prepagadas' };
+const NOMBRE_APP: Record<ProgramaPanel, string> = { acc: 'ACC', prepagadas: 'Prepagadas', rrhh: 'RRHH' };
 
 const ICONO = 'h-[16px] w-[16px]';
 
@@ -117,6 +117,14 @@ const GRUPOS: Grupo[] = [
     destinos: [
       // Prepagadas no lee `ir`: su /sso abre siempre los indicadores.
       { label: 'Entrar', detalle: 'Indicadores, afiliados, gestión y calendario', icono: <HeartPulse className={ICONO} />, ruta: '/indicadores' },
+    ],
+  },
+  {
+    app: 'rrhh',
+    titulo: 'RRHH',
+    dominio: 'rrhh.bodytech.app',
+    destinos: [
+      { label: 'Entrar', detalle: 'Clases grupales: vacancias, profesores y ranking', icono: <Users className={ICONO} />, ruta: '/' },
     ],
   },
 ];

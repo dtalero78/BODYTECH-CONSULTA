@@ -50,7 +50,7 @@ export interface SessionUser {
  * puede descartar la rama 'consulta' y se pierde el chequeo). Registrar una
  * app nueva es agregarla también acá.
  */
-export type ProgramaHermano = 'prepagadas' | 'acc';
+export type ProgramaHermano = 'prepagadas' | 'acc' | 'rrhh';
 
 export type PasswordLoginOutcome =
   | {

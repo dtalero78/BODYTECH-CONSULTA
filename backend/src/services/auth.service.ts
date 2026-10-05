@@ -42,6 +42,13 @@ const APPS_HERMANAS: Array<{ programa: string; url: string }> = [
     programa: 'acc',
     url: (process.env.ACC_URL || 'https://bodytech-acc-f9hd6.ondigitalocean.app').replace(/\/+$/, ''),
   },
+  {
+    // BODYTECH-RRHH: agendamiento de clases grupales (sedes ↔ profesores). Entra
+    // con la cuenta global si tiene `persona_apps.app = 'rrhh'`; su límite de
+    // intentos es por correo, porque esta cascada le llega desde una sola IP.
+    programa: 'rrhh',
+    url: (process.env.RRHH_URL || 'https://rrhh.bodytech.app').replace(/\/+$/, ''),
+  },
 ];
 
 export interface AuthPayload {

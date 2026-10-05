@@ -24,7 +24,7 @@ const CLAVE = 'bsl_paneles';
  */
 const MARGEN_MS = 60_000;
 
-export type ProgramaPanel = 'acc' | 'prepagadas';
+export type ProgramaPanel = 'acc' | 'prepagadas' | 'rrhh';
 
 export interface TokenPanel {
   programa: ProgramaPanel;
@@ -77,8 +77,8 @@ export function olvidar(): void {
 
 /**
  * La URL del salto: el /sso de la app con el token en el FRAGMENTO —no viaja
- * al servidor ni queda en logs— y la pantalla a la que ir. `ir` lo lee ACC;
- * Prepagadas lo ignora y abre su inicio.
+ * al servidor ni queda en logs— y la pantalla a la que ir. `ir` lo leen ACC
+ * y RRHH; Prepagadas lo ignora y abre su inicio.
  */
 export function urlDeSalto(t: TokenPanel, ir?: string): string {
   const fragmento = new URLSearchParams({ t: t.token });

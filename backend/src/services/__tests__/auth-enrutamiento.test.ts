@@ -111,7 +111,8 @@ describe('loginHermanas — enrutamiento por correo', () => {
     const r = await authService.loginHermanas('coach@bodytechcorp.com', 'clave');
 
     expect(r.ok).toBe(false);
-    // Se comporta como antes: prueba las hermanas por si el espejo está viejo.
-    expect(intentos).toHaveLength(2);
+    // Se comporta como antes: prueba todas las hermanas (prepagadas, acc y rrhh)
+    // por si el espejo está viejo.
+    expect(intentos).toHaveLength(3);
   });
 });

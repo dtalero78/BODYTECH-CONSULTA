@@ -1354,6 +1354,16 @@ class PostgresService {
         CREATE INDEX IF NOT EXISTS idx_mybodytech_afiliados_numero
           ON mybodytech_afiliados (numero_id)
       `);
+      // Enlace con la cita de Trepsi de la misma persona (5-oct-2026, ver
+      // mybodytech-enlace.service): la consulta se atiende en la historia de
+      // Trepsi y el RIPS sale con los datos de esta orden. Una historia de
+      // Trepsi enlaza a UNA sola orden (índice único).
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS historia_enlazada_id  VARCHAR(64)`);
+      await this.query(`ALTER TABLE mybodytech_afiliados ADD COLUMN IF NOT EXISTS enlazada_at           TIMESTAMPTZ`);
+      await this.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mybodytech_afiliados_enlazada
+          ON mybodytech_afiliados (historia_enlazada_id) WHERE historia_enlazada_id IS NOT NULL
+      `);
 
       // ===== WhatsApp Leads — captura de la "entidad" =====
       // Estado efímero por chat para capturar la ENTIDAD que el cliente responde

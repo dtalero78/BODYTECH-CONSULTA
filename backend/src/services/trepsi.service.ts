@@ -15,6 +15,7 @@
 // ============================================================================
 
 import postgresService from './postgres.service';
+import mybodytechEnlaceService from './mybodytech-enlace.service';
 import crypto from 'crypto';
 
 // ---------------------------------------------------------------------------
@@ -609,6 +610,11 @@ class TrepsiService {
       };
     }
 
+    // ¿Esta persona tiene una orden de MyBodytech pendiente? Se enlaza para
+    // que, al cerrar esta historia, el RIPS salga con los datos de esa orden.
+    // Fire-and-forget y sin efecto en la respuesta a Trepsi.
+    void mybodytechEnlaceService.enlazarDesdeTrepsi(historiaId, input.paciente.numeroId);
+
     return {
       ok: true,
       status: 201,
@@ -809,6 +815,10 @@ class TrepsiService {
         status: 500,
         error: { code: 'DB_ERROR', message: 'Error cancelando la cita.' },
       };
+    }
+    // Si la cita estaba enlazada a una orden de MyBodytech, se suelta.
+    if (updated[0].historia_id) {
+      void mybodytechEnlaceService.desenlazarTrepsi(String(updated[0].historia_id));
     }
     return { ok: true, status: 200, data: rowToRecord(updated[0]) };
   }

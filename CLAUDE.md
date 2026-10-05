@@ -275,6 +275,18 @@ Desde ahí es una cita más: recordatorio de las 07:00, link a la hora (plantill
 - El INSERT de la historia vive en [mybodytech-historia.service.ts](backend/src/services/mybodytech-historia.service.ts) porque lo usan los dos caminos; `mybodytech.service` importa `agenda-umv` de forma perezosa (arrastra el cliente de Twilio).
 - Fijado en [agenda-umv.helper.test.ts](backend/src/helpers/__tests__/agenda-umv.helper.test.ts).
 
+### La orden de MyBodytech y la cita de Trepsi de la misma persona (enlace)
+
+La persona recibe su orden por MyBodytech (eso crea una historia acá) y después **agenda la consulta desde la app de Trepsi**, que crea OTRA historia. El coach atiende y cierra la de Trepsi, y el RIPS —que solo buscaba la historia de MyBodytech— no salía: del 21-sep al 5-oct-2026 el proxy de IP fija no registró **ni un** envío. [mybodytech-enlace.service.ts](backend/src/services/mybodytech-enlace.service.ts) las une **por cédula** (normalizada: `normalizarDocumento`) en el momento en que llega la segunda, sin esperar al cierre:
+
+- **Llega la cita de Trepsi** (`trepsi.createAppointment`) → se enlaza con la orden de MyBodytech más antigua de esa cédula que siga pendiente: RIPS sin `done`, su propia historia sin atender, sin otro enlace, de los últimos `MYBODYTECH_ENLACE_DIAS` (60). **Llega la orden y Trepsi ya estaba** (`mybodytech.createAfiliado`, 201) → se enlaza con la cita de Trepsi vigente (ni cancelada ni atendida). **Trepsi cancela** → se suelta.
+- **El RIPS sale con los datos de la ORDEN, siempre** (decisión de Daniel): su `eventoId` y el documento de profesional que mandó MyBodytech. De la cita de Trepsi solo cuenta que se cerró. `enviarRips` busca por `historia_id` **o** `historia_enlazada_id` y prefiere la propia.
+- **Lo que MyBodytech lee por la API no cambia** y a Trepsi le sigue llegando su webhook igual: el enlace vive en columnas propias (`historia_enlazada_id`, único, y `enlazada_at`).
+- Un RIPS ya `done` no se reenvía (`ALREADY_SENT`): con el enlace la orden puede cerrarse por dos historias, y el "Guardar" del panel nutricional lo mandaba en cada guardado. El RIPS también sale al cerrar con **"Finalizar"** (`marcarAtendida`), no solo desde el panel nutricional.
+- Una orden "por agendar" de la UMV ya enlazada no recibe la invitación a agendar: crearía la cita duplicada que el enlace evita.
+- **La historia duplicada de MyBodytech se deja quieta**: un estado nuevo toca más de 20 lugares, y esa historia lleva el nombre escrito a mano en `medico`, así que no le aparece a ningún coach, no cuenta en indicadores ni dispara mensajes.
+- Todo fire-and-forget: un fallo del enlace no tumba el alta de Trepsi ni de MyBodytech. Las órdenes y citas que ya existían antes del 5-oct no se enlazan solas. Fijado en [mybodytech-enlace.helper.test.ts](backend/src/helpers/__tests__/mybodytech-enlace.helper.test.ts).
+
 ### Envío del link de videollamada al paciente
 
 El paciente entra a su consulta por un link de WhatsApp. Ese envío tiene **dos caminos**, y los dos pasan por [backend/src/services/link-paciente.service.ts](backend/src/services/link-paciente.service.ts):

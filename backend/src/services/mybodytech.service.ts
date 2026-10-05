@@ -20,6 +20,7 @@
 import postgresService from './postgres.service';
 import { insertarHistoriaMybodytech, generateHistoriaId } from './mybodytech-historia.service';
 import { agendaUmvActiva, celularHabilitadoUmv } from '../helpers/agenda-umv.helper';
+import mybodytechEnlaceService from './mybodytech-enlace.service';
 
 export interface AfiliadoInput {
   numeroId: string;
@@ -134,6 +135,17 @@ class MybodytechService {
    * Idempotente por evento_id.
    */
   async createAfiliado(input: CreateAfiliadoInput): Promise<ServiceResult<AfiliadoRecord>> {
+    const res = await this.crearAfiliado(input);
+    // Orden nueva: si la persona ya agendó por Trepsi, se enlaza con esa cita
+    // (el RIPS saldrá al cerrarla). Fire-and-forget: la respuesta a MyBodytech
+    // es la misma de siempre.
+    if (res.ok && res.status === 201) {
+      void mybodytechEnlaceService.enlazarDesdeMybodytech(input.eventoId, input.afiliado.numeroId);
+    }
+    return res;
+  }
+
+  private async crearAfiliado(input: CreateAfiliadoInput): Promise<ServiceResult<AfiliadoRecord>> {
     // 1) Idempotencia
     const existing = await postgresService.query(
       'SELECT * FROM mybodytech_afiliados WHERE evento_id = $1',

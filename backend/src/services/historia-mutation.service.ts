@@ -73,6 +73,19 @@ class HistoriaMutationService {
       carpetaService
         .reflejarDesdeConsulta(historiaId)
         .catch((e) => console.error(`⚠️  [carpeta] ${e?.message ?? e}`));
+      // El RIPS de MyBodytech también sale al cerrar por acá: antes solo salía
+      // desde el botón Guardar del panel nutricional (updateMedicalHistory), y
+      // una orden atendida en el panel de 7 pestañas o en la placa nunca lo
+      // mandaba. Sin orden de MyBodytech (propia o enlazada) es un no-op.
+      mybodytechRipsService
+        .enviarRips(historiaId)
+        .then((res) => {
+          if (res.sent) console.log(`📨 [mybodytech-RIPS] Enviado (${res.status}) para historia ${historiaId}`);
+          else if (res.reason && res.reason !== 'NOT_MYBODYTECH') {
+            console.log(`ℹ️  [mybodytech-RIPS] No enviado: ${res.reason}`);
+          }
+        })
+        .catch((e) => console.error(`⚠️  [mybodytech-RIPS] Error: ${e?.message ?? e}`));
     }
     return ok;
   }

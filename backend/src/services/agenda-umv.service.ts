@@ -241,6 +241,9 @@ class AgendaUmvService {
               updated_at = NOW()
         WHERE evento_id = $1
           AND agenda_estado = 'por_agendar'
+          -- Ya agendó por Trepsi (enlazada): invitarla a agendar otra vez
+          -- crearía la cita duplicada que el enlace evita.
+          AND historia_enlazada_id IS NULL
           AND invitacion_intentos < $2
           AND (invitacion_estado IN ('pendiente', 'error')
                OR (invitacion_estado = 'enviando' AND updated_at < NOW() - INTERVAL '15 minutes'))
@@ -321,6 +324,7 @@ class AgendaUmvService {
     const rows = await postgresService.query(
       `SELECT evento_id FROM mybodytech_afiliados
         WHERE agenda_estado = 'por_agendar'
+          AND historia_enlazada_id IS NULL
           AND invitacion_intentos < $1
           AND (invitacion_estado = 'pendiente'
                OR (invitacion_estado = 'error' AND updated_at < NOW() - INTERVAL '10 minutes')

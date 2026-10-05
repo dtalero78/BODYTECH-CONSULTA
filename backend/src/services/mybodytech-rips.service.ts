@@ -104,13 +104,19 @@ class MybodytechRipsService {
   async enviarRips(historiaId: string): Promise<EnviarRipsResult> {
     if (!isConfigured()) return { sent: false, reason: 'NOT_CONFIGURED' };
 
+    // La historia cerrada puede ser la de la orden o la de la cita de Trepsi
+    // enlazada a ella (mybodytech-enlace.service). En los dos casos lo que viaja
+    // es lo de la ORDEN de MyBodytech: su eventoId y su documento.
     const rows = await postgresService.query(
-      `SELECT evento_id, user_document_type, user_document_number
+      `SELECT evento_id, user_document_type, user_document_number, rips_estado,
+              COALESCE(historia_id = $1, FALSE) AS propia
          FROM mybodytech_afiliados
-        WHERE historia_id = $1
+        WHERE (historia_id = $1 OR historia_enlazada_id = $1)
           -- La orden creada en el panel (fuente='panel') no es de MyBodytech:
           -- su RIPS no existe allá y mandarlo sería ruido en su sistema.
-          AND COALESCE(fuente, 'mybodytech') = 'mybodytech'`,
+          AND COALESCE(fuente, 'mybodytech') = 'mybodytech'
+        ORDER BY COALESCE(historia_id = $1, FALSE) DESC, created_at
+        LIMIT 1`,
       [historiaId]
     );
     if (!rows || rows.length === 0) return { sent: false, reason: 'NOT_MYBODYTECH' };
@@ -118,7 +124,15 @@ class MybodytechRipsService {
       evento_id: string;
       user_document_type: string | null;
       user_document_number: string | null;
+      rips_estado: string | null;
+      propia: boolean;
     };
+    // Ya aceptado por su validador: volver a cerrar (o el "Guardar" de nuevo)
+    // no lo reenvía. Con el enlace, la orden puede cerrarse por dos historias.
+    if (row.rips_estado === 'done') return { sent: false, reason: 'ALREADY_SENT' };
+    if (!row.propia) {
+      console.log(`🔗 [mybodytech-RIPS] Historia ${historiaId} es la cita de Trepsi enlazada a la orden ${row.evento_id}`);
+    }
     if (!row.user_document_number) {
       return { sent: false, reason: 'NO_PROFESSIONAL_DOC' };
     }
@@ -165,8 +179,8 @@ class MybodytechRipsService {
     const estado = ok ? 'done' : 'error';
     await postgresService
       .query(
-        `UPDATE mybodytech_afiliados SET rips_estado = $1, updated_at = NOW() WHERE historia_id = $2`,
-        [estado, historiaId]
+        `UPDATE mybodytech_afiliados SET rips_estado = $1, updated_at = NOW() WHERE evento_id = $2`,
+        [estado, row.evento_id]
       )
       .catch(() => {});
 

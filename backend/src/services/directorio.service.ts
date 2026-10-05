@@ -30,6 +30,9 @@
 
 import { Pool } from 'pg';
 
+/** Rol del padrón que este tablero no muestra: profesores de clases grupales (BODYTECH-RRHH). */
+const ROL_FUERA_DEL_TABLERO = 'profesor';
+
 export type RolDirectorio = 'medico' | 'evaluador' | 'fisioterapeuta' | 'nutricionista';
 export type AmbitoDirectorio = 'sede' | 'corporativo' | 'virtual';
 
@@ -98,12 +101,17 @@ class DirectorioService {
 
   async resumen(): Promise<ResumenDirectorio> {
     const pool = this.getPool();
+    // Los profesores de clases grupales (rol 'profesor', los carga BODYTECH-RRHH)
+    // viven en el mismo padrón pero no son de este tablero: son ~350 y no
+    // atienden pacientes. Se excluyen aquí y en `listar`.
 
     const [totales, porRol, cobertura, porRegional] = await Promise.all([
       pool.query<{ sedes: string; profesionales: string; asignaciones: string }>(
-        `SELECT (SELECT count(*) FROM sedes WHERE activa)::text          AS sedes,
-                (SELECT count(*) FROM profesionales WHERE activo)::text  AS profesionales,
-                (SELECT count(*) FROM profesional_sedes)::text           AS asignaciones`,
+        `SELECT (SELECT count(*) FROM sedes WHERE activa)::text AS sedes,
+                (SELECT count(*) FROM profesionales WHERE activo AND rol <> '${ROL_FUERA_DEL_TABLERO}')::text AS profesionales,
+                (SELECT count(*) FROM profesional_sedes ps
+                   JOIN profesionales p ON p.documento = ps.documento
+                  WHERE p.rol <> '${ROL_FUERA_DEL_TABLERO}')::text AS asignaciones`,
       ),
       pool.query<{ rol: string; ambito: string; personas: string; asignaciones: string }>(
         `SELECT p.rol, p.ambito,
@@ -111,7 +119,7 @@ class DirectorioService {
                 count(ps.sede_slug)::text         AS asignaciones
            FROM profesionales p
            LEFT JOIN profesional_sedes ps ON ps.documento = p.documento
-          WHERE p.activo
+          WHERE p.activo AND p.rol <> '${ROL_FUERA_DEL_TABLERO}'
           GROUP BY p.rol, p.ambito
           ORDER BY p.rol, p.ambito`,
       ),
@@ -180,7 +188,7 @@ class DirectorioService {
     sede?: string;
     q?: string;
   }): Promise<ProfesionalDirectorio[]> {
-    const where: string[] = ['p.activo'];
+    const where: string[] = ['p.activo', `p.rol <> '${ROL_FUERA_DEL_TABLERO}'`];
     const params: unknown[] = [];
 
     if (filtros.rol) {

@@ -97,6 +97,51 @@ export interface EnviarRipsResult {
 
 class MybodytechRipsService {
   /**
+   * Lo que se le ENVIARÍA al validador por esta orden, sin enviarlo: la misma
+   * URL, cabeceras (el token, oculto) y cuerpo que arma `enviarRips`.
+   */
+  async previsualizar(eventoId: string): Promise<Record<string, unknown> | null> {
+    const rows = await postgresService.query(
+      `SELECT m.evento_id, m.historia_id, m.historia_enlazada_id, m.rips_estado,
+              m.user_document_type, m.user_document_number, m.professional_name,
+              h."fechaConsulta" AS fecha_consulta_trepsi, h."atendido" AS atendido_trepsi
+         FROM mybodytech_afiliados m
+         LEFT JOIN "HistoriaClinica" h ON h."_id" = m.historia_enlazada_id
+        WHERE m.evento_id = $1`,
+      [eventoId]
+    );
+    if (!rows || rows.length === 0) return null;
+    const r = rows[0];
+    const c = cfg();
+    return {
+      orden: {
+        eventoId: r.evento_id,
+        historiaMybodytech: r.historia_id,
+        historiaTrepsiEnlazada: r.historia_enlazada_id,
+        consultaTrepsi: { atendido: r.atendido_trepsi, fechaConsulta: r.fecha_consulta_trepsi },
+        profesionalSegunMybodytech: r.professional_name,
+        ripsEstado: r.rips_estado,
+      },
+      seEnviaria: {
+        metodo: 'POST',
+        url: c.ripsUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer <token de su OAuth, se pide al enviar>',
+          'x-bodytech-brand': c.brand,
+          'x-bodytech-organization': c.org,
+        },
+        body: {
+          ref_invoice: String(r.evento_id),
+          user_document_type: String(r.user_document_type ?? 'CC'),
+          user_document_number: r.user_document_number ? String(r.user_document_number) : null,
+        },
+      },
+      seEnviariaDeVerdad: Boolean(isConfigured() && r.user_document_number && r.rips_estado !== 'done'),
+    };
+  }
+
+  /**
    * Envía el RIPS de una HC recién cerrada. Solo actúa si la HC es de un
    * afiliado mybodytech. Best-effort: nunca lanza hacia arriba (el médico ya
    * guardó la HC); devuelve el resultado para logging.

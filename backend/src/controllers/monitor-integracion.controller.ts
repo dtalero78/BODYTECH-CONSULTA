@@ -20,6 +20,7 @@ import integrationLogService from '../services/integration-log.service';
 import postgresService from '../services/postgres.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
 import mybodytechRipsService from '../services/mybodytech-rips.service';
+import mybodytechEnlaceService from '../services/mybodytech-enlace.service';
 
 function constantTimeEquals(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
@@ -452,6 +453,55 @@ class MonitorIntegracionController {
         trepsi_appointments: trepsiAppt ?? [],
         outbox_lastRows: outboxRows ?? [],
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /mybodytech-enlazar-existentes  (?aplicar=1 para escribir)
+   *
+   * Une las órdenes de MyBodytech con la cita de Trepsi de la misma cédula que
+   * ya existían antes del enlace automático. Sin `aplicar=1` solo muestra la
+   * propuesta. No envía RIPS.
+   */
+  mybodytechEnlazarExistentes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const aplicar = req.query.aplicar === '1';
+      const r = await mybodytechEnlaceService.enlazarExistentes(aplicar);
+      res.status(200).json({
+        ok: true,
+        aplicar,
+        total: r.propuestas.length,
+        yaAtendidas: r.propuestas.filter((p) => p.atendida).length,
+        pendientes: r.propuestas.filter((p) => !p.atendida).length,
+        enlazadas: r.enlazadas,
+        propuestas: r.propuestas,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * GET /mybodytech-rips-preview?eventoId=...
+   * Lo que se le enviaría al validador por esa orden, sin enviarlo.
+   */
+  mybodytechRipsPreview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const eventoId = typeof req.query.eventoId === 'string' ? req.query.eventoId : '';
+      if (!eventoId) {
+        res.status(400).json({ ok: false, error: { code: 'NO_EVENTO_ID', message: 'eventoId requerido.' } });
+        return;
+      }
+      const preview = await mybodytechRipsService.previsualizar(eventoId);
+      if (!preview) {
+        res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'eventoId no existe.' } });
+        return;
+      }
+      res.status(200).json({ ok: true, ...preview });
     } catch (err) {
       next(err);
     }

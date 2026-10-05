@@ -13,5 +13,7 @@ router.get('/debug-historia', monitorIntegracionController.debugHistoria);
 router.post('/revive-cita', monitorIntegracionController.reviveCita);
 router.get('/agenda-simultaneidad', monitorIntegracionController.agendaSimultaneidad);
 router.post('/mybodytech-rips-test', monitorIntegracionController.mybodytechRipsTest);
+router.post('/mybodytech-enlazar-existentes', monitorIntegracionController.mybodytechEnlazarExistentes);
+router.get('/mybodytech-rips-preview', monitorIntegracionController.mybodytechRipsPreview);
 
 export default router;

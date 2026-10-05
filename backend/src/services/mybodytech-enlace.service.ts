@@ -111,6 +111,84 @@ class MybodytechEnlaceService {
   }
 
   /**
+   * Une los duplicados que ya existían antes del enlace (5-oct-2026). Por cada
+   * orden pendiente busca su cita de Trepsi: primero la que YA se atendió
+   * después de crearse la orden (la consulta que de verdad ocurrió y cuyo RIPS
+   * nunca salió), y si no hay, la vigente más antigua. Una cita de Trepsi
+   * queda con una sola orden. Con `aplicar=false` solo devuelve la propuesta.
+   * NO envía ningún RIPS: eso es aparte.
+   */
+  async enlazarExistentes(aplicar: boolean): Promise<{
+    propuestas: Array<{ eventoId: string; historiaTrepsiId: string; citaId: string; atendida: boolean; fecha: string | null }>;
+    enlazadas: number;
+  }> {
+    const rows = await postgresService.query(
+      `WITH ordenes AS (
+         SELECT m.evento_id, m.created_at, ${documentoSql('m.numero_id')} AS doc
+           FROM mybodytech_afiliados m
+          WHERE COALESCE(m.fuente, 'mybodytech') = 'mybodytech'
+            AND m.historia_enlazada_id IS NULL
+            AND m.rips_estado IS DISTINCT FROM 'done'
+            AND m.created_at > NOW() - make_interval(days => $1)
+            AND NOT EXISTS (SELECT 1 FROM "HistoriaClinica" h
+                             WHERE h."_id" = m.historia_id AND h."atendido" = 'ATENDIDO')
+       ),
+       citas AS (
+         SELECT ta.cita_id, ta.historia_id, ta.created_at, h."fechaConsulta", h."fechaAtencion",
+                (ta.estado = 'attended' OR COALESCE(h."atendido", '') = 'ATENDIDO') AS atendida,
+                ta.estado, ${documentoSql('h."numeroId"')} AS doc
+           FROM trepsi_appointments ta
+           JOIN "HistoriaClinica" h ON h."_id" = ta.historia_id
+          WHERE ta.created_at > NOW() - make_interval(days => $1)
+            AND ta.estado <> 'cancelled'
+            AND NOT EXISTS (SELECT 1 FROM mybodytech_afiliados x WHERE x.historia_enlazada_id = ta.historia_id)
+       ),
+       pares AS (
+         SELECT DISTINCT ON (o.evento_id)
+                o.evento_id, c.historia_id, c.cita_id, c.atendida,
+                COALESCE(c."fechaConsulta", c."fechaAtencion"::timestamptz) AS fecha
+           FROM ordenes o
+           JOIN citas c ON c.doc = o.doc
+          WHERE length(o.doc) >= 5
+            AND (   (c.atendida AND c."fechaConsulta" > o.created_at)
+                 OR (NOT c.atendida AND c.estado <> 'attended'))
+          ORDER BY o.evento_id, c.atendida DESC,
+                   CASE WHEN c.atendida THEN c."fechaConsulta" END ASC,
+                   c.created_at ASC
+       )
+       SELECT DISTINCT ON (historia_id) evento_id, historia_id, cita_id, atendida, fecha
+         FROM pares
+        ORDER BY historia_id, fecha`,
+      [diasVentanaEnlace()]
+    );
+    if (rows === null) throw new Error('No se pudo leer la base.');
+
+    const propuestas = rows.map((r) => ({
+      eventoId: String(r.evento_id),
+      historiaTrepsiId: String(r.historia_id),
+      citaId: String(r.cita_id),
+      atendida: Boolean(r.atendida),
+      fecha: r.fecha ? new Date(r.fecha).toISOString() : null,
+    }));
+    if (!aplicar) return { propuestas, enlazadas: 0 };
+
+    let enlazadas = 0;
+    for (const p of propuestas) {
+      const r = await postgresService.query(
+        `UPDATE mybodytech_afiliados
+            SET historia_enlazada_id = $2, enlazada_at = NOW(), updated_at = NOW()
+          WHERE evento_id = $1 AND historia_enlazada_id IS NULL
+            AND NOT EXISTS (SELECT 1 FROM mybodytech_afiliados x WHERE x.historia_enlazada_id = $2)
+        RETURNING evento_id`,
+        [p.eventoId, p.historiaTrepsiId]
+      );
+      if (r && r.length > 0) enlazadas++;
+    }
+    console.log(`🔗 [mybodytech-enlace] Enlazados existentes: ${enlazadas} de ${propuestas.length}`);
+    return { propuestas, enlazadas };
+  }
+
+  /**
    * Trepsi canceló la cita: se suelta el enlace para que la orden quede libre
    * de nuevo (si la persona vuelve a agendar, se enlaza con la nueva). Un RIPS
    * ya enviado no se toca.

@@ -208,10 +208,18 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
     [],
   );
 
-  /** Activa en una aplicación e inactiva en otra: la baja no llegó a todas partes. */
+  /**
+   * Activa en una aplicación e inactiva en otra (la baja no llegó a todas
+   * partes), O cuenta clínica activa con ficha inactiva (la cuenta entra
+   * pero su agenda sale vacía — mismo síntoma que "sin ficha", y sin
+   * marcarlo acá nadie lo nota hasta que un paciente no logra reprogramar;
+   * le pasó a un coach que llevaba meses así, ver `ROLES_CLINICOS`).
+   */
   const esInconsistente = useCallback(
-    (p: Persona) => p.apps.some((a) => a.activo) && p.apps.some((a) => !a.activo),
-    [],
+    (p: Persona) =>
+      (p.apps.some((a) => a.activo) && p.apps.some((a) => !a.activo)) ||
+      (p.activo && esClinico(p) && !!p.ficha && !p.ficha.activo),
+    [esClinico],
   );
 
   const visibles = useMemo(() => {
@@ -696,6 +704,14 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                         <div className="text-[10.5px] text-zinc-400">
                           {p.ficha.especialidad || p.ficha.rol}
                         </div>
+                        {/* El activo de la ficha es OTRO distinto del activo de la cuenta
+                            (columna Accesos): con cuenta activa y ficha inactiva, la
+                            persona entra pero su agenda sale vacía — mismo síntoma que
+                            "sin ficha" de abajo, y sin esto se veía igual que una ficha
+                            normal. */}
+                        {!p.ficha.activo && (
+                          <div className="text-[10.5px] text-amber-700">ficha inactiva</div>
+                        )}
                       </button>
                     ) : esClinico(p) ? (
                       <span className="text-[11px] text-amber-700">
@@ -969,12 +985,32 @@ export function UsuariosPanelView({ showToast, reportCount }: Props) {
                         .map((x) => (
                           <option key={x.id} value={x.id}>
                             {x.nombre} · {x.codigo}
+                            {!x.activo ? ' · ficha inactiva' : ''}
                           </option>
                         ))}
                     </select>
-                    <p className="text-[11px] text-zinc-400 mt-1">
-                      Sin ficha, su agenda sale vacía y no puede agendar.
-                    </p>
+                    {(() => {
+                      const ficha = profesionales.find((x) => x.id === hoja.profesionalId);
+                      // Dos "activo" distintos conviven acá: el de la cuenta (checkbox de
+                      // Accesos, arriba) y el de la ficha — y los dos se llaman igual, lo
+                      // que confundía: una cuenta activa con ficha inactiva entra al panel
+                      // pero su agenda sale vacía, igual que sin ficha. Si no se distingue
+                      // acá, nadie lo nota hasta que un paciente no logra reprogramar.
+                      if (ficha && !ficha.activo) {
+                        return (
+                          <p className="text-[11px] text-amber-700 mt-1">
+                            Esta ficha está inactiva: aunque la cuenta entre, su agenda sale
+                            vacía y no puede agendar ni le ofrecen cupos para reprogramar.
+                            Actívala en Profesionales si sigue atendiendo.
+                          </p>
+                        );
+                      }
+                      return (
+                        <p className="text-[11px] text-zinc-400 mt-1">
+                          Sin ficha, su agenda sale vacía y no puede agendar.
+                        </p>
+                      );
+                    })()}
                   </Campo>
                 )}
                 <Campo etiqueta="Programa">

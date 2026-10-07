@@ -39,6 +39,13 @@ export interface ProfesionalLite {
   rol: Role;
   sedeId?: string;
   especialidad?: string | null;
+  /**
+   * La ficha tiene SU PROPIO activo, distinto del `activo` de la cuenta
+   * (checkbox de "Accesos"). Una cuenta con login puede seguir vinculada a
+   * una ficha inactiva — ahí entra, pero su agenda sale vacía: ver
+   * `ROLES_CLINICOS` en UsuariosPanelView.tsx.
+   */
+  activo: boolean;
 }
 
 export interface UpdateUsuarioInput {
@@ -82,6 +89,7 @@ class UsuariosApi {
       rol: p.rol,
       sedeId: p.sedeId,
       especialidad: p.especialidad ?? null,
+      activo: p.activo !== false,
     }));
   }
 }

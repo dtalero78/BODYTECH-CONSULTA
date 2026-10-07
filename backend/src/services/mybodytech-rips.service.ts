@@ -32,6 +32,23 @@ function cfg() {
     clientSecret: process.env.MYBODYTECH_RIPS_CLIENT_SECRET || '',
     brand: process.env.MYBODYTECH_RIPS_BRAND || '1',
     org: process.env.MYBODYTECH_RIPS_ORG || '1',
+    // Profesional que FIRMA todos los RIPS (6-oct-2026, decisión de Daniel:
+    // la nutricionista Ingrid Adriana Osorio Martinez, CC 52386116). Si está,
+    // reemplaza al documento que manda MyBodytech en cada orden.
+    firmaDocType: (process.env.MYBODYTECH_RIPS_FIRMA_DOC_TYPE || 'CC').trim(),
+    firmaDoc: (process.env.MYBODYTECH_RIPS_FIRMA_DOC || '').trim(),
+  };
+}
+
+/** Documento con el que sale el RIPS: el de la firma fija, o el de la orden. */
+function documentoFirma(
+  c: ReturnType<typeof cfg>,
+  row: { user_document_type: string | null; user_document_number: string | null }
+): { type: string; number: string | null } {
+  if (c.firmaDoc) return { type: c.firmaDocType || 'CC', number: c.firmaDoc };
+  return {
+    type: String(row.user_document_type ?? 'CC'),
+    number: row.user_document_number ? String(row.user_document_number) : null,
   };
 }
 
@@ -113,6 +130,7 @@ class MybodytechRipsService {
     if (!rows || rows.length === 0) return null;
     const r = rows[0];
     const c = cfg();
+    const firma = documentoFirma(c, r);
     return {
       orden: {
         eventoId: r.evento_id,
@@ -133,11 +151,12 @@ class MybodytechRipsService {
         },
         body: {
           ref_invoice: String(r.evento_id),
-          user_document_type: String(r.user_document_type ?? 'CC'),
-          user_document_number: r.user_document_number ? String(r.user_document_number) : null,
+          user_document_type: firma.type,
+          user_document_number: firma.number,
         },
       },
-      seEnviariaDeVerdad: Boolean(isConfigured() && r.user_document_number && r.rips_estado !== 'done'),
+      firmaFija: Boolean(c.firmaDoc),
+      seEnviariaDeVerdad: Boolean(isConfigured() && firma.number && r.rips_estado !== 'done'),
     };
   }
 
@@ -178,16 +197,17 @@ class MybodytechRipsService {
     if (!row.propia) {
       console.log(`🔗 [mybodytech-RIPS] Historia ${historiaId} es la cita de Trepsi enlazada a la orden ${row.evento_id}`);
     }
-    if (!row.user_document_number) {
+    const c = cfg();
+    const firma = documentoFirma(c, row);
+    if (!firma.number) {
       return { sent: false, reason: 'NO_PROFESSIONAL_DOC' };
     }
 
-    const c = cfg();
     const started = Date.now();
     const requestBody = {
       ref_invoice: String(row.evento_id),
-      user_document_type: String(row.user_document_type ?? 'CC'),
-      user_document_number: String(row.user_document_number),
+      user_document_type: firma.type,
+      user_document_number: firma.number,
     };
 
     let httpStatus = 0;

@@ -1210,7 +1210,13 @@ class CalendarioService {
     medicoCodigo: string,
     fecha: string,
     hora: string,
-    modalidad: Modalidad
+    modalidad: Modalidad,
+    /**
+     * Historia que NO cuenta como cupo ocupado: la que se está moviendo. Sin
+     * esto, reprogramar una cita a su misma hora (o a una que la solapa) la
+     * haría chocar contra sí misma.
+     */
+    excluirHistoriaId?: string | null
   ): Promise<ServiceResult<{ disponible: true }>> {
     let range;
     try {
@@ -1260,8 +1266,9 @@ class CalendarioService {
            AND "fechaAtencion"::timestamptz >= $2::timestamptz
            AND "fechaAtencion"::timestamptz < $3::timestamptz
            AND "medico" = $4
+           AND ($5::text IS NULL OR "_id" <> $5::text)
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
-      [sedeId, range.startUtc, range.endUtc, medicoCodigo]
+      [sedeId, range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
     );
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };

@@ -18,6 +18,42 @@ import postgresService from './postgres.service';
 import mybodytechEnlaceService from './mybodytech-enlace.service';
 import crypto from 'crypto';
 
+/**
+ * ¿Prendemos el rechazo del cupo ocupado para las citas que entran de Trepsi?
+ *
+ * Nace APAGADO. Hoy Trepsi nos pregunta los cupos (21.161 veces en una semana)
+ * y agenda igual cuando le contestamos que no hay: el 8-oct-2026 le dijimos
+ * `horariosDisponibles: []` para Mauricio Peña y seis horas después creó una
+ * cita encima de otra. En 30 días son 6 choques de dos pacientes distintos y
+ * 6 duplicados de la misma persona (reintentos a los 7-34 segundos, cada uno
+ * con su propio citaId, así que la idempotencia por citaId no los ve).
+ *
+ * Prender esto hoy le tumbaría a Trepsi ~25 citas por semana —las que crea
+ * para el mismo día, que es justo lo que le negamos—, así que se enciende
+ * cuando ellos confirmen que respetan la respuesta.
+ */
+const VALIDAR_CUPO = (): boolean => {
+  const v = process.env.TREPSI_VALIDAR_CUPO;
+  return v === '1' || v === 'true';
+};
+
+/** `fechaAtencion` ISO → fecha y hora en Colombia (UTC-5 fijo, no hay DST). */
+export function fechaHoraColombia(iso: string): { fecha: string; hora: string } | null {
+  // `Date.parse` es laxo: con "mañana a las 4" devuelve un instante real (lo
+  // mide como año 2001). Si eso llegara acá validaríamos un cupo inventado, así
+  // que se exige que empiece por YYYY-MM-DD, igual que las guardas del resto
+  // de la plataforma sobre `fechaAtencion`.
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso ?? '')) return null;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return null;
+  const cot = new Date(ts - 5 * 60 * 60 * 1000);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return {
+    fecha: `${cot.getUTCFullYear()}-${p2(cot.getUTCMonth() + 1)}-${p2(cot.getUTCDate())}`,
+    hora: `${p2(cot.getUTCHours())}:${p2(cot.getUTCMinutes())}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tipos del contrato (espejo de la spec)
 // ---------------------------------------------------------------------------
@@ -391,6 +427,54 @@ function rowToRecord(row: Record<string, unknown>): AppointmentRecord {
 
 class TrepsiService {
   /**
+   * ¿El cupo que pide Trepsi está libre? Usa EXACTAMENTE la misma regla que el
+   * panel, la página de reprogramar y la UMV (`validarSlotDisponible`): si la
+   * validación del socio fuera distinta de la nuestra, el cupo que ofrecemos
+   * dejaría de ser el cupo que aceptamos.
+   *
+   * Devuelve `null` si se puede agendar (o si la guarda está apagada) y el
+   * error listo para responder si no. `calendario.service` se importa de forma
+   * perezosa: cargarlo arriba mete el calendario entero en el arranque de una
+   * ruta que no lo necesitaba.
+   */
+  private async cupoOcupado(
+    medicoCodigo: string,
+    fechaAtencionIso: string,
+    sedeIdCita?: string | null,
+    excluirHistoriaId?: string | null
+  ): Promise<ServiceResult<never> | null> {
+    if (!VALIDAR_CUPO()) return null;
+    const cuando = fechaHoraColombia(fechaAtencionIso);
+    if (!cuando) return null; // una fecha ilegible ya la rechaza quien valida el cuerpo
+
+    const { default: calendarioService } = await import('./calendario.service');
+    const sede =
+      (await calendarioService.resolveSedeMedico(medicoCodigo, sedeIdCita ?? 'trepsi')) ??
+      sedeIdCita ??
+      'trepsi';
+    const val = await calendarioService.validarSlotDisponible(
+      sede,
+      medicoCodigo,
+      cuando.fecha,
+      cuando.hora,
+      'virtual',
+      excluirHistoriaId ?? null
+    );
+    if (val.ok) return null;
+    // Un problema nuestro (la base no responde) no puede verse como "cupo
+    // ocupado": sería rechazarle a Trepsi una cita que sí cabía.
+    if (val.status >= 500) return null;
+    return {
+      ok: false,
+      status: val.status,
+      error: {
+        code: val.error?.code ?? 'SLOT_NO_DISPONIBLE',
+        message: val.error?.message ?? 'Ese horario no está disponible.',
+      },
+    } as ServiceResult<never>;
+  }
+
+  /**
    * Crea (o devuelve, si ya existe) la cita + historia clínica.
    * Idempotente por cita_id.
    */
@@ -438,6 +522,12 @@ class TrepsiService {
         data: rowToRecord(existing[0]),
       };
     }
+
+    // El cupo, con la misma regla del resto de la plataforma. Va DESPUÉS de la
+    // idempotencia: un reenvío de una cita que ya existe debe seguir
+    // devolviendo 200 con su recurso, no chocar contra sí misma.
+    const ocupado = await this.cupoOcupado(input.medico.codigo, input.fechaAtencion);
+    if (ocupado) return ocupado as ServiceResult<AppointmentRecord>;
 
     // Crear nueva historia clínica.
     const historiaId = generateHistoriaId();
@@ -690,6 +780,21 @@ class TrepsiService {
             message: 'La cita ya fue atendida y no puede reprogramarse; cree una cita nueva.',
           },
         };
+      }
+    }
+
+    // Mover la cita a una hora ocupada es el mismo choque que crearla ahí. El
+    // médico puede venir en el cuerpo o quedarse como está.
+    if (input.fechaAtencion) {
+      const medicoDestino = input.medico?.codigo || String(existing[0].medico_codigo || '');
+      if (medicoDestino) {
+        const ocupado = await this.cupoOcupado(
+          medicoDestino,
+          input.fechaAtencion,
+          existing[0].sede_origen ? String(existing[0].sede_origen) : null,
+          historiaId
+        );
+        if (ocupado) return ocupado as ServiceResult<AppointmentRecord>;
       }
     }
 

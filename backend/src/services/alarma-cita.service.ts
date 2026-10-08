@@ -47,6 +47,16 @@ export interface CitaSinCoach {
   horaCita: string;
   paciente: string;
   celular: string | null;
+  /**
+   * `false` cuando la cita quedó agendada FUERA de la disponibilidad del
+   * profesional. No es una ausencia: nadie faltó, la cita se puso a una hora
+   * en la que esa persona no trabaja (8-oct-2026, 18:30 con una coach cuyo
+   * jueves termina 15:40 — contestó "este no es mi horario laboral, mil
+   * disculpas"). Decirle al grupo que "no está conectado" la culpa de algo
+   * que no hizo, así que el aviso tiene que nombrar lo que de verdad pasó.
+   * `undefined` si no se pudo determinar: ahí se dice lo de siempre.
+   */
+  enSuHorario?: boolean;
 }
 
 export interface ResumenAlarma {
@@ -104,7 +114,11 @@ export function construirMensaje(items: CitaSinCoach[], panelUrl?: string): stri
   const detalle = items.slice(0, MAX_DETALLE).map((c) => {
     const sede = c.sedeId ? ` · ${c.sedeId}` : '';
     const paciente = c.paciente || 'Afiliado sin nombre';
-    return `• ${c.horaCita}${sede} — ${c.medicoNombre} no está conectado.\n   Afiliado: ${paciente}`;
+    const motivo =
+      c.enSuHorario === false
+        ? `la cita quedó fuera del horario de ${c.medicoNombre}.`
+        : `${c.medicoNombre} no está conectado.`;
+    return `• ${c.horaCita}${sede} — ${motivo}\n   Afiliado: ${paciente}`;
   });
 
   const resto =
@@ -282,6 +296,8 @@ class AlarmaCitaService {
              h."celular" AS celular,
              to_char(h."fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora_cita,
              TRIM(COALESCE(h."primerNombre",'') || ' ' || COALESCE(h."primerApellido",'')) AS paciente,
+             p.id AS profesional_id,
+             p.sede_id AS prof_sede,
              COALESCE(
                NULLIF(p.alias, ''),
                NULLIF(TRIM(COALESCE(p.primer_nombre,'') || ' ' || COALESCE(p.primer_apellido,'')), ''),
@@ -325,7 +341,7 @@ class AlarmaCitaService {
     const rows = await postgresService.query(sql, params);
     if (rows === null) return null;
 
-    return rows.map((r: Record<string, unknown>) => ({
+    const items: CitaSinCoach[] = rows.map((r: Record<string, unknown>) => ({
       historiaId: String(r.historia_id),
       medico: String(r.medico ?? ''),
       medicoNombre: String(r.medico_nombre ?? r.medico ?? ''),
@@ -334,6 +350,56 @@ class AlarmaCitaService {
       paciente: String(r.paciente ?? '').trim(),
       celular: r.celular ? String(r.celular) : null,
     }));
+
+    await this.marcarFueraDeHorario(
+      items,
+      fecha,
+      rows.map((r: Record<string, unknown>) => ({
+        profesionalId: Number(r.profesional_id),
+        sede: r.prof_sede ? String(r.prof_sede) : null,
+      }))
+    );
+    return items;
+  }
+
+  /**
+   * Anota cuáles de estas citas quedaron FUERA de la jornada del profesional.
+   *
+   * Solo se marca cuando ese día tiene disponibilidad configurada y la hora no
+   * cae en ninguna franja: una agenda vacía puede ser "no la han configurado",
+   * y acusar a la agenda sin estar seguros es tan injusto como acusar al coach.
+   * La disponibilidad se lee con `getRangosEfectivos`, la misma fuente que usa
+   * el agendamiento (override por fecha > patrón semanal).
+   */
+  private async marcarFueraDeHorario(
+    items: CitaSinCoach[],
+    fecha: string,
+    profs: { profesionalId: number; sede: string | null }[]
+  ): Promise<void> {
+    if (items.length === 0) return;
+    const { default: disponibilidadFecha } = await import('./disponibilidad-fecha.service');
+    const diaSemana = new Date(`${fecha}T12:00:00-05:00`).getUTCDay();
+    const cache = new Map<string, { horaInicio: string; horaFin: string }[] | null>();
+
+    for (let i = 0; i < items.length; i++) {
+      const { profesionalId, sede } = profs[i] ?? {};
+      if (!profesionalId || !sede) continue;
+      const clave = `${profesionalId}|${sede}`;
+      if (!cache.has(clave)) {
+        const res = await disponibilidadFecha.getRangosEfectivos(
+          profesionalId,
+          sede,
+          fecha,
+          diaSemana,
+          'virtual'
+        );
+        cache.set(clave, res.ok && res.data ? res.data.rangos : null);
+      }
+      const rangos = cache.get(clave);
+      if (!rangos || rangos.length === 0) continue; // sin jornada conocida: no se opina
+      const hora = items[i].horaCita;
+      items[i].enSuHorario = rangos.some((r) => hora >= r.horaInicio && hora < r.horaFin);
+    }
   }
 
   /**

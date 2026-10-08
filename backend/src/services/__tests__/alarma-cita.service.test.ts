@@ -79,6 +79,27 @@ describe('construirMensaje', () => {
     expect(m).toContain('María Restrepo');
   });
 
+  it('una cita fuera de la jornada no acusa al profesional de no conectarse', () => {
+    // 8-oct-2026: la alarma dijo "Lina Rocio Vera Guevara no está conectado"
+    // por una cita de las 18:30, y su jueves termina 15:40. Contestó al grupo
+    // "este no es mi horario laboral, mil disculpas". No faltó nadie: la cita
+    // se agendó a una hora en la que esa persona no trabaja.
+    const m = construirMensaje([cita({ horaCita: '18:30', enSuHorario: false })]);
+    expect(m).toContain('fuera del horario de Juan Méndez');
+    expect(m).not.toContain('no está conectado.');
+    expect(m).toContain('María Restrepo');
+  });
+
+  it('si la cita sí cae en su jornada, el aviso sigue siendo la ausencia', () => {
+    const m = construirMensaje([cita({ enSuHorario: true })]);
+    expect(m).toContain('Juan Méndez no está conectado.');
+  });
+
+  it('sin jornada conocida no se opina: se dice lo de siempre', () => {
+    const m = construirMensaje([cita({ enSuHorario: undefined })]);
+    expect(m).toContain('Juan Méndez no está conectado.');
+  });
+
   it('con varias, el título las cuenta', () => {
     const m = construirMensaje([cita(), cita({ historiaId: 'hc-2', horaCita: '08:20' })]);
     expect(m).toContain('🔴 2 citas sin profesional conectado');

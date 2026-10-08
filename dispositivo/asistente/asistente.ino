@@ -376,7 +376,7 @@ struct Paso {
   String id, tema, pregunta, pista, nota;
 };
 
-String historiaId, pacienteNombre, pacienteDatos;
+String historiaId, pacienteNombre, pacienteDatos, encabezadoConsulta;
 std::vector<String> resumen;
 std::vector<Paso> pasos;
 
@@ -392,13 +392,16 @@ void respuestaConsulta(const servidor::Respuesta &r) {
       return;
     }
     historiaId = d["historiaId"] | "";
+    // De quién y de cuándo es la historia ("Cita de hoy 09:00 · Paula Mora"); la
+    // placa de pruebas abre las de cualquier profesional.
+    encabezadoConsulta = d["encabezado"] | "";
     pacienteNombre = d["paciente"]["nombre"] | "";
-    String partes;
-    if (!d["paciente"]["edad"].isNull()) partes = String(d["paciente"]["edad"].as<int>()) + " años";
+    String partes = "CC " + cedula;
+    if (!d["paciente"]["edad"].isNull()) partes += " · " + String(d["paciente"]["edad"].as<int>()) + " años";
     String genero = d["paciente"]["genero"] | "";
     if (genero.length()) partes += (partes.length() ? " · " : "") + genero;
     String hora = d["hora"] | "";
-    if (hora.length()) partes += (partes.length() ? " · " : "") + hora;
+    if (hora.length() && !encabezadoConsulta.length()) partes += " · " + hora;
     pacienteDatos = partes;
     resumen.clear();
     for (JsonVariant l : d["resumen"]["lineas"].as<JsonArray>()) resumen.push_back(l.as<String>());
@@ -420,7 +423,8 @@ void respuestaConsulta(const servidor::Respuesta &r) {
 
 void drawPaciente() {
   lienzo::fillRect(0, 0, ANCHO_H, ALTO_H, C_BG);
-  lienzo::texto(F_ETIQUETA, "Consulta de hoy · CC " + cedula, 14, 22, C_MUTED);
+  String arriba = encabezadoConsulta.length() ? encabezadoConsulta : String("Consulta de hoy");
+  lienzo::texto(F_ETIQUETA, lienzo::recortar(F_ETIQUETA, arriba, ANCHO_H - 28), 14, 22, C_MUTED);
   int base = textoEnVarias(F_TITULO, pacienteNombre, 14, 48, ANCHO_H - 28, 23, C_TEXT);
   if (pacienteDatos.length()) lienzo::texto(F_ETIQUETA, pacienteDatos, 14, base, C_MUTED);
   int y = base + 12;

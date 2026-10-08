@@ -147,6 +147,11 @@ class PostgresService {
     await this.query(
       `CREATE INDEX IF NOT EXISTS idx_dispositivos_usuario ON dispositivos (usuario_id)`
     );
+    // Placa de pruebas: ve la historia de cualquier paciente (solo lectura). Se
+    // prende a mano en la base, para una placa puntual; el panel no lo ofrece.
+    await this.query(
+      `ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS ve_todo BOOLEAN NOT NULL DEFAULT FALSE`
+    );
     // Lo que la placa transcribe, frase por frase y con el paso de la guía en
     // que se dijo. `seq` lo numera la placa: un reintento no duplica.
     await this.query(`

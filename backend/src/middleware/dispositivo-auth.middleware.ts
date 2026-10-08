@@ -20,6 +20,12 @@ export function getDispositivoId(req: Request): number | undefined {
   return (req as any).dispositivoId;
 }
 
+/** Placa de pruebas: puede mirar la historia de cualquier paciente (ver dispositivo.service). */
+export function dispositivoVeTodo(req: Request): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (req as any).dispositivoVeTodo === true;
+}
+
 export async function requireDispositivo(req: Request, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   const token = typeof header === 'string' && header.startsWith(BEARER) ? header.slice(BEARER.length).trim() : '';
@@ -42,6 +48,7 @@ export async function requireDispositivo(req: Request, res: Response, next: Next
     r.session = auth.sesion;
     r.sedeScope = auth.sesion.esGlobal ? { all: true } : { all: false, sedes: auth.sesion.sedes ?? [] };
     r.dispositivoId = auth.dispositivoId;
+    r.dispositivoVeTodo = auth.veTodo;
     next();
   } catch (e) {
     next(e);

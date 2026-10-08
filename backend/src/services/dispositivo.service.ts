@@ -52,6 +52,8 @@ const VIGENCIA_CODIGO_MIN = 10;
 export interface Autenticado {
   dispositivoId: number;
   sesion: SessionPayload;
+  /** Placa de pruebas: ve la historia de cualquier paciente, sea del profesional que sea (solo lectura). */
+  veTodo: boolean;
 }
 
 export type ResultadoReclamo =
@@ -214,7 +216,7 @@ class DispositivoService {
   /** Token de la placa → la sesión del médico. null si no sirve. */
   async autenticar(token: string): Promise<Autenticado | null> {
     const rows = await postgresService.query(
-      `SELECT id, usuario_id, ultimo_uso_en FROM dispositivos
+      `SELECT id, usuario_id, ultimo_uso_en, ve_todo FROM dispositivos
         WHERE token_hash = $1 AND revocado_en IS NULL`,
       [hashSecreto(token)]
     );
@@ -232,6 +234,7 @@ class DispositivoService {
     }
     return {
       dispositivoId: Number(d.id),
+      veTodo: d.ve_todo === true,
       sesion: {
         kind: 'session',
         userId: s.id,
@@ -292,6 +295,51 @@ class DispositivoService {
     return { estado: 'ok', historia: rows[0] };
   }
 
+  /**
+   * Placa de pruebas (`ve_todo`): la cédula, sea del profesional que sea. La
+   * cita abierta de hoy si hay; si no, la historia más reciente del paciente.
+   */
+  async buscarCualquiera(cedula: string): Promise<{ historia: HistoriaRow; deHoy: boolean } | null | 'SIN_HISTORIA'> {
+    const { inicio, fin } = hoyColombia();
+    const instante = `(CASE WHEN "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' THEN "fechaAtencion"::timestamptz END)`;
+    const hoy = await postgresService.query(
+      `SELECT ${SELECT_HISTORIA} FROM "HistoriaClinica"
+        WHERE "numeroId" = $1 AND "fechaConsulta" IS NULL
+          AND ${instante} >= $2::timestamptz AND ${instante} <= $3::timestamptz
+        ORDER BY ${instante} ASC LIMIT 1`,
+      [cedula, inicio.toISOString(), fin.toISOString()]
+    );
+    if (hoy === null) return null;
+    if (hoy.length) return { historia: hoy[0], deHoy: true };
+    const ultima = await postgresService.query(
+      `SELECT ${SELECT_HISTORIA} FROM "HistoriaClinica" WHERE "numeroId" = $1
+        ORDER BY COALESCE("fechaConsulta", "_createdDate") DESC LIMIT 1`,
+      [cedula]
+    );
+    if (ultima === null) return null;
+    return ultima.length ? { historia: ultima[0], deHoy: false } : 'SIN_HISTORIA';
+  }
+
+  /** Nombre y especialidad del profesional de una historia (para el encabezado y la guía). */
+  async profesional(codigo: string | null | undefined): Promise<{ nombre: string; especialidad: string | null } | null> {
+    if (!codigo) return null;
+    const rows = await postgresService.query(
+      `SELECT concat_ws(' ', primer_nombre, primer_apellido) AS nombre, especialidad
+         FROM profesionales WHERE codigo = $1 LIMIT 1`,
+      [codigo]
+    );
+    if (!rows || !rows.length) return null;
+    return { nombre: String(rows[0].nombre ?? '').replace(/\s+/g, ' ').trim(), especialidad: rows[0].especialidad ?? null };
+  }
+
+  /** "Cita de hoy 23:30 · Paula Mora" / "12-ago-2026 · Paula Mora": de quién y de cuándo. */
+  encabezado(historia: HistoriaRow, deHoy: boolean, profesional: string | null): string {
+    const cuando = deHoy
+      ? `Cita de hoy${historia.horaAtencion ? ` ${historia.horaAtencion}` : ''}`
+      : fechaCorta(historia.fechaConsulta ?? historia.fechaAtencion ?? historia._createdDate) ?? 'Sin fecha';
+    return `${cuando} · ${profesional || historia.medico || 'sin profesional'}`;
+  }
+
   /** La historia, solo si es de ese médico. */
   async historiaDelMedico(historiaId: string, medicoCodigo: string): Promise<HistoriaRow | null> {
     const rows = await postgresService.query(
@@ -314,7 +362,7 @@ class DispositivoService {
   }
 
   /** Lo que ve el médico al abrir la consulta: paciente, resumen y la guía. */
-  armarConsulta(historia: HistoriaRow, programa: Programa, anteriores: HistoriaRow[]) {
+  armarConsulta(historia: HistoriaRow, programa: Programa, anteriores: HistoriaRow[], encabezado?: string) {
     const paciente = {
       cedula: historia.numeroId,
       nombre: nombreCompleto(historia),
@@ -377,6 +425,9 @@ class DispositivoService {
     return {
       historiaId: historia._id as string,
       programa,
+      encabezado: encabezado ?? null,
+      // La placa de pruebas puede abrir historias ajenas o ya cerradas: solo para mirar.
+      soloLectura: Boolean(historia.fechaConsulta),
       hora: historia.horaAtencion ?? null,
       paciente,
       resumen: { visitas: medidas.length, ultimas: medidas.slice(0, 3), lineas },

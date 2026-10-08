@@ -15,6 +15,9 @@ jest.mock('../../services/dispositivo.service', () => ({
     listar: jest.fn(),
     revocar: jest.fn(),
     buscarCitaHoy: jest.fn(),
+    buscarCualquiera: jest.fn(),
+    profesional: jest.fn(),
+    encabezado: jest.fn(),
     historiaDelMedico: jest.fn(),
     visitasAnteriores: jest.fn(),
     armarConsulta: jest.fn(),
@@ -24,6 +27,10 @@ jest.mock('../../services/dispositivo.service', () => ({
     borrador: jest.fn(),
     finalizar: jest.fn(),
   },
+}));
+jest.mock('../../services/audit.service', () => ({
+  __esModule: true,
+  default: { record: jest.fn().mockResolvedValue(undefined) },
 }));
 jest.mock('../../services/transcription.service', () => ({
   __esModule: true,
@@ -36,6 +43,7 @@ import request from 'supertest';
 import dispositivoRoutes from '../dispositivo.routes';
 import dispositivoService from '../../services/dispositivo.service';
 import { crearTokenRealtime } from '../../services/transcription.service';
+import auditService from '../../services/audit.service';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const svc = dispositivoService as any as Record<string, jest.Mock>;
@@ -68,7 +76,7 @@ const TOKEN = 'Bearer dsp_token-de-prueba';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  svc.autenticar.mockResolvedValue({ dispositivoId: 3, sesion: SESION_MEDICO });
+  svc.autenticar.mockResolvedValue({ dispositivoId: 3, sesion: SESION_MEDICO, veTodo: false });
 });
 
 describe('la placa sin vincular', () => {
@@ -216,5 +224,53 @@ describe('la placa vinculada', () => {
       .send({ campos: { tas: 120 } });
     expect(r.status).toBe(200);
     expect(svc.finalizar).toHaveBeenCalledWith(historia, 'umv', { tas: 120 }, '');
+  });
+});
+
+describe('la placa de pruebas (ve_todo)', () => {
+  beforeEach(() => {
+    svc.autenticar.mockResolvedValue({ dispositivoId: 3, sesion: SESION_MEDICO, veTodo: true });
+  });
+
+  it('busca la cédula en todas las historias, no solo en las de su médico', async () => {
+    const historia = { _id: 'h-ajena', medico: 'EVAL01', fechaConsulta: null };
+    svc.buscarCualquiera.mockResolvedValue({ historia, deHoy: true });
+    svc.profesional.mockResolvedValue({ nombre: 'Paula Mora', especialidad: 'Medico Corporativo' });
+    svc.visitasAnteriores.mockResolvedValue([]);
+    svc.encabezado.mockReturnValue('Cita de hoy 09:00 · Paula Mora');
+    svc.armarConsulta.mockReturnValue({ historiaId: 'h-ajena' });
+    const r = await request(app()).post('/api/dispositivo/consulta').set('Authorization', TOKEN).send({ cedula: '1023456789' });
+    expect(r.status).toBe(200);
+    expect(svc.buscarCitaHoy).not.toHaveBeenCalled();
+    // La guía es la del profesional de la historia, no la de la cuenta de la placa.
+    expect(svc.armarConsulta).toHaveBeenCalledWith(historia, 'corporativo', [], 'Cita de hoy 09:00 · Paula Mora');
+  });
+
+  it('cada historia que abre queda en la auditoría', async () => {
+    svc.buscarCualquiera.mockResolvedValue({ historia: { _id: 'h-ajena', medico: 'EVAL01' }, deHoy: false });
+    svc.profesional.mockResolvedValue(null);
+    svc.visitasAnteriores.mockResolvedValue([]);
+    svc.armarConsulta.mockReturnValue({});
+    await request(app()).post('/api/dispositivo/consulta').set('Authorization', TOKEN).send({ cedula: '1023456789' });
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ accion: 'dispositivo_ver_historia', entidadId: 'h-ajena', actorCodigo: 'MED-PRUEBA' })
+    );
+  });
+
+  it('sin ninguna historia con esa cédula, lo dice', async () => {
+    svc.buscarCualquiera.mockResolvedValue('SIN_HISTORIA');
+    const r = await request(app()).post('/api/dispositivo/consulta').set('Authorization', TOKEN).send({ cedula: '1023456789' });
+    expect(r.status).toBe(404);
+    expect(r.body.error).toBe('SIN_HISTORIA');
+  });
+
+  it('solo mira: no escribe en una historia que no es de su médico', async () => {
+    svc.historiaDelMedico.mockResolvedValue(null);
+    const r = await request(app())
+      .post('/api/dispositivo/consulta/h-ajena/segmentos')
+      .set('Authorization', TOKEN)
+      .send({ segmentos: [{ seq: 0, paso: 'motivo', texto: 'hola' }] });
+    expect(r.status).toBe(404);
+    expect(svc.guardarSegmentos).not.toHaveBeenCalled();
   });
 });

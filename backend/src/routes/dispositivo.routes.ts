@@ -17,7 +17,8 @@ import { z } from 'zod';
 import dispositivoService from '../services/dispositivo.service';
 import { crearTokenRealtime } from '../services/transcription.service';
 import { getSession, requireRole } from '../middleware/rbac.middleware';
-import { requireDispositivo, getDispositivoId } from '../middleware/dispositivo-auth.middleware';
+import { requireDispositivo, getDispositivoId, dispositivoVeTodo } from '../middleware/dispositivo-auth.middleware';
+import auditService from '../services/audit.service';
 import { normalizarCedula, normalizarCodigo } from '../helpers/dispositivo.helper';
 import { programaDe } from '../helpers/guias-dispositivo';
 
@@ -144,6 +145,7 @@ router.post('/consulta', requireDispositivo, async (req: Request, res: Response,
   }
   try {
     const s = getSession(req)!;
+    if (dispositivoVeTodo(req)) return void (await consultaDePrueba(req, res, cedula));
     const r = await dispositivoService.buscarCitaHoy(s.codigo!, cedula);
     if (!r) return void errorDb(res);
     if (r.estado === 'SIN_CITA') {
@@ -161,6 +163,45 @@ router.post('/consulta', requireDispositivo, async (req: Request, res: Response,
     next(e);
   }
 });
+
+/**
+ * La placa de pruebas (`dispositivos.ve_todo`, decisión de Daniel del 8-oct-2026):
+ * ve la historia de cualquier paciente, sea del profesional que sea. Solo para
+ * mirar: grabar, transcribir y cerrar siguen exigiendo que la historia sea del
+ * médico de la placa (cargarHistoria). Cada historia abierta así queda en la
+ * auditoría con su id: es acceso a datos clínicos de un paciente ajeno.
+ */
+async function consultaDePrueba(req: Request, res: Response, cedula: string): Promise<void> {
+  const r = await dispositivoService.buscarCualquiera(cedula);
+  if (r === null) return void errorDb(res);
+  if (r === 'SIN_HISTORIA') {
+    res.status(404).json({ success: false, error: 'SIN_HISTORIA', message: 'No hay historias con esa cédula.' });
+    return;
+  }
+  const prof = await dispositivoService.profesional(r.historia.medico);
+  const programa = programaDe(prof?.especialidad);
+  const anteriores = await dispositivoService.visitasAnteriores(cedula, r.historia._id);
+  const s = getSession(req)!;
+  auditService
+    .record({
+      actorUserId: s.userId,
+      actorEmail: s.email,
+      actorNombre: s.nombre,
+      actorCodigo: s.codigo ?? null,
+      actorRol: s.role,
+      metodo: 'POST',
+      ruta: req.originalUrl,
+      accion: 'dispositivo_ver_historia',
+      entidad: 'historia',
+      entidadId: r.historia._id,
+      statusCode: 200,
+      ip: req.ip,
+      detalle: { dispositivoId: getDispositivoId(req), medicoDeLaHistoria: r.historia.medico ?? null },
+    })
+    .catch(() => undefined);
+  const encabezado = dispositivoService.encabezado(r.historia, r.deHoy, prof?.nombre ?? null);
+  res.json({ success: true, data: dispositivoService.armarConsulta(r.historia, programa, anteriores, encabezado) });
+}
 
 /** Las rutas de una consulta: la historia tiene que ser del médico de la placa. */
 async function cargarHistoria(req: Request, res: Response, next: NextFunction): Promise<void> {

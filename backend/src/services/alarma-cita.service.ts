@@ -313,6 +313,9 @@ class AlarmaCitaService {
          AND UPPER(COALESCE(h."atendido", 'PENDIENTE')) NOT IN ('ATENDIDO', 'NO CONTESTA')
          AND COALESCE(h."pvEstado", '') <> 'No Contesta'
          AND COALESCE(h."numeroId", '') NOT IN ('TEST', 'test')
+         -- Una cita de prueba no saca a nadie a buscar al coach: nadie la va a
+         --    atender, para eso es de prueba.
+         AND COALESCE(h."es_prueba", FALSE) = FALSE
          AND NOT EXISTS (SELECT 1 FROM trepsi_appointments t
                           WHERE t.historia_id = h."_id" AND t.estado = 'cancelled')
          AND NOT (

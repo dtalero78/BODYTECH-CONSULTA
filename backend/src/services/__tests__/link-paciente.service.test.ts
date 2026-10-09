@@ -344,14 +344,20 @@ describe('enviarLinkPaciente', () => {
 
     await enviarLinkPaciente(input);
 
+    // Las llamadas se buscan por su CONTENIDO y no por su posición: cualquier
+    // consulta nueva antes de los rastros (ej. la guarda de cita de prueba)
+    // las corría de lugar y rompía el test sin que nada estuviera mal.
+    const llamada = (fragmento: string) =>
+      query.mock.calls.find((c: unknown[]) => String(c[0]).includes(fragmento));
+
     // 1. La marca de contacto, con quién lo envió y solo si es el primer envío.
-    const marca = query.mock.calls[0];
+    const marca = llamada('"link_enviado_at" = NOW()')!;
     expect(marca[0]).toContain('"link_enviado_at" = NOW()');
     expect(marca[0]).toContain('"link_enviado_at" IS NULL');
     expect(marca[1]).toEqual(['hc-1', 'manual']);
 
     // 2. La sala, SIN los query params: es lo que lee "Atender".
-    const sala = query.mock.calls[1];
+    const sala = llamada('"video_room_name"')!;
     expect(sala[0]).toContain('"video_room_name"');
     expect(sala[1]).toEqual(['consulta-abc', 'hc-1']);
 
@@ -372,7 +378,10 @@ describe('enviarLinkPaciente', () => {
 
     await enviarLinkPaciente({ ...input, origen: 'auto' });
 
-    expect(query.mock.calls[0][1]).toEqual(['hc-1', 'auto']);
+    const marcaAuto = query.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes('"link_enviado_at" = NOW()')
+    )!;
+    expect(marcaAuto[1]).toEqual(['hc-1', 'auto']);
   });
 
   it('un envío fallido no deja NINGÚN rastro: la cita sigue sin contactar', async () => {
@@ -382,7 +391,12 @@ describe('enviarLinkPaciente', () => {
     const r = await enviarLinkPaciente(input);
 
     expect(r).toMatchObject({ success: false, via: 'ninguno' });
-    expect(query).not.toHaveBeenCalled();
+    // Ninguna ESCRITURA: la única consulta permitida es la lectura de la
+    // guarda de cita de prueba, que no deja rastro.
+    const escrituras = query.mock.calls.filter((c: unknown[]) =>
+      /UPDATE|INSERT|DELETE/i.test(String(c[0]))
+    );
+    expect(escrituras).toHaveLength(0);
     expect(registrarMensaje).not.toHaveBeenCalled();
     expect(enqueueLink).not.toHaveBeenCalled();
   });

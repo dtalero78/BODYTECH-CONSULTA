@@ -664,15 +664,19 @@ class TrepsiService {
          "codEmpresa",
          "atendido",
          "sede_id",
-         "origen"
+         "origen",
+         "es_prueba"
        ) VALUES (
          $1, NOW(), NOW(),
-         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'PENDIENTE', 'trepsi', 'trepsi'
+         $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'PENDIENTE', 'trepsi', 'trepsi', $24
        ) RETURNING "_id"`,
       [
         historiaId,
         input.paciente.numeroId,
-        input.paciente.primerNombre,
+        // El nombre lleva PRUEBA adelante: el coach la ve en su lista del día
+        // —la cita ocupa un cupo real, que es lo que se está probando— y sabe
+        // de un vistazo que a esa no hay que llamarla.
+        esPruebas ? `PRUEBA ${input.paciente.primerNombre}` : input.paciente.primerNombre,
         input.paciente.segundoNombre ?? null,
         input.paciente.primerApellido,
         input.paciente.segundoApellido ?? null,
@@ -693,6 +697,7 @@ class TrepsiService {
         tallaVal != null ? String(tallaVal) : null,
         horaAtencion,
         input.empresa ? input.empresa.trim().toUpperCase() : null,
+        esPruebas,
       ]
     );
 

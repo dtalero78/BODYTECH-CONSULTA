@@ -85,7 +85,8 @@ const CLASE_CITA_SQL = `
 // un nombre escrito a mano. Sigue saliendo en el calendario y en Digitalizar:
 // esto solo saca sus citas de la estadística de gestión.
 export const TIENE_FICHA_SQL = `
-  EXISTS (SELECT 1 FROM profesionales pf WHERE pf.codigo = "HistoriaClinica"."medico")`;
+  EXISTS (SELECT 1 FROM profesionales pf WHERE pf.codigo = "HistoriaClinica"."medico")
+  AND COALESCE("HistoriaClinica"."es_prueba", FALSE) = FALSE`;
 
 export type Modalidad = 'presencial' | 'virtual';
 

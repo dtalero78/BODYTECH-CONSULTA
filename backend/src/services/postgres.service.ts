@@ -1621,6 +1621,21 @@ class PostgresService {
           ON cita_cupo (historia_id)
       `);
 
+      // ===== Citas de prueba =====
+      // Las pruebas de la integración se hacen contra COACHES REALES: con un
+      // profesional ficticio no se estaría probando la parrilla de verdad, que
+      // es justo lo que hay que verificar. A cambio, la cita se marca acá y su
+      // paciente lleva "PRUEBA" en el nombre, para que el coach la vea en su
+      // lista y sepa que a esa no hay que llamarla.
+      //
+      // La marca es lo que impide que una prueba le escriba a una persona
+      // real: los envíos automáticos de WhatsApp, la alarma al grupo de
+      // soporte y los indicadores la saltan.
+      await this.query(`
+        ALTER TABLE "HistoriaClinica"
+          ADD COLUMN IF NOT EXISTS es_prueba BOOLEAN NOT NULL DEFAULT FALSE
+      `);
+
       // ===== Valoraciones del Médico Corporativo → Google Sheets =====
       // Una fila por valoración cerrada. NO es la fuente del dato —la historia
       // ya está guardada en `HistoriaClinica`— sino la cola que garantiza que

@@ -470,6 +470,9 @@ class LinkAutoService {
          AND UPPER(COALESCE(h."atendido", 'PENDIENTE')) NOT IN ('ATENDIDO', 'NO CONTESTA')
          AND COALESCE(h."pvEstado", '') <> 'No Contesta'
          AND COALESCE(h."numeroId", '') NOT IN ('TEST', 'test')
+         -- Una cita de prueba de la integración NUNCA recibe WhatsApp: el celular
+         --    que manda el socio al probar es de una persona real.
+         AND COALESCE(h."es_prueba", FALSE) = FALSE
          AND (h."link_enviado_at" IS NULL OR h."link_enviado_at" < $7::timestamptz)
          AND NOT EXISTS (SELECT 1 FROM trepsi_appointments t
                           WHERE t.historia_id = h."_id" AND t.estado = 'cancelled')

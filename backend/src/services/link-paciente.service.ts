@@ -41,6 +41,23 @@ const TEMPLATE_CITA_FALLBACK = 'HX83c2dd7da8954757ee34a310d4f17e62';
 export { formatCelularE164 } from '../helpers/celular.helper';
 import { formatCelularE164 } from '../helpers/celular.helper';
 
+/**
+ * ¿Es una cita de prueba de la integración? Ante un error de base se responde
+ * `false`: dejar de mandarle el link a todos los pacientes reales por un bache
+ * es peor que el riesgo de un mensaje de prueba.
+ */
+async function esCitaDePrueba(historiaId: string): Promise<boolean> {
+  try {
+    const rows = await postgresService.query(
+      'SELECT COALESCE("es_prueba", FALSE) AS p FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1',
+      [historiaId]
+    );
+    return rows !== null && rows.length > 0 && rows[0].p === true;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 1. Helpers puros
 // ---------------------------------------------------------------------------
@@ -302,6 +319,14 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   if (await bloqueadoPorPruebasUmv(historiaId)) {
     console.log(`🧪 [umv] Link NO enviado a ${historiaId}: modo pruebas (celular fuera de UMV_SOLO_CELULARES)`);
     return { success: false, error: 'UMV_MODO_PRUEBAS', via: 'ninguno' };
+  }
+  // Una cita de prueba de la integración lleva PRUEBA en el nombre y el coach
+  // no debería contactarla, pero el botón sigue ahí: el candado va acá, donde
+  // sale el mensaje, y no en la confianza de que nadie lo apriete. El celular
+  // que el socio usa para probar es el de una persona real.
+  if (await esCitaDePrueba(historiaId)) {
+    console.log(`🧪 [pruebas] Link NO enviado a ${historiaId}: es una cita de prueba de la integración`);
+    return { success: false, error: 'CITA_DE_PRUEBA', via: 'ninguno' };
   }
   const marca = await marcaDeEnvioParaHistoria(historiaId);
   const umv = await envioUmvParaHistoria(historiaId);

@@ -14,6 +14,63 @@ import profesionalesService from '../services/profesionales.service';
 import calendarioService, { nowColombia } from '../services/calendario.service';
 import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
 
+/**
+ * Caché corta del "próximo día con cupos" por profesional.
+ *
+ * Esa búsqueda recorre el calendario día por día, y las consultas de día
+ * bloqueado son 441 diarias: calcularlo en cada una es caro para un servidor
+ * que corre en una sola instancia. 60 segundos alcanza — un cupo que se ocupa
+ * en ese minuto solo hace que ofrezcamos una hora de más, y el control de cupo
+ * la rechaza al crear.
+ */
+const TTL_PROXIMO_MS = 60_000;
+
+/**
+ * El campo `proximoDisponible` nace apagado: se acordó probarlo con Trepsi
+ * antes de que lo vean todas sus peticiones. Se prende con
+ * `TREPSI_PROXIMO_DISPONIBLE=true` desde las variables, sin desplegar.
+ */
+const PROXIMO_ACTIVO = (): boolean => {
+  const v = process.env.TREPSI_PROXIMO_DISPONIBLE;
+  return v === '1' || v === 'true';
+};
+const cacheProximo = new Map<string, { hasta: number; valor: ProximoDisponible | null }>();
+
+interface ProximoDisponible {
+  fecha: string;
+  horariosDisponibles: string[];
+}
+
+/**
+ * El siguiente día (de hoy en adelante) en que ese profesional tiene cupos.
+ *
+ * Va en la respuesta cuando el día pedido viene vacío: decir "no hay" y nada
+ * más deja a la app de Trepsi sin qué ofrecerle al paciente, y de ahí salieron
+ * las citas agendadas sobre un día sin cupos (8-oct-2026). `null` si no tiene
+ * nada en los próximos días. Nunca hace fallar la respuesta: si la búsqueda
+ * falla, se omite el campo.
+ */
+async function proximoDiaConCupos(
+  sedeId: string,
+  medicoCodigo: string,
+  modalidad: 'virtual' | 'presencial'
+): Promise<ProximoDisponible | null> {
+  if (!PROXIMO_ACTIVO()) return null;
+  const clave = `${medicoCodigo}|${sedeId}|${modalidad}`;
+  const hit = cacheProximo.get(clave);
+  if (hit && hit.hasta > Date.now()) return hit.valor;
+  let valor: ProximoDisponible | null = null;
+  try {
+    const res = await calendarioService.getHorariosReprogramar(sedeId, medicoCodigo, modalidad, 1);
+    const dia = res.ok && res.data ? res.data.dias[0] : null;
+    if (dia) valor = { fecha: dia.fecha, horariosDisponibles: dia.horarios };
+  } catch {
+    valor = null;
+  }
+  cacheProximo.set(clave, { hasta: Date.now() + TTL_PROXIMO_MS, valor });
+  return valor;
+}
+
 // ---------------------------------------------------------------------------
 // Zod schemas (espejo de la spec)
 // ---------------------------------------------------------------------------
@@ -489,6 +546,9 @@ class TrepsiController {
       // como no disponible sin agendar encima.
       const motivoBloqueo = diaNoLaborable(fecha) ?? (fecha === nowColombia().fecha ? 'mismo_dia' : null);
       if (motivoBloqueo) {
+        const proximoDisponible = PROXIMO_ACTIVO()
+          ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad)
+          : undefined;
         res.status(200).json({
           ok: true,
           fecha,
@@ -503,6 +563,7 @@ class TrepsiController {
           tiempoConsultaMinutos: prof.tiempoConsulta ?? null,
           horariosDisponibles: [],
           motivoBloqueo, // 'domingo' | 'festivo' | 'mismo_dia'
+          ...(proximoDisponible !== undefined ? { proximoDisponible } : {}),
         });
         return;
       }
@@ -523,6 +584,13 @@ class TrepsiController {
       const data = horariosResult.data;
       const slotsLibres = data.horarios.filter((s) => s.disponible).map((s) => s.hora);
 
+      // Un día sin cupos libres es tan callejón sin salida como un día
+      // bloqueado: también lleva el siguiente día con horas.
+      const proximoDisponible =
+        slotsLibres.length === 0 && PROXIMO_ACTIVO()
+          ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad)
+          : undefined;
+
       res.status(200).json({
         ok: true,
         fecha: data.fecha,
@@ -536,6 +604,7 @@ class TrepsiController {
         modalidad: data.modalidad,
         tiempoConsultaMinutos: data.tiempoConsulta,
         horariosDisponibles: slotsLibres,
+        ...(proximoDisponible !== undefined ? { proximoDisponible } : {}),
       });
     } catch (err) {
       next(err);

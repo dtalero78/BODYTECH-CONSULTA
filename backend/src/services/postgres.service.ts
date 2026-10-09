@@ -1592,6 +1592,35 @@ class PostgresService {
           ON alarma_cita_envio (fecha, estado)
       `);
 
+      // ===== El cupo de un profesional, tomado de a uno =====
+      // Revisar "¿está libre?" y después insertar la cita son dos pasos, y
+      // entre ellos cabe otra solicitud: dos personas que agendan el mismo
+      // segundo pasan las dos la revisión y las dos quedan. Esta tabla cierra
+      // ese hueco porque la PK la decide la base: el segundo INSERT choca.
+      //
+      // Por qué una tabla y no un índice único sobre `HistoriaClinica`: su
+      // `fechaAtencion` es TEXT con formatos mezclados (la misma hora está
+      // guardada como `...T21:00:00.000Z` y como `...T16:00:00-05:00`), así
+      // que un índice ahí no vería el choque, y la conversión a timestamptz
+      // no se puede indexar. Acá el instante se guarda ya normalizado.
+      //
+      // `historia_id` permite re-tomar un cupo huérfano: si la cita que lo
+      // tenía se canceló o ya no existe, el cupo vuelve a estar libre.
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS cita_cupo (
+          medico       TEXT        NOT NULL,
+          instante     TIMESTAMPTZ NOT NULL,
+          historia_id  TEXT        NOT NULL,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (medico, instante)
+        )
+      `);
+
+      await this.query(`
+        CREATE INDEX IF NOT EXISTS idx_cita_cupo_historia
+          ON cita_cupo (historia_id)
+      `);
+
       // ===== Valoraciones del Médico Corporativo → Google Sheets =====
       // Una fila por valoración cerrada. NO es la fuente del dato —la historia
       // ya está guardada en `HistoriaClinica`— sino la cola que garantiza que

@@ -466,7 +466,18 @@ class TrepsiController {
         res.status(result.status).json({ ok: false, error: result.error });
         return;
       }
-      const medicos = result.data.map((m) => ({
+      // `?empresa=athletic` devuelve SOLO el coach de Athletic. Sin esto, su
+      // app ofrecería cualquiera y la cita rebotaría al crearse: es mejor que
+      // el paciente nunca vea un profesional con el que no puede agendar.
+      const empresa = typeof req.query.empresa === 'string' ? req.query.empresa : '';
+      const coachAthletic = (process.env.ATHLETIC_COACH_CODIGO || '').trim();
+      const soloAthletic =
+        empresa.trim().toUpperCase() === 'ATHLETIC' && coachAthletic.length > 0;
+
+      const medicos = (soloAthletic
+        ? result.data.filter((m) => m.codigo === coachAthletic)
+        : result.data
+      ).map((m) => ({
         codigo: m.codigo,
         nombre:
           m.alias ||

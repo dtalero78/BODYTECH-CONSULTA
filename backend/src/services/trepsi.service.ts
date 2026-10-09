@@ -16,6 +16,7 @@
 
 import postgresService from './postgres.service';
 import mybodytechEnlaceService from './mybodytech-enlace.service';
+import cupoClaimService from './cupo-claim.service';
 import crypto from 'crypto';
 
 /**
@@ -32,6 +33,23 @@ import crypto from 'crypto';
  * para el mismo día, que es justo lo que le negamos—, así que se enciende
  * cuando ellos confirmen que respetan la respuesta.
  */
+/**
+ * Athletic se atiende con un solo coach (decisión del 9-oct-2026). Es su
+ * propia marca —el paciente recibe el WhatsApp desde el número de Athletic,
+ * ver marca.helper— y la operación quiere su agenda concentrada en una
+ * persona. Trepsi manda `empresa: "athletic"` al crear la cita.
+ *
+ * El código sale de la variable para poder cambiar de coach sin desplegar.
+ * Sin ella configurada, la regla no se aplica.
+ */
+const COACH_ATHLETIC = (): string | null => {
+  const v = (process.env.ATHLETIC_COACH_CODIGO || '').trim();
+  return v.length > 0 ? v : null;
+};
+
+const esAthletic = (empresa?: string | null): boolean =>
+  (empresa || '').trim().toUpperCase() === 'ATHLETIC';
+
 const VALIDAR_CUPO = (): boolean => {
   const v = process.env.TREPSI_VALIDAR_CUPO;
   return v === '1' || v === 'true';
@@ -526,6 +544,21 @@ class TrepsiService {
       };
     }
 
+    // Athletic va con su coach y con ninguno más.
+    const coachAthletic = COACH_ATHLETIC();
+    if ((VALIDAR_CUPO() || esPruebas) && coachAthletic && esAthletic(input.empresa)) {
+      if (input.medico.codigo !== coachAthletic) {
+        return {
+          ok: false,
+          status: 422,
+          error: {
+            code: 'MEDICO_NO_ATIENDE_ATHLETIC',
+            message: `Las consultas de Athletic se agendan únicamente con el profesional ${coachAthletic}.`,
+          },
+        };
+      }
+    }
+
     // El cupo, con la misma regla del resto de la plataforma. Va DESPUÉS de la
     // idempotencia: un reenvío de una cita que ya existe debe seguir
     // devolviendo 200 con su recurso, no chocar contra sí misma.
@@ -540,6 +573,27 @@ class TrepsiService {
 
     // Crear nueva historia clínica.
     const historiaId = generateHistoriaId();
+
+    // El candado de verdad contra dos personas agendando el mismo segundo: la
+    // revisión de arriba responde "está libre", pero quien decide es la base.
+    // Va antes de escribir la historia; si algo falla después, se suelta.
+    if (VALIDAR_CUPO() || esPruebas) {
+      const tomado = await cupoClaimService.tomar(
+        input.medico.codigo,
+        input.fechaAtencion,
+        historiaId
+      );
+      if (tomado === false) {
+        return {
+          ok: false,
+          status: 409,
+          error: {
+            code: 'SLOT_TAKEN',
+            message: 'Ese horario ya está ocupado para este profesional.',
+          },
+        };
+      }
+    }
     const motivo = String(input.historiaClinica.motivoConsulta ?? '').slice(0, 4000);
     // Antecedentes familiares: Trepsi los manda en historiaClinica; persistir al
     // crear (antes solo entraban por PATCH) para que se vean en el panel del coach.
@@ -643,6 +697,9 @@ class TrepsiService {
     );
 
     if (hcInsert === null) {
+      // El cupo quedó tomado por una cita que no existe: se suelta para no
+      // dejar una hora inutilizable.
+      await cupoClaimService.soltar(historiaId);
       return {
         ok: false,
         status: 500,
@@ -809,6 +866,30 @@ class TrepsiService {
       }
     }
 
+    // Mover la cita también mueve su cupo: se toma el nuevo y recién ahí se
+    // suelta el viejo (al revés, un fallo dejaría la cita sin ninguno).
+    if ((VALIDAR_CUPO() || esPruebas) && input.fechaAtencion) {
+      const medicoDestino = input.medico?.codigo || String(existing[0].medico_codigo || '');
+      if (medicoDestino) {
+        const tomado = await cupoClaimService.tomar(
+          medicoDestino,
+          input.fechaAtencion,
+          historiaId
+        );
+        if (tomado === false) {
+          return {
+            ok: false,
+            status: 409,
+            error: {
+              code: 'SLOT_TAKEN',
+              message: 'Ese horario ya está ocupado para este profesional.',
+            },
+          };
+        }
+        await cupoClaimService.soltarOtros(historiaId, medicoDestino, input.fechaAtencion);
+      }
+    }
+
     // Build dynamic UPDATE only with provided fields.
     const sets: string[] = ['updated_at = NOW()'];
     const params: unknown[] = [];
@@ -935,6 +1016,9 @@ class TrepsiService {
     // Si la cita estaba enlazada a una orden de MyBodytech, se suelta.
     if (updated[0].historia_id) {
       void mybodytechEnlaceService.desenlazarTrepsi(String(updated[0].historia_id));
+      // Y el cupo vuelve a quedar libre: cancelar y no liberarlo dejaría esa
+      // hora bloqueada para el resto de los pacientes.
+      void cupoClaimService.soltar(String(updated[0].historia_id));
     }
     return { ok: true, status: 200, data: rowToRecord(updated[0]) };
   }

@@ -34,10 +34,12 @@ import usuariosGlobalRoutes from './routes/usuarios-global.routes';
 import informeCorporativoRoutes from './routes/informe-corporativo.routes';
 import carpetaRoutes from './routes/carpeta.routes';
 import usuariosGlobalService from './services/usuarios-global.service';
+import cuentasApagadas from './services/cuentas-apagadas.service';
 import carpetaService from './services/carpeta.service';
 import accesosSyncService from './services/accesos-sync.service';
 import botTrepsiRoutes from './routes/bot-trepsi.routes';
 import trepsiWebhookAdminRoutes from './routes/trepsi-webhook-admin.routes';
+import cupoClaimService from './services/cupo-claim.service';
 import trepsiWebhookService from './services/trepsi-webhook.service';
 import whatsappLeadsRoutes from './routes/whatsapp-leads.routes';
 import whatsappLeadsService from './services/whatsapp-leads.service';
@@ -361,6 +363,9 @@ postgresService
       .then(() => carpetaService.asegurarEsquema())
       .catch((e) => console.error('⚠️ [usuarios-global] no se pudo asegurar el esquema:', e?.message ?? e))
   )
+  // Lista de cuentas apagadas, para cortar la sesión que ya tenían abierta.
+  // Nunca lanza: si una base no responde, se queda con la última lista.
+  .then(() => cuentasApagadas.iniciar())
   .then(() =>
     empresasService
       .asegurarEsquema()
@@ -450,6 +455,24 @@ postgresService
   // viejo y describiría una vista que ya no es.
   .then(() => bodyvibeCatalogoService.invalidar())
   .catch((e) => console.error('❌ [bootstrap] Error en migraciones/siembra:', e?.message ?? e));
+
+// Limpieza de las citas de PRUEBA de la integración. Ocupan la hora de un
+// coach real a propósito —es lo que permite verificar que el cupo se bloquea—
+// pero si el socio no las cancela, esa hora se la quitan a un afiliado. A las
+// 6 horas se borran solas. Solo corre si hay llave de pruebas configurada: sin
+// ambiente de pruebas no hay nada que limpiar.
+if (process.env.NODE_ENV !== 'test' && (process.env.TREPSI_API_KEY_PRUEBAS || '').trim()) {
+  const limpiar = () =>
+    cupoClaimService
+      .limpiarPruebasViejas(Number(process.env.TREPSI_PRUEBAS_HORAS || 6))
+      .then((n) => {
+        if (n > 0) console.log(`🧪 [pruebas] ${n} cita(s) de prueba borradas y sus cupos liberados`);
+      })
+      .catch((e) => console.error('⚠️ [pruebas] limpieza fallida:', e?.message ?? e));
+  setInterval(limpiar, 30 * 60 * 1000);
+  void limpiar();
+  console.log('🧪 [pruebas] Limpieza de citas de prueba iniciada (cada 30 min)');
+}
 
 // Worker del outbox del webhook Trepsi: cada 30 s recorre la cola y reenvía
 // las filas pending listas (con backoff exponencial). Si TREPSI_WEBHOOK_URL

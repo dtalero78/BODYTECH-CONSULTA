@@ -62,6 +62,34 @@ class CupoClaimService {
   async soltar(historiaId: string): Promise<void> {
     await postgresService.query('DELETE FROM cita_cupo WHERE historia_id = $1', [historiaId]);
   }
+
+  /**
+   * Borra las citas de prueba viejas y devuelve sus cupos.
+   *
+   * Una prueba ocupa la hora de un coach real —a propósito: es lo que permite
+   * verificar que el cupo se bloquea— pero si el socio no la cancela, esa hora
+   * se la quita a un afiliado. A las `horas` de creada se borra sola: nadie va
+   * a atender una cita que dice PRUEBA en el nombre.
+   *
+   * Solo toca filas con `es_prueba = TRUE`. Devuelve cuántas borró.
+   */
+  async limpiarPruebasViejas(horas = 6): Promise<number> {
+    const rows = await postgresService.query(
+      `WITH viejas AS (
+         DELETE FROM "HistoriaClinica"
+          WHERE COALESCE("es_prueba", FALSE) = TRUE
+            AND "_createdDate" < NOW() - ($1 || ' hours')::interval
+        RETURNING "_id"
+       ), cupos AS (
+         DELETE FROM cita_cupo WHERE historia_id IN (SELECT "_id" FROM viejas)
+       ), citas AS (
+         DELETE FROM trepsi_appointments WHERE historia_id IN (SELECT "_id" FROM viejas)
+       )
+       SELECT count(*)::int AS n FROM viejas`,
+      [String(horas)]
+    );
+    return rows && rows.length > 0 ? Number(rows[0].n) : 0;
+  }
 }
 
 export default new CupoClaimService();

@@ -441,9 +441,11 @@ class TrepsiService {
     medicoCodigo: string,
     fechaAtencionIso: string,
     sedeIdCita?: string | null,
-    excluirHistoriaId?: string | null
+    excluirHistoriaId?: string | null,
+    /** La petición entró con la llave de PRUEBAS: el control se aplica igual. */
+    esPruebas = false
   ): Promise<ServiceResult<never> | null> {
-    if (!VALIDAR_CUPO()) return null;
+    if (!VALIDAR_CUPO() && !esPruebas) return null;
     const cuando = fechaHoraColombia(fechaAtencionIso);
     if (!cuando) return null; // una fecha ilegible ya la rechaza quien valida el cuerpo
 
@@ -479,7 +481,8 @@ class TrepsiService {
    * Idempotente por cita_id.
    */
   async createAppointment(
-    input: CreateAppointmentInput
+    input: CreateAppointmentInput,
+    esPruebas = false
   ): Promise<ServiceResult<AppointmentRecord>> {
     if (!input.historiaClinica?.consentimientoInformado) {
       return {
@@ -526,7 +529,13 @@ class TrepsiService {
     // El cupo, con la misma regla del resto de la plataforma. Va DESPUÉS de la
     // idempotencia: un reenvío de una cita que ya existe debe seguir
     // devolviendo 200 con su recurso, no chocar contra sí misma.
-    const ocupado = await this.cupoOcupado(input.medico.codigo, input.fechaAtencion);
+    const ocupado = await this.cupoOcupado(
+      input.medico.codigo,
+      input.fechaAtencion,
+      null,
+      null,
+      esPruebas
+    );
     if (ocupado) return ocupado as ServiceResult<AppointmentRecord>;
 
     // Crear nueva historia clínica.
@@ -717,7 +726,8 @@ class TrepsiService {
    */
   async reschedule(
     citaId: string,
-    input: ScheduleInput
+    input: ScheduleInput,
+    esPruebas = false
   ): Promise<ServiceResult<AppointmentRecord>> {
     if (input.fechaAtencion && isFechaInPast(input.fechaAtencion)) {
       return {
@@ -792,7 +802,8 @@ class TrepsiService {
           medicoDestino,
           input.fechaAtencion,
           existing[0].sede_origen ? String(existing[0].sede_origen) : null,
-          historiaId
+          historiaId,
+          esPruebas
         );
         if (ocupado) return ocupado as ServiceResult<AppointmentRecord>;
       }

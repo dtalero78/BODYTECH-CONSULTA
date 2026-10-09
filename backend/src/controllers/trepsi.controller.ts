@@ -23,6 +23,11 @@ import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
  * en ese minuto solo hace que ofrezcamos una hora de más, y el control de cupo
  * la rechaza al crear.
  */
+/** ¿La petición entró con la llave de PRUEBAS? (ver api-key.middleware). */
+const esPruebas = (req: Request): boolean =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (req as any).integrationPruebas === true;
+
 const TTL_PROXIMO_MS = 60_000;
 
 /**
@@ -53,9 +58,10 @@ interface ProximoDisponible {
 async function proximoDiaConCupos(
   sedeId: string,
   medicoCodigo: string,
-  modalidad: 'virtual' | 'presencial'
+  modalidad: 'virtual' | 'presencial',
+  forzar = false
 ): Promise<ProximoDisponible | null> {
-  if (!PROXIMO_ACTIVO()) return null;
+  if (!PROXIMO_ACTIVO() && !forzar) return null;
   const clave = `${medicoCodigo}|${sedeId}|${modalidad}`;
   const hit = cacheProximo.get(clave);
   if (hit && hit.hasta > Date.now()) return hit.valor;
@@ -303,7 +309,7 @@ class TrepsiController {
         return;
       }
 
-      const result = await trepsiService.createAppointment(parsed.data);
+      const result = await trepsiService.createAppointment(parsed.data, esPruebas(req));
 
       if (result.ok && result.data) {
         res.status(result.status).json({
@@ -346,7 +352,7 @@ class TrepsiController {
         return;
       }
 
-      const result = await trepsiService.reschedule(citaId, parsed.data);
+      const result = await trepsiService.reschedule(citaId, parsed.data, esPruebas(req));
 
       if (result.ok && result.data) {
         res.status(result.status).json({
@@ -546,9 +552,10 @@ class TrepsiController {
       // como no disponible sin agendar encima.
       const motivoBloqueo = diaNoLaborable(fecha) ?? (fecha === nowColombia().fecha ? 'mismo_dia' : null);
       if (motivoBloqueo) {
-        const proximoDisponible = PROXIMO_ACTIVO()
-          ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad)
-          : undefined;
+        const proximoDisponible =
+          PROXIMO_ACTIVO() || esPruebas(req)
+            ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad, esPruebas(req))
+            : undefined;
         res.status(200).json({
           ok: true,
           fecha,
@@ -587,8 +594,8 @@ class TrepsiController {
       // Un día sin cupos libres es tan callejón sin salida como un día
       // bloqueado: también lleva el siguiente día con horas.
       const proximoDisponible =
-        slotsLibres.length === 0 && PROXIMO_ACTIVO()
-          ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad)
+        slotsLibres.length === 0 && (PROXIMO_ACTIVO() || esPruebas(req))
+          ? await proximoDiaConCupos(prof.sedeId, prof.codigo, modalidad, esPruebas(req))
           : undefined;
 
       res.status(200).json({

@@ -41,6 +41,24 @@ function constantTimeEquals(a: string, b: string): boolean {
  *     requireApiKey('TREPSI_API_KEY', 'trepsi'),
  *     trepsiRoutes);
  */
+/**
+ * Llave alterna de PRUEBAS. Quien entre con ella queda marcado
+ * (`req.integrationPruebas = true`) y recibe el comportamiento nuevo —el que
+ * todavía no está aprobado con el socio— mientras la llave de producción
+ * sigue comportándose exactamente como antes.
+ *
+ * Nace de lo del 8-oct-2026: se prendió el control de cupo para todos sin
+ * probarlo y en 17 horas rechazamos 178 citas de Trepsi, con pacientes que no
+ * quedaron agendados. Un cambio en una puerta por donde entra el 94% del
+ * volumen se prueba primero con una llave aparte.
+ *
+ * Opcional: sin la variable configurada, nadie puede entrar en modo pruebas.
+ */
+function envPruebas(envVarName: string): string | undefined {
+  const v = process.env[`${envVarName}_PRUEBAS`];
+  return v && v.trim().length > 0 ? v : undefined;
+}
+
 export function requireApiKey(envVarName: string, integrationName: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const expected = process.env[envVarName];
@@ -71,7 +89,12 @@ export function requireApiKey(envVarName: string, integrationName: string) {
       return;
     }
 
-    if (!constantTimeEquals(provided, expected)) {
+    const esPruebas = (() => {
+      const alterna = envPruebas(envVarName);
+      return alterna ? constantTimeEquals(provided, alterna) : false;
+    })();
+
+    if (!esPruebas && !constantTimeEquals(provided, expected)) {
       res.status(401).json({
         ok: false,
         error: {
@@ -85,6 +108,8 @@ export function requireApiKey(envVarName: string, integrationName: string) {
     // Marcar el request como autenticado por integración externa.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req as any).integration = integrationName;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any).integrationPruebas = esPruebas;
     next();
   };
 }

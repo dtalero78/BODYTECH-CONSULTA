@@ -50,6 +50,19 @@ const COACH_ATHLETIC = (): string | null => {
 const esAthletic = (empresa?: string | null): boolean =>
   (empresa || '').trim().toUpperCase() === 'ATHLETIC';
 
+/**
+ * Interruptor PROPIO de la regla de Athletic, aparte del control de cupo.
+ *
+ * Son dos cambios de tamaño muy distinto: prender el control de cupo rechazó
+ * 178 citas en 17 horas, mientras que acá el 96% de las citas de Athletic ya
+ * van con su coach (233 de 243 en dos semanas). Atarlas al mismo interruptor
+ * obligaría a encender la grande para poder encender la chica.
+ */
+const ATHLETIC_SOLO_SU_COACH = (): boolean => {
+  const v = process.env.ATHLETIC_SOLO_SU_COACH;
+  return v === '1' || v === 'true';
+};
+
 const VALIDAR_CUPO = (): boolean => {
   const v = process.env.TREPSI_VALIDAR_CUPO;
   return v === '1' || v === 'true';
@@ -546,7 +559,7 @@ class TrepsiService {
 
     // Athletic va con su coach y con ninguno más.
     const coachAthletic = COACH_ATHLETIC();
-    if ((VALIDAR_CUPO() || esPruebas) && coachAthletic && esAthletic(input.empresa)) {
+    if ((ATHLETIC_SOLO_SU_COACH() || esPruebas) && coachAthletic && esAthletic(input.empresa)) {
       if (input.medico.codigo !== coachAthletic) {
         return {
           ok: false,

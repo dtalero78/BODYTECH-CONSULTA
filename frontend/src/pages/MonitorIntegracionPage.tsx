@@ -43,6 +43,17 @@ interface IntegrationEvent {
   es_prueba?: boolean;
 }
 
+interface Oferta {
+  medico: string;
+  profesional: string | null;
+  fecha: string;
+  cuantos: number;
+  minutos: number | null;
+  motivoBloqueo: string | null;
+  proximoDia: string | null;
+  horarios: string[];
+}
+
 interface EventsResponse {
   ok: boolean;
   serverTime: string;
@@ -240,9 +251,30 @@ export function MonitorIntegracionPage() {
   const [filter, setFilter] = useState<'todos' | 'errores' | 'inbound' | 'outbound'>('todos');
   const [lastError, setLastError] = useState<string | null>(null);
   const [serverTime, setServerTime] = useState<string | null>(null);
+  /**
+   * Qué horas le estamos ofreciendo a Trepsi, por profesional y día. Antes esa
+   * pregunta se contestaba abriendo eventos de la bitácora uno por uno; un día
+   * ofrecido con cero o dos horas es la causa de que el paciente termine
+   * agendando fuera de la parrilla, y así se ve de un golpe.
+   */
+  const [ofertas, setOfertas] = useState<Oferta[] | null>(null);
+  const [verOfertas, setVerOfertas] = useState(false);
   // Cursor por id (numérico, monótono y único). Evita el problema de los
   // microsegundos que perdemos al serializar timestamptz como ISO en JS.
   const lastIdRef = useRef<number | null>(null);
+
+  const cargarOfertas = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/monitor-integracion/horarios-ofrecidos?horas=24`, {
+        headers: { 'x-monitor-token': token },
+      });
+      const data = await res.json();
+      if (data?.ok) setOfertas(data.ofertas as Oferta[]);
+    } catch {
+      /* el panel es informativo: si falla, no estorba el monitor */
+    }
+  }, [token]);
 
   const fetchEvents = useCallback(async () => {
     if (paused) return;
@@ -365,6 +397,17 @@ export function MonitorIntegracionPage() {
             </div>
 
             <button
+              onClick={() => {
+                const abrir = !verOfertas;
+                setVerOfertas(abrir);
+                if (abrir && ofertas === null) void cargarOfertas();
+              }}
+              className="px-2.5 py-1 text-[11px] font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-md hover:bg-sky-100"
+              title="Las horas que le estamos ofreciendo a Trepsi, por profesional y día."
+            >
+              Horarios ofrecidos
+            </button>
+            <button
               onClick={async () => {
                 try {
                   const res = await fetch(
@@ -406,6 +449,68 @@ export function MonitorIntegracionPage() {
             </button>
           </div>
         </div>
+
+        {/* Lo que le estamos ofreciendo a Trepsi: la ÚLTIMA lista enviada por
+            profesional y día. Un día en cero —o con dos horas— explica que el
+            paciente termine agendando fuera de la parrilla. */}
+        {verOfertas && (
+          <div className="max-w-7xl mx-auto px-6 pb-3">
+            <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3">
+              <div className="mb-2 flex items-center justify-between text-[12px] text-sky-900">
+                <strong>Horarios que le estamos ofreciendo a Trepsi (últimas 24 h)</strong>
+                <button onClick={() => setVerOfertas(false)} className="text-sky-700 hover:underline">
+                  Cerrar ✕
+                </button>
+              </div>
+              {ofertas === null ? (
+                <p className="text-[12px] text-sky-800">Cargando…</p>
+              ) : ofertas.length === 0 ? (
+                <p className="text-[12px] text-sky-800">Trepsi no ha consultado horarios en 24 h.</p>
+              ) : (
+                <div className="max-h-72 overflow-auto">
+                  <table className="w-full text-[12px]">
+                    <thead className="text-left text-sky-900/70">
+                      <tr>
+                        <th className="py-1 pr-3 font-medium">Día</th>
+                        <th className="py-1 pr-3 font-medium">Profesional</th>
+                        <th className="py-1 pr-3 font-medium">Cupos</th>
+                        <th className="py-1 font-medium">Horas ofrecidas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ofertas.map((o) => (
+                        <tr key={`${o.medico}-${o.fecha}`} className="border-t border-sky-100 align-top">
+                          <td className="py-1 pr-3 whitespace-nowrap text-zinc-700">{o.fecha}</td>
+                          <td className="py-1 pr-3 whitespace-nowrap text-zinc-700">
+                            {o.profesional ?? o.medico}
+                          </td>
+                          <td
+                            className={`py-1 pr-3 font-semibold ${
+                              o.cuantos === 0 ? 'text-rose-700' : 'text-emerald-700'
+                            }`}
+                          >
+                            {o.cuantos}
+                          </td>
+                          <td className="py-1 text-zinc-600">
+                            {o.cuantos > 0 ? (
+                              o.horarios.join(', ')
+                            ) : (
+                              <span className="text-rose-700">
+                                sin cupos
+                                {o.motivoBloqueo ? ` (${o.motivoBloqueo})` : ''}
+                                {o.proximoDia ? ` · se le ofreció el ${o.proximoDia}` : ''}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Stats row */}
         <div className="max-w-7xl mx-auto px-6 pb-3 grid grid-cols-4 gap-3">

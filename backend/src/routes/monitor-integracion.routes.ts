@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/events', monitorIntegracionController.events);
 router.get('/summary', monitorIntegracionController.summary);
+router.get('/horarios-ofrecidos', monitorIntegracionController.horariosOfrecidos);
 router.post('/test-webhook', monitorIntegracionController.testWebhook);
 router.post('/discard-outbox', monitorIntegracionController.discardOutbox);
 router.get('/debug-historia', monitorIntegracionController.debugHistoria);

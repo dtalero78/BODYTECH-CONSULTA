@@ -155,6 +155,68 @@ class MonitorIntegracionController {
   };
 
   /**
+   * GET /horarios-ofrecidos?token=...&horas=24
+   *
+   * Qué horas le estamos ofreciendo a Trepsi, por profesional y por día: la
+   * ÚLTIMA respuesta que le dimos para cada combinación, con cuántas horas
+   * llevaba y si fue un día bloqueado.
+   *
+   * Existe porque esa pregunta —"¿qué le estamos ofreciendo?"— se contestaba
+   * leyendo eventos sueltos en la bitácora, uno por uno. Un día ofrecido vacío
+   * o con dos horas es la causa de que el paciente termine agendando fuera de
+   * la parrilla, y así se ve de un golpe.
+   */
+  horariosOfrecidos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!checkToken(req, res)) return;
+    try {
+      const horas = Math.min(Number(req.query.horas) || 24, 168);
+      const rows = await postgresService.query(
+        `SELECT DISTINCT ON (medico, fecha)
+                medico, fecha, created_at,
+                response_body->'medico'->>'nombre'              AS profesional,
+                response_body->>'motivoBloqueo'                 AS motivo_bloqueo,
+                response_body->'horariosDisponibles'            AS horarios,
+                response_body->'proximoDisponible'->>'fecha'    AS proximo_dia,
+                (response_body->>'tiempoConsultaMinutos')::int   AS minutos
+           FROM (
+             SELECT substring(path from 'medico=([^&]+)') AS medico,
+                    substring(path from 'fecha=([0-9-]+)') AS fecha,
+                    created_at, response_body
+               FROM trepsi_integration_log
+              WHERE tipo = 'listHorariosDisponibles'
+                AND created_at > NOW() - ($1 || ' hours')::interval
+           ) q
+          WHERE medico IS NOT NULL AND fecha IS NOT NULL
+          ORDER BY medico, fecha, created_at DESC`,
+        [String(horas)]
+      );
+      const ofertas = (rows ?? []).map((r: Record<string, unknown>) => {
+        const horarios = Array.isArray(r.horarios) ? (r.horarios as string[]) : [];
+        return {
+          medico: String(r.medico ?? ''),
+          profesional: r.profesional ? String(r.profesional) : null,
+          fecha: String(r.fecha ?? ''),
+          consultadoAt: r.created_at,
+          minutos: r.minutos != null ? Number(r.minutos) : null,
+          motivoBloqueo: r.motivo_bloqueo ? String(r.motivo_bloqueo) : null,
+          proximoDia: r.proximo_dia ? String(r.proximo_dia) : null,
+          cuantos: horarios.length,
+          horarios,
+        };
+      });
+      res.status(200).json({
+        ok: true,
+        ventanaHoras: horas,
+        total: ofertas.length,
+        sinCupos: ofertas.filter((o) => o.cuantos === 0).length,
+        ofertas: ofertas.sort((a, b) => (a.fecha + a.medico).localeCompare(b.fecha + b.medico)),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
    * POST /test-webhook?token=...
    * Inserta una fila sintética en trepsi_webhook_outbox y fuerza dispatch
    * inmediato. Útil para verificar que el outbound se registra en el monitor

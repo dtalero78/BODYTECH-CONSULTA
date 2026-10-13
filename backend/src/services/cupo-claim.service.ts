@@ -30,12 +30,22 @@ class CupoClaimService {
        ON CONFLICT (medico, instante) DO UPDATE
               SET historia_id = EXCLUDED.historia_id, created_at = NOW()
             WHERE cita_cupo.historia_id = EXCLUDED.historia_id
-               OR NOT EXISTS (
-                    SELECT 1 FROM "HistoriaClinica" h
-                     WHERE h."_id" = cita_cupo.historia_id
-                       AND NOT EXISTS (
-                             SELECT 1 FROM trepsi_appointments t
-                              WHERE t.historia_id = h."_id" AND t.estado = 'cancelled')
+               OR (
+                    -- El cupo se toma ANTES de escribir la historia, así que
+                    -- durante unos milisegundos su historia "no existe". Sin
+                    -- esta espera, la segunda solicitud simultánea lo veía
+                    -- huérfano y se lo robaba: las dos citas quedaban, que es
+                    -- justo lo que el candado debía impedir (comprobado en vivo
+                    -- el 13-oct-2026, las dos salieron 201). Un cupo recién
+                    -- tomado no se le quita a nadie.
+                    cita_cupo.created_at < NOW() - INTERVAL '2 minutes'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM "HistoriaClinica" h
+                       WHERE h."_id" = cita_cupo.historia_id
+                         AND NOT EXISTS (
+                               SELECT 1 FROM trepsi_appointments t
+                                WHERE t.historia_id = h."_id" AND t.estado = 'cancelled')
+                    )
                   )
         RETURNING historia_id`,
       [medico, instanteIso, historiaId]

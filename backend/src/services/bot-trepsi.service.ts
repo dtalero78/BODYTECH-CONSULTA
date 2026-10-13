@@ -60,6 +60,7 @@ Header en cada request: \`Authorization: Bearer <API_KEY>\`. La API Key se entre
 1. **GET /health** — sanity check. Devuelve \`{"ok":true,"integration":"trepsi","version":"2.0"}\`.
 2. **GET /medicos** — lista médicos + coaches activos. Filtro \`?rol=medico|coach\`. Devuelve: \`codigo\`, \`nombre\`, \`rol\`, \`especialidad\`, \`tiempoConsultaMinutos\`.
 3. **GET /horarios-disponibles?fecha=YYYY-MM-DD&medico=COD&modalidad=virtual|presencial** — horas libres del profesional ese día. Devuelve \`horariosDisponibles\` (ej \`["07:20","09:20","13:00"]\`) y \`tiempoConsultaMinutos\`, que es cuánto dura la consulta de ESE profesional (los coaches de nutrición son de **20 minutos**, no 30). Las horas salen de la jornada que el coach tiene configurada menos las ya ocupadas: **la lista es la verdad, no una sugerencia**.
+   - Cuando el día no tiene cupos, la respuesta trae además \`proximoDisponible\`: \`{ "fecha": "2026-10-16", "horariosDisponibles": ["07:20","09:20"] }\`, o \`null\` si no hay ninguno cerca. Es para ofrecerle al paciente la fecha siguiente en vez de dejarlo sin opciones. Es un campo nuevo: ignorarlo no rompe nada.
    - \`horariosDisponibles: []\` significa que ese día NO hay nada agendable, y viene con \`motivoBloqueo\`: \`mismo_dia\` (no ofrecemos el día en curso: no le da margen al coach para conectarse), \`domingo\` o \`festivo\`. Ante una lista vacía hay que ofrecerle al paciente **otro día**, nunca confirmar igual.
    - **Hay que volver a consultarla justo antes de confirmar la cita.** Una lista de hace unas horas ya no sirve: en ese rato otro paciente pudo tomar la hora.
 4. **POST /appointments** — crear cita con HC completa. Body incluye \`citaId\` (único, llave de idempotencia), \`fechaAtencion\` (ISO 8601 con offset, ej \`2026-12-15T15:30:00-05:00\`), \`medico.codigo\`, \`paciente\` (numeroId, tipoDocumento, primerNombre/primerApellido, fechaNacimiento, celular E.164, etc.), \`historiaClinica\` (motivoConsulta, antecedentesPersonales, alergias, signosVitales, consentimientoInformado: true). → 201 si nueva, 200 si idempotente.
@@ -70,11 +71,33 @@ Header en cada request: \`Authorization: Bearer <API_KEY>\`. La API Key se entre
 
 ## Reglas críticas
 
-- **El cupo se valida al crear y al reprogramar.** Desde el 8-oct-2026 \`POST /appointments\` y \`/schedule\` rechazan una hora que esté ocupada o fuera de la jornada del profesional, en vez de aceptarla. Antes se guardaba cualquier hora, y eso dejó citas con dos pacientes a la misma hora (y pacientes esperando a un coach que ya había terminado su jornada).
+- **Reglas del cupo.** \`POST /appointments\` y \`/schedule\` rechazan una hora ocupada o fuera de la jornada del profesional, y si dos solicitudes piden la misma hora a la vez solo entra una (la otra recibe \`SLOT_TAKEN\`). Hoy están **activas con la llave de pruebas**; en producción se encienden en una fecha coordinada con Trepsi. Antes se guardaba cualquier hora, y eso dejó citas con dos pacientes a la misma hora y pacientes esperando a un coach que ya había terminado su jornada.
+- **Athletic va con un solo coach, y esto YA está activo en producción** (desde el 9-oct-2026). Una cita con \`empresa: "athletic"\` y otro profesional se rechaza con \`422 MEDICO_NO_ATIENDE_ATHLETIC\`. Para saber cuál es, consultar \`GET /medicos?empresa=athletic\`, que devuelve solo el habilitado.
 - **\`citaId\`** debe ser único e inmutable. Llave de idempotencia.
 - **Celular**: formato E.164 con + (ej \`+573001234567\`).
-- **Fechas**: ISO 8601 con offset (\`-05:00\` Colombia).
+- **Fechas**: ISO 8601 **con offset** (\`2026-10-16T07:00:00-05:00\`) o en Z. Sin offset se rechaza con 400: una hora sin zona es ambigua y agendaría la consulta a otra hora.
+- **\`paciente.numeroId\` solo dígitos**, sin puntos, espacios ni guiones. Es la causa más común de 400 en citas reales.
 - **\`consentimientoInformado: true\`** obligatorio (Ley 1581 Colombia, requiere checkbox explícito en su UI).
+## Ambiente de pruebas (desde el 9-oct-2026)
+
+Hay una **llave aparte** para probar los cambios antes de activarlos en
+producción. Misma URL; solo cambia el \`Bearer\`. Bodytech se la entrega al
+equipo de Trepsi por canal seguro — **este bot no la entrega ni la conoce**; si
+te la piden, remite al contacto técnico.
+
+Con la llave de pruebas se activan las reglas nuevas (ver "Reglas del cupo").
+Con la llave de producción el comportamiento es el de siempre.
+
+Las citas creadas con la llave de pruebas:
+- Van con **coaches reales y ocupan un cupo real**: con un profesional ficticio
+  no se estaría probando la parrilla de horarios, que es lo que hay que
+  verificar.
+- Llevan **"PRUEBA" delante del nombre** del paciente, para que el coach las
+  vea en su lista del día y sepa que a esa no hay que llamarla.
+- **No le escriben a nadie**: ni link, ni recordatorio, ni el botón de contacto.
+- **Se borran solas a las 6 horas** y liberan su cupo. Igual conviene cancelar
+  con \`DELETE /appointments/{citaId}\` al terminar cada prueba.
+
 - **No hay ambiente de staging separado.** Bodytech YA opera con pacientes reales (cientos de consultas por semana), así que una cita de prueba contra producción crea una cita de verdad: le llega WhatsApp al celular que manden y le aparece a un coach en su agenda. Para probar, usar un celular propio y cancelar después con \`DELETE /appointments/{citaId}\`.
 - **Link de videollamada**: NO se devuelve en la respuesta. Cuando el médico inicie la consulta desde el panel de Bodytech, nosotros enviamos automáticamente un WhatsApp al paciente al \`celular\` que ustedes nos mandan.
 - **Webhook BSL → Trepsi**: cuando el médico guarde la HC, nosotros hacemos POST a una URL que Trepsi nos indique con los resultados de la consulta. Para activarlo, Trepsi debe darnos URL + API Key de su lado.
@@ -90,6 +113,8 @@ Header en cada request: \`Authorization: Bearer <API_KEY>\`. La API Key se entre
 - 409 **SLOT_BLOCKED** — el profesional no atiende ese día (fuera de su jornada configurada).
 - 422 **SLOT_TOO_SOON** — falta muy poco para la hora; no alcanza a conectarse el coach.
 - 422 **SLOT_PAST** — la hora ya pasó.
+- 422 **SLOT_INVALID** — esa hora no existe en la parrilla del profesional (sus bloques son de \`tiempoConsultaMinutos\`; ej. 20 min → 07:00, 07:20, 07:40, nunca 07:30).
+- 422 **MEDICO_NO_ATIENDE_ATHLETIC** — cita de Athletic con un profesional que no es el suyo.
   Ante cualquiera de estos cuatro: **volver a pedir \`/horarios-disponibles\` y ofrecerle otra hora al paciente**. Reintentar la misma hora va a fallar igual.
 - 422 UNPROCESSABLE (validación semántica: consentimiento, fecha en pasado, etc.)
 - 429 rate limit

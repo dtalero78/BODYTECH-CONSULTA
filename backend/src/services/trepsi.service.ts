@@ -508,6 +508,33 @@ class TrepsiService {
   }
 
   /**
+   * ¿El profesional existe en el padrón pero está apagado? Entonces no recibe
+   * citas. Hacía falta porque `validarSlotDisponible` lee solo fichas activas y
+   * a una apagada la trata como "médico legacy sin ficha", que no se valida:
+   * un coach que renunció seguía recibiendo citas de Trepsi (13-oct-2026, 11
+   * citas creadas después de apagarlo).
+   *
+   * Sin ficha (código legacy) no se bloquea, y si la base no responde tampoco:
+   * rechazarle a Trepsi una cita válida por un bache nuestro es peor.
+   */
+  private async medicoApagado(medicoCodigo: string): Promise<ServiceResult<never> | null> {
+    const rows = await postgresService.query(
+      'SELECT activo FROM profesionales WHERE codigo = $1',
+      [medicoCodigo]
+    );
+    if (!rows || rows.length === 0) return null;
+    if (rows.some((r) => r.activo === true)) return null;
+    return {
+      ok: false,
+      status: 422,
+      error: {
+        code: 'MEDICO_INACTIVO',
+        message: `El profesional ${medicoCodigo} ya no atiende; elija otro.`,
+      },
+    } as ServiceResult<never>;
+  }
+
+  /**
    * Crea (o devuelve, si ya existe) la cita + historia clínica.
    * Idempotente por cita_id.
    */
@@ -571,6 +598,9 @@ class TrepsiService {
         };
       }
     }
+
+    const apagado = await this.medicoApagado(input.medico.codigo);
+    if (apagado) return apagado as ServiceResult<AppointmentRecord>;
 
     // El cupo, con la misma regla del resto de la plataforma. Va DESPUÉS de la
     // idempotencia: un reenvío de una cita que ya existe debe seguir
@@ -866,6 +896,12 @@ class TrepsiService {
           },
         };
       }
+    }
+
+    // Pasarla a un profesional apagado tampoco: dejaría la cita sin quién la atienda.
+    if (input.medico?.codigo) {
+      const apagado = await this.medicoApagado(input.medico.codigo);
+      if (apagado) return apagado as ServiceResult<AppointmentRecord>;
     }
 
     // Mover la cita a una hora ocupada es el mismo choque que crearla ahí. El

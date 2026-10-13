@@ -14,6 +14,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import authService, { SessionPayload } from '../services/auth.service';
+import cuentasApagadas from '../services/cuentas-apagadas.service';
 import { Rol } from '../services/usuarios.service';
 
 const BEARER_PREFIX = 'Bearer ';
@@ -37,7 +38,10 @@ export function sessionContextMiddleware(req: Request, _res: Response, next: Nex
   const token = extractToken(req);
   if (token) {
     const session = authService.verifySessionToken(token);
-    if (session) {
+    // Una cuenta apagada pierde la sesión que ya tenía abierta: el token sigue
+    // bien firmado hasta que vence (con «recordarme», 30 días), así que la
+    // firma sola no alcanza. Se trata como si no hubiera sesión → 401.
+    if (session && !cuentasApagadas.estaApagada(session.email)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (req as any).session = session;
       const scope: SedeScope = session.esGlobal

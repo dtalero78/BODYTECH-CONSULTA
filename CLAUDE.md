@@ -496,6 +496,16 @@ Ahora [ProfesionalFormModal.tsx](frontend/src/components/coordinador/Profesional
 - Foto, firma, licencia, alias, especialidad y duración quedan plegados y marcados como opcionales: la foto abría el formulario y parecía obligatoria.
 - Fijado en [perfilesAlta.test.ts](frontend/src/components/coordinador/__tests__/perfilesAlta.test.ts) y [ProfesionalFormModal.test.tsx](frontend/src/components/coordinador/__tests__/ProfesionalFormModal.test.tsx) (`npm test` en `frontend/`, vitest).
 
+### Apagar a una persona la apaga en Consulta (cuenta, sesión y ficha)
+
+Apagar en Creación de Usuarios solo escribía `personas.activo` en la tabla global, y quedaban tres cosas vivas (1-oct-2026: un coach apagado el 22-sep siguió atendiendo hasta el 27, y el 1-oct tenía 3 citas que le habían caído por reprogramación):
+
+- **El login de respaldo.** `porEmail` filtra por activo, así que la global "no lo conocía" y el login caía a la tabla local, que seguía activa. Ahora el camino local pregunta `cuentasApagadas.apagadaAhora(email)` después de la contraseña (mismo lugar que la baja, por los tiempos).
+- **La sesión abierta** (hasta 30 días con "recordarme"; el JWT se valida solo con la firma). [cuentas-apagadas.service.ts](backend/src/services/cuentas-apagadas.service.ts) guarda en memoria quién está apagado —local `activo=false`, o global con la persona o su acceso a Consulta apagados—, se refresca cada minuto y `sessionContextMiddleware` no adjunta la sesión de esa cuenta (→ 401). Lista en memoria y no consulta por request porque ese middleware corre en todas; si una base no responde se queda con la última lista, como `bajas`.
+- **La ficha**, con su disponibilidad: los pacientes de Trepsi que reprogramaban desde WhatsApp le seguían cayendo. `reflejarVigenciaEnConsulta` (PATCH de [usuarios-global.routes.ts](backend/src/routes/usuarios-global.routes.ts)) apaga la cuenta local y la ficha vinculada.
+
+La cuenta local se escribe directo, **sin reflejar**: `reflejarDesdeConsulta` copia `activo` a la persona entera y, a quien solo se le quitó Consulta, lo apagaría también en ACC y prepagadas. **Encender devuelve la cuenta pero no la ficha**: una ficha activa recibe citas, y eso se decide en Profesionales. Fijado en [usuarios-global-apagar.routes.test.ts](backend/src/routes/__tests__/usuarios-global-apagar.routes.test.ts), [rbac-cuenta-apagada.test.ts](backend/src/middleware/__tests__/rbac-cuenta-apagada.test.ts) y [cuentas-apagadas.service.test.ts](backend/src/services/__tests__/cuentas-apagadas.service.test.ts).
+
 ### Coordinador panel
 
 Route: `/coordinador` (login at `/coordinador-login`) → `CoordinadorPage.tsx`. Three views toggled by a `View` state (`'profesionales' | 'calendario' | 'ordenes'`):

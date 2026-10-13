@@ -27,6 +27,7 @@ import usuariosGlobalService from '../services/usuarios-global.service';
 import { getSession } from '../middleware/rbac.middleware';
 import usuariosService from '../services/usuarios.service';
 import bajasService from '../services/bajas.service';
+import cuentasApagadas from '../services/cuentas-apagadas.service';
 import { getSharedPool } from '../services/shared-db';
 import postgresService from '../services/postgres.service';
 import {
@@ -400,11 +401,84 @@ router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => 
       }
     }
     await usuariosGlobalService.editar(id, cambios);
+    await reflejarVigenciaEnConsulta(id, d);
     res.json({ success: true });
   } catch (e) {
     next(e);
   }
 });
+
+/**
+ * Apagar a alguien acá tiene que apagarlo también en Consulta.
+ *
+ * Antes solo se escribía `personas.activo`, y eso dejaba tres cosas vivas:
+ *  - la cuenta LOCAL, con la que el login de respaldo lo dejaba entrar igual
+ *    (la tabla global no lo encuentra y se cae a la local);
+ *  - la sesión que ya tenía abierta, que dura hasta 30 días; y
+ *  - su FICHA de profesional, con la disponibilidad intacta. Los pacientes de
+ *    Trepsi que reprogramaban desde el link de WhatsApp seguían recibiendo sus
+ *    cupos: un coach apagado el 22-sep-2026 amaneció el 1-oct con 3 citas.
+ *
+ * La cuenta local se escribe directo y SIN reflejar: `reflejarDesdeConsulta`
+ * copia `activo` a la persona entera, y a quien solo se le quitó Consulta lo
+ * apagaría también en ACC y prepagadas.
+ *
+ * Encender reactiva la cuenta, pero NO la ficha: una ficha activa recibe
+ * citas (Trepsi, /agendar de la UMV), y eso se decide en Profesionales, no
+ * como efecto lateral de devolverle el acceso a alguien.
+ */
+async function reflejarVigenciaEnConsulta(
+  personaId: number,
+  d: { activo?: boolean; app?: string; accesoActivo?: boolean },
+): Promise<void> {
+  const tocaVigencia =
+    d.activo !== undefined || (d.app === 'consulta' && d.accesoActivo !== undefined);
+  if (!tocaVigencia) return;
+  try {
+    const { rows } = await getSharedPool().query(
+      `SELECT p.email, p.activo AS persona, pa.activo AS acceso
+         FROM personas p
+         LEFT JOIN persona_apps pa ON pa.persona_id = p.id AND pa.app = 'consulta'
+        WHERE p.id = $1`,
+      [personaId],
+    );
+    const r = rows[0];
+    if (!r) return;
+    const vigente = r.persona === true && r.acceso !== false;
+    // La sesión se corta (o se devuelve) en el acto, sin esperar al refresco.
+    if (vigente) cuentasApagadas.desmarcar(r.email);
+    else cuentasApagadas.marcar(r.email);
+
+    const idLocal = await idLocalDeConsulta(personaId);
+    if (!idLocal) return;
+    if (vigente) {
+      await postgresService.query(
+        `UPDATE usuarios SET activo = TRUE, updated_at = NOW() WHERE id = $1 AND activo = FALSE`,
+        [idLocal],
+      );
+      return;
+    }
+    const filas = await postgresService.query(
+      `UPDATE usuarios SET activo = FALSE, updated_at = NOW() WHERE id = $1 RETURNING profesional_id`,
+      [idLocal],
+    );
+    const profesionalId = filas?.[0]?.profesional_id;
+    if (profesionalId) {
+      await postgresService.query(
+        `UPDATE profesionales SET activo = FALSE, updated_at = NOW() WHERE id = $1 AND activo = TRUE`,
+        [profesionalId],
+      );
+    }
+  } catch (e) {
+    // La persona ya quedó apagada en la tabla global, que es la que manda en el
+    // login. Que falle el reflejo no puede deshacer eso con un 500.
+    console.error(
+      '⚠️ [usuarios-global] no se pudo reflejar la vigencia en Consulta:',
+      personaId,
+      e instanceof Error ? e.message : e,
+    );
+  }
+}
 
 /** Da de baja de la organización, o la revierte. Sale de TODAS las aplicaciones. */
 router.post('/:id/baja', async (req: Request, res: Response, next: NextFunction) => {

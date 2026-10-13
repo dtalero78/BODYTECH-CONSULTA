@@ -16,6 +16,7 @@ import postgresService from './postgres.service';
 import usuariosService, { Rol } from './usuarios.service';
 import accesosSyncService from './accesos-sync.service';
 import bajasService from './bajas.service';
+import cuentasApagadas from './cuentas-apagadas.service';
 import usuariosGlobalService from './usuarios-global.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'bsl-dev-secret-change-in-prod';
@@ -252,6 +253,15 @@ class AuthService {
     // mismo cuidado que ya tenía ACC comparando contra un hash de descarte
     // cuando el correo no existe.
     if (await bajasService.estaDeBaja(email)) {
+      return { ok: false, error: 'INVALID_CREDENTIALS' };
+    }
+
+    // Apagado en Creación de Usuarios. La tabla global no lo devuelve
+    // (`porEmail` filtra por activo) y por eso se llega acá, a la local: sin
+    // esta pregunta, apagar a alguien solo le cambiaba la puerta por la que
+    // entraba. Pasó el 22-sep-2026 y el coach siguió atendiendo. Mismo lugar
+    // que la baja —después de la contraseña— por la misma razón de tiempos.
+    if (process.env.AUTH_GLOBAL_ENABLED !== 'false' && (await cuentasApagadas.apagadaAhora(email))) {
       return { ok: false, error: 'INVALID_CREDENTIALS' };
     }
 

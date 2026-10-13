@@ -33,6 +33,14 @@ interface IntegrationEvent {
   ip: string | null;
   user_agent: string | null;
   created_at: string;
+  /**
+   * Veredicto de las reglas acordadas con Trepsi (lo calcula el backend en
+   * helpers/cumplimiento-trepsi). Toda la semana del 8-oct-2026 ese cruce se
+   * hizo a mano, caso por caso; acá queda a la vista en cada evento.
+   */
+  cumplimiento?: { regla: string; cumple: boolean | null; detalle: string }[];
+  /** La cita que dejó este evento es del ambiente de pruebas. */
+  es_prueba?: boolean;
 }
 
 interface EventsResponse {
@@ -579,8 +587,40 @@ function Diagnosis({ event }: { event: IntegrationEvent }) {
           >
             {event.direccion === 'inbound' ? 'Trepsi → Bodytech' : 'Bodytech → Trepsi'}
           </span>
+          {event.es_prueba && (
+            <span
+              className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800"
+              title="Cita del ambiente de pruebas: no le escribe a nadie y se borra sola a las 6 horas."
+            >
+              PRUEBA
+            </span>
+          )}
         </div>
         {info && <p className="text-zinc-600 leading-snug">{info.descripcion}</p>}
+
+        {/* Las reglas que acordamos: verde si se respetó, rojo si no. Siempre
+            con la evidencia al lado, para no tener que creerle al veredicto. */}
+        {event.cumplimiento?.map((c, i) => (
+          <div
+            key={i}
+            className={`mt-2 flex items-start gap-2 rounded-md border p-2.5 text-[13px] leading-snug ${
+              c.cumple === true
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : c.cumple === false
+                  ? 'border-rose-200 bg-rose-50 text-rose-900'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-700'
+            }`}
+          >
+            <span className="mt-px shrink-0 font-semibold">
+              {c.cumple === true ? '✓' : c.cumple === false ? '✕' : '–'}
+            </span>
+            <span>
+              <strong className="font-semibold">{c.regla}</strong>
+              <br />
+              {c.detalle}
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Sugerencia (solo si hay error) */}

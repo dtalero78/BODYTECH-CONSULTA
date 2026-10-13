@@ -21,6 +21,11 @@ import postgresService from '../services/postgres.service';
 import trepsiWebhookService from '../services/trepsi-webhook.service';
 import mybodytechRipsService from '../services/mybodytech-rips.service';
 import mybodytechEnlaceService from '../services/mybodytech-enlace.service';
+import {
+  cumpleHoraOfrecida,
+  cumpleProximoDisponible,
+  type Cumplimiento,
+} from '../helpers/cumplimiento-trepsi';
 
 function constantTimeEquals(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
@@ -45,6 +50,71 @@ function checkToken(req: Request, res: Response): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Le pega a cada evento el veredicto de las reglas que acordamos con Trepsi.
+ *
+ * Toda esta semana ese cruce se hizo a mano, caso por caso. Dos reglas:
+ *  · la cita creada tiene que salir de la lista de horarios que le dimos, y
+ *  · un día sin cupos tiene que ofrecer el siguiente — esa es de NUESTRO lado.
+ *
+ * Solo consulta la base para las citas creadas, y una vez por evento: el feed
+ * trae hasta 500 y no vale la pena un barrido por cada uno. Si algo falla, el
+ * evento se queda sin veredicto en vez de tumbar el monitor.
+ */
+async function anotarCumplimiento(filas: unknown[]): Promise<void> {
+  const rows = filas as Record<string, unknown>[];
+  for (const r of rows) {
+    try {
+      const tipo = String(r.tipo ?? '');
+      const reglas: Cumplimiento[] = [];
+
+      if (tipo === 'listHorariosDisponibles' && r.response_body) {
+        const c = cumpleProximoDisponible(r.response_body);
+        if (c) reglas.push(c);
+      }
+
+      if (tipo === 'createAppointment' && Number(r.status_code) < 400 && r.request_body) {
+        const body = r.request_body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const medico = body?.medico?.codigo ? String(body.medico.codigo) : '';
+        const fechaIso = body?.fechaAtencion ? String(body.fechaAtencion) : '';
+        if (medico && /^\d{4}-\d{2}-\d{2}/.test(fechaIso)) {
+          const dia = new Date(Date.parse(fechaIso) - 5 * 3600_000).toISOString().slice(0, 10);
+          const prev = await postgresService.query(
+            `SELECT response_body FROM trepsi_integration_log
+              WHERE tipo = 'listHorariosDisponibles'
+                AND path LIKE '%medico=' || $1 || '%' AND path LIKE '%fecha=' || $2 || '%'
+                AND created_at < $3
+              ORDER BY created_at DESC LIMIT 1`,
+            [medico, dia, r.created_at]
+          );
+          const cuerpo = prev && prev.length > 0 ? (prev[0].response_body as Record<string, unknown>) : null;
+          const ofrecidos = cuerpo && Array.isArray(cuerpo.horariosDisponibles)
+            ? (cuerpo.horariosDisponibles as string[])
+            : null;
+          reglas.push(cumpleHoraOfrecida(fechaIso, ofrecidos));
+        }
+      }
+
+      if (reglas.length > 0) r.cumplimiento = reglas;
+
+      // ¿Fue una llamada del ambiente de pruebas? Se reconoce por la cita que
+      // dejó: sin esto, una prueba se ve igual que una cita real y ensucia la
+      // lectura del monitor.
+      if (r.cita_id) {
+        const p = await postgresService.query(
+          `SELECT COALESCE(h."es_prueba", FALSE) AS p
+             FROM trepsi_appointments t JOIN "HistoriaClinica" h ON h."_id" = t.historia_id
+            WHERE t.cita_id = $1 LIMIT 1`,
+          [String(r.cita_id)]
+        );
+        if (p && p.length > 0 && p[0].p === true) r.es_prueba = true;
+      }
+    } catch {
+      /* un veredicto que falla no puede tumbar el monitor */
+    }
+  }
 }
 
 class MonitorIntegracionController {
@@ -72,6 +142,7 @@ class MonitorIntegracionController {
       const integracion =
         typeof req.query.integracion === 'string' ? req.query.integracion : 'trepsi';
       const rows = await integrationLogService.listSince(sinceId, limit, integracion);
+      await anotarCumplimiento(rows);
       res.status(200).json({
         ok: true,
         serverTime: new Date().toISOString(),

@@ -307,7 +307,7 @@ export async function enviarLinkPaciente(i: EnviarLinkInput): Promise<EnviarLink
   } = i;
 
   // Se intenta primero POR la plataforma, en el tenant de la marca del paciente
-  // (BODYTECH → +5716284820, ATHLETIC → +15055871860), para que el mensaje quede
+  // (BODYTECH → +5716284820, ATHLETIC → +17692074143), para que el mensaje quede
   // en el hilo del chat. Si la plataforma falla, cae al envío directo por
   // Twilio DESDE EL MISMO NÚMERO: el paciente igual recibe, aunque no quede
   // registrado en el chat. La plantilla es la misma para las dos marcas.

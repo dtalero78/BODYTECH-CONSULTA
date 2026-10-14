@@ -5,7 +5,7 @@
 // Athletic es una marca de Bodytech: mismos coaches, mismo panel, mismas citas.
 // Lo único que cambia para el paciente es QUIÉN le escribe por WhatsApp: a un
 // paciente de Athletic le tiene que llegar el mensaje desde el número de
-// Athletic (+1 505 587-1860), no desde el de Bodytech (+57 1 628 4820).
+// Athletic (+1 769 207-4143), no desde el de Bodytech (+57 1 628 4820).
 //
 // La marca sale de `HistoriaClinica.codEmpresa`, que llena Trepsi con
 // 'BODYTECH-COLOMBIA' o 'ATHLETIC' (trepsi.controller.ts, campo `empresa`). Solo
@@ -25,7 +25,7 @@
 export type Marca = 'bodytech' | 'athletic';
 
 /** Número de WhatsApp de Athletic, si ATHLETIC_WHATSAPP_FROM no dice otro. */
-export const ATHLETIC_WHATSAPP_FROM_DEFAULT = 'whatsapp:+15055871860';
+export const ATHLETIC_WHATSAPP_FROM_DEFAULT = 'whatsapp:+17692074143';
 
 type Entorno = Record<string, string | undefined>;
 

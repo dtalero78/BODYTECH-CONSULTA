@@ -131,7 +131,7 @@ class BslPlataformaChatService {
    * Envía una plantilla (por SID) A TRAVÉS de la plataforma, para que quede en
    * el hilo del chat. Devuelve true si la plataforma la envió/guardó. Se usa
    * para las notificaciones de cita/reprogramación: sale por el número del
-   * tenant de esta instancia (+5716284820 en BODYTECH, +15055871860 en ATHLETIC).
+   * tenant de esta instancia (+5716284820 en BODYTECH, +17692074143 en ATHLETIC).
    * false → el caller cae al envío directo por Twilio (el paciente igual recibe,
    * aunque no quede en chat).
    */

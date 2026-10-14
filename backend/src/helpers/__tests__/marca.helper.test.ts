@@ -80,9 +80,9 @@ describe('whatsappFromDeMarca', () => {
     expect(whatsappFromDeMarca('bodytech', ENCENDIDO)).toBeUndefined();
   });
 
-  it('Athletic sale por +1 505 587-1860 salvo que el entorno diga otro', () => {
-    expect(whatsappFromDeMarca('athletic', {})).toBe('whatsapp:+15055871860');
-    expect(ATHLETIC_WHATSAPP_FROM_DEFAULT).toBe('whatsapp:+15055871860');
+  it('Athletic sale por +1 769 207-4143 salvo que el entorno diga otro', () => {
+    expect(whatsappFromDeMarca('athletic', {})).toBe('whatsapp:+17692074143');
+    expect(ATHLETIC_WHATSAPP_FROM_DEFAULT).toBe('whatsapp:+17692074143');
     expect(whatsappFromDeMarca('athletic', { ATHLETIC_WHATSAPP_FROM: 'whatsapp:+10000000000' })).toBe(
       'whatsapp:+10000000000'
     );

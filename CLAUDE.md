@@ -349,8 +349,10 @@ Operación (admin): `POST /api/admin/alarma-cita/dispatch?fecha=&dryRun=1&limit=
 
 ### Athletic: el mismo WhatsApp, desde otro número
 
-Athletic es una marca de Bodytech: mismos coaches, panel y citas. Lo único que cambia para el paciente es **quién le escribe**: a uno de Athletic le tiene que llegar el WhatsApp desde el número de Athletic (**+1 505 587-1860**, sender `XE5e6ee355b819e271d9e96c5ef18d7d03`, misma WABA que Bodytech), no desde el de Bodytech. Código en [marca.helper.ts](backend/src/helpers/marca.helper.ts).
+Athletic es una marca de Bodytech: mismos coaches, panel y citas. Lo único que cambia para el paciente es **quién le escribe**: a uno de Athletic le tiene que llegar el WhatsApp desde el número de Athletic (**+1 769 207-4143**, sender `XE73bedd142ff7209fb1a34ea3d3a1b285`, misma WABA que Bodytech), no desde el de Bodytech. Código en [marca.helper.ts](backend/src/helpers/marca.helper.ts).
 
+- **Por qué el 769 y no el 505.** El primer número (+1 505 587-1860) nació con el nombre del negocio, "Bienestar y Salud Laboral", porque cuando la WABA y el negocio ya existen el formulario de la consola **nunca pregunta el nombre visible**, y después Twilio no deja cambiarlo (el campo está bloqueado: pide ticket). El 769 se creó por la **API de Senders**, donde `profile.name` es obligatorio, y nació llamándose Athletic con su logo. Ese sender se borró; el que vale es `XE73bedd…`.
+- **"Rechazada" al lado del nombre NO es que el número esté roto**: marca la última solicitud de CAMBIO de nombre, no el nombre en uso. El número de Siigo lleva ese mismo sello y envía normal. Meta negó "Athletic" y "Athletic Gym" como cambios; el nombre activo del 769 sigue siendo Athletic, que es lo que ve el paciente junto al logo. **No volver a pedir cambios de nombre**: cada intento se rechaza y no aporta nada.
 - **La marca es `HistoriaClinica."codEmpresa"`**: Trepsi manda `empresa` = `BODYTECH-COLOMBIA` o `ATHLETIC` y se guarda en mayúsculas. **Solo `ATHLETIC` es Athletic**; vacío o cualquier otro valor es Bodytech. Solo Trepsi llena el campo, y alcanza: los pacientes de Athletic llegan **únicamente** por Trepsi. La columna `empresa` NO es la marca.
 - **Las plantillas no cambian con la marca.** Las tres que recibe el paciente (link `bodytech_nutricion_v1`, recordatorio `bodytech_recordatorio_v1`, `cita_reprogramada`) tienen texto neutro y están aprobadas en la WABA que comparten los dos números. Cambian el **número de salida** y el **tenant de bsl-plataforma**. Ojo: el `.env` local todavía apunta a `bodytech_saludo`, que sí dice "Bodytech" y ya no se usa. Producción usa `HXe0d406bf…`.
 - **bsl-plataforma admite UN número por tenant**, así que Athletic es su propio tenant, `ATHLETIC`. No tiene dominio: se le envía con `X-Tenant-Id: ATHLETIC`, y los webhooks de Twilio lo encuentran **por el número** (`tenantPorNumeroWhatsapp` en bsl-plataforma). Necesita **su propio usuario**, porque la plataforma ata el JWT al tenant y un token de BODYTECH con `X-Tenant-Id: ATHLETIC` responde `TENANT_MISMATCH`.
@@ -709,7 +711,7 @@ ALARMA_CITA_PANEL_URL=                         # opcional: link al tablero que v
 ATHLETIC_WHATSAPP_ENABLED=false
 ATHLETIC_PLATAFORMA_USER=                      # usuario del tenant ATHLETIC en bsl-plataforma
 ATHLETIC_PLATAFORMA_PASS=
-ATHLETIC_WHATSAPP_FROM=whatsapp:+15055871860   # opcional; ese es el default
+ATHLETIC_WHATSAPP_FROM=whatsapp:+17692074143   # opcional; ese es el default
 
 # Llamada del coach al paciente (en vivo, grabada). Twilio marca al celular del
 # coach (usuarios.celular) y después al paciente. Los webhooks validan firma con

@@ -530,7 +530,7 @@ describe('la marca del paciente elige por qué número sale', () => {
     const r = await enviarLinkPaciente(link);
 
     expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'athletic' });
-    expect(sendTemplate.mock.calls[0][5]).toBe('whatsapp:+15055871860');
+    expect(sendTemplate.mock.calls[0][5]).toBe('whatsapp:+17692074143');
   });
 
   it('la plantilla es la misma para las dos marcas', async () => {
@@ -569,7 +569,7 @@ describe('la marca del paciente elige por qué número sale', () => {
 
     expect(r).toMatchObject({ success: true, via: 'twilio', marca: 'athletic' });
     expect(athleticPlantilla.mock.calls[0][1]).toBe('HXrecordatorio');
-    expect(sendContent.mock.calls[0][3]).toBe('whatsapp:+15055871860');
+    expect(sendContent.mock.calls[0][3]).toBe('whatsapp:+17692074143');
   });
 });
 

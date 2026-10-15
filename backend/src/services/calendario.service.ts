@@ -1229,6 +1229,17 @@ class CalendarioService {
 
     const horaHHMM = hora.slice(0, 5);
 
+    // La sede de quien AGENDA no tiene por qué ser la del profesional: un
+    // admin sin unidad asignada cae a 'bsl', y una coordinación puede agendarle
+    // a un coach de otra unidad. Si se busca al profesional con la sede de
+    // quien pide, no se lo encuentra y la duración del slot cae al default de
+    // 30 minutos — y con 30, en una parrilla de 20, TODA hora pegada a una cita
+    // existente se da por solapada. Eso es lo que le pasó al coach Cristhian
+    // Vivas el 15-oct-2026: el panel le pintaba las 10:40 libres y "Agendar"
+    // le respondía "Ese horario ya está ocupado". Acá se resuelve la sede real
+    // del profesional y se usa para todo lo que sigue.
+    const sedeProfesional = (await this.resolveSedeMedico(medicoCodigo, sedeId)) ?? sedeId;
+
     // 0) No permitir agendar una hora pasada ni dentro del margen de anticipación.
     const ahora = nowColombia();
     if (fecha === ahora.fecha) {
@@ -1269,7 +1280,7 @@ class CalendarioService {
            AND "medico" = $4
            AND ($5::text IS NULL OR "_id" <> $5::text)
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
-      [sedeId, range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
+      [sedeProfesional, range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
     );
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };
@@ -1288,7 +1299,7 @@ class CalendarioService {
     const profRows = await postgresService.query(
       `SELECT id, tiempo_consulta FROM profesionales
          WHERE codigo = $1 AND sede_id = $2 AND activo = TRUE`,
-      [medicoCodigo, sedeId]
+      [medicoCodigo, sedeProfesional]
     );
     if (profRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando profesional.' } };
@@ -1318,7 +1329,7 @@ class CalendarioService {
     // Rangos EFECTIVOS del día (override por fecha > patrón semanal).
     const efectivos = await disponibilidadFechaService.getRangosEfectivos(
       profesionalId,
-      sedeId,
+      sedeProfesional,
       fecha,
       diaSemana,
       modalidad

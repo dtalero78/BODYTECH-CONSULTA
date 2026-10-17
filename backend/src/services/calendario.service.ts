@@ -1134,16 +1134,25 @@ class CalendarioService {
       // silencio — que es exactamente como apareció con Trepsi.
       // La hora ocupada se deriva de fechaAtencion (COT) para no depender de
       // que horaAtencion esté poblada.
+      //
+      // Y NO se filtra por sede: la agenda de un profesional es suya, venga la
+      // cita por donde venga. Filtrar por sede dejaba invisibles las citas con
+      // otra unidad — una creada desde el panel por alguien de 'bsl' para un
+      // coach de 'bdt-nutricion' no contaba como ocupada, así que esa hora se
+      // seguía ofreciendo. Pasó el 17-oct-2026: Laura Anaya (panel, 16-oct
+      // 16:01) y Felipe Pardo (Trepsi, 85 minutos después) quedaron los dos a
+      // las 11:20 con el mismo coach. Eran 20 citas invisibles en 14 días.
+      // El `AND "medico" = $3` ya acota lo suficiente: una persona no puede
+      // atender dos consultas a la vez, lleve la cita la etiqueta que lleve.
       `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE (sede_id = $1 OR sede_id IN ('trepsi', 'mybodytech'))
-           AND "fechaAtencion" IS NOT NULL
+         WHERE "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-           AND "fechaAtencion"::timestamptz >= $2::timestamptz
-           AND "fechaAtencion"::timestamptz < $3::timestamptz
-           AND "medico" = $4
+           AND "fechaAtencion"::timestamptz >= $1::timestamptz
+           AND "fechaAtencion"::timestamptz < $2::timestamptz
+           AND "medico" = $3
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
-      [sedeReal, range.startUtc, range.endUtc, codigoMedico]
+      [range.startUtc, range.endUtc, codigoMedico]
     );
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };
@@ -1272,15 +1281,14 @@ class CalendarioService {
       // divergen, el cupo que se ofrece deja de ser el cupo que se valida.
       `SELECT to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI') AS "horaAtencion"
          FROM "HistoriaClinica"
-         WHERE (sede_id = $1 OR sede_id IN ('trepsi', 'mybodytech'))
-           AND "fechaAtencion" IS NOT NULL
+         WHERE "fechaAtencion" IS NOT NULL
            AND "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-           AND "fechaAtencion"::timestamptz >= $2::timestamptz
-           AND "fechaAtencion"::timestamptz < $3::timestamptz
-           AND "medico" = $4
-           AND ($5::text IS NULL OR "_id" <> $5::text)
+           AND "fechaAtencion"::timestamptz >= $1::timestamptz
+           AND "fechaAtencion"::timestamptz < $2::timestamptz
+           AND "medico" = $3
+           AND ($4::text IS NULL OR "_id" <> $4::text)
            AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
-      [sedeProfesional, range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
+      [range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
     );
     if (ocupRows === null) {
       return { ok: false, status: 500, error: { code: 'DB_ERROR', message: 'Error consultando citas existentes.' } };

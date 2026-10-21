@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from './pages/LoginPage';
+import SsoPage from './pages/SsoPage';
 import { TemaBodyVibe } from './components/bodyvibe/TemaBodyVibe';
 import { RequireRole } from './components/RequireRole';
 import { useTorniquete } from './hooks/useTorniquete';
@@ -169,6 +170,8 @@ function App() {
             <Route path="/" element={<Navigate to="/login" replace />} />
             {/* Login unificado (RBAC). Las páginas de login viejas redirigen aquí. */}
             <Route path="/login" element={<LoginPage />} />
+            {/* Entrada por pase desde otra app hermana (CRM): token en el fragmento. */}
+            <Route path="/sso" element={<SsoPage />} />
             {/* Registro de profesionales: la pantalla es de acá, la cuenta se
                 crea en ACC (ver RegistroPage). */}
             <Route path="/registro" element={<RegistroPage />} />

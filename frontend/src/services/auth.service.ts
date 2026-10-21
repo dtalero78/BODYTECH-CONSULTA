@@ -240,6 +240,21 @@ class AuthService {
     return { program: 'consulta', user: user as SessionUser, paneles };
   }
 
+  /**
+   * Entrada por pase de una app hermana (el CRM): el token lo firmó ESTA app al validar las credenciales
+   * server-to-server (`/api/auth/password-login`), y acá solo se guarda, igual que tras un login normal.
+   * El usuario viaja con el token porque la sesión de este frontend guarda los dos. Devuelve el usuario,
+   * o null si lo recibido no tiene forma de sesión. El permiso real lo sigue decidiendo el backend con el token.
+   */
+  entrarConPase(token: string, user: unknown): SessionUser | null {
+    const u = user as Partial<SessionUser> | null;
+    if (!token || !u || typeof u.role !== 'string' || typeof u.email !== 'string') return null;
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(u));
+    olvidarPaneles();
+    return u as SessionUser;
+  }
+
   /** Solicita el enlace de reset de contraseña por email (Resend). */
   async forgotPassword(email: string): Promise<void> {
     await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, { email });

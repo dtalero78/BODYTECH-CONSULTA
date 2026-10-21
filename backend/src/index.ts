@@ -18,6 +18,7 @@ import agendarUmvRoutes from './routes/agendar-umv.routes';
 import agendaUmvService from './services/agenda-umv.service';
 import profesionalesRoutes from './routes/profesionales.routes';
 import calendarioRoutes from './routes/calendario.routes';
+import integracionCrmRoutes from './routes/integracion-crm.routes';
 import torniqueteRoutes from './routes/torniquete.routes';
 import torniqueteService from './services/torniquete.service';
 import usuariosRoutes from './routes/usuarios.routes';
@@ -214,6 +215,8 @@ app.use('/api/medical-panel', medicalPanelRoutes);
 // desde /panel-medico (ver profesionales.routes.ts y calendario.routes.ts).
 app.use('/api/profesionales', profesionalesRoutes);
 app.use('/api/calendario', calendarioRoutes);
+// Sin sesión de persona: la llama el CRM con su token de servicio (CRM_SERVICE_TOKEN).
+app.use('/api/integracion-crm/v1', integracionCrmRoutes);
 // Torniquete de jornada: heartbeat/logout (identidad derivada del token en el
 // controller) + tablero del día (RBAC operativo dentro del router).
 app.use('/api/torniquete', torniqueteRoutes);

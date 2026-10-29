@@ -1151,7 +1151,19 @@ class CalendarioService {
            AND "fechaAtencion"::timestamptz >= $1::timestamptz
            AND "fechaAtencion"::timestamptz < $2::timestamptz
            AND "medico" = $3
-           AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
+           AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'
+           -- Una cita que Trepsi canceló NO ocupa la hora. trepsi.cancel()
+           -- marca trepsi_appointments.estado = cancelled y a propósito no
+           -- toca HistoriaClinica (se conserva por trazabilidad), así que sin
+           -- esto la historia sigue viéndose PENDIENTE y el cupo queda muerto
+           -- para siempre. Lo reportó Trepsi el 29-oct-2026 con tres citas de
+           -- prueba de Lina Vera canceladas el mismo día; el resto de la
+           -- plataforma (link-auto, alarma) ya excluía las canceladas y estas
+           -- dos consultas eran las que faltaban.
+           AND NOT EXISTS (
+                 SELECT 1 FROM trepsi_appointments t
+                  WHERE t.historia_id = "HistoriaClinica"."_id"
+                    AND t.estado = 'cancelled')`,
       [range.startUtc, range.endUtc, codigoMedico]
     );
     if (ocupRows === null) {
@@ -1287,7 +1299,19 @@ class CalendarioService {
            AND "fechaAtencion"::timestamptz < $2::timestamptz
            AND "medico" = $3
            AND ($4::text IS NULL OR "_id" <> $4::text)
-           AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'`,
+           AND UPPER(COALESCE("atendido", 'PENDIENTE')) <> 'ATENDIDO'
+           -- Una cita que Trepsi canceló NO ocupa la hora. trepsi.cancel()
+           -- marca trepsi_appointments.estado = cancelled y a propósito no
+           -- toca HistoriaClinica (se conserva por trazabilidad), así que sin
+           -- esto la historia sigue viéndose PENDIENTE y el cupo queda muerto
+           -- para siempre. Lo reportó Trepsi el 29-oct-2026 con tres citas de
+           -- prueba de Lina Vera canceladas el mismo día; el resto de la
+           -- plataforma (link-auto, alarma) ya excluía las canceladas y estas
+           -- dos consultas eran las que faltaban.
+           AND NOT EXISTS (
+                 SELECT 1 FROM trepsi_appointments t
+                  WHERE t.historia_id = "HistoriaClinica"."_id"
+                    AND t.estado = 'cancelled')`,
       [range.startUtc, range.endUtc, medicoCodigo, excluirHistoriaId ?? null]
     );
     if (ocupRows === null) {

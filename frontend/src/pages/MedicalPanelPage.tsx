@@ -753,6 +753,9 @@ export function MedicalPanelPage() {
       // 1. Enviar mensaje de WhatsApp con template aprobado
       // Plantilla bodytech_nutricion_v1: "Hola {{1}}, Tienes tu valoración de nutrición virtual a la hora {{2}}..."
       // Botones: Conectarme → /panel-medico/patient/{{3}} · Reprogramar → /reprogramar/{{4}}
+      // Solo respaldo: el servidor reemplaza esta hora por la de la cita
+      // (`horaDeCita`). La del reloj del coach le llegó al paciente como si
+      // fuera la de su consulta.
       const now = new Date();
       const appointmentTime = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
       await apiService.sendWhatsApp(

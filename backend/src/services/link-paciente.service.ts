@@ -58,6 +58,36 @@ async function esCitaDePrueba(historiaId: string): Promise<boolean> {
   }
 }
 
+/**
+ * La hora de la cita en Bogotá, ya formateada para {{2}}, o `null` si la
+ * historia no tiene hora legible (o la base no responde).
+ *
+ * La usa el botón "Contactar": hasta el 29-oct-2026 el panel mandaba la hora
+ * DEL COMPUTADOR DEL COACH al apretar (`new Date()`), así que el mensaje decía
+ * la hora del clic y no la de la cita — y con el reloj del equipo adelantado,
+ * una cita de las 09:20 contactada a las 09:22 le llegó a la paciente como
+ * "09:24". Misma expresión que la query del worker, para que los dos digan lo
+ * mismo; la guarda regex va antes del cast por la misma razón que allá.
+ */
+export async function horaDeCita(historiaId: string): Promise<string | null> {
+  try {
+    const rows = await postgresService.query(
+      `SELECT COALESCE(
+                CASE WHEN "fechaAtencion" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                     THEN to_char("fechaAtencion"::timestamptz AT TIME ZONE 'America/Bogota', 'HH24:MI')
+                END,
+                NULLIF("horaAtencion", '')
+              ) AS hora
+         FROM "HistoriaClinica" WHERE "_id" = $1 LIMIT 1`,
+      [historiaId]
+    );
+    const hora = rows && rows.length > 0 ? String(rows[0].hora || '').trim() : '';
+    return hora ? formatHoraCita(hora) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 1. Helpers puros
 // ---------------------------------------------------------------------------

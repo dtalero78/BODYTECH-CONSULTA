@@ -52,6 +52,7 @@ import {
   prepararLinkDeCita,
   enviarLinkPaciente,
   enviarRecordatorioPaciente,
+  horaDeCita,
   FilaCitaLink,
 } from '../link-paciente.service';
 import whatsappService from '../whatsapp.service';
@@ -721,5 +722,33 @@ describe('modo pruebas de la UMV', () => {
     expect(r).toMatchObject({ success: false, error: 'UMV_MODO_PRUEBAS' });
     expect(enviarPlantilla).not.toHaveBeenCalled();
     expect(sendContent).not.toHaveBeenCalled();
+  });
+});
+
+// El botón "Contactar" mandaba la hora del reloj del coach (29-oct-2026: una
+// cita de las 09:20 le llegó a la paciente como "09:24"). Ahora la hora sale
+// de la cita.
+describe('horaDeCita', () => {
+  const query = postgresService.query as jest.Mock;
+  afterEach(() => query.mockReset());
+
+  it('devuelve la hora de la cita en Bogotá, con el formato del mensaje', async () => {
+    query.mockResolvedValueOnce([{ hora: '09:20' }]);
+    await expect(horaDeCita('h1')).resolves.toBe('09:20 a. m.');
+    expect(query.mock.calls[0][1]).toEqual(['h1']);
+  });
+
+  it('null si la historia no existe o no tiene hora legible', async () => {
+    query.mockResolvedValueOnce([]);
+    await expect(horaDeCita('h1')).resolves.toBeNull();
+    query.mockResolvedValueOnce([{ hora: null }]);
+    await expect(horaDeCita('h1')).resolves.toBeNull();
+  });
+
+  it('null si la base falla (el controlador cae a la hora del panel)', async () => {
+    query.mockResolvedValueOnce(null);
+    await expect(horaDeCita('h1')).resolves.toBeNull();
+    query.mockRejectedValueOnce(new Error('boom'));
+    await expect(horaDeCita('h1')).resolves.toBeNull();
   });
 });

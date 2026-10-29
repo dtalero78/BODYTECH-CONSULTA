@@ -20,7 +20,7 @@ import { marcaDeEnvioParaHistoria } from '../services/marca.service';
 import { whatsappFromDeMarca } from '../helpers/marca.helper';
 import { esCitaUmv } from '../helpers/unidad-envio.helper';
 import { bloqueadoPorPruebasUmv } from '../services/unidad-envio.service';
-import { enviarLinkPaciente } from '../services/link-paciente.service';
+import { enviarLinkPaciente, horaDeCita } from '../services/link-paciente.service';
 
 // ============================================================================
 // Zod schemas (privados al controller).
@@ -562,7 +562,15 @@ class VideoController {
       // El envío y sus 4 rastros viven en link-paciente.service, compartidos con
       // el worker de envío automático. `origen: 'manual'` es lo que distingue
       // este botón del worker en el indicador "No contactó".
-      const result = await enviarLinkPaciente({ ...parsed.data, origen: 'manual' });
+      // La hora del mensaje es la de la CITA, leída de la base, no la que manda
+      // el panel (era la del reloj del coach al apretar). Solo si la cita no
+      // tiene hora legible se usa la del panel, como antes.
+      const hora = await horaDeCita(parsed.data.historiaId);
+      const result = await enviarLinkPaciente({
+        ...parsed.data,
+        appointmentTime: hora ?? parsed.data.appointmentTime,
+        origen: 'manual',
+      });
 
       if (result.success) {
         res.status(200).json({

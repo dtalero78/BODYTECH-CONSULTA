@@ -582,6 +582,27 @@ class MedicalPanelController {
     const modalidad = data.modalidad ?? 'virtual';
 
     try {
+      // La cita va a la unidad del PROFESIONAL, no a la de quien agenda. Con la
+      // de quien agenda, las citas de una admin global (sin unidad propia, cae
+      // a 'bsl') para coaches de 'bdt-nutricion' quedaban en la UMV: aparecían
+      // en el panel del coach pero no en el calendario de su unidad (29-oct-2026:
+      // Wilmer González tenía 16 citas y el calendario le mostraba 5; eran 454
+      // así desde el 1-oct). Si el médico no tiene ficha activa, queda la de
+      // quien agenda, como antes.
+      const sedeCita = (await calendarioService.resolveSedeMedico(data.medico, sedeId)) ?? sedeId;
+
+      // Y solo se agenda a profesionales de una unidad que esté en el alcance
+      // de quien agenda: una cuenta limitada a Coach Nutrición Trepsi no puede
+      // agendarle a la UMV ni al corporativo mandando otro `medico` en el body.
+      if (session && !canActOnSede(req, sedeCita)) {
+        res.status(403).json({
+          success: false,
+          error: 'PROFESIONAL_FUERA_DE_ALCANCE',
+          message: 'Ese profesional es de una unidad que no tienes asignada.',
+        });
+        return;
+      }
+
       // Reglas de agendamiento: anti doble-reserva por médico + respeto de la
       // disponibilidad configurada del profesional (mismas reglas que generan
       // los slots en /calendario/horarios-disponibles).
@@ -599,7 +620,7 @@ class MedicalPanelController {
         return;
       }
 
-      const orden = await medicalPanelService.createOrden(data as OrdenCreateInput, sedeId);
+      const orden = await medicalPanelService.createOrden(data as OrdenCreateInput, sedeCita);
       res.status(201).json({ success: true, orden });
     } catch (error) {
       next(error);

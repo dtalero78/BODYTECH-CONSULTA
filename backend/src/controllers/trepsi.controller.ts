@@ -9,7 +9,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
-import trepsiService from '../services/trepsi.service';
+import trepsiService, { coachesAthletic } from '../services/trepsi.service';
 import profesionalesService from '../services/profesionales.service';
 import calendarioService, { nowColombia } from '../services/calendario.service';
 import { diaNoLaborable } from '../helpers/festivos-colombia.helper';
@@ -466,16 +466,16 @@ class TrepsiController {
         res.status(result.status).json({ ok: false, error: result.error });
         return;
       }
-      // `?empresa=athletic` devuelve SOLO el coach de Athletic. Sin esto, su
+      // `?empresa=athletic` devuelve SOLO los coaches de Athletic. Sin esto, su
       // app ofrecería cualquiera y la cita rebotaría al crearse: es mejor que
       // el paciente nunca vea un profesional con el que no puede agendar.
       const empresa = typeof req.query.empresa === 'string' ? req.query.empresa : '';
-      const coachAthletic = (process.env.ATHLETIC_COACH_CODIGO || '').trim();
+      const equipoAthletic = coachesAthletic();
       const soloAthletic =
-        empresa.trim().toUpperCase() === 'ATHLETIC' && coachAthletic.length > 0;
+        empresa.trim().toUpperCase() === 'ATHLETIC' && equipoAthletic.length > 0;
 
       const medicos = (soloAthletic
-        ? result.data.filter((m) => m.codigo === coachAthletic)
+        ? result.data.filter((m) => equipoAthletic.includes(m.codigo))
         : result.data
       ).map((m) => ({
         codigo: m.codigo,

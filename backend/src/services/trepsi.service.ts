@@ -34,18 +34,19 @@ import crypto from 'crypto';
  * cuando ellos confirmen que respetan la respuesta.
  */
 /**
- * Athletic se atiende con un solo coach (decisión del 9-oct-2026). Es su
- * propia marca —el paciente recibe el WhatsApp desde el número de Athletic,
- * ver marca.helper— y la operación quiere su agenda concentrada en una
- * persona. Trepsi manda `empresa: "athletic"` al crear la cita.
+ * Athletic se atiende con su propio equipo de coaches. Empezó con uno solo
+ * (decisión del 9-oct-2026) y el 29-oct pasó a tres: la variable es una lista
+ * CSV de códigos. Es su propia marca —el paciente recibe el WhatsApp desde el
+ * número de Athletic, ver marca.helper—. Trepsi manda `empresa: "athletic"`.
  *
- * El código sale de la variable para poder cambiar de coach sin desplegar.
- * Sin ella configurada, la regla no se aplica.
+ * Los códigos salen de la variable para poder cambiar el equipo sin desplegar.
+ * Sin ella configurada (o vacía), la regla no se aplica.
  */
-const COACH_ATHLETIC = (): string | null => {
-  const v = (process.env.ATHLETIC_COACH_CODIGO || '').trim();
-  return v.length > 0 ? v : null;
-};
+export const coachesAthletic = (): string[] =>
+  (process.env.ATHLETIC_COACH_CODIGO || '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
 
 const esAthletic = (empresa?: string | null): boolean =>
   (empresa || '').trim().toUpperCase() === 'ATHLETIC';
@@ -584,16 +585,16 @@ class TrepsiService {
       };
     }
 
-    // Athletic va con su coach y con ninguno más.
-    const coachAthletic = COACH_ATHLETIC();
-    if ((ATHLETIC_SOLO_SU_COACH() || esPruebas) && coachAthletic && esAthletic(input.empresa)) {
-      if (input.medico.codigo !== coachAthletic) {
+    // Athletic va con sus coaches y con ninguno más.
+    const equipoAthletic = coachesAthletic();
+    if ((ATHLETIC_SOLO_SU_COACH() || esPruebas) && equipoAthletic.length > 0 && esAthletic(input.empresa)) {
+      if (!equipoAthletic.includes(input.medico.codigo)) {
         return {
           ok: false,
           status: 422,
           error: {
             code: 'MEDICO_NO_ATIENDE_ATHLETIC',
-            message: `Las consultas de Athletic se agendan únicamente con el profesional ${coachAthletic}.`,
+            message: `Las consultas de Athletic se agendan únicamente con los profesionales ${equipoAthletic.join(', ')}.`,
           },
         };
       }

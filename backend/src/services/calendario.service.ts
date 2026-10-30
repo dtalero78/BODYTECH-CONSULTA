@@ -15,8 +15,15 @@
 import postgresService from './postgres.service';
 import { programaFilter } from '../helpers/programa-scope';
 import disponibilidadFechaService from './disponibilidad-fecha.service';
+import { festivosColombia } from '../helpers/festivos-colombia.helper';
 
 const TZ = 'America/Bogota';
+
+/** ¿La fecha (YYYY-MM-DD, Colombia) es festivo oficial? Los domingos no cuentan acá: los decide la disponibilidad. */
+function esFestivo(fecha: string): boolean {
+  const y = Number(fecha.slice(0, 4));
+  return Number.isFinite(y) && festivosColombia(y).has(fecha);
+}
 
 // Sede por defecto para citas Trepsi cuyo médico no está registrado en
 // `profesionales` (no resuelve a una sede real). Evita que queden ocultas
@@ -1112,7 +1119,11 @@ class CalendarioService {
     const rangosDisponibles = efectivos.data.rangos;
 
     // Sin rangos efectivos (día bloqueado por override, o sin patrón semanal) → no hay cupos.
-    if (rangosDisponibles.length === 0) {
+    // Un festivo de Colombia tampoco ofrece cupos, aunque el patrón semanal tenga
+    // horas ese día de la semana (30-oct-2026: el lunes 2-nov, festivo, aparecía
+    // con horarios). De acá leen el panel, /reprogramar, /agendar de la UMV y la
+    // API de Trepsi, así que el bloqueo vive en un solo lugar.
+    if (rangosDisponibles.length === 0 || esFestivo(fecha)) {
       return {
         ok: true,
         status: 200,
@@ -1249,6 +1260,16 @@ class CalendarioService {
     }
 
     const horaHHMM = hora.slice(0, 5);
+
+    // Festivo: mismo criterio que getHorariosDisponibles. Lo que no se ofrece
+    // tampoco se acepta, si no un cliente con la lista vieja agendaría igual.
+    if (esFestivo(fecha)) {
+      return {
+        ok: false,
+        status: 422,
+        error: { code: 'SLOT_FESTIVO', message: 'Ese día es festivo: no hay atención.' },
+      };
+    }
 
     // La sede de quien AGENDA no tiene por qué ser la del profesional: un
     // admin sin unidad asignada cae a 'bsl', y una coordinación puede agendarle

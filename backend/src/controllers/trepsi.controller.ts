@@ -28,6 +28,25 @@ const esPruebas = (req: Request): boolean =>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (req as any).integrationPruebas === true;
 
+/**
+ * Exigir 10 dígitos (y no 8) después del '+' en el celular que manda Trepsi.
+ *
+ * Crear la cita aceptaba desde 8 dígitos, pero ENVIAR el WhatsApp exige 10
+ * (`formatCelularE164`). Un número de 9 dígitos creaba la cita y después no se
+ * le podía entregar el link: el paciente no se enteraba de nada, que es peor
+ * que un rechazo. Trepsi lo confirmó de su lado el 30-oct-2026 y acordamos
+ * alinear las dos reglas.
+ *
+ * Va detrás de una variable porque el cambio tiene que salir COORDINADO: su
+ * app sube su mínimo primero —tiene una pantalla que le pide al paciente
+ * corregir el celular antes de elegir hora— y recién después se prende acá.
+ * Al revés, rechazaríamos citas que su pantalla todavía deja pasar.
+ */
+const CELULAR_MIN_10 = (): boolean => {
+  const v = process.env.TREPSI_CELULAR_MIN_10;
+  return v === '1' || v === 'true';
+};
+
 const TTL_PROXIMO_MS = 60_000;
 
 /**
@@ -106,7 +125,10 @@ const pacienteSchema = z.object({
     const clean = v.replace(/\s+/g, '').trim();
     if (/^3\d{9}$/.test(clean)) return `+57${clean}`;
     return clean;
-  }, z.string().regex(/^\+\d{8,15}$/, 'celular debe estar en formato E.164 (ej. +573001234567) o ser un móvil colombiano de 10 dígitos empezando por 3.')),
+  }, z.string().refine(
+    (c) => (CELULAR_MIN_10() ? /^\+\d{10,15}$/ : /^\+\d{8,15}$/).test(c),
+    'celular debe estar en formato E.164 con al menos 10 dígitos (ej. +573001234567), o ser un móvil colombiano de 10 dígitos empezando por 3.'
+  )),
   email: z.string().email().optional(),
   direccion: z.string().optional(),
   ciudad: z.string().optional(),
